@@ -1,0 +1,16 @@
+name: ai-service-production
+
+services:
+  backend-app:
+    image: "${AI_SERVICE_BACKEND_IMAGE:?Set AI_SERVICE_BACKEND_IMAGE}"
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8888}:8080"
+
+  angular-app:
+    image: "${AI_SERVICE_FRONTEND_IMAGE:?Set AI_SERVICE_FRONTEND_IMAGE}"
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8000}:80"
+    depends_on:
+      - backend-app

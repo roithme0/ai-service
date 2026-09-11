@@ -1,6 +1,7 @@
 [mcp_servers.angular-cli]
 args = ["-y", "@angular/cli", "mcp"]
 command = "npx"
+cwd = "frontend"
 enabled = true
 
 [mcp_servers.openaiDeveloperDocs]

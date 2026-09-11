@@ -1,0 +1,16 @@
+name: ai-service
+
+services:
+  backend-app:
+    build:
+      context: ../backend
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+
+  angular-app:
+    build:
+      context: ../frontend
+    ports:
+      - "${FRONTEND_PORT:-8000}:80"
+    depends_on:
+      - backend-app
