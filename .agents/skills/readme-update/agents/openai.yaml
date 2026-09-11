@@ -1,0 +1,7 @@
+interface:
+  display_name: "README Update"
+  short_description: "Audit and refresh repo README files"
+  default_prompt: "Use $readme-update to verify and refresh this repo's README.md without inventing unsupported sections or claims."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Concept Creator"
+  short_description: "Discuss ideas and maintain concept docs"
+  default_prompt: "Use $concept-creator to pressure-test this idea and maintain the concept document as the discussion evolves."
+
+policy:
+  allow_implicit_invocation: true

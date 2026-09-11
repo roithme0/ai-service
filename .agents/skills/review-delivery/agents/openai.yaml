@@ -1,0 +1,7 @@
+interface:
+  display_name: "Review Delivery"
+  short_description: "Review delivery and resolve delegated findings"
+  default_prompt: "Use $review-delivery to review this completed delivery against its spec and the broader codebase, resolving ordinary findings with the implementing agent when supervising delegated work."
+
+policy:
+  allow_implicit_invocation: false

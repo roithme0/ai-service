@@ -1,0 +1,7 @@
+interface:
+  display_name: "Prepare Spec"
+  short_description: "Turn a scoped change into a lightweight spec"
+  default_prompt: "Use $prepare-spec to pressure-test this change and create an implementation-ready spec."
+
+policy:
+  allow_implicit_invocation: false
