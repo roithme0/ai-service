@@ -4,6 +4,10 @@
 
 - Before non-trivial work, read `README.md`.
 
+## Plans and Specifications
+
+Plans and specification files are gitignored. Treat the current code and tracked documentation as the source of truth; do not rely on uncommitted plans or specs being available to other agents.
+
 ## Coding Rules
 
 - No destructive commands.
