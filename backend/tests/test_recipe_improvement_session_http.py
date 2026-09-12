@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.recipe_improvement.http import get_recipe_improvement_session_store
 from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionStore
+from app.sessions.text_sessions import MAX_MESSAGE_COUNT
 
 
 RECIPE_VERSION_UUID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
@@ -70,6 +71,7 @@ def test_create_and_read_return_accepted_snapshots_without_derived_index(client:
         "expires_at": created["expires_at"],
         "source": expected_source,
         "foodstuffs": valid_request()["foodstuffs"],
+        "messages": [],
     }
     assert "availability_reference_index" not in read.json()
 
@@ -144,5 +146,115 @@ def test_retained_expired_session_returns_gone_without_snapshot() -> None:
         assert response.json() == {"kind": "expired"}
         assert "source" not in response.json()
         assert client.get(f"/api/v1/recipe-improvement/sessions/{created['session_id']}").status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_user_messages_append_in_order_and_preserve_submitted_text(client: TestClient) -> None:
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+
+    first = client.post(f"{session_url}/messages", json={"text": "  Make it lighter.  "})
+    second = client.post(f"{session_url}/messages", json={"text": "Keep it filling."})
+    read = client.get(session_url)
+
+    assert first.status_code == 201
+    assert first.json() == {"role": "user", "text": "  Make it lighter.  "}
+    assert second.status_code == 201
+    assert second.json() == {"role": "user", "text": "Keep it filling."}
+    assert read.status_code == 200
+    assert read.json()["messages"] == [
+        {"role": "user", "text": "  Make it lighter.  "},
+        {"role": "user", "text": "Keep it filling."},
+    ]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"text": "valid", "role": "assistant"},
+        {"text": "valid", "unexpected": True},
+        {"text": 123},
+        {"text": ""},
+        {"text": " \t "},
+        {"text": "x" * 4_001},
+    ],
+)
+def test_rejected_user_messages_do_not_change_the_conversation(
+    client: TestClient, payload: dict[str, object]
+) -> None:
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+
+    response = client.post(f"{session_url}/messages", json=payload)
+    read = client.get(session_url)
+
+    assert response.status_code == 422
+    assert read.status_code == 200
+    assert read.json()["messages"] == []
+
+
+def test_message_limit_returns_conflict_without_appending(client: TestClient) -> None:
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    for index in range(MAX_MESSAGE_COUNT):
+        response = client.post(f"{session_url}/messages", json={"text": str(index)})
+        assert response.status_code == 201
+
+    rejected = client.post(f"{session_url}/messages", json={"text": "one too many"})
+    read = client.get(session_url)
+
+    assert rejected.status_code == 409
+    assert read.status_code == 200
+    assert len(read.json()["messages"]) == MAX_MESSAGE_COUNT
+    assert read.json()["messages"][-1] == {"role": "user", "text": "99"}
+
+
+def test_unknown_and_expired_user_message_appends_do_not_expose_session_content() -> None:
+    clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
+    store = RecipeImprovementSessionStore(clock=clock.now)
+    app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
+    try:
+        client = TestClient(app)
+        unknown = client.post(
+            "/api/v1/recipe-improvement/sessions/missing/messages", json={"text": "Hello"}
+        )
+        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+        clock.value = datetime.fromisoformat(created["expires_at"])
+
+        expired = client.post(
+            f"/api/v1/recipe-improvement/sessions/{created['session_id']}/messages",
+            json={"text": "Too late"},
+        )
+        read = client.get(f"/api/v1/recipe-improvement/sessions/{created['session_id']}")
+
+        assert unknown.status_code == 404
+        assert unknown.json() == {"kind": "unknown"}
+        assert expired.status_code == 410
+        assert expired.json() == {"kind": "expired"}
+        assert "messages" not in expired.json()
+        assert read.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_user_message_append_and_read_preserve_the_fixed_expiry() -> None:
+    clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
+    store = RecipeImprovementSessionStore(clock=clock.now)
+    app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
+    try:
+        client = TestClient(app)
+        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+        clock.value += timedelta(minutes=10)
+
+        appended = client.post(
+            f"/api/v1/recipe-improvement/sessions/{created['session_id']}/messages",
+            json={"text": "Still active"},
+        )
+        read = client.get(f"/api/v1/recipe-improvement/sessions/{created['session_id']}")
+
+        assert appended.status_code == 201
+        assert read.status_code == 200
+        assert read.json()["expires_at"] == created["expires_at"]
     finally:
         app.dependency_overrides.clear()

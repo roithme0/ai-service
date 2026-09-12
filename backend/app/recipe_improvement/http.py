@@ -1,4 +1,4 @@
-"""HTTP adapters for recipe-improvement session initialization and retrieval."""
+"""HTTP adapters for recipe-improvement session initialization, retrieval, and user messages."""
 
 from __future__ import annotations
 
@@ -23,6 +23,13 @@ from app.recipe_improvement.session_lifecycle import (
     RecipeImprovementSessionStore,
 )
 from app.recipe_improvement.validation import ValidationIssue
+from app.sessions.text_sessions import (
+    TextMessage,
+    TextSessionAppendAccepted,
+    TextSessionAppendExpired,
+    TextSessionAppendInvalidMessage,
+    TextSessionAppendLimitReached,
+)
 
 
 router = APIRouter(prefix="/api/v1/recipe-improvement/sessions", tags=["recipe-improvement"])
@@ -42,6 +49,12 @@ class RecipeImprovementSessionInputErrorResponse(BaseModel):
     issues: tuple[ValidationIssue, ...]
 
 
+class RecipeImprovementUserMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    text: str
+
+
 class RecipeImprovementSessionReadResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -49,6 +62,7 @@ class RecipeImprovementSessionReadResponse(BaseModel):
     expires_at: datetime
     source: RecipeImprovementSourceSnapshot
     foodstuffs: tuple[AvailableFoodstuffSnapshot, ...]
+    messages: tuple[TextMessage, ...]
 
 
 def get_recipe_improvement_session_store() -> RecipeImprovementSessionStore:
@@ -83,9 +97,28 @@ def get_recipe_improvement_session(
             expires_at=outcome.session.expires_at,
             source=outcome.session.session_input.source,
             foodstuffs=outcome.session.session_input.foodstuffs,
+            messages=outcome.session.messages,
         )
     if isinstance(outcome, RecipeImprovementSessionLookupExpired):
         return JSONResponse(status_code=410, content={"kind": "expired"})
+    return JSONResponse(status_code=404, content={"kind": "unknown"})
+
+
+@router.post("/{session_id}/messages", response_model=TextMessage, status_code=201)
+def append_recipe_improvement_user_message(
+    session_id: str,
+    request: RecipeImprovementUserMessageRequest,
+    store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
+) -> TextMessage | JSONResponse:
+    outcome = store.append(session_id, "user", request.text)
+    if isinstance(outcome, TextSessionAppendAccepted):
+        return outcome.message
+    if isinstance(outcome, TextSessionAppendExpired):
+        return JSONResponse(status_code=410, content={"kind": "expired"})
+    if isinstance(outcome, TextSessionAppendLimitReached):
+        return JSONResponse(status_code=409, content={"kind": "limit_reached"})
+    if isinstance(outcome, TextSessionAppendInvalidMessage):
+        return JSONResponse(status_code=422, content={"kind": "invalid_message"})
     return JSONResponse(status_code=404, content={"kind": "unknown"})
 
 
