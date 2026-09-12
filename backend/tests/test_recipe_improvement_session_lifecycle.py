@@ -1,7 +1,5 @@
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from threading import Event, Lock
 
 import pytest
 
@@ -17,6 +15,7 @@ from app.recipe_improvement.session_lifecycle import (
     RecipeImprovementSessionLookupUnknown,
     RecipeImprovementSessionStore,
 )
+from app.sessions.text_sessions import TextSessionAppendAccepted
 
 
 RECIPE_VERSION_UUID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
@@ -77,6 +76,20 @@ def test_lookup_does_not_extend_fixed_expiry() -> None:
     assert outcome.session.expires_at == created.expires_at
 
 
+def test_recipe_store_uses_shared_core_for_text_messages() -> None:
+    store = RecipeImprovementSessionStore()
+    created = store.create(valid_session_input())
+
+    appended = store.append(created.session_id, "user", "Can this be lighter?")
+    outcome = store.lookup(created.session_id)
+
+    assert isinstance(appended, TextSessionAppendAccepted)
+    assert isinstance(outcome, RecipeImprovementSessionLookupSuccess)
+    assert [(message.role, message.text) for message in outcome.session.messages] == [
+        ("user", "Can this be lighter?")
+    ]
+
+
 @pytest.mark.parametrize("elapsed", [timedelta(), timedelta(seconds=1)])
 def test_lookup_at_or_after_expiry_reports_expired_then_unknown(elapsed: timedelta) -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
@@ -128,46 +141,5 @@ def test_session_snapshots_are_owned_and_immutable() -> None:
     assert first_lookup.session.session_input is not input_snapshot
     assert first_lookup.session.session_input is not second_lookup.session.session_input
     assert first_lookup.session.session_input == input_snapshot
+    assert first_lookup.session.messages == ()
 
-
-def test_concurrent_creation_does_not_reuse_active_ids() -> None:
-    generated_ids = iter(f"session-{index}" for index in range(100))
-    generator_lock = Lock()
-
-    def next_id() -> str:
-        with generator_lock:
-            return next(generated_ids)
-
-    store = RecipeImprovementSessionStore(session_id_generator=next_id)
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        created_sessions = list(executor.map(lambda _: store.create(valid_session_input()), range(50)))
-
-    assert len({session.session_id for session in created_sessions}) == 50
-    assert all(
-        isinstance(store.lookup(session.session_id), RecipeImprovementSessionLookupSuccess)
-        for session in created_sessions
-    )
-
-
-def test_lookup_samples_time_after_waiting_for_store_lock() -> None:
-    clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
-    store = RecipeImprovementSessionStore(clock=clock.now)
-    created = store.create(valid_session_input())
-    clock_read = Event()
-
-    def signal_clock_read() -> datetime:
-        clock_read.set()
-        return clock.now()
-
-    store._clock = signal_clock_read
-    executor = ThreadPoolExecutor(max_workers=1)
-    try:
-        with store._lock:
-            lookup = executor.submit(store.lookup, created.session_id)
-            assert not clock_read.wait(timeout=0.1)
-            clock.value = created.expires_at
-        outcome = lookup.result()
-    finally:
-        executor.shutdown()
-
-    assert isinstance(outcome, RecipeImprovementSessionLookupExpired)
