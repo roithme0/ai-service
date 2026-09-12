@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Literal
 from urllib.parse import urlparse
@@ -34,6 +35,13 @@ class RecipeContent(BaseModel):
     origin_url: str | None = Field(default=None, max_length=200)
     ingredients: list[Ingredient]
     steps: list[PreparationStep]
+
+    @field_validator("ingredients", "steps", mode="before")
+    @classmethod
+    def convert_tuple_collections_to_lists(cls, value: object) -> object:
+        if isinstance(value, tuple):
+            return list(value)
+        return value
 
     @field_validator("origin_url", mode="before")
     @classmethod
@@ -77,13 +85,20 @@ class SourceRecipeSnapshot(BaseModel):
 
 
 class AvailabilityReferenceIndex(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    foodstuff_references: list[int] = Field(default_factory=list)
+    foodstuff_references: tuple[int, ...] = Field(default_factory=tuple)
+
+    @field_validator("foodstuff_references", mode="before")
+    @classmethod
+    def convert_references_to_tuple(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
 
     @field_validator("foodstuff_references")
     @classmethod
-    def validate_unique_positive_references(cls, value: list[int]) -> list[int]:
+    def validate_unique_positive_references(cls, value: tuple[int, ...]) -> tuple[int, ...]:
         if any(reference <= 0 for reference in value):
             raise ValueError("foodstuff references must be positive")
         _validate_unique(value, "foodstuff references")
@@ -135,7 +150,7 @@ def validate_recipe_proposal(
     except ValidationError as error:
         return _input_failure(error)
 
-    source_issues = _unknown_foodstuff_issues(
+    source_issues = unknown_foodstuff_issues(
         validated_source.recipe.ingredients,
         validated_index.foodstuff_references,
         ("recipe", "ingredients"),
@@ -148,7 +163,7 @@ def validate_recipe_proposal(
     except ValidationError as error:
         return RecipeProposalValidationFailure(scope="candidate", issues=_issues_from(error))
 
-    candidate_issues = _unknown_foodstuff_issues(
+    candidate_issues = unknown_foodstuff_issues(
         validated_candidate.ingredients,
         validated_index.foodstuff_references,
         ("ingredients",),
@@ -170,9 +185,9 @@ def _issues_from(error: ValidationError) -> tuple[ValidationIssue, ...]:
     )
 
 
-def _unknown_foodstuff_issues(
-    ingredients: list[Ingredient],
-    available_references: list[int],
+def unknown_foodstuff_issues(
+    ingredients: Sequence[Ingredient],
+    available_references: Sequence[int],
     location_prefix: tuple[str, ...],
 ) -> tuple[ValidationIssue, ...]:
     available_reference_set = set(available_references)
@@ -186,6 +201,6 @@ def _unknown_foodstuff_issues(
     )
 
 
-def _validate_unique(values: list[int], field_name: str) -> None:
+def _validate_unique(values: Sequence[int], field_name: str) -> None:
     if len(values) != len(set(values)):
         raise ValueError(f"{field_name} must be unique")
