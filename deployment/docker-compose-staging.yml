@@ -1,16 +1,22 @@
 name: ai-service-staging
 
 services:
-  backend-app:
-    image: "${AI_SERVICE_BACKEND_IMAGE:?Set AI_SERVICE_BACKEND_IMAGE}"
+  backend:
+    image: roithme0/ai-service-backend:alpha
     restart: unless-stopped
-    ports:
-      - "${BACKEND_PORT:-8889}:8080"
 
-  angular-app:
-    image: "${AI_SERVICE_FRONTEND_IMAGE:?Set AI_SERVICE_FRONTEND_IMAGE}"
+  frontend:
+    image: roithme0/ai-service-frontend:alpha
     restart: unless-stopped
+    depends_on:
+      - backend
+
+  gateway:
+    image: nginx:1.25
     ports:
       - "${FRONTEND_PORT:-8001}:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - backend-app
+      - backend
+      - frontend
