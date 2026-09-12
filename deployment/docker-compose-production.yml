@@ -2,11 +2,11 @@ name: ai-service-production
 
 services:
   backend:
-    image: "${AI_SERVICE_BACKEND_IMAGE:?Set AI_SERVICE_BACKEND_IMAGE}"
+    image: roithme0/ai-service-backend:latest
     restart: unless-stopped
 
   frontend:
-    image: "${AI_SERVICE_FRONTEND_IMAGE:?Set AI_SERVICE_FRONTEND_IMAGE}"
+    image: roithme0/ai-service-frontend:latest
     restart: unless-stopped
     depends_on:
       - backend

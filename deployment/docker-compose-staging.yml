@@ -2,11 +2,11 @@ name: ai-service-staging
 
 services:
   backend:
-    image: "${AI_SERVICE_BACKEND_IMAGE:?Set AI_SERVICE_BACKEND_IMAGE}"
+    image: roithme0/ai-service-backend:alpha
     restart: unless-stopped
 
   frontend:
-    image: "${AI_SERVICE_FRONTEND_IMAGE:?Set AI_SERVICE_FRONTEND_IMAGE}"
+    image: roithme0/ai-service-frontend:alpha
     restart: unless-stopped
     depends_on:
       - backend
