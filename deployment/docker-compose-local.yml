@@ -1,4 +1,4 @@
-name: ai-service
+name: ai-service-local
 
 services:
   backend:
