@@ -52,6 +52,7 @@ def test_openai_generator_sends_conversation_without_provider_storage() -> None:
                     TextGenerationRequest(
                         (TextMessage("user", "First"), TextMessage("assistant", "Second"), TextMessage("user", "Third")),
                         context="Recipe snapshot data",
+                        instructions="Help discuss this recipe.",
                     ),
                 )
 
@@ -67,12 +68,15 @@ def test_openai_generator_sends_conversation_without_provider_storage() -> None:
     assert requests[0]["store"] is False
     assert requests[0]["max_output_tokens"] == OPENAI_MAX_OUTPUT_TOKENS
     assert OPENAI_REQUEST_TIMEOUT_SECONDS > 0
-    assert "instructions" not in requests[0]
+    assert requests[0]["instructions"] == "Help discuss this recipe."
     assert "tools" not in requests[0]
 
 
 def test_openai_generator_rejects_incomplete_response() -> None:
     def respond(request: httpx.Request) -> httpx.Response:
+        payload: object = json.loads(request.content)
+        assert isinstance(payload, dict)
+        assert "instructions" not in payload
         return httpx.Response(
             200,
             json={

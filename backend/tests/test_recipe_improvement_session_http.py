@@ -10,6 +10,7 @@ from app.models.openai_text_generation import OpenAITextGenerator
 from app.recipe_improvement.http import get_recipe_improvement_session_store, get_text_generator
 from app.recipe_improvement.http import _configured_text_generator
 from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionStore
+from app.recipe_improvement.instructions import RECIPE_IMPROVEMENT_INSTRUCTIONS
 from app.sessions.text_sessions import MAX_MESSAGE_COUNT
 
 
@@ -326,6 +327,10 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
     assert '"name":"Overnight oats"' in generation_request.context
     assert '"name":"Oats"' in generation_request.context
     assert "availability_reference_index" not in generation_request.context
+    assert generation_request.instructions == RECIPE_IMPROVEMENT_INSTRUCTIONS
+    assert "stated goals, preferences, and constraints" in generation_request.instructions
+    assert "For health-related questions" in generation_request.instructions
+    assert "not structured recipe proposals" in generation_request.instructions
     assert read.json()["messages"] == [
         {"role": "user", "text": "  question  "},
         {"role": "assistant", "text": "Test reply"},

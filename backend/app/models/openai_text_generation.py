@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from openai import AsyncOpenAI
+from openai import NOT_GIVEN, AsyncOpenAI
 
 from app.models.text_generation import TextGenerationRequest, TextGenerationResponse
 
@@ -29,6 +29,7 @@ class OpenAITextGenerator:
         response = await self._client.responses.create(
             model=self._model,
             input=input_messages,
+            instructions=request.instructions if request.instructions is not None else NOT_GIVEN,
             max_output_tokens=OPENAI_MAX_OUTPUT_TOKENS,
             store=False,
             timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,

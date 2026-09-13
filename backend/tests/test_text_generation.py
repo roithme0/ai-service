@@ -4,6 +4,7 @@ import pytest
 
 from app.models.text_generation import (
     MAX_CONTEXT_LENGTH,
+    MAX_INSTRUCTIONS_LENGTH,
     TextGenerationRequest,
     TextGenerationResponse,
     generate_text,
@@ -69,6 +70,18 @@ def test_oversized_context_never_reaches_generator() -> None:
     )
 
     with pytest.raises(ValueError, match="context exceeds"):
+        asyncio.run(generate_text(generator, request))
+
+    assert generator.calls == []
+
+
+def test_oversized_instructions_never_reach_generator() -> None:
+    generator = FakeGenerator("answer")
+    request = TextGenerationRequest(
+        (TextMessage("user", "hi"),), instructions="x" * (MAX_INSTRUCTIONS_LENGTH + 1)
+    )
+
+    with pytest.raises(ValueError, match="instructions exceed"):
         asyncio.run(generate_text(generator, request))
 
     assert generator.calls == []
