@@ -9,6 +9,7 @@ description = "Backend for the AI Service."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.115,<1.0",
+    "openai>=2,<3",
 ]
 
 [project.optional-dependencies]

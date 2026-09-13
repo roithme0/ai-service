@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
+from functools import lru_cache
+import os
 from typing import Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from openai import AsyncOpenAI
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.text_generation import TextGenerator
+from app.models.openai_text_generation import OpenAITextGenerator
 from app.recipe_improvement.session_input import (
     AvailableFoodstuffSnapshot,
     RecipeImprovementSessionInputFailure,
@@ -72,7 +76,16 @@ def get_recipe_improvement_session_store() -> RecipeImprovementSessionStore:
 
 
 def get_text_generator() -> TextGenerator | None:
-    return None
+    return _configured_text_generator()
+
+
+@lru_cache(maxsize=1)
+def _configured_text_generator() -> TextGenerator | None:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    model = os.getenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", "").strip()
+    if not api_key or not model:
+        return None
+    return OpenAITextGenerator(model=model, client=AsyncOpenAI(api_key=api_key, max_retries=0))
 
 
 recipe_improvement_session_store = RecipeImprovementSessionStore()

@@ -6,7 +6,9 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.models.text_generation import TextGenerationRequest, TextGenerationResponse
+from app.models.openai_text_generation import OpenAITextGenerator
 from app.recipe_improvement.http import get_recipe_improvement_session_store, get_text_generator
+from app.recipe_improvement.http import _configured_text_generator
 from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionStore
 from app.sessions.text_sessions import MAX_MESSAGE_COUNT
 
@@ -309,16 +311,40 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
     ]
 
 
-def test_turn_endpoint_is_unavailable_without_configured_generator(client: TestClient) -> None:
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
-    client.post(f"{session_url}/messages", json={"text": "question"})
+def test_turn_endpoint_is_unavailable_without_configured_generator(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", raising=False)
+    _configured_text_generator.cache_clear()
+    try:
+        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+        session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+        client.post(f"{session_url}/messages", json={"text": "question"})
 
-    response = client.post(f"{session_url}/turns")
+        response = client.post(f"{session_url}/turns")
 
-    assert response.status_code == 503
-    assert response.json() == {"kind": "generator_unavailable"}
-    assert len(client.get(session_url).json()["messages"]) == 1
+        assert response.status_code == 503
+        assert response.json() == {"kind": "generator_unavailable"}
+        assert len(client.get(session_url).json()["messages"]) == 1
+    finally:
+        _configured_text_generator.cache_clear()
+
+
+def test_generator_requires_key_and_use_case_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    _configured_text_generator.cache_clear()
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", raising=False)
+    try:
+        assert get_text_generator() is None
+        _configured_text_generator.cache_clear()
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        assert get_text_generator() is None
+        _configured_text_generator.cache_clear()
+        monkeypatch.setenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", "gpt-5.6-sol")
+        assert isinstance(get_text_generator(), OpenAITextGenerator)
+    finally:
+        _configured_text_generator.cache_clear()
 
 
 def test_turn_endpoint_reports_unknown_and_not_ready(
