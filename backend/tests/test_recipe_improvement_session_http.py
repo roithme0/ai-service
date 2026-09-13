@@ -1,10 +1,12 @@
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.recipe_improvement.http import get_recipe_improvement_session_store
+from app.models.text_generation import TextGenerationRequest, TextGenerationResponse
+from app.recipe_improvement.http import get_recipe_improvement_session_store, get_text_generator
 from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionStore
 from app.sessions.text_sessions import MAX_MESSAGE_COUNT
 
@@ -20,6 +22,22 @@ class MutableClock:
         return self.value
 
 
+class FakeGenerator:
+    def __init__(self, text: str = "Test reply") -> None:
+        self.text = text
+        self.calls: list[TextGenerationRequest] = []
+        self.fail = False
+        self.before_return: Callable[[], None] | None = None
+
+    async def generate(self, request: TextGenerationRequest) -> TextGenerationResponse:
+        self.calls.append(request)
+        if self.fail:
+            raise RuntimeError("model failure")
+        if self.before_return is not None:
+            self.before_return()
+        return TextGenerationResponse(text=self.text)
+
+
 @pytest.fixture
 def client() -> TestClient:
     store = RecipeImprovementSessionStore()
@@ -28,6 +46,16 @@ def client() -> TestClient:
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def fake_generator() -> Iterator[FakeGenerator]:
+    generator = FakeGenerator()
+    app.dependency_overrides[get_text_generator] = lambda: generator
+    try:
+        yield generator
+    finally:
+        app.dependency_overrides.pop(get_text_generator, None)
 
 
 def valid_request(foodstuff_reference: int = 1) -> dict[str, object]:
@@ -258,3 +286,125 @@ def test_user_message_append_and_read_preserve_the_fixed_expiry() -> None:
         assert read.json()["expires_at"] == created["expires_at"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_turn_endpoint_returns_and_stores_assistant_reply(
+    client: TestClient, fake_generator: FakeGenerator
+) -> None:
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    client.post(f"{session_url}/messages", json={"text": "  question  "})
+
+    response = client.post(f"{session_url}/turns")
+    read = client.get(session_url)
+
+    assert response.status_code == 201
+    assert response.json() == {"role": "assistant", "text": "Test reply"}
+    assert [(message.role, message.text) for message in fake_generator.calls[0].messages] == [
+        ("user", "  question  ")
+    ]
+    assert read.json()["messages"] == [
+        {"role": "user", "text": "  question  "},
+        {"role": "assistant", "text": "Test reply"},
+    ]
+
+
+def test_turn_endpoint_is_unavailable_without_configured_generator(client: TestClient) -> None:
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    client.post(f"{session_url}/messages", json={"text": "question"})
+
+    response = client.post(f"{session_url}/turns")
+
+    assert response.status_code == 503
+    assert response.json() == {"kind": "generator_unavailable"}
+    assert len(client.get(session_url).json()["messages"]) == 1
+
+
+def test_turn_endpoint_reports_unknown_and_not_ready(
+    client: TestClient, fake_generator: FakeGenerator
+) -> None:
+    unknown = client.post("/api/v1/recipe-improvement/sessions/missing/turns")
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    not_ready = client.post(f"{session_url}/turns")
+
+    assert unknown.status_code == 404
+    assert unknown.json() == {"kind": "unknown"}
+    assert not_ready.status_code == 409
+    assert not_ready.json() == {"kind": "not_ready"}
+    assert fake_generator.calls == []
+
+
+def test_turn_endpoint_reports_generation_failure_without_appending(
+    client: TestClient, fake_generator: FakeGenerator
+) -> None:
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    client.post(f"{session_url}/messages", json={"text": "question"})
+    fake_generator.fail = True
+
+    response = client.post(f"{session_url}/turns")
+
+    assert response.status_code == 502
+    assert response.json() == {"kind": "generation_failed"}
+    assert client.get(session_url).json()["messages"] == [{"role": "user", "text": "question"}]
+
+
+def test_turn_endpoint_rejects_reply_after_new_message(
+    client: TestClient, fake_generator: FakeGenerator
+) -> None:
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    client.post(f"{session_url}/messages", json={"text": "first"})
+
+    def append_another_message() -> None:
+        assert client.post(f"{session_url}/messages", json={"text": "second"}).status_code == 201
+
+    fake_generator.before_return = append_another_message
+
+    response = client.post(f"{session_url}/turns")
+
+    assert response.status_code == 409
+    assert response.json() == {"kind": "conflict"}
+    assert client.get(session_url).json()["messages"] == [
+        {"role": "user", "text": "first"},
+        {"role": "user", "text": "second"},
+    ]
+
+
+def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGenerator) -> None:
+    clock = MutableClock(datetime(2026, 9, 13, 10, 30, tzinfo=UTC))
+    store = RecipeImprovementSessionStore(clock=clock.now)
+    app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
+    try:
+        client = TestClient(app)
+        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+        session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+        client.post(f"{session_url}/messages", json={"text": "question"})
+        fake_generator.before_return = lambda: setattr(
+            clock, "value", datetime.fromisoformat(created["expires_at"])
+        )
+
+        response = client.post(f"{session_url}/turns")
+
+        assert response.status_code == 410
+        assert response.json() == {"kind": "expired"}
+        assert client.get(session_url).status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_recipe_improvement_session_store, None)
+
+
+def test_turn_endpoint_reports_full_conversation_without_calling_generator(
+    client: TestClient, fake_generator: FakeGenerator
+) -> None:
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    for index in range(MAX_MESSAGE_COUNT):
+        assert client.post(f"{session_url}/messages", json={"text": str(index)}).status_code == 201
+
+    response = client.post(f"{session_url}/turns")
+
+    assert response.status_code == 409
+    assert response.json() == {"kind": "limit_reached"}
+    assert fake_generator.calls == []

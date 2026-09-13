@@ -1,4 +1,4 @@
-"""HTTP adapters for recipe-improvement session initialization, retrieval, and user messages."""
+"""HTTP adapters for recipe-improvement sessions and text turns."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.text_generation import TextGenerator
 from app.recipe_improvement.session_input import (
     AvailableFoodstuffSnapshot,
     RecipeImprovementSessionInputFailure,
@@ -30,6 +31,7 @@ from app.sessions.text_sessions import (
     TextSessionAppendInvalidMessage,
     TextSessionAppendLimitReached,
 )
+from app.sessions.text_turns import TextTurnCompleted
 
 
 router = APIRouter(prefix="/api/v1/recipe-improvement/sessions", tags=["recipe-improvement"])
@@ -67,6 +69,10 @@ class RecipeImprovementSessionReadResponse(BaseModel):
 
 def get_recipe_improvement_session_store() -> RecipeImprovementSessionStore:
     return recipe_improvement_session_store
+
+
+def get_text_generator() -> TextGenerator | None:
+    return None
 
 
 recipe_improvement_session_store = RecipeImprovementSessionStore()
@@ -120,6 +126,28 @@ def append_recipe_improvement_user_message(
     if isinstance(outcome, TextSessionAppendInvalidMessage):
         return JSONResponse(status_code=422, content={"kind": "invalid_message"})
     return JSONResponse(status_code=404, content={"kind": "unknown"})
+
+
+@router.post("/{session_id}/turns", response_model=TextMessage, status_code=201)
+async def generate_recipe_improvement_turn(
+    session_id: str,
+    store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
+    generator: TextGenerator | None = Depends(get_text_generator),
+) -> TextMessage | JSONResponse:
+    if generator is None:
+        return JSONResponse(status_code=503, content={"kind": "generator_unavailable"})
+    outcome = await store.generate_turn(session_id, generator)
+    if isinstance(outcome, TextTurnCompleted):
+        return outcome.message
+    status_code = {
+        "unknown": 404,
+        "expired": 410,
+        "not_ready": 409,
+        "limit_reached": 409,
+        "conflict": 409,
+        "generation_failed": 502,
+    }[outcome.kind]
+    return JSONResponse(status_code=status_code, content={"kind": outcome.kind})
 
 
 def _invalid_input_response(

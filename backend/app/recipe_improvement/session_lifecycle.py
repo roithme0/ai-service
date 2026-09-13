@@ -8,6 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.text_generation import TextGenerator
 from app.recipe_improvement.session_input import RecipeImprovementSessionInput
 from app.sessions.text_sessions import (
     EphemeralTextSessionStore,
@@ -17,6 +18,7 @@ from app.sessions.text_sessions import (
     TextSessionReadExpired,
     TextSessionReadUnknown,
 )
+from app.sessions.text_turns import TextTurnOutcome, generate_assistant_turn
 
 
 SESSION_LIFETIME = timedelta(minutes=90)
@@ -110,3 +112,6 @@ class RecipeImprovementSessionStore:
 
     def append(self, session_id: str, role: object, text: object) -> TextSessionAppendOutcome:
         return self._core.append(session_id, role, text)
+
+    async def generate_turn(self, session_id: str, generator: TextGenerator) -> TextTurnOutcome:
+        return await generate_assistant_turn(self._core, session_id, generator)
