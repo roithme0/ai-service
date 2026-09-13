@@ -34,6 +34,7 @@ class TextMessage:
 class TextSessionSnapshot(Generic[T]):
     session_id: str
     expires_at: datetime
+    revision: int
     payload: T
     messages: tuple[TextMessage, ...]
 
@@ -93,18 +94,26 @@ class TextSessionAppendLimitReached:
     session_id: str
 
 
+@dataclass(frozen=True)
+class TextSessionAppendConflict:
+    kind: Literal["conflict"]
+    session_id: str
+
+
 TextSessionAppendOutcome = (
     TextSessionAppendAccepted
     | TextSessionAppendUnknown
     | TextSessionAppendExpired
     | TextSessionAppendInvalidMessage
     | TextSessionAppendLimitReached
+    | TextSessionAppendConflict
 )
 
 
 @dataclass(frozen=True)
 class _StoredTextSession(Generic[T]):
     expires_at: datetime
+    revision: int
     payload: T
     messages: tuple[TextMessage, ...]
 
@@ -142,6 +151,7 @@ class EphemeralTextSessionStore(Generic[T]):
             expires_at = now + self._lifetime
             self._sessions[session_id] = _StoredTextSession(
                 expires_at=expires_at,
+                revision=0,
                 payload=_copy(payload),
                 messages=(),
             )
@@ -166,12 +176,23 @@ class EphemeralTextSessionStore(Generic[T]):
                 session=TextSessionSnapshot(
                     session_id=session_id,
                     expires_at=session.expires_at,
+                    revision=session.revision,
                     payload=_copy(session.payload),
                     messages=tuple(_copy(message) for message in session.messages),
                 ),
             )
 
     def append(self, session_id: str, role: object, text: object) -> TextSessionAppendOutcome:
+        return self._append(session_id, role, text, expected_revision=None)
+
+    def append_if_revision(
+        self, session_id: str, expected_revision: int, role: object, text: object
+    ) -> TextSessionAppendOutcome:
+        return self._append(session_id, role, text, expected_revision=expected_revision)
+
+    def _append(
+        self, session_id: str, role: object, text: object, expected_revision: int | None
+    ) -> TextSessionAppendOutcome:
         with self._lock:
             now = _as_utc(self._clock())
             session = self._sessions.get(session_id)
@@ -185,6 +206,8 @@ class EphemeralTextSessionStore(Generic[T]):
                     kind="expired", session_id=session_id, expires_at=session.expires_at
                 )
             self._discard_expired(now, except_session_id=session_id)
+            if expected_revision is not None and session.revision != expected_revision:
+                return TextSessionAppendConflict(kind="conflict", session_id=session_id)
             invalid_reason = _invalid_message_reason(role, text)
             if invalid_reason is not None:
                 return TextSessionAppendInvalidMessage(
@@ -195,6 +218,7 @@ class EphemeralTextSessionStore(Generic[T]):
             message = TextMessage(role=cast(SessionRole, role), text=cast(str, text))
             self._sessions[session_id] = _StoredTextSession(
                 expires_at=session.expires_at,
+                revision=session.revision + 1,
                 payload=session.payload,
                 messages=(*session.messages, message),
             )

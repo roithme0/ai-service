@@ -10,6 +10,7 @@ from app.sessions.text_sessions import (
     MAX_MESSAGE_LENGTH,
     EphemeralTextSessionStore,
     TextSessionAppendAccepted,
+    TextSessionAppendConflict,
     TextSessionAppendExpired,
     TextSessionAppendInvalidMessage,
     TextSessionAppendLimitReached,
@@ -211,3 +212,26 @@ def test_concurrent_creation_does_not_reuse_active_ids() -> None:
 
     assert len({session.session_id for session in created}) == 50
     assert all(isinstance(store.read(session.session_id), TextSessionReadActive) for session in created)
+
+
+def test_conditional_append_checks_only_its_own_session_revision() -> None:
+    store = EphemeralTextSessionStore[str](lifetime=timedelta(minutes=5))
+    first_id = store.create("first").session_id
+    second_id = store.create("second").session_id
+    first = store.read(first_id)
+    assert isinstance(first, TextSessionReadActive)
+    assert first.session.revision == 0
+    assert isinstance(store.append(second_id, "user", "other session"), TextSessionAppendAccepted)
+    accepted = store.append_if_revision(first_id, first.session.revision, "user", "first message")
+    assert isinstance(accepted, TextSessionAppendAccepted)
+    later = store.read(first_id)
+    assert isinstance(later, TextSessionReadActive)
+    assert later.session.revision == 1
+
+    assert isinstance(
+        store.append_if_revision(first_id, first.session.revision, "assistant", "stale"),
+        TextSessionAppendConflict,
+    )
+    after_conflict = store.read(first_id)
+    assert isinstance(after_conflict, TextSessionReadActive)
+    assert [message.text for message in after_conflict.session.messages] == ["first message"]
