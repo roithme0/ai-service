@@ -8,9 +8,13 @@ from typing import Protocol
 from app.sessions.text_sessions import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH, TextMessage
 
 
+MAX_CONTEXT_LENGTH = 16_000
+
+
 @dataclass(frozen=True)
 class TextGenerationRequest:
     messages: tuple[TextMessage, ...]
+    context: str | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +39,8 @@ async def generate_text(
         for message in request.messages
     ):
         raise ValueError("conversation contains an invalid message")
+    if request.context is not None and len(request.context) > MAX_CONTEXT_LENGTH:
+        raise ValueError("context exceeds the context limit")
 
     response = await generator.generate(request)
     if not isinstance(response.text, str) or not response.text.strip():

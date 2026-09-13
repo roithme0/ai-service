@@ -127,6 +127,22 @@ def test_integer_amount_and_read_snapshot_can_initialize_sessions(client: TestCl
     assert recreated.status_code == 201
 
 
+def test_oversized_context_is_rejected_at_creation(client: TestClient) -> None:
+    request = valid_request()
+    request["foodstuffs"] = [
+        {"external_reference": index, "name": "N" * 50, "brand": "B" * 100, "unit": "G"}
+        for index in range(1, 101)
+    ]
+
+    response = client.post("/api/v1/recipe-improvement/sessions", json=request)
+
+    assert response.status_code == 422
+    assert response.json()["kind"] == "invalid_input"
+    assert response.json()["issues"] == [
+        {"location": ["foodstuffs"], "message": "recipe context exceeds 16000 characters"}
+    ]
+
+
 @pytest.mark.parametrize(
     ("payload", "location"),
     [
@@ -302,9 +318,14 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
 
     assert response.status_code == 201
     assert response.json() == {"role": "assistant", "text": "Test reply"}
-    assert [(message.role, message.text) for message in fake_generator.calls[0].messages] == [
+    generation_request = fake_generator.calls[0]
+    assert [(message.role, message.text) for message in generation_request.messages] == [
         ("user", "  question  ")
     ]
+    assert generation_request.context is not None
+    assert '"name":"Overnight oats"' in generation_request.context
+    assert '"name":"Oats"' in generation_request.context
+    assert "availability_reference_index" not in generation_request.context
     assert read.json()["messages"] == [
         {"role": "user", "text": "  question  "},
         {"role": "assistant", "text": "Test reply"},

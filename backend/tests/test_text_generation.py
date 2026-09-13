@@ -3,6 +3,7 @@ import asyncio
 import pytest
 
 from app.models.text_generation import (
+    MAX_CONTEXT_LENGTH,
     TextGenerationRequest,
     TextGenerationResponse,
     generate_text,
@@ -48,6 +49,27 @@ def test_invalid_conversation_never_reaches_generator(
 
     with pytest.raises(ValueError):
         asyncio.run(generate_text(generator, TextGenerationRequest(messages)))
+
+    assert generator.calls == []
+
+
+@pytest.mark.parametrize("context", ["", " \t "])
+def test_blank_context_is_allowed(context: str) -> None:
+    request = TextGenerationRequest((TextMessage("user", "hi"),), context=context)
+    generator = FakeGenerator("answer")
+
+    assert asyncio.run(generate_text(generator, request)) == TextGenerationResponse("answer")
+    assert generator.calls == [request]
+
+
+def test_oversized_context_never_reaches_generator() -> None:
+    generator = FakeGenerator("answer")
+    request = TextGenerationRequest(
+        (TextMessage("user", "hi"),), context="x" * (MAX_CONTEXT_LENGTH + 1)
+    )
+
+    with pytest.raises(ValueError, match="context exceeds"):
+        asyncio.run(generate_text(generator, request))
 
     assert generator.calls == []
 

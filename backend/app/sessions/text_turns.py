@@ -38,7 +38,8 @@ logger = logging.getLogger(__name__)
 
 
 async def generate_assistant_turn(
-    store: EphemeralTextSessionStore[T], session_id: str, generator: TextGenerator
+    store: EphemeralTextSessionStore[T], session_id: str, generator: TextGenerator,
+    context: str | None = None,
 ) -> TextTurnOutcome:
     read = store.read(session_id)
     if isinstance(read, TextSessionReadExpired):
@@ -53,7 +54,7 @@ async def generate_assistant_turn(
         return TextTurnUnavailable(kind="limit_reached")
 
     try:
-        response = await generate_text(generator, TextGenerationRequest(snapshot.messages))
+        response = await generate_text(generator, TextGenerationRequest(snapshot.messages, context))
     except Exception as error:
         logger.error(
             "Text generation failed for session %s (%s)",

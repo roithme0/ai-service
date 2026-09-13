@@ -9,6 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.text_generation import TextGenerator
+from app.recipe_improvement.context import recipe_context
 from app.recipe_improvement.session_input import RecipeImprovementSessionInput
 from app.sessions.text_sessions import (
     EphemeralTextSessionStore,
@@ -117,4 +118,6 @@ class RecipeImprovementSessionStore:
         )
 
     async def generate_turn(self, session_id: str, generator: TextGenerator) -> TextTurnOutcome:
-        return await generate_assistant_turn(self._core, session_id, generator)
+        outcome = self._core.read(session_id)
+        context = recipe_context(outcome.session.payload) if isinstance(outcome, TextSessionReadActive) else None
+        return await generate_assistant_turn(self._core, session_id, generator, context)

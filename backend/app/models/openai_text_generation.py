@@ -20,9 +20,15 @@ class OpenAITextGenerator:
         self._client = client
 
     async def generate(self, request: TextGenerationRequest) -> TextGenerationResponse:
+        input_messages = []
+        if request.context is not None:
+            input_messages.append({"role": "user", "content": request.context})
+        input_messages.extend(
+            {"role": message.role, "content": message.text} for message in request.messages
+        )
         response = await self._client.responses.create(
             model=self._model,
-            input=[{"role": message.role, "content": message.text} for message in request.messages],
+            input=input_messages,
             max_output_tokens=OPENAI_MAX_OUTPUT_TOKENS,
             store=False,
             timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,

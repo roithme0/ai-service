@@ -50,7 +50,8 @@ def test_openai_generator_sends_conversation_without_provider_storage() -> None:
                 return await generate_text(
                     generator,
                     TextGenerationRequest(
-                        (TextMessage("user", "First"), TextMessage("assistant", "Second"), TextMessage("user", "Third"))
+                        (TextMessage("user", "First"), TextMessage("assistant", "Second"), TextMessage("user", "Third")),
+                        context="Recipe snapshot data",
                     ),
                 )
 
@@ -58,6 +59,7 @@ def test_openai_generator_sends_conversation_without_provider_storage() -> None:
     assert len(requests) == 1
     assert requests[0]["model"] == "gpt-5.6-sol"
     assert requests[0]["input"] == [
+        {"role": "user", "content": "Recipe snapshot data"},
         {"role": "user", "content": "First"},
         {"role": "assistant", "content": "Second"},
         {"role": "user", "content": "Third"},
