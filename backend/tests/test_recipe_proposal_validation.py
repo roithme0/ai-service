@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 import pytest
+from pydantic import ValidationError
 
 from app.recipe_improvement.validation import (
     RecipeProposalValidationFailure,
@@ -40,7 +41,8 @@ def test_accepts_complete_candidate_and_preserves_decimal_amount() -> None:
     )
 
     assert isinstance(outcome, RecipeProposalValidationSuccess)
-    assert outcome.candidate.model_dump() == candidate
+    expected = {**candidate, "ingredients": tuple(candidate["ingredients"]), "steps": tuple(candidate["steps"])}
+    assert outcome.candidate.model_dump() == expected
     assert outcome.candidate.ingredients[0].amount == Decimal("125.75")
     assert isinstance(outcome.candidate.ingredients[0].amount, Decimal)
 
@@ -63,8 +65,26 @@ def test_accepts_empty_ingredient_and_step_lists() -> None:
     outcome = validate_recipe_proposal(valid_source(), {"foodstuff_references": [1]}, candidate)
 
     assert isinstance(outcome, RecipeProposalValidationSuccess)
-    assert outcome.candidate.ingredients == []
-    assert outcome.candidate.steps == []
+    assert outcome.candidate.ingredients == ()
+    assert outcome.candidate.steps == ()
+
+
+def test_accepted_candidate_is_deeply_immutable_and_owned() -> None:
+    candidate = valid_recipe(ingredient_reference=1)
+    outcome = validate_recipe_proposal(valid_source(), {"foodstuff_references": [1]}, candidate)
+
+    assert isinstance(outcome, RecipeProposalValidationSuccess)
+    candidate["name"] = "Changed"
+    candidate["ingredients"][0]["foodstuff_reference"] = 2
+
+    assert outcome.candidate.name == "Overnight oats"
+    assert outcome.candidate.ingredients[0].foodstuff_reference == 1
+    with pytest.raises(ValidationError):
+        outcome.candidate.name = "Changed"
+    with pytest.raises(ValidationError):
+        outcome.candidate.ingredients[0].amount = Decimal("2")
+    with pytest.raises(AttributeError):
+        outcome.candidate.ingredients.append(outcome.candidate.ingredients[0])
 
 
 def test_rejects_candidate_foodstuff_outside_availability_index() -> None:

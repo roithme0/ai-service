@@ -1,5 +1,8 @@
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from app.models.text_generation import TextGenerationRequest, TextGenerationResponse
 from app.sessions.text_sessions import (
@@ -73,14 +76,25 @@ def test_full_session_does_not_call_generator() -> None:
     assert generator.calls == []
 
 
-def test_generator_failure_and_invalid_output_leave_messages_unchanged() -> None:
+def test_generator_failure_is_logged_without_request_details_and_leaves_messages_unchanged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     store = new_store()
     session_id = store.create("payload").session_id
     store.append(session_id, "user", "question")
     generator = FakeGenerator()
     generator.on_generate = RuntimeError
 
-    assert asyncio.run(generate_assistant_turn(store, session_id, generator)) == TextTurnUnavailable("generation_failed")
+    with caplog.at_level(logging.ERROR, logger="app.sessions.text_turns"):
+        outcome = asyncio.run(generate_assistant_turn(store, session_id, generator))
+    assert outcome == TextTurnUnavailable("generation_failed")
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.levelno == logging.ERROR
+    assert record.getMessage() == f"Text generation failed for session {session_id} (RuntimeError)"
+    assert "question" not in record.getMessage()
+    assert record.exc_info is None
+
     generator.on_generate = None
     generator.text = "  "
     assert asyncio.run(generate_assistant_turn(store, session_id, generator)) == TextTurnUnavailable("generation_failed")

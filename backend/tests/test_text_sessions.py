@@ -125,6 +125,23 @@ def test_message_limit_rejects_an_extra_append_without_storing_it() -> None:
     assert len(later.session.messages) == MAX_MESSAGE_COUNT
 
 
+def test_capped_appends_reserve_capacity_atomically() -> None:
+    store = new_store()
+    created = store.create(MutablePayload(values=[]))
+
+    def append(index: int) -> object:
+        return store.append_with_max_message_count(created.session_id, "user", str(index), 3)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outcomes = list(executor.map(append, range(20)))
+    later = store.read(created.session_id)
+
+    assert sum(isinstance(outcome, TextSessionAppendAccepted) for outcome in outcomes) == 3
+    assert sum(isinstance(outcome, TextSessionAppendLimitReached) for outcome in outcomes) == 17
+    assert isinstance(later, TextSessionReadActive)
+    assert len(later.session.messages) == 3
+
+
 def test_expired_and_unknown_results_are_distinct_for_read_and_append() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
     store = new_store(clock)

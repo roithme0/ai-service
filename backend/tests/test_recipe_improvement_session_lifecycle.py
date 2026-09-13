@@ -80,7 +80,7 @@ def test_recipe_store_uses_shared_core_for_text_messages() -> None:
     store = RecipeImprovementSessionStore()
     created = store.create(valid_session_input())
 
-    appended = store.append(created.session_id, "user", "Can this be lighter?")
+    appended = store.append_user_message(created.session_id, "Can this be lighter?")
     outcome = store.lookup(created.session_id)
 
     assert isinstance(appended, TextSessionAppendAccepted)

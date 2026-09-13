@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 
 class Ingredient(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     index: int = Field(ge=1, le=99)
     amount: Decimal = Field(gt=0, le=9999)
@@ -19,28 +19,28 @@ class Ingredient(BaseModel):
 
 
 class PreparationStep(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     index: int = Field(ge=1, le=99)
     description: str = Field(min_length=1, max_length=200)
 
 
 class RecipeContent(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     name: str = Field(min_length=1, max_length=200)
     servings: int = Field(ge=1, le=99)
     preparation_time: int | None = Field(default=None, ge=1, le=999)
     origin_name: str | None = Field(default=None, max_length=200)
     origin_url: str | None = Field(default=None, max_length=200)
-    ingredients: list[Ingredient]
-    steps: list[PreparationStep]
+    ingredients: tuple[Ingredient, ...]
+    steps: tuple[PreparationStep, ...]
 
     @field_validator("ingredients", "steps", mode="before")
     @classmethod
-    def convert_tuple_collections_to_lists(cls, value: object) -> object:
-        if isinstance(value, tuple):
-            return list(value)
+    def convert_collections_to_tuples(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
         return value
 
     @field_validator("origin_url", mode="before")
@@ -62,7 +62,7 @@ class RecipeContent(BaseModel):
 
     @field_validator("ingredients")
     @classmethod
-    def validate_unique_ingredients(cls, value: list[Ingredient]) -> list[Ingredient]:
+    def validate_unique_ingredients(cls, value: tuple[Ingredient, ...]) -> tuple[Ingredient, ...]:
         _validate_unique([ingredient.index for ingredient in value], "ingredient indexes")
         _validate_unique(
             [ingredient.foodstuff_reference for ingredient in value],
@@ -72,7 +72,9 @@ class RecipeContent(BaseModel):
 
     @field_validator("steps")
     @classmethod
-    def validate_unique_step_indexes(cls, value: list[PreparationStep]) -> list[PreparationStep]:
+    def validate_unique_step_indexes(
+        cls, value: tuple[PreparationStep, ...]
+    ) -> tuple[PreparationStep, ...]:
         _validate_unique([step.index for step in value], "step indexes")
         return value
 

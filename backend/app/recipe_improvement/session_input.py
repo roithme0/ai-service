@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -10,51 +9,18 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from app.recipe_improvement.validation import (
     AvailabilityReferenceIndex,
+    RecipeContent,
     SourceRecipeSnapshot,
     ValidationIssue,
     unknown_foodstuff_issues,
 )
 
 
-class ImmutableIngredient(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
-
-    index: int
-    amount: Decimal
-    foodstuff_reference: int
-
-
-class ImmutablePreparationStep(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
-
-    index: int
-    description: str
-
-
-class ImmutableRecipeContent(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
-
-    name: str
-    servings: int
-    preparation_time: int | None
-    origin_name: str | None
-    origin_url: str | None
-    ingredients: tuple[ImmutableIngredient, ...]
-    steps: tuple[ImmutablePreparationStep, ...]
-
-    @field_validator("ingredients", "steps", mode="before")
-    @classmethod
-    def convert_collections_to_tuples(cls, value: object) -> object:
-        if isinstance(value, list):
-            return tuple(value)
-        return value
-
-
 class RecipeImprovementSourceSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     external_reference: str
-    recipe: ImmutableRecipeContent
+    recipe: RecipeContent
 
 
 class _RecipeImprovementSourceCandidate(SourceRecipeSnapshot):
@@ -118,7 +84,7 @@ def validate_recipe_improvement_session_input(
     try:
         validated_source = RecipeImprovementSourceSnapshot(
             external_reference=source_candidate.external_reference,
-            recipe=ImmutableRecipeContent.model_validate(source_candidate.recipe.model_dump()),
+            recipe=source_candidate.recipe,
         )
     except ValidationError as error:
         return _input_failure(error, ("source",))

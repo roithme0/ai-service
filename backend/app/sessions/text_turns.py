@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Literal, TypeVar
 
@@ -33,6 +34,7 @@ class TextTurnUnavailable:
 
 TextTurnOutcome = TextTurnCompleted | TextTurnUnavailable
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
 
 async def generate_assistant_turn(
@@ -52,7 +54,12 @@ async def generate_assistant_turn(
 
     try:
         response = await generate_text(generator, TextGenerationRequest(snapshot.messages))
-    except Exception:
+    except Exception as error:
+        logger.error(
+            "Text generation failed for session %s (%s)",
+            session_id,
+            type(error).__name__,
+        )
         return TextTurnUnavailable(kind="generation_failed")
 
     appended = store.append_if_revision(session_id, snapshot.revision, "assistant", response.text)

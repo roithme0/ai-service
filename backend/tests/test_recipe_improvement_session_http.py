@@ -225,7 +225,7 @@ def test_rejected_user_messages_do_not_change_the_conversation(
 def test_message_limit_returns_conflict_without_appending(client: TestClient) -> None:
     created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
     session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
-    for index in range(MAX_MESSAGE_COUNT):
+    for index in range(MAX_MESSAGE_COUNT - 1):
         response = client.post(f"{session_url}/messages", json={"text": str(index)})
         assert response.status_code == 201
 
@@ -234,8 +234,8 @@ def test_message_limit_returns_conflict_without_appending(client: TestClient) ->
 
     assert rejected.status_code == 409
     assert read.status_code == 200
-    assert len(read.json()["messages"]) == MAX_MESSAGE_COUNT
-    assert read.json()["messages"][-1] == {"role": "user", "text": "99"}
+    assert len(read.json()["messages"]) == MAX_MESSAGE_COUNT - 1
+    assert read.json()["messages"][-1] == {"role": "user", "text": "98"}
 
 
 def test_unknown_and_expired_user_message_appends_do_not_expose_session_content() -> None:
@@ -395,16 +395,23 @@ def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGene
         app.dependency_overrides.pop(get_recipe_improvement_session_store, None)
 
 
-def test_turn_endpoint_reports_full_conversation_without_calling_generator(
+def test_turn_endpoint_uses_reserved_assistant_capacity(
     client: TestClient, fake_generator: FakeGenerator
 ) -> None:
     created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
     session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
-    for index in range(MAX_MESSAGE_COUNT):
+    for index in range(MAX_MESSAGE_COUNT - 1):
         assert client.post(f"{session_url}/messages", json={"text": str(index)}).status_code == 201
 
     response = client.post(f"{session_url}/turns")
+    answered = client.get(session_url)
+    further_message = client.post(f"{session_url}/messages", json={"text": "one too many"})
+    further_turn = client.post(f"{session_url}/turns")
 
-    assert response.status_code == 409
-    assert response.json() == {"kind": "limit_reached"}
-    assert fake_generator.calls == []
+    assert response.status_code == 201
+    assert response.json() == {"role": "assistant", "text": "Test reply"}
+    assert answered.status_code == 200
+    assert len(answered.json()["messages"]) == MAX_MESSAGE_COUNT
+    assert further_message.status_code == 409
+    assert further_turn.status_code == 409
+    assert len(fake_generator.calls) == 1

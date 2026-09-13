@@ -116,7 +116,7 @@ def append_recipe_improvement_user_message(
     request: RecipeImprovementUserMessageRequest,
     store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
 ) -> TextMessage | JSONResponse:
-    outcome = store.append(session_id, "user", request.text)
+    outcome = store.append_user_message(session_id, request.text)
     if isinstance(outcome, TextSessionAppendAccepted):
         return outcome.message
     if isinstance(outcome, TextSessionAppendExpired):

@@ -183,15 +183,41 @@ class EphemeralTextSessionStore(Generic[T]):
             )
 
     def append(self, session_id: str, role: object, text: object) -> TextSessionAppendOutcome:
-        return self._append(session_id, role, text, expected_revision=None)
+        return self._append(
+            session_id, role, text, expected_revision=None, max_message_count=MAX_MESSAGE_COUNT
+        )
+
+    def append_with_max_message_count(
+        self, session_id: str, role: object, text: object, max_message_count: int
+    ) -> TextSessionAppendOutcome:
+        if max_message_count < 1 or max_message_count > MAX_MESSAGE_COUNT:
+            raise ValueError("max_message_count must be between 1 and MAX_MESSAGE_COUNT")
+        return self._append(
+            session_id,
+            role,
+            text,
+            expected_revision=None,
+            max_message_count=max_message_count,
+        )
 
     def append_if_revision(
         self, session_id: str, expected_revision: int, role: object, text: object
     ) -> TextSessionAppendOutcome:
-        return self._append(session_id, role, text, expected_revision=expected_revision)
+        return self._append(
+            session_id,
+            role,
+            text,
+            expected_revision=expected_revision,
+            max_message_count=MAX_MESSAGE_COUNT,
+        )
 
     def _append(
-        self, session_id: str, role: object, text: object, expected_revision: int | None
+        self,
+        session_id: str,
+        role: object,
+        text: object,
+        expected_revision: int | None,
+        max_message_count: int,
     ) -> TextSessionAppendOutcome:
         with self._lock:
             now = _as_utc(self._clock())
@@ -213,7 +239,7 @@ class EphemeralTextSessionStore(Generic[T]):
                 return TextSessionAppendInvalidMessage(
                     kind="invalid_message", session_id=session_id, reason=invalid_reason
                 )
-            if len(session.messages) >= MAX_MESSAGE_COUNT:
+            if len(session.messages) >= max_message_count:
                 return TextSessionAppendLimitReached(kind="limit_reached", session_id=session_id)
             message = TextMessage(role=cast(SessionRole, role), text=cast(str, text))
             self._sessions[session_id] = _StoredTextSession(
