@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+
 from pydantic import TypeAdapter, ValidationError
 
 from app.models.agentic_generation import AgenticGenerator
@@ -13,6 +16,8 @@ from app.recipe_improvement.session_lifecycle import (
     RecipeImprovementSessionStore,
     RecipeTurnResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def generate_recipe_turn(
@@ -42,5 +47,13 @@ async def generate_recipe_turn(
             register_from_tool,
         )
         return store.complete_turn(session_id, reservation, result)
+    except asyncio.CancelledError:
+        store.fail_turn(session_id, reservation)
+        raise
     except Exception:
+        logger.exception(
+            "Recipe turn generation failed (session_id=%s, turn_id=%s)",
+            session_id,
+            reservation.turn_id,
+        )
         return store.fail_turn(session_id, reservation)

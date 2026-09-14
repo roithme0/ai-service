@@ -4,6 +4,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
+
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.recipe_improvement.session_input import RecipeImprovementSessionInput, RecipeImprovementSessionInputSuccess, validate_recipe_improvement_session_input
 from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionLookupSuccess, RecipeImprovementSessionStore
@@ -249,7 +251,7 @@ def test_provider_response_budget_drops_accepted_proposals() -> None:
     assert len(generator.requests) == 8
 
 
-def test_provider_exception_after_registration_drops_proposal() -> None:
+def test_provider_exception_after_registration_drops_proposal(caplog: pytest.LogCaptureFixture) -> None:
     store = RecipeImprovementSessionStore()
     created = store.create(session_input())
     store.append_user_message(created.session_id, "Suggest an option")
@@ -267,6 +269,41 @@ def test_provider_exception_after_registration_drops_proposal() -> None:
     assert result.proposals == ()
     assert isinstance(read, RecipeImprovementSessionLookupSuccess)
     assert read.session.proposals == ()
+    assert f"session_id={created.session_id}, turn_id={result.turn_id}" in caplog.text
+    assert "provider failed" in caplog.text
+
+
+def test_cancellation_after_registration_releases_turn_and_drops_proposal() -> None:
+    store = RecipeImprovementSessionStore()
+    created = store.create(session_input())
+    store.append_user_message(created.session_id, "Suggest an option")
+    entered = asyncio.Event()
+
+    class BlockingGenerator:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def generate(self, request: AgenticGenerationRequest) -> AgenticGenerationResponse:
+            self.calls += 1
+            if self.calls == 1:
+                return call("accepted", {"kind": "source"}, candidate())
+            entered.set()
+            await asyncio.Event().wait()
+            return final()
+
+    async def run() -> None:
+        task = asyncio.create_task(store.generate_agentic_turn(created.session_id, BlockingGenerator()))
+        await entered.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(run())
+    read = store.lookup(created.session_id)
+    assert isinstance(read, RecipeImprovementSessionLookupSuccess)
+    assert read.session.proposals == ()
+    assert read.session.terminal_turn_kind == "generation_failed"
+    assert store.append_user_message(created.session_id, "Try again").kind == "accepted"
 
 
 def test_expiry_after_registration_drops_proposal_and_wins_over_busy() -> None:
