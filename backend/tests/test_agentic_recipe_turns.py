@@ -72,6 +72,30 @@ def test_multiple_proposals_can_chain_and_remain_typed_in_session() -> None:
     assert len(read.session.messages) == 2
 
 
+def test_later_turn_receives_full_previous_proposals_and_final_text_instruction() -> None:
+    store = RecipeImprovementSessionStore()
+    created = store.create(session_input())
+    store.append_user_message(created.session_id, "Suggest an option")
+    first = asyncio.run(store.generate_agentic_turn(
+        created.session_id,
+        ScriptedGenerator([call("first", {"kind": "source"}, candidate("First")), final("Option ready")]),
+    ))
+    assert first.kind == "completed"
+
+    store.append_user_message(created.session_id, "Refine that proposal")
+
+    def inspect_context(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
+        context = json.loads(request.input_items[0]["content"].split("\n", 1)[1])
+        assert context["proposals"] == [first.proposals[0].model_dump(mode="json")]
+        assert context["proposals"][0]["recipe"]["name"] == "First"
+        assert "not persisted or visible to the user" in request.instructions
+        assert "final text response" in request.instructions
+        return final("Refined")
+
+    second = asyncio.run(store.generate_agentic_turn(created.session_id, ScriptedGenerator([inspect_context])))
+    assert second.kind == "completed"
+
+
 def test_rejected_call_can_be_corrected_and_failed_final_is_idempotent() -> None:
     store = RecipeImprovementSessionStore()
     created = store.create(session_input())
@@ -108,7 +132,14 @@ def test_rejected_call_can_be_corrected_and_failed_final_is_idempotent() -> None
     assert pending.session.terminal_turn_id is None
     assert pending.session.terminal_turn_kind is None
     assert pending.session.proposals == first.proposals
-    next_turn = asyncio.run(store.generate_agentic_turn(created.session_id, ScriptedGenerator([final()])))
+    def inspect_recovered_context(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
+        context = json.loads(request.input_items[0]["content"].split("\n", 1)[1])
+        assert context["proposals"] == [first.proposals[0].model_dump(mode="json")]
+        return final()
+
+    next_turn = asyncio.run(store.generate_agentic_turn(
+        created.session_id, ScriptedGenerator([inspect_recovered_context])
+    ))
     assert next_turn.kind == "completed"
     assert next_turn.turn_id != first.turn_id
 

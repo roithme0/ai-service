@@ -135,7 +135,7 @@ def test_integer_amount_and_read_snapshot_can_initialize_sessions(client: TestCl
     assert recreated.status_code == 201
 
 
-def test_oversized_context_is_rejected_at_creation(client: TestClient) -> None:
+def test_oversized_initial_snapshot_context_is_rejected_at_creation(client: TestClient) -> None:
     request = valid_request()
     request["foodstuffs"] = [
         {"external_reference": index, "name": "N" * 50, "brand": "B" * 100, "unit": "G"}
@@ -147,7 +147,7 @@ def test_oversized_context_is_rejected_at_creation(client: TestClient) -> None:
     assert response.status_code == 422
     assert response.json()["kind"] == "invalid_input"
     assert response.json()["issues"] == [
-        {"location": ["foodstuffs"], "message": "recipe context exceeds 16000 characters"}
+        {"location": [], "message": "initial source recipe and foodstuffs context exceeds 16000 characters"}
     ]
 
 

@@ -111,9 +111,13 @@ def validate_recipe_improvement_session_input(
         foodstuffs=tuple(validated_foodstuffs.foodstuffs),
         availability_reference_index=index,
     )
-    if len(recipe_context(session_input)) > MAX_CONTEXT_LENGTH:
+    initial_snapshot_context = recipe_context(session_input)
+    if len(initial_snapshot_context) > MAX_CONTEXT_LENGTH:
         return RecipeImprovementSessionInputFailure(
-            issues=(ValidationIssue(location=("foodstuffs",), message="recipe context exceeds 16000 characters"),)
+            issues=(ValidationIssue(
+                location=(),
+                message="initial source recipe and foodstuffs context exceeds 16000 characters",
+            ),)
         )
     return RecipeImprovementSessionInputSuccess(session_input=session_input)
 

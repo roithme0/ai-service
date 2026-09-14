@@ -262,7 +262,9 @@ class RecipeImprovementSessionStore:
             return reserved
         turn_id, snapshot = reserved
         try:
-            context = recipe_context(snapshot.payload)
+            with self._lock:
+                previous_proposals = self._proposals.get(session_id, ())
+            context = recipe_context(snapshot.payload, previous_proposals)
             def register_from_tool(base: object, candidate: object) -> ProposalRegistrationOutcome:
                 try:
                     validated_base = TypeAdapter(ProposalBase).validate_python(base)
