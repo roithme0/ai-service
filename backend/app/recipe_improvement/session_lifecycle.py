@@ -161,13 +161,17 @@ class RecipeImprovementSessionStore:
             outcome = self._core.read(session_id)
             if isinstance(outcome, TextSessionReadActive):
                 terminal = self._terminal_turns.get(session_id)
+                active_turn_id = self._active_turns.get(session_id)
                 return RecipeImprovementSessionLookupSuccess(
                     session=RecipeImprovementSessionSnapshot(
                         session_id=outcome.session.session_id,
                         expires_at=outcome.session.expires_at,
                         session_input=outcome.session.payload,
                         messages=outcome.session.messages,
-                        proposals=self._proposals.get(session_id, ()),
+                        proposals=tuple(
+                            proposal for proposal in self._proposals.get(session_id, ())
+                            if proposal.turn_id != active_turn_id
+                        ),
                         terminal_turn_id=terminal.result.turn_id if terminal is not None else None,
                         terminal_turn_kind=terminal.result.kind if terminal is not None else None,
                     )

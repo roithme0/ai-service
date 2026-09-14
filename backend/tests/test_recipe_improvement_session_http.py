@@ -508,3 +508,64 @@ def test_partial_failure_drops_accepted_proposals_and_retry_is_stable(
     assert read.json()["proposals"] == []
     assert read.json()["terminal_turn_id"] == first.json()["turn_id"]
     assert read.json()["messages"] == [{"role": "user", "text": "Propose one"}]
+
+
+def test_proposal_lookup_only_exposes_completed_turn_artifacts(
+    client: TestClient, fake_generator: FakeGenerator
+) -> None:
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    client.post(f"{session_url}/messages", json={"text": "Propose one"})
+    recipe = valid_request()["source"]["recipe"]
+    recipe["ingredients"][0]["amount"] = "125.75"
+    arguments = json.dumps({"base": {"kind": "source"}, "candidate": recipe})
+    fake_generator.responses = [
+        AgenticGenerationResponse(
+            output_items=({"type": "function_call", "call_id": "call_1",
+                           "name": "register_recipe_proposal", "arguments": arguments},),
+            tool_calls=(AgenticToolCall("call_1", "register_recipe_proposal", arguments),),
+            text=None,
+        ),
+        AgenticGenerationResponse((), (), "Here is a proposal."),
+    ]
+
+    def check_pending_proposal() -> None:
+        if len(fake_generator.calls) != 2:
+            return
+        pending = client.get(session_url).json()["proposals"]
+        assert pending == []
+
+    fake_generator.before_return = check_pending_proposal
+    turn = client.post(f"{session_url}/turns")
+
+    assert turn.status_code == 201
+    proposal = turn.json()["proposals"][0]
+    found = client.get(f"{session_url}/proposals/{proposal['proposal_id']}")
+    missing = client.get(f"{session_url}/proposals/missing")
+    assert found.status_code == 200
+    assert found.json() == proposal
+    assert missing.status_code == 404
+    assert missing.json() == {"kind": "unknown_proposal"}
+
+
+def test_proposal_lookup_reports_session_expiry_then_unknown() -> None:
+    clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
+    store = RecipeImprovementSessionStore(clock=clock.now)
+    app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
+    try:
+        client = TestClient(app)
+        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+        proposal_url = (
+            f"/api/v1/recipe-improvement/sessions/{created['session_id']}/proposals/missing"
+        )
+        clock.value = datetime.fromisoformat(created["expires_at"])
+
+        expired = client.get(proposal_url)
+        unknown = client.get(proposal_url)
+
+        assert expired.status_code == 410
+        assert expired.json() == {"kind": "expired"}
+        assert unknown.status_code == 404
+        assert unknown.json() == {"kind": "unknown"}
+    finally:
+        app.dependency_overrides.clear()

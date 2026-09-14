@@ -139,6 +139,23 @@ def get_recipe_improvement_session(
     return JSONResponse(status_code=404, content={"kind": "unknown"})
 
 
+@router.get("/{session_id}/proposals/{proposal_id}", response_model=RecipeProposal)
+def get_recipe_improvement_proposal(
+    session_id: str,
+    proposal_id: str,
+    store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
+) -> RecipeProposal | JSONResponse:
+    outcome = store.lookup(session_id)
+    if isinstance(outcome, RecipeImprovementSessionLookupExpired):
+        return JSONResponse(status_code=410, content={"kind": "expired"})
+    if not isinstance(outcome, RecipeImprovementSessionLookupSuccess):
+        return JSONResponse(status_code=404, content={"kind": "unknown"})
+    for proposal in outcome.session.proposals:
+        if proposal.proposal_id == proposal_id:
+            return proposal
+    return JSONResponse(status_code=404, content={"kind": "unknown_proposal"})
+
+
 @router.post("/{session_id}/messages", response_model=TextMessage, status_code=201)
 def append_recipe_improvement_user_message(
     session_id: str,

@@ -25,6 +25,7 @@ from app.recipe_improvement.proposals import (
     SourceProposalBase,
 )
 from app.sessions.text_sessions import TextSessionAppendAccepted
+from app.sessions.tool_turns import ToolTurnResult
 
 
 RECIPE_VERSION_UUID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
@@ -192,6 +193,15 @@ def test_proposals_have_explicit_validated_lineage_and_deterministic_order() -> 
     assert second.proposal.base.proposal_id == first.proposal.proposal_id
     assert second.proposal.proposal_id != first.proposal.proposal_id
     assert first.proposal.turn_id == second.proposal.turn_id == turn_id
+    pending_snapshot = store.lookup(created.session_id)
+    assert isinstance(pending_snapshot, RecipeImprovementSessionLookupSuccess)
+    assert pending_snapshot.session.proposals == ()
+    completed = store.complete_turn(
+        created.session_id,
+        reserved,
+        ToolTurnResult("completed", "Two alternatives.", (first.proposal, second.proposal)),
+    )
+    assert completed.kind == "completed"
     snapshot = store.lookup(created.session_id)
     assert isinstance(snapshot, RecipeImprovementSessionLookupSuccess)
     assert snapshot.session.proposals == (first.proposal, second.proposal)

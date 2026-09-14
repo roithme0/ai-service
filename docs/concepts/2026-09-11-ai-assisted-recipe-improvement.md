@@ -6,7 +6,7 @@ Draft. Defines the AI Service backend and reusable chat UI for bounded recipe im
 
 ## Context
 
-The AI Service should provide a focused chat capability that improves one complete recipe through a short-lived conversational session. The caller supplies the source recipe and all foodstuffs currently available for proposals. The service applies a versioned irritable-bowel-syndrome-focused gut-health optimization capability and returns explainable, structured recipe proposals.
+The AI Service should provide a focused chat capability that improves one complete recipe through a short-lived conversational session. The caller supplies the source recipe and all foodstuffs currently available for proposals. The service uses generic recipe-improvement instructions and returns structured recipe proposals.
 
 This concept covers AI orchestration, proposal production, short-lived conversation state, and a reusable chat UI that can be embedded into Kochwiki. Kochwiki remains responsible for recipe data, foodstuff data, authorization, domain-specific proposal presentation, validation at its boundary, and persistence through its own draft lifecycle.
 
@@ -18,12 +18,12 @@ Each session:
 
 - is initialized with one complete source-recipe snapshot and its opaque external reference;
 - receives a snapshot of the foodstuffs available for use in proposals;
-- applies the irritable-bowel-syndrome-focused gut-health direction with an explicit version;
+- uses generic instructions to discuss recipe changes in light of the user's stated goals and constraints;
 - supports clarification, questions, and iterative proposal refinement;
 - retains its conversation, proposals, and proposal lineage in short-lived AI Service state; and
 - expires without becoming durable recipe or chat storage.
 
-The service produces immutable, complete recipe proposals. It assigns proposal identifiers, ordering, timestamps, base references, and optimization provenance deterministically. The model supplies conversational content, explanations, and structured recipe candidates but does not invent lifecycle metadata.
+The service produces immutable, complete recipe proposals. It assigns proposal identifiers, ordering, timestamps, and base references deterministically. The model supplies conversational content and structured recipe candidates but does not invent lifecycle metadata.
 
 The AI Service also owns generic chat UI behavior. The UI presents conversational content and proposal placement but delegates proposal rendering to a renderer supplied by the host application.
 
@@ -37,15 +37,13 @@ Later iterations may replace or supplement the snapshot with a bounded foodstuff
 
 The snapshot represents allowed references, not AI Service-owned domain data. It should contain only the fields needed to choose and explain an ingredient. The exact schema and catalogue-size limit remain contract-design questions.
 
-## Initial Optimization Direction
+## Recipe-Improvement Instructions
 
-The initial and only optimization direction is gut-health recipe improvement for a user with a diagnosed irritable bowel syndrome (German: `Reizdarm`). It is implemented as a versioned capability module that will provide instructions, evaluation criteria, and proposal strategies.
+The initial capability uses generic instructions to help users explore practical recipe changes aligned with their stated goals, preferences, and constraints. It should explain relevant tradeoffs and uncertainty without presenting unvalidated optimization criteria as established.
 
-The concrete meaning of this optimization is deliberately deferred. This concept does not yet choose nutritional signals, symptom profiles, dietary protocols, scoring rules, or deterministic validation beyond structural proposal validity. Those decisions require a separate evidence-informed definition before implementation.
+Health-related questions receive cautious recipe-level suggestions, not diagnosis, treatment, or promised health outcomes. Specific dietary or medical optimization criteria are not part of this initial capability.
 
-The capability improves recipes within the eventual criteria but does not diagnose, treat, or claim to improve the underlying condition. Its language and explanations must distinguish recipe suggestions from personalized medical advice.
-
-Other optimization directions, including protein, calorie, and macronutrient targets, are outside the initial concept.
+The model may discuss different user-supplied goals, but the service does not claim to evaluate proposals against a defined nutrition or medical standard.
 
 ## Proposal Behavior
 
@@ -53,17 +51,16 @@ Other optimization directions, including protein, calorie, and macronutrient tar
 - Every ingredient must reference the session's availability snapshot.
 - A proposal identifies the source recipe or an earlier session proposal as its base.
 - One assistant turn may emit multiple proposals when alternatives are requested.
-- Each proposal includes a concise explanation of material changes and their relationship to the gut-health direction.
-- The applied direction identifier and version are retained as provenance.
+- The assistant can explain proposals in its conversational response; explanations are not required fields on individual proposal artifacts.
 - Deterministic validation occurs before a proposal is exposed to the caller.
 
 The service does not claim that a proposal remains valid against changing external state after session initialization. Revalidation and conflict handling at persistence time belong to the consuming domain service and are outside this concept.
 
 ## Session Lifecycle
 
-Short-lived service state is required so a proposal identifier can be resolved without trusting the model or requiring it to reconstruct recipe content. The state includes the initialization snapshots, ordered conversation content, validated proposals, lineage, and capability provenance.
+Short-lived service state is required so a proposal identifier can be resolved without trusting the model or requiring it to reconstruct recipe content. The state includes the initialization snapshots, ordered conversation content, validated proposals, and lineage. The backend exposes session-scoped proposal lookup by identifier.
 
-Session expiry, maximum context, proposal count, and storage mechanism are implementation decisions. Expiry must be visible to callers, and an expired proposal identifier must fail explicitly. Durable conversation history, session reopening, and recovery of expired proposals are out of scope.
+Session expiry, maximum context, proposal count, and storage mechanism are implementation decisions. Expiry is visible when an expired session is first encountered; after its state is removed, later lookups may return unknown. Durable conversation history, session reopening, and recovery of expired proposals are out of scope.
 
 ## Reusable Chat UI
 
@@ -71,7 +68,7 @@ The AI Service provides a reusable chat UI that Kochwiki can integrate into its 
 
 The chat UI must not import Kochwiki components or understand Kochwiki recipe presentation. Instead, it exposes a typed renderer registry or equivalent host extension point:
 
-- the host associates the recipe-proposal artifact type and version with its renderer;
+- the host associates the recipe-proposal artifact type with its renderer;
 - the chat UI invokes that renderer for validated proposal artifacts;
 - the renderer receives typed proposal data and only explicitly supplied host actions;
 - an absent or unsupported renderer produces a generic fallback rather than breaking the conversation; and
@@ -85,7 +82,7 @@ The library must retain a deliberately narrow public API so its packaging does n
 
 ## Integration Impact
 
-The AI Service backend exposes a versioned recipe-improvement contract around session initialization, conversational turns, structured proposal artifacts, and session expiry. External recipe and foodstuff identifiers remain opaque to the service.
+The AI Service backend exposes a recipe-improvement contract around session initialization, conversational turns, structured proposal artifacts, proposal lookup, and session expiry. External recipe and foodstuff identifiers remain opaque to the service.
 
 The caller must supply a self-consistent recipe and foodstuff snapshot and translate returned proposals into its domain workflow. The AI Service does not read from or write to Kochwiki, create drafts, render recipes, or decide whether an external recipe changed.
 
@@ -99,10 +96,10 @@ In scope:
 
 - one-recipe, short-lived improvement sessions;
 - caller-provided recipe and foodstuff snapshots;
-- the versioned irritable-bowel-syndrome-focused gut-health direction;
+- generic recipe-improvement guidance shaped by user-stated goals and constraints;
 - clarification and iterative conversational refinement;
-- complete, explainable, structured proposals using available foodstuffs only;
-- deterministic proposal identity, lineage, provenance, and validation;
+- complete, structured proposals using available foodstuffs only;
+- deterministic proposal identity, lineage, and validation;
 - a reusable chat UI for the session lifecycle; and
 - a typed extension point for host-supplied proposal renderers.
 
@@ -115,15 +112,14 @@ Out of scope:
 - proposing or creating unavailable foodstuffs;
 - durable chat history or session resumption;
 - diagnosis, treatment, medical advice, or health-outcome claims;
-- optimization directions other than the initial gut-health direction;
 - handling changes to the external source recipe during a session; and
-- defining the detailed irritable-bowel-syndrome optimization criteria.
+- defining or guaranteeing specific dietary or medical optimization criteria.
 
 ## Risks
 
 - Supplying the full foodstuff catalogue can consume excessive model context as the catalogue grows. A measured limit and a later lookup tool will be needed before this becomes unbounded.
 - Catalogue entries may not contain enough semantic or nutritional information for the model to choose useful substitutions.
-- Irritable-bowel-syndrome guidance is individualized and medically sensitive. The eventual optimization definition and product language need evidence review and clear limits.
+- Health-related suggestions can be mistaken for medical advice; the instructions and product language need clear limits.
 - Short-lived state adds expiry and horizontal-scaling concerns even though durable persistence is excluded.
 - A reusable chat UI can become coupled to Kochwiki if artifact or action APIs encode recipe-specific behavior instead of generic extension points.
 - Deferring the concrete renderer while defining its contract risks discovering missing data later; the first contract should be exercised with a minimal test renderer.
@@ -131,15 +127,13 @@ Out of scope:
 
 ## Open Questions
 
-- What evidence-informed definition should govern the irritable-bowel-syndrome-focused optimization?
-- Which eventual criteria are deterministic, which depend on model judgment, and which are explanatory signals only?
 - What minimum recipe and foodstuff fields are required for useful and valid proposals?
 - What catalogue-size or token-budget threshold triggers a move from an upfront snapshot to lookup tools?
 - How long should a session live, and should activity extend its expiry?
 - Which registry and release workflow should distribute the Angular chat UI library when Kochwiki integration begins?
-- What generic renderer interface and fallback representation are sufficient for the first proposal artifact version?
+- What generic renderer interface and fallback representation are sufficient for recipe proposals?
 - Which host actions, if any, must the renderer contract anticipate before Kochwiki persistence work begins?
 
 ## Summary
 
-The AI Service owns a short-lived, recipe-scoped optimization session that turns caller-supplied snapshots into validated and explainable recipe proposals. It also owns a reusable, embeddable chat UI that places typed proposals in the conversation and accepts their renderer from the host application. The initial capability is restricted to available foodstuffs and one versioned, irritable-bowel-syndrome-focused gut-health direction whose concrete criteria remain deferred. The Kochwiki renderer, domain persistence, and changing external state remain outside the service boundary.
+The AI Service owns a short-lived, recipe-scoped improvement session that turns caller-supplied snapshots into validated recipe proposals. It also owns a reusable, embeddable chat UI that places typed proposals in the conversation and accepts their renderer from the host application. The initial capability uses generic instructions and is restricted to available foodstuffs. The Kochwiki renderer, domain persistence, and changing external state remain outside the service boundary.
