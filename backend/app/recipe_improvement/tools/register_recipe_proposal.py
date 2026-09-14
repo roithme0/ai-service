@@ -11,6 +11,52 @@ from app.recipe_improvement.proposals import ProposalRegistered, ProposalRegistr
 from app.sessions.tool_turns import RegisteredTool, ToolExecution
 
 
+_BASE_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["kind"],
+    "properties": {
+        "kind": {"type": "string", "enum": ["source", "proposal"]},
+        "proposal_id": {"type": "string"},
+    },
+}
+
+_INGREDIENT_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["index", "amount", "foodstuff_reference"],
+    "properties": {
+        "index": {"type": "integer"},
+        "amount": {"type": "string"},
+        "foodstuff_reference": {"type": "integer"},
+    },
+}
+
+_STEP_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["index", "description"],
+    "properties": {
+        "index": {"type": "integer"},
+        "description": {"type": "string"},
+    },
+}
+
+_CANDIDATE_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["name", "servings", "ingredients", "steps"],
+    "properties": {
+        "name": {"type": "string"},
+        "servings": {"type": "integer"},
+        "preparation_time": {"type": ["integer", "null"]},
+        "origin_name": {"type": ["string", "null"]},
+        "origin_url": {"type": ["string", "null"]},
+        "ingredients": {"type": "array", "items": _INGREDIENT_SCHEMA},
+        "steps": {"type": "array", "items": _STEP_SCHEMA},
+    },
+}
+
 REGISTER_TOOL_SCHEMA: dict[str, object] = {
     "type": "function",
     "name": "register_recipe_proposal",
@@ -19,31 +65,7 @@ REGISTER_TOOL_SCHEMA: dict[str, object] = {
         "type": "object",
         "additionalProperties": False,
         "required": ["base", "candidate"],
-        "properties": {
-            "base": {"type": "object", "additionalProperties": False,
-                     "required": ["kind"], "properties": {
-                         "kind": {"type": "string", "enum": ["source", "proposal"]},
-                         "proposal_id": {"type": "string"}}},
-            "candidate": {"type": "object", "additionalProperties": False,
-                          "required": ["name", "servings", "ingredients", "steps"],
-                          "properties": {
-                              "name": {"type": "string"}, "servings": {"type": "integer"},
-                              "preparation_time": {"type": ["integer", "null"]},
-                              "origin_name": {"type": ["string", "null"]},
-                              "origin_url": {"type": ["string", "null"]},
-                              "ingredients": {"type": "array", "items": {"type": "object",
-                                  "additionalProperties": False,
-                                  "required": ["index", "amount", "foodstuff_reference"],
-                                  "properties": {"index": {"type": "integer"},
-                                                 "amount": {"type": "string"},
-                                                 "foodstuff_reference": {"type": "integer"}}}},
-                              "steps": {"type": "array", "items": {"type": "object",
-                                  "additionalProperties": False,
-                                  "required": ["index", "description"],
-                                  "properties": {"index": {"type": "integer"},
-                                                 "description": {"type": "string"}}}},
-                          }},
-        },
+        "properties": {"base": _BASE_SCHEMA, "candidate": _CANDIDATE_SCHEMA},
     },
     "strict": False,
 }

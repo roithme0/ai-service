@@ -10,6 +10,7 @@ from app.models.agentic_generation import AgenticGenerationRequest, AgenticGener
 from app.recipe_improvement.session_input import RecipeImprovementSessionInput, RecipeImprovementSessionInputSuccess, validate_recipe_improvement_session_input
 from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionLookupSuccess, RecipeImprovementSessionStore
 from app.recipe_improvement.turn_service import generate_recipe_turn
+from app.recipe_improvement.tools.register_recipe_proposal import REGISTER_TOOL_SCHEMA
 
 
 def session_input() -> RecipeImprovementSessionInput:
@@ -49,6 +50,24 @@ class ScriptedGenerator:
 
 def final(text: str = "Done") -> AgenticGenerationResponse:
     return AgenticGenerationResponse((), (), text)
+
+
+def test_registration_tool_schema_requests_complete_recipe_with_string_amounts() -> None:
+    assert REGISTER_TOOL_SCHEMA["name"] == "register_recipe_proposal"
+    assert REGISTER_TOOL_SCHEMA["strict"] is False
+    parameters = REGISTER_TOOL_SCHEMA["parameters"]
+    assert isinstance(parameters, dict)
+    assert parameters["required"] == ["base", "candidate"]
+    base = parameters["properties"]["base"]
+    assert base["required"] == ["kind"]
+    assert base["properties"]["kind"]["enum"] == ["source", "proposal"]
+    candidate_schema = parameters["properties"]["candidate"]
+    assert candidate_schema["required"] == ["name", "servings", "ingredients", "steps"]
+    ingredients = candidate_schema["properties"]["ingredients"]["items"]
+    assert ingredients["required"] == ["index", "amount", "foodstuff_reference"]
+    assert ingredients["properties"]["amount"] == {"type": "string"}
+    steps = candidate_schema["properties"]["steps"]["items"]
+    assert steps["required"] == ["index", "description"]
 
 
 def test_multiple_proposals_can_chain_and_remain_typed_in_session() -> None:
