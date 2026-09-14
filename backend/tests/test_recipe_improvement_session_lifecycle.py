@@ -14,6 +14,7 @@ from app.recipe_improvement.session_lifecycle import (
     RecipeImprovementSessionLookupSuccess,
     RecipeImprovementSessionLookupUnknown,
     RecipeImprovementSessionStore,
+    RecipeTurnReservation,
 )
 from app.recipe_improvement.proposals import (
     MAX_PROPOSALS_PER_SESSION,
@@ -158,9 +159,9 @@ def test_proposals_have_explicit_validated_lineage_and_deterministic_order() -> 
     created = store.create(valid_session_input())
     candidate = valid_session_input().source.recipe.model_dump()
     store.append_user_message(created.session_id, "Improve this")
-    reserved = store._reserve_turn(created.session_id)
-    assert isinstance(reserved, tuple)
-    turn_id, _ = reserved
+    reserved = store.reserve_turn(created.session_id)
+    assert isinstance(reserved, RecipeTurnReservation)
+    turn_id = reserved.turn_id
 
     first = store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id)
     assert isinstance(first, ProposalRegistered)
@@ -184,9 +185,9 @@ def test_invalid_base_and_candidate_do_not_modify_proposal_state() -> None:
     created = store.create(valid_session_input())
     candidate = valid_session_input().source.recipe.model_dump()
     store.append_user_message(created.session_id, "Improve this")
-    reserved = store._reserve_turn(created.session_id)
-    assert isinstance(reserved, tuple)
-    turn_id, _ = reserved
+    reserved = store.reserve_turn(created.session_id)
+    assert isinstance(reserved, RecipeTurnReservation)
+    turn_id = reserved.turn_id
 
     invalid_base = store.register_proposal(
         created.session_id, PreviousProposalBase(proposal_id="missing"), candidate, turn_id
@@ -210,9 +211,9 @@ def test_proposal_registration_respects_expiry_and_limit() -> None:
     created = store.create(valid_session_input())
     candidate = valid_session_input().source.recipe.model_dump()
     store.append_user_message(created.session_id, "Improve this")
-    reserved = store._reserve_turn(created.session_id)
-    assert isinstance(reserved, tuple)
-    turn_id, _ = reserved
+    reserved = store.reserve_turn(created.session_id)
+    assert isinstance(reserved, RecipeTurnReservation)
+    turn_id = reserved.turn_id
     for _ in range(MAX_PROPOSALS_PER_SESSION):
         assert isinstance(
             store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id),

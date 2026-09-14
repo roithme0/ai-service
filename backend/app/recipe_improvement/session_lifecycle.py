@@ -9,10 +9,8 @@ from threading import RLock
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.recipe_improvement.context import recipe_context
-from app.recipe_improvement.instructions import RECIPE_IMPROVEMENT_INSTRUCTIONS
 from app.recipe_improvement.proposals import (
     MAX_PROPOSALS_PER_SESSION,
     PreviousProposalBase,
@@ -38,7 +36,7 @@ from app.sessions.text_sessions import (
     TextSessionReadUnknown,
 )
 from app.models.agentic_generation import AgenticGenerator
-from app.recipe_improvement.agentic_turns import generate_agentic_recipe_turn
+from app.sessions.tool_turns import ToolTurnResult
 
 
 SESSION_LIFETIME = timedelta(minutes=90)
@@ -69,6 +67,13 @@ class RecipeTurnResult:
     turn_id: str
     text: str | None
     proposals: tuple[RecipeProposal, ...]
+
+
+@dataclass(frozen=True)
+class RecipeTurnReservation:
+    turn_id: str
+    snapshot: TextSessionSnapshot[RecipeImprovementSessionInput]
+    previous_proposals: tuple[RecipeProposal, ...]
 
 
 @dataclass(frozen=True)
@@ -243,7 +248,7 @@ class RecipeImprovementSessionStore:
         else:
             self._proposals.pop(session_id, None)
 
-    def _reserve_turn(self, session_id: str) -> tuple[str, TextSessionSnapshot[RecipeImprovementSessionInput]] | RecipeTurnResult:
+    def reserve_turn(self, session_id: str) -> RecipeTurnReservation | RecipeTurnResult:
         with self._lock:
             read = self._core.read(session_id)
             if isinstance(read, TextSessionReadExpired):
@@ -264,61 +269,50 @@ class RecipeImprovementSessionStore:
                 return RecipeTurnResult("limit_reached", "", None, ())
             turn_id = str(uuid4())
             self._active_turns[session_id] = turn_id
-            return turn_id, read.session
+            return RecipeTurnReservation(turn_id, read.session, self._proposals.get(session_id, ()))
 
     async def generate_agentic_turn(self, session_id: str, generator: AgenticGenerator) -> RecipeTurnResult:
-        reserved = self._reserve_turn(session_id)
-        if isinstance(reserved, RecipeTurnResult):
-            return reserved
-        turn_id, snapshot = reserved
-        try:
-            with self._lock:
-                previous_proposals = self._proposals.get(session_id, ())
-            context = recipe_context(snapshot.payload, previous_proposals)
-            def register_from_tool(base: object, candidate: object) -> ProposalRegistrationOutcome:
-                try:
-                    validated_base = TypeAdapter(ProposalBase).validate_python(base)
-                except ValidationError:
-                    return ProposalRejected(reason="invalid_base")
-                return self.register_proposal(session_id, validated_base, candidate, turn_id)
-            result = await generate_agentic_recipe_turn(
-                generator, snapshot.messages, context, RECIPE_IMPROVEMENT_INSTRUCTIONS,
-                register_from_tool,
-            )
-            with self._lock:
-                current = self._core.read(session_id)
-                if not isinstance(current, TextSessionReadActive):
-                    if current.kind == "expired":
-                        self._proposals.pop(session_id, None)
-                    final = RecipeTurnResult("expired" if current.kind == "expired" else "unknown", turn_id, None, ())
-                elif current.session.revision != snapshot.revision:
-                    final = RecipeTurnResult("conflict", turn_id, None, ())
-                elif result.kind == "completed" and result.text is not None:
-                    appended = self._core.append_if_revision(session_id, snapshot.revision, "assistant", result.text)
-                    if isinstance(appended, TextSessionAppendAccepted):
-                        final = RecipeTurnResult("completed", turn_id, result.text, result.artifacts)
-                    else:
-                        final = RecipeTurnResult("conflict", turn_id, None, ())
-                else:
-                    final = RecipeTurnResult("generation_failed", turn_id, None, ())
-                if final.kind != "completed":
-                    self._drop_turn_proposals(session_id, turn_id)
-                terminal_revision = snapshot.revision
-                if final.kind == "completed":
-                    terminal_revision += 1
-                if final.kind not in ("expired", "unknown"):
-                    self._terminal_turns[session_id] = _TerminalTurn(terminal_revision, final)
-                self._active_turns.pop(session_id, None)
-                return final
-        except Exception:
-            with self._lock:
-                self._active_turns.pop(session_id, None)
-                current = self._core.read(session_id)
-                if not isinstance(current, TextSessionReadActive):
+        from app.recipe_improvement.turn_service import generate_recipe_turn
+
+        return await generate_recipe_turn(self, session_id, generator)
+
+    def complete_turn(
+        self, session_id: str, reservation: RecipeTurnReservation, result: ToolTurnResult[RecipeProposal]
+    ) -> RecipeTurnResult:
+        turn_id, snapshot = reservation.turn_id, reservation.snapshot
+        with self._lock:
+            current = self._core.read(session_id)
+            if not isinstance(current, TextSessionReadActive):
+                if current.kind == "expired":
                     self._proposals.pop(session_id, None)
-                    self._terminal_turns.pop(session_id, None)
-                    return RecipeTurnResult(current.kind, turn_id, None, ())
-                self._drop_turn_proposals(session_id, turn_id)
+                final = RecipeTurnResult(current.kind, turn_id, None, ())
+            elif current.session.revision != snapshot.revision:
+                final = RecipeTurnResult("conflict", turn_id, None, ())
+            elif result.kind == "completed" and result.text is not None:
+                appended = self._core.append_if_revision(session_id, snapshot.revision, "assistant", result.text)
+                if isinstance(appended, TextSessionAppendAccepted):
+                    final = RecipeTurnResult("completed", turn_id, result.text, result.artifacts)
+                else:
+                    final = RecipeTurnResult("conflict", turn_id, None, ())
+            else:
                 final = RecipeTurnResult("generation_failed", turn_id, None, ())
-                self._terminal_turns[session_id] = _TerminalTurn(snapshot.revision, final)
+            if final.kind != "completed":
+                self._drop_turn_proposals(session_id, turn_id)
+            terminal_revision = snapshot.revision + 1 if final.kind == "completed" else snapshot.revision
+            if final.kind not in ("expired", "unknown"):
+                self._terminal_turns[session_id] = _TerminalTurn(terminal_revision, final)
+            self._active_turns.pop(session_id, None)
+            return final
+
+    def fail_turn(self, session_id: str, reservation: RecipeTurnReservation) -> RecipeTurnResult:
+        with self._lock:
+            self._active_turns.pop(session_id, None)
+            current = self._core.read(session_id)
+            if not isinstance(current, TextSessionReadActive):
+                self._proposals.pop(session_id, None)
+                self._terminal_turns.pop(session_id, None)
+                return RecipeTurnResult(current.kind, reservation.turn_id, None, ())
+            self._drop_turn_proposals(session_id, reservation.turn_id)
+            final = RecipeTurnResult("generation_failed", reservation.turn_id, None, ())
+            self._terminal_turns[session_id] = _TerminalTurn(reservation.snapshot.revision, final)
             return final
