@@ -1,6 +1,4 @@
-"""Versioned conversational scope for recipe improvement."""
-
-RECIPE_IMPROVEMENT_INSTRUCTIONS_VERSION = "5"
+"""Conversational scope for recipe improvement."""
 
 RECIPE_IMPROVEMENT_INSTRUCTIONS = (
     "You are helping the user discuss and refine the recipe supplied in the recipe context. "
