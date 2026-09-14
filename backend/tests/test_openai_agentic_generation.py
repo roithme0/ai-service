@@ -4,7 +4,10 @@ import json
 import httpx
 from openai import AsyncOpenAI
 
-from app.models.openai_agentic_generation import OpenAIAgenticGenerator
+from app.models.openai_agentic_generation import (
+    OPENAI_MAX_OUTPUT_TOKENS,
+    OpenAIAgenticGenerator,
+)
 from app.recipe_improvement.agentic_turns import generate_agentic_recipe_turn
 from app.recipe_improvement.proposals import ProposalRejected, ProposalRegistrationOutcome
 from app.sessions.text_sessions import TextMessage
@@ -51,6 +54,7 @@ def test_openai_replays_function_call_and_result_without_storage() -> None:
     assert not invoked
     assert len(requests) == 2
     assert all(request["store"] is False and request["parallel_tool_calls"] is False for request in requests)
+    assert all(request["max_output_tokens"] == OPENAI_MAX_OUTPUT_TOKENS for request in requests)
     assert all(request["include"] == ["reasoning.encrypted_content"] for request in requests)
     assert requests[0]["input"] == [
         {"role": "user", "content": "Recipe context"},

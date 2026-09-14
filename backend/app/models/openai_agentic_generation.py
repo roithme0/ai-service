@@ -11,7 +11,10 @@ from app.models.agentic_generation import (
     AgenticGenerationResponse,
     AgenticToolCall,
 )
-from app.models.openai_text_generation import OPENAI_MAX_OUTPUT_TOKENS, OPENAI_REQUEST_TIMEOUT_SECONDS
+
+
+OPENAI_REQUEST_TIMEOUT_SECONDS = 60.0
+OPENAI_MAX_OUTPUT_TOKENS = 4_096
 
 logger = logging.getLogger(__name__)
 

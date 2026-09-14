@@ -7,7 +7,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from app.models.text_generation import MAX_CONTEXT_LENGTH
 from app.recipe_improvement.context import recipe_context
 from app.recipe_improvement.validation import (
     AvailabilityReferenceIndex,
@@ -16,6 +15,8 @@ from app.recipe_improvement.validation import (
     ValidationIssue,
     unknown_foodstuff_issues,
 )
+
+MAX_INITIAL_SNAPSHOT_CONTEXT_LENGTH = 16_000
 
 
 class RecipeImprovementSourceSnapshot(BaseModel):
@@ -112,11 +113,12 @@ def validate_recipe_improvement_session_input(
         availability_reference_index=index,
     )
     initial_snapshot_context = recipe_context(session_input)
-    if len(initial_snapshot_context) > MAX_CONTEXT_LENGTH:
+    if len(initial_snapshot_context) > MAX_INITIAL_SNAPSHOT_CONTEXT_LENGTH:
         return RecipeImprovementSessionInputFailure(
             issues=(ValidationIssue(
                 location=(),
-                message="initial source recipe and foodstuffs context exceeds 16000 characters",
+                message=("initial source recipe and foodstuffs context exceeds "
+                         f"{MAX_INITIAL_SNAPSHOT_CONTEXT_LENGTH} characters"),
             ),)
         )
     return RecipeImprovementSessionInputSuccess(session_input=session_input)
