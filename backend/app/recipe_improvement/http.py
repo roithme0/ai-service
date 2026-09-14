@@ -29,6 +29,7 @@ from app.recipe_improvement.session_lifecycle import (
     RecipeImprovementSessionStore,
 )
 from app.recipe_improvement.validation import ValidationIssue
+from app.recipe_improvement.turn_service import generate_recipe_turn
 from app.sessions.text_sessions import (
     TextMessage,
     TextSessionAppendAccepted,
@@ -166,7 +167,7 @@ async def generate_recipe_improvement_turn(
 ) -> RecipeImprovementTurnResponse | JSONResponse:
     if generator is None:
         return JSONResponse(status_code=503, content={"kind": "generator_unavailable"})
-    outcome = await store.generate_agentic_turn(session_id, generator)
+    outcome = await generate_recipe_turn(store, session_id, generator)
     if outcome.kind == "completed":
         assert outcome.text is not None
         return RecipeImprovementTurnResponse(

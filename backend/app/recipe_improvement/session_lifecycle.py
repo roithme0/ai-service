@@ -35,7 +35,6 @@ from app.sessions.text_sessions import (
     TextSessionReadExpired,
     TextSessionReadUnknown,
 )
-from app.models.agentic_generation import AgenticGenerator
 from app.sessions.tool_turns import ToolTurnResult
 
 
@@ -273,11 +272,6 @@ class RecipeImprovementSessionStore:
             turn_id = str(uuid4())
             self._active_turns[session_id] = turn_id
             return RecipeTurnReservation(turn_id, read.session, self._proposals.get(session_id, ()))
-
-    async def generate_agentic_turn(self, session_id: str, generator: AgenticGenerator) -> RecipeTurnResult:
-        from app.recipe_improvement.turn_service import generate_recipe_turn
-
-        return await generate_recipe_turn(self, session_id, generator)
 
     def complete_turn(
         self, session_id: str, reservation: RecipeTurnReservation, result: ToolTurnResult[RecipeProposal]
