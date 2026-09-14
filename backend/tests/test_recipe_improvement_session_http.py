@@ -1,14 +1,15 @@
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
+import json
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.models.text_generation import TextGenerationRequest, TextGenerationResponse
-from app.models.openai_text_generation import OpenAITextGenerator
-from app.recipe_improvement.http import get_recipe_improvement_session_store, get_text_generator
-from app.recipe_improvement.http import _configured_text_generator
+from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.models.openai_agentic_generation import OpenAIAgenticGenerator
+from app.recipe_improvement.http import get_recipe_improvement_session_store, get_agentic_generator
+from app.recipe_improvement.http import _configured_agentic_generator
 from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionStore
 from app.recipe_improvement.instructions import RECIPE_IMPROVEMENT_INSTRUCTIONS
 from app.sessions.text_sessions import MAX_MESSAGE_COUNT
@@ -28,17 +29,20 @@ class MutableClock:
 class FakeGenerator:
     def __init__(self, text: str = "Test reply") -> None:
         self.text = text
-        self.calls: list[TextGenerationRequest] = []
+        self.calls: list[AgenticGenerationRequest] = []
         self.fail = False
         self.before_return: Callable[[], None] | None = None
+        self.responses: list[AgenticGenerationResponse] = []
 
-    async def generate(self, request: TextGenerationRequest) -> TextGenerationResponse:
+    async def generate(self, request: AgenticGenerationRequest) -> AgenticGenerationResponse:
         self.calls.append(request)
         if self.fail:
             raise RuntimeError("model failure")
         if self.before_return is not None:
             self.before_return()
-        return TextGenerationResponse(text=self.text)
+        if self.responses:
+            return self.responses.pop(0)
+        return AgenticGenerationResponse(output_items=(), tool_calls=(), text=self.text)
 
 
 @pytest.fixture
@@ -54,11 +58,11 @@ def client() -> TestClient:
 @pytest.fixture
 def fake_generator() -> Iterator[FakeGenerator]:
     generator = FakeGenerator()
-    app.dependency_overrides[get_text_generator] = lambda: generator
+    app.dependency_overrides[get_agentic_generator] = lambda: generator
     try:
         yield generator
     finally:
-        app.dependency_overrides.pop(get_text_generator, None)
+        app.dependency_overrides.pop(get_agentic_generator, None)
 
 
 def valid_request(foodstuff_reference: int = 1) -> dict[str, object]:
@@ -103,6 +107,9 @@ def test_create_and_read_return_accepted_snapshots_without_derived_index(client:
         "source": expected_source,
         "foodstuffs": valid_request()["foodstuffs"],
         "messages": [],
+        "proposals": [],
+        "terminal_turn_id": None,
+        "terminal_turn_kind": None,
     }
     assert "availability_reference_index" not in read.json()
 
@@ -318,19 +325,20 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
     read = client.get(session_url)
 
     assert response.status_code == 201
-    assert response.json() == {"role": "assistant", "text": "Test reply"}
+    assert response.json()["message"] == {"role": "assistant", "text": "Test reply"}
+    assert response.json()["proposals"] == []
+    assert response.json()["turn_id"]
     generation_request = fake_generator.calls[0]
-    assert [(message.role, message.text) for message in generation_request.messages] == [
-        ("user", "  question  ")
-    ]
-    assert generation_request.context is not None
-    assert '"name":"Overnight oats"' in generation_request.context
-    assert '"name":"Oats"' in generation_request.context
-    assert "availability_reference_index" not in generation_request.context
+    assert generation_request.input_items[-1] == {"role": "user", "content": "  question  "}
+    recipe_context = generation_request.input_items[0]["content"]
+    assert isinstance(recipe_context, str)
+    assert '"name":"Overnight oats"' in recipe_context
+    assert '"name":"Oats"' in recipe_context
+    assert "availability_reference_index" not in recipe_context
     assert generation_request.instructions == RECIPE_IMPROVEMENT_INSTRUCTIONS
     assert "stated goals, preferences, and constraints" in generation_request.instructions
     assert "For health-related questions" in generation_request.instructions
-    assert "not structured recipe proposals" in generation_request.instructions
+    assert "register_recipe_proposal" in generation_request.instructions
     assert read.json()["messages"] == [
         {"role": "user", "text": "  question  "},
         {"role": "assistant", "text": "Test reply"},
@@ -342,7 +350,7 @@ def test_turn_endpoint_is_unavailable_without_configured_generator(
 ) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", raising=False)
-    _configured_text_generator.cache_clear()
+    _configured_agentic_generator.cache_clear()
     try:
         created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
         session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
@@ -354,23 +362,23 @@ def test_turn_endpoint_is_unavailable_without_configured_generator(
         assert response.json() == {"kind": "generator_unavailable"}
         assert len(client.get(session_url).json()["messages"]) == 1
     finally:
-        _configured_text_generator.cache_clear()
+        _configured_agentic_generator.cache_clear()
 
 
 def test_generator_requires_key_and_use_case_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    _configured_text_generator.cache_clear()
+    _configured_agentic_generator.cache_clear()
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", raising=False)
     try:
-        assert get_text_generator() is None
-        _configured_text_generator.cache_clear()
+        assert get_agentic_generator() is None
+        _configured_agentic_generator.cache_clear()
         monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-        assert get_text_generator() is None
-        _configured_text_generator.cache_clear()
+        assert get_agentic_generator() is None
+        _configured_agentic_generator.cache_clear()
         monkeypatch.setenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", "gpt-5.6-sol")
-        assert isinstance(get_text_generator(), OpenAITextGenerator)
+        assert isinstance(get_agentic_generator(), OpenAIAgenticGenerator)
     finally:
-        _configured_text_generator.cache_clear()
+        _configured_agentic_generator.cache_clear()
 
 
 def test_turn_endpoint_reports_unknown_and_not_ready(
@@ -399,7 +407,8 @@ def test_turn_endpoint_reports_generation_failure_without_appending(
     response = client.post(f"{session_url}/turns")
 
     assert response.status_code == 502
-    assert response.json() == {"kind": "generation_failed"}
+    assert response.json()["kind"] == "generation_failed"
+    assert response.json()["turn_id"]
     assert client.get(session_url).json()["messages"] == [{"role": "user", "text": "question"}]
 
 
@@ -411,17 +420,18 @@ def test_turn_endpoint_rejects_reply_after_new_message(
     client.post(f"{session_url}/messages", json={"text": "first"})
 
     def append_another_message() -> None:
-        assert client.post(f"{session_url}/messages", json={"text": "second"}).status_code == 201
+        blocked = client.post(f"{session_url}/messages", json={"text": "second"})
+        assert blocked.status_code == 409
+        assert blocked.json() == {"kind": "busy"}
 
     fake_generator.before_return = append_another_message
 
     response = client.post(f"{session_url}/turns")
 
-    assert response.status_code == 409
-    assert response.json() == {"kind": "conflict"}
+    assert response.status_code == 201
     assert client.get(session_url).json()["messages"] == [
         {"role": "user", "text": "first"},
-        {"role": "user", "text": "second"},
+        {"role": "assistant", "text": "Test reply"},
     ]
 
 
@@ -441,7 +451,7 @@ def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGene
         response = client.post(f"{session_url}/turns")
 
         assert response.status_code == 410
-        assert response.json() == {"kind": "expired"}
+        assert response.json()["kind"] == "expired"
         assert client.get(session_url).status_code == 404
     finally:
         app.dependency_overrides.pop(get_recipe_improvement_session_store, None)
@@ -461,9 +471,42 @@ def test_turn_endpoint_uses_reserved_assistant_capacity(
     further_turn = client.post(f"{session_url}/turns")
 
     assert response.status_code == 201
-    assert response.json() == {"role": "assistant", "text": "Test reply"}
+    assert response.json()["message"] == {"role": "assistant", "text": "Test reply"}
     assert answered.status_code == 200
     assert len(answered.json()["messages"]) == MAX_MESSAGE_COUNT
     assert further_message.status_code == 409
     assert further_turn.status_code == 409
     assert len(fake_generator.calls) == 1
+
+
+def test_partial_failure_returns_accepted_proposals_and_retry_is_stable(
+    client: TestClient, fake_generator: FakeGenerator
+) -> None:
+    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    client.post(f"{session_url}/messages", json={"text": "Propose one"})
+    recipe = valid_request()["source"]["recipe"]
+    recipe["ingredients"][0]["amount"] = "125.75"
+    arguments = json.dumps({"base": {"kind": "source"}, "candidate": recipe})
+    fake_generator.responses = [
+        AgenticGenerationResponse(
+            output_items=({"type": "function_call", "call_id": "call_1",
+                           "name": "register_recipe_proposal", "arguments": arguments},),
+            tool_calls=(AgenticToolCall("call_1", "register_recipe_proposal", arguments),),
+            text=None,
+        ),
+        AgenticGenerationResponse((), (), None),
+    ]
+    first = client.post(f"{session_url}/turns")
+    retry = client.post(f"{session_url}/turns")
+    read = client.get(session_url)
+
+    assert first.status_code == retry.status_code == 502
+    assert first.json() == retry.json()
+    assert first.json()["kind"] == "generation_failed"
+    assert len(first.json()["proposals"]) == 1
+    assert first.json()["proposals"][0]["turn_id"] == first.json()["turn_id"]
+    assert len(fake_generator.calls) == 2
+    assert read.json()["proposals"] == first.json()["proposals"]
+    assert read.json()["terminal_turn_id"] == first.json()["turn_id"]
+    assert read.json()["messages"] == [{"role": "user", "text": "Propose one"}]

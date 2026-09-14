@@ -1,4 +1,4 @@
-"""HTTP adapters for recipe-improvement sessions and text turns."""
+"""HTTP adapters for recipe-improvement sessions and agentic turns."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from fastapi.responses import JSONResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.text_generation import TextGenerator
-from app.models.openai_text_generation import OpenAITextGenerator
+from app.models.agentic_generation import AgenticGenerator
+from app.models.openai_agentic_generation import OpenAIAgenticGenerator
 from app.recipe_improvement.session_input import (
     AvailableFoodstuffSnapshot,
     RecipeImprovementSessionInputFailure,
@@ -25,6 +25,7 @@ from app.recipe_improvement.session_lifecycle import (
     RecipeImprovementSessionCreation,
     RecipeImprovementSessionLookupExpired,
     RecipeImprovementSessionLookupSuccess,
+    RecipeMessageBusy,
     RecipeImprovementSessionStore,
 )
 from app.recipe_improvement.validation import ValidationIssue
@@ -35,7 +36,7 @@ from app.sessions.text_sessions import (
     TextSessionAppendInvalidMessage,
     TextSessionAppendLimitReached,
 )
-from app.sessions.text_turns import TextTurnCompleted
+from app.recipe_improvement.proposals import RecipeProposal
 
 
 router = APIRouter(prefix="/api/v1/recipe-improvement/sessions", tags=["recipe-improvement"])
@@ -69,23 +70,34 @@ class RecipeImprovementSessionReadResponse(BaseModel):
     source: RecipeImprovementSourceSnapshot
     foodstuffs: tuple[AvailableFoodstuffSnapshot, ...]
     messages: tuple[TextMessage, ...]
+    proposals: tuple[RecipeProposal, ...] = ()
+    terminal_turn_id: str | None = None
+    terminal_turn_kind: str | None = None
+
+
+class RecipeImprovementTurnResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    turn_id: str
+    message: TextMessage
+    proposals: tuple[RecipeProposal, ...] = ()
 
 
 def get_recipe_improvement_session_store() -> RecipeImprovementSessionStore:
     return recipe_improvement_session_store
 
 
-def get_text_generator() -> TextGenerator | None:
-    return _configured_text_generator()
+def get_agentic_generator() -> AgenticGenerator | None:
+    return _configured_agentic_generator()
 
 
 @lru_cache(maxsize=1)
-def _configured_text_generator() -> TextGenerator | None:
+def _configured_agentic_generator() -> AgenticGenerator | None:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     model = os.getenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", "").strip()
     if not api_key or not model:
         return None
-    return OpenAITextGenerator(model=model, client=AsyncOpenAI(api_key=api_key, max_retries=0))
+    return OpenAIAgenticGenerator(model=model, client=AsyncOpenAI(api_key=api_key, max_retries=0))
 
 
 recipe_improvement_session_store = RecipeImprovementSessionStore()
@@ -117,6 +129,9 @@ def get_recipe_improvement_session(
             source=outcome.session.session_input.source,
             foodstuffs=outcome.session.session_input.foodstuffs,
             messages=outcome.session.messages,
+            proposals=outcome.session.proposals,
+            terminal_turn_id=outcome.session.terminal_turn_id,
+            terminal_turn_kind=outcome.session.terminal_turn_kind,
         )
     if isinstance(outcome, RecipeImprovementSessionLookupExpired):
         return JSONResponse(status_code=410, content={"kind": "expired"})
@@ -138,20 +153,32 @@ def append_recipe_improvement_user_message(
         return JSONResponse(status_code=409, content={"kind": "limit_reached"})
     if isinstance(outcome, TextSessionAppendInvalidMessage):
         return JSONResponse(status_code=422, content={"kind": "invalid_message"})
+    if isinstance(outcome, RecipeMessageBusy):
+        return JSONResponse(status_code=409, content={"kind": "busy"})
     return JSONResponse(status_code=404, content={"kind": "unknown"})
 
 
-@router.post("/{session_id}/turns", response_model=TextMessage, status_code=201)
+@router.post("/{session_id}/turns", response_model=RecipeImprovementTurnResponse, status_code=201)
 async def generate_recipe_improvement_turn(
     session_id: str,
     store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
-    generator: TextGenerator | None = Depends(get_text_generator),
-) -> TextMessage | JSONResponse:
+    generator: AgenticGenerator | None = Depends(get_agentic_generator),
+) -> RecipeImprovementTurnResponse | JSONResponse:
     if generator is None:
         return JSONResponse(status_code=503, content={"kind": "generator_unavailable"})
-    outcome = await store.generate_turn(session_id, generator)
-    if isinstance(outcome, TextTurnCompleted):
-        return outcome.message
+    outcome = await store.generate_agentic_turn(session_id, generator)
+    if outcome.kind == "completed":
+        assert outcome.text is not None
+        return RecipeImprovementTurnResponse(
+            turn_id=outcome.turn_id,
+            message=TextMessage(role="assistant", text=outcome.text),
+            proposals=outcome.proposals,
+        )
+    if outcome.kind == "generation_failed" and outcome.proposals:
+        return JSONResponse(status_code=502, content={
+            "kind": "generation_failed", "turn_id": outcome.turn_id,
+            "proposals": [proposal.model_dump(mode="json") for proposal in outcome.proposals],
+        })
     status_code = {
         "unknown": 404,
         "expired": 410,
@@ -159,8 +186,12 @@ async def generate_recipe_improvement_turn(
         "limit_reached": 409,
         "conflict": 409,
         "generation_failed": 502,
+        "busy": 409,
     }[outcome.kind]
-    return JSONResponse(status_code=status_code, content={"kind": outcome.kind})
+    content: dict[str, object] = {"kind": outcome.kind}
+    if outcome.turn_id:
+        content["turn_id"] = outcome.turn_id
+    return JSONResponse(status_code=status_code, content=content)
 
 
 def _invalid_input_response(

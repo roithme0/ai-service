@@ -37,6 +37,7 @@ class RecipeProposal(BaseModel):
     order: int = Field(ge=1)
     base: ProposalBase
     recipe: RecipeProposalCandidate
+    turn_id: str = Field(min_length=1)
 
 
 class ProposalRegistered(BaseModel):

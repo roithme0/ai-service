@@ -157,11 +157,15 @@ def test_proposals_have_explicit_validated_lineage_and_deterministic_order() -> 
     store = RecipeImprovementSessionStore(clock=lambda: created_at)
     created = store.create(valid_session_input())
     candidate = valid_session_input().source.recipe.model_dump()
+    store.append_user_message(created.session_id, "Improve this")
+    reserved = store._reserve_turn(created.session_id)
+    assert isinstance(reserved, tuple)
+    turn_id, _ = reserved
 
-    first = store.register_proposal(created.session_id, SourceProposalBase(), candidate)
+    first = store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id)
     assert isinstance(first, ProposalRegistered)
     second = store.register_proposal(
-        created.session_id, PreviousProposalBase(proposal_id=first.proposal.proposal_id), candidate
+        created.session_id, PreviousProposalBase(proposal_id=first.proposal.proposal_id), candidate, turn_id
     )
     assert isinstance(second, ProposalRegistered)
     assert first.proposal.created_at == created_at
@@ -169,6 +173,7 @@ def test_proposals_have_explicit_validated_lineage_and_deterministic_order() -> 
     assert second.proposal.order == 2
     assert second.proposal.base.proposal_id == first.proposal.proposal_id
     assert second.proposal.proposal_id != first.proposal.proposal_id
+    assert first.proposal.turn_id == second.proposal.turn_id == turn_id
     snapshot = store.lookup(created.session_id)
     assert isinstance(snapshot, RecipeImprovementSessionLookupSuccess)
     assert snapshot.session.proposals == (first.proposal, second.proposal)
@@ -178,12 +183,16 @@ def test_invalid_base_and_candidate_do_not_modify_proposal_state() -> None:
     store = RecipeImprovementSessionStore()
     created = store.create(valid_session_input())
     candidate = valid_session_input().source.recipe.model_dump()
+    store.append_user_message(created.session_id, "Improve this")
+    reserved = store._reserve_turn(created.session_id)
+    assert isinstance(reserved, tuple)
+    turn_id, _ = reserved
 
     invalid_base = store.register_proposal(
-        created.session_id, PreviousProposalBase(proposal_id="missing"), candidate
+        created.session_id, PreviousProposalBase(proposal_id="missing"), candidate, turn_id
     )
     candidate["ingredients"][0]["foodstuff_reference"] = 999
-    invalid_candidate = store.register_proposal(created.session_id, SourceProposalBase(), candidate)
+    invalid_candidate = store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id)
     snapshot = store.lookup(created.session_id)
 
     assert isinstance(invalid_base, ProposalRejected)
@@ -200,17 +209,21 @@ def test_proposal_registration_respects_expiry_and_limit() -> None:
     store = RecipeImprovementSessionStore(clock=clock.now)
     created = store.create(valid_session_input())
     candidate = valid_session_input().source.recipe.model_dump()
+    store.append_user_message(created.session_id, "Improve this")
+    reserved = store._reserve_turn(created.session_id)
+    assert isinstance(reserved, tuple)
+    turn_id, _ = reserved
     for _ in range(MAX_PROPOSALS_PER_SESSION):
         assert isinstance(
-            store.register_proposal(created.session_id, SourceProposalBase(), candidate),
+            store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id),
             ProposalRegistered,
         )
-    limit = store.register_proposal(created.session_id, SourceProposalBase(), candidate)
+    limit = store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id)
     assert isinstance(limit, ProposalRejected)
     assert limit.reason == "limit_reached"
 
     clock.value = created.expires_at
-    expired = store.register_proposal(created.session_id, SourceProposalBase(), candidate)
+    expired = store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id)
     assert isinstance(expired, ProposalSessionUnavailable)
     assert expired.kind == "expired"
 
