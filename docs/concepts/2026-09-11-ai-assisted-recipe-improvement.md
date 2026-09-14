@@ -60,11 +60,17 @@ The service does not claim that a proposal remains valid against changing extern
 
 Short-lived service state is required so a proposal identifier can be resolved without trusting the model or requiring it to reconstruct recipe content. The state includes the initialization snapshots, ordered conversation content, validated proposals, and lineage. The backend exposes session-scoped proposal lookup by identifier.
 
+Opening the improvement view creates the session immediately from the source recipe and available-foodstuffs snapshots; the user does not need to send a message to establish it. A failed generation leaves the user message in the conversation. The initial UI shows the failure but offers no retry of that turn; the user may continue with a new message while the session remains active.
+
 Session expiry, maximum context, proposal count, and storage mechanism are implementation decisions. Expiry is visible when an expired session is first encountered; after its state is removed, later lookups may return unknown. Durable conversation history, session reopening, and recovery of expired proposals are out of scope.
 
 ## Reusable Chat UI
 
-The AI Service provides a reusable chat UI that Kochwiki can integrate into its existing application. It owns generic conversation concerns, including ordered messages, sending and cancellation, streamed content, errors, session expiry, and placement of structured proposal artifacts within assistant turns.
+The AI Service provides a reusable chat UI that Kochwiki can integrate into its existing application. The initial UI is designed only for smartphones in portrait orientation; other devices and orientations are explicitly out of scope. It opens as a full-screen view from a recipe, visually belongs to Kochwiki, and follows the familiar mobile chat pattern: a conversation scrolling above a bottom-anchored composer. The first version accepts plain text only. It shows a pending state while a turn runs, then displays the completed response; streaming and cancellation are not part of this UI concept.
+
+The first screen identifies the source recipe and briefly explains the improvement conversation. Subsequent content keeps user messages, assistant messages, and proposals in conversational order. A proposal uses the same host-supplied recipe rendering in both states: when its content exceeds a defined height, the shared UI clips it and offers an expand control; expanding reveals the rest of that rendering. Shorter proposals need no toggle. There is no separate summary template or prescribed set of visible recipe fields, and the clipped content does not create a second scroll area. Proposals are view-only in the initial UI; expand and collapse are their only controls. The composer remains usable above the on-screen keyboard and phone safe area. Failed turns show an error without a retry control; expiry is presented with a path to start a new session from the recipe.
+
+The shared UI owns generic conversation behavior, including message ordering, sending, pending and error states, session expiry, composer behavior, and placement of structured artifacts. Kochwiki owns its entry action and recipe-specific rendering. This ownership boundary is separate from the shared visual direction.
 
 The chat UI must not import Kochwiki components or understand Kochwiki recipe presentation. Instead, it exposes a typed renderer registry or equivalent host extension point:
 
@@ -74,7 +80,9 @@ The chat UI must not import Kochwiki components or understand Kochwiki recipe pr
 - an absent or unsupported renderer produces a generic fallback rather than breaking the conversation; and
 - registering a renderer does not grant the backend or model additional domain permissions.
 
-Building the Kochwiki proposal renderer and deciding its visual treatment are deferred. The renderer contract is not deferred because proposal artifacts and chat state must let a host renderer consume structured content without reconstructing it from conversational text.
+Building the Kochwiki proposal renderer is deferred. The shared UI owns the height-based collapse/expand control around the host renderer, while the content and ordering visible within the clipped area follow Kochwiki's recipe presentation. The exact clip height remains to be worked out. The renderer contract is not deferred because proposal artifacts and chat state must let a host renderer consume structured content without reconstructing it from conversational text.
+
+The visual language follows Kochwiki's existing dark mobile theme: near-black app background, subtly lighter rounded surfaces, light text, and rose/magenta accents. The preferred integration is a small set of semantic CSS custom properties supplied by the host and consumed by the library, mapped centrally from Kochwiki's existing theme tokens. This shares concrete visual values without making the library import Kochwiki Sass files or duplicate hard-coded colors. The exact token interface is an integration detail to validate when the library is built.
 
 The chat UI is exposed as a reusable Angular library owned by the AI Service repository and consumed by Kochwiki at build time. This gives the current Angular host typed renderer injection without introducing an iframe boundary. The package registry, publication automation, release workflow, and local cross-repository development mechanism are deferred until Kochwiki needs to consume the library.
 
@@ -100,12 +108,16 @@ In scope:
 - clarification and iterative conversational refinement;
 - complete, structured proposals using available foodstuffs only;
 - deterministic proposal identity, lineage, and validation;
-- a reusable chat UI for the session lifecycle; and
-- a typed extension point for host-supplied proposal renderers.
+- a reusable chat UI for the session lifecycle;
+- a typed extension point for host-supplied proposal renderers;
+- a portrait-smartphone full-screen chat layout with a plain-text composer; and
+- height-clipped, expandable host-rendered proposals matching Kochwiki's visual language.
 
 Out of scope:
 
-- the Kochwiki-specific proposal renderer and its visual design;
+- the implementation of the Kochwiki-specific proposal renderer;
+- non-smartphone layouts and non-portrait orientations;
+- streamed responses, turn cancellation, and non-text input in the initial UI;
 - Kochwiki authorization, drafts, publication, and persistence;
 - fetching recipes or foodstuffs directly from Kochwiki;
 - foodstuff lookup tools in the initial capability;
@@ -124,6 +136,7 @@ Out of scope:
 - A reusable chat UI can become coupled to Kochwiki if artifact or action APIs encode recipe-specific behavior instead of generic extension points.
 - Deferring the concrete renderer while defining its contract risks discovering missing data later; the first contract should be exercised with a minimal test renderer.
 - Deferring distribution avoids premature registry work, but the library must still be built as an independently consumable boundary so publication does not later require architectural separation.
+- A shared visual appearance may drift if Kochwiki and the library maintain separate color values; host-supplied semantic tokens should be exercised in a Kochwiki integration example.
 
 ## Open Questions
 
@@ -132,8 +145,9 @@ Out of scope:
 - How long should a session live, and should activity extend its expiry?
 - Which registry and release workflow should distribute the Angular chat UI library when Kochwiki integration begins?
 - What generic renderer interface and fallback representation are sufficient for recipe proposals?
-- Which host actions, if any, must the renderer contract anticipate before Kochwiki persistence work begins?
+- What collapsed height gives enough context without overwhelming a phone-sized conversation?
+- What should the first screen say?
 
 ## Summary
 
-The AI Service owns a short-lived, recipe-scoped improvement session that turns caller-supplied snapshots into validated recipe proposals. It also owns a reusable, embeddable chat UI that places typed proposals in the conversation and accepts their renderer from the host application. The initial capability uses generic instructions and is restricted to available foodstuffs. The Kochwiki renderer, domain persistence, and changing external state remain outside the service boundary.
+The AI Service owns a short-lived, recipe-scoped improvement session that turns caller-supplied snapshots into validated recipe proposals. It also owns a reusable, portrait-smartphone chat UI with plain-text input and height-clipped, expandable proposals rendered by the host. The UI follows Kochwiki's visual language through host-provided semantic style tokens. The initial capability uses generic instructions and is restricted to available foodstuffs. Kochwiki's renderer implementation, domain persistence, and changing external state remain outside the service boundary.
