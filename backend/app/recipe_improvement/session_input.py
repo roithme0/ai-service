@@ -8,13 +8,12 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.recipe_improvement.context import recipe_context
-from app.recipe_improvement.validation import (
+from app.recipe_improvement.recipe import (
     AvailabilityReferenceIndex,
     RecipeContent,
     SourceRecipeSnapshot,
-    ValidationIssue,
-    unknown_foodstuff_issues,
 )
+from app.recipe_improvement.validation import ValidationIssue, unknown_foodstuff_issues
 
 MAX_INITIAL_SNAPSHOT_CONTEXT_LENGTH = 16_000
 

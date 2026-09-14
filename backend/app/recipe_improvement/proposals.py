@@ -7,7 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.recipe_improvement.validation import RecipeProposalCandidate, ValidationIssue
+from app.recipe_improvement.recipe import RecipeProposalCandidate
+from app.recipe_improvement.validation import ValidationIssue
 
 
 MAX_PROPOSALS_PER_SESSION = 20
