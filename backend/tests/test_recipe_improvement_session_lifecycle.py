@@ -137,6 +137,23 @@ def test_creation_opportunistically_discards_expired_sessions() -> None:
     assert isinstance(store.lookup(expired_session.session_id), RecipeImprovementSessionLookupUnknown)
 
 
+def test_creation_discards_expired_failed_turn_without_proposals() -> None:
+    clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
+    store = RecipeImprovementSessionStore(clock=clock.now)
+    expired_session = store.create(valid_session_input())
+    store.append_user_message(expired_session.session_id, "Improve this")
+    reservation = store.reserve_turn(expired_session.session_id)
+    assert isinstance(reservation, RecipeTurnReservation)
+    assert store.fail_turn(expired_session.session_id, reservation).kind == "generation_failed"
+    assert expired_session.session_id in store._terminal_turns
+
+    clock.value = expired_session.expires_at
+    store.create(valid_session_input())
+
+    assert expired_session.session_id not in store._terminal_turns
+    assert isinstance(store.lookup(expired_session.session_id), RecipeImprovementSessionLookupUnknown)
+
+
 def test_session_snapshots_are_owned_and_immutable() -> None:
     store = RecipeImprovementSessionStore()
     input_snapshot = valid_session_input()

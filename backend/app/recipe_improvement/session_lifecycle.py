@@ -144,9 +144,12 @@ class RecipeImprovementSessionStore:
         self, session_input: RecipeImprovementSessionInput
     ) -> RecipeImprovementSessionCreation:
         with self._lock:
-            for session_id in tuple(self._proposals):
+            tracked_session_ids = (
+                self._proposals.keys() | self._active_turns.keys() | self._terminal_turns.keys()
+            )
+            for session_id in tuple(tracked_session_ids):
                 if not isinstance(self._core.read(session_id), TextSessionReadActive):
-                    del self._proposals[session_id]
+                    self._proposals.pop(session_id, None)
                     self._active_turns.pop(session_id, None)
                     self._terminal_turns.pop(session_id, None)
             created = self._core.create(session_input)
@@ -283,8 +286,6 @@ class RecipeImprovementSessionStore:
         with self._lock:
             current = self._core.read(session_id)
             if not isinstance(current, TextSessionReadActive):
-                if current.kind == "expired":
-                    self._proposals.pop(session_id, None)
                 final = RecipeTurnResult(current.kind, turn_id, None, ())
             elif current.session.revision != snapshot.revision:
                 final = RecipeTurnResult("conflict", turn_id, None, ())
@@ -296,23 +297,30 @@ class RecipeImprovementSessionStore:
                     final = RecipeTurnResult("conflict", turn_id, None, ())
             else:
                 final = RecipeTurnResult("generation_failed", turn_id, None, ())
-            if final.kind != "completed":
-                self._drop_turn_proposals(session_id, turn_id)
-            terminal_revision = snapshot.revision + 1 if final.kind == "completed" else snapshot.revision
-            if final.kind not in ("expired", "unknown"):
-                self._terminal_turns[session_id] = _TerminalTurn(terminal_revision, final)
-            self._active_turns.pop(session_id, None)
-            return final
+            return self._finish_turn(session_id, reservation, final)
 
     def fail_turn(self, session_id: str, reservation: RecipeTurnReservation) -> RecipeTurnResult:
         with self._lock:
-            self._active_turns.pop(session_id, None)
             current = self._core.read(session_id)
             if not isinstance(current, TextSessionReadActive):
-                self._proposals.pop(session_id, None)
-                self._terminal_turns.pop(session_id, None)
-                return RecipeTurnResult(current.kind, reservation.turn_id, None, ())
-            self._drop_turn_proposals(session_id, reservation.turn_id)
-            final = RecipeTurnResult("generation_failed", reservation.turn_id, None, ())
-            self._terminal_turns[session_id] = _TerminalTurn(reservation.snapshot.revision, final)
-            return final
+                final = RecipeTurnResult(current.kind, reservation.turn_id, None, ())
+            else:
+                final = RecipeTurnResult("generation_failed", reservation.turn_id, None, ())
+            return self._finish_turn(session_id, reservation, final)
+
+    def _finish_turn(
+        self, session_id: str, reservation: RecipeTurnReservation, final: RecipeTurnResult
+    ) -> RecipeTurnResult:
+        """Commit terminal state while the store lock is held."""
+        if final.kind in ("expired", "unknown"):
+            self._proposals.pop(session_id, None)
+            self._terminal_turns.pop(session_id, None)
+        else:
+            if final.kind != "completed":
+                self._drop_turn_proposals(session_id, reservation.turn_id)
+            terminal_revision = reservation.snapshot.revision
+            if final.kind == "completed":
+                terminal_revision += 1
+            self._terminal_turns[session_id] = _TerminalTurn(terminal_revision, final)
+        self._active_turns.pop(session_id, None)
+        return final
