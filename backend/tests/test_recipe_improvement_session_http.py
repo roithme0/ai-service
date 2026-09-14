@@ -479,7 +479,7 @@ def test_turn_endpoint_uses_reserved_assistant_capacity(
     assert len(fake_generator.calls) == 1
 
 
-def test_partial_failure_returns_accepted_proposals_and_retry_is_stable(
+def test_partial_failure_drops_accepted_proposals_and_retry_is_stable(
     client: TestClient, fake_generator: FakeGenerator
 ) -> None:
     created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
@@ -503,10 +503,8 @@ def test_partial_failure_returns_accepted_proposals_and_retry_is_stable(
 
     assert first.status_code == retry.status_code == 502
     assert first.json() == retry.json()
-    assert first.json()["kind"] == "generation_failed"
-    assert len(first.json()["proposals"]) == 1
-    assert first.json()["proposals"][0]["turn_id"] == first.json()["turn_id"]
+    assert first.json() == {"kind": "generation_failed", "turn_id": first.json()["turn_id"]}
     assert len(fake_generator.calls) == 2
-    assert read.json()["proposals"] == first.json()["proposals"]
+    assert read.json()["proposals"] == []
     assert read.json()["terminal_turn_id"] == first.json()["turn_id"]
     assert read.json()["messages"] == [{"role": "user", "text": "Propose one"}]

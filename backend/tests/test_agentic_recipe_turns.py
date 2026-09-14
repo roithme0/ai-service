@@ -96,7 +96,7 @@ def test_later_turn_receives_full_previous_proposals_and_final_text_instruction(
     assert second.kind == "completed"
 
 
-def test_rejected_call_can_be_corrected_and_failed_final_is_idempotent() -> None:
+def test_rejected_call_can_be_corrected_and_failed_final_drops_proposals() -> None:
     store = RecipeImprovementSessionStore()
     created = store.create(session_input())
     store.append_user_message(created.session_id, "Improve it")
@@ -116,11 +116,12 @@ def test_rejected_call_can_be_corrected_and_failed_final_is_idempotent() -> None
     assert first.kind == "generation_failed"
     assert retry == first
     assert len(generator.requests) == 3
-    assert len(first.proposals) == 1
+    assert first.proposals == ()
     read = store.lookup(created.session_id)
     assert isinstance(read, RecipeImprovementSessionLookupSuccess)
     assert read.session.terminal_turn_id == first.turn_id
     assert read.session.terminal_turn_kind == "generation_failed"
+    assert read.session.proposals == ()
     assert len(read.session.messages) == 1
     assert store.append_user_message(created.session_id, " ").kind == "invalid_message"
     unchanged = store.lookup(created.session_id)
@@ -131,10 +132,10 @@ def test_rejected_call_can_be_corrected_and_failed_final_is_idempotent() -> None
     assert isinstance(pending, RecipeImprovementSessionLookupSuccess)
     assert pending.session.terminal_turn_id is None
     assert pending.session.terminal_turn_kind is None
-    assert pending.session.proposals == first.proposals
+    assert pending.session.proposals == ()
     def inspect_recovered_context(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
         context = json.loads(request.input_items[0]["content"].split("\n", 1)[1])
-        assert context["proposals"] == [first.proposals[0].model_dump(mode="json")]
+        assert "proposals" not in context
         return final()
 
     next_turn = asyncio.run(store.generate_agentic_turn(
@@ -231,7 +232,7 @@ def test_active_turn_is_busy_but_independent_session_can_complete() -> None:
     asyncio.run(run())
 
 
-def test_provider_response_budget_preserves_accepted_proposals() -> None:
+def test_provider_response_budget_drops_accepted_proposals() -> None:
     store = RecipeImprovementSessionStore()
     created = store.create(session_input())
     store.append_user_message(created.session_id, "Try")
@@ -241,8 +242,31 @@ def test_provider_response_budget_preserves_accepted_proposals() -> None:
     ])
     result = asyncio.run(store.generate_agentic_turn(created.session_id, generator))
     assert result.kind == "generation_failed"
-    assert len(result.proposals) == 1
+    assert result.proposals == ()
+    read = store.lookup(created.session_id)
+    assert isinstance(read, RecipeImprovementSessionLookupSuccess)
+    assert read.session.proposals == ()
     assert len(generator.requests) == 8
+
+
+def test_provider_exception_after_registration_drops_proposal() -> None:
+    store = RecipeImprovementSessionStore()
+    created = store.create(session_input())
+    store.append_user_message(created.session_id, "Suggest an option")
+
+    def fail_after_registration(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
+        raise RuntimeError("provider failed")
+
+    generator = ScriptedGenerator([
+        call("accepted", {"kind": "source"}, candidate()), fail_after_registration,
+    ])
+    result = asyncio.run(store.generate_agentic_turn(created.session_id, generator))
+    read = store.lookup(created.session_id)
+
+    assert result.kind == "generation_failed"
+    assert result.proposals == ()
+    assert isinstance(read, RecipeImprovementSessionLookupSuccess)
+    assert read.session.proposals == ()
 
 
 def test_expiry_after_registration_drops_proposal_and_wins_over_busy() -> None:

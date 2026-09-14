@@ -233,6 +233,16 @@ class RecipeImprovementSessionStore:
                 self._terminal_turns.pop(session_id, None)
             return appended
 
+    def _drop_turn_proposals(self, session_id: str, turn_id: str) -> None:
+        retained = tuple(
+            proposal for proposal in self._proposals.get(session_id, ())
+            if proposal.turn_id != turn_id
+        )
+        if retained:
+            self._proposals[session_id] = retained
+        else:
+            self._proposals.pop(session_id, None)
+
     def _reserve_turn(self, session_id: str) -> tuple[str, TextSessionSnapshot[RecipeImprovementSessionInput]] | RecipeTurnResult:
         with self._lock:
             read = self._core.read(session_id)
@@ -282,15 +292,17 @@ class RecipeImprovementSessionStore:
                         self._proposals.pop(session_id, None)
                     final = RecipeTurnResult("expired" if current.kind == "expired" else "unknown", turn_id, None, ())
                 elif current.session.revision != snapshot.revision:
-                    final = RecipeTurnResult("conflict", turn_id, None, result.artifacts)
+                    final = RecipeTurnResult("conflict", turn_id, None, ())
                 elif result.kind == "completed" and result.text is not None:
                     appended = self._core.append_if_revision(session_id, snapshot.revision, "assistant", result.text)
                     if isinstance(appended, TextSessionAppendAccepted):
                         final = RecipeTurnResult("completed", turn_id, result.text, result.artifacts)
                     else:
-                        final = RecipeTurnResult("conflict", turn_id, None, result.artifacts)
+                        final = RecipeTurnResult("conflict", turn_id, None, ())
                 else:
-                    final = RecipeTurnResult("generation_failed", turn_id, None, result.artifacts)
+                    final = RecipeTurnResult("generation_failed", turn_id, None, ())
+                if final.kind != "completed":
+                    self._drop_turn_proposals(session_id, turn_id)
                 terminal_revision = snapshot.revision
                 if final.kind == "completed":
                     terminal_revision += 1
@@ -306,7 +318,7 @@ class RecipeImprovementSessionStore:
                     self._proposals.pop(session_id, None)
                     self._terminal_turns.pop(session_id, None)
                     return RecipeTurnResult(current.kind, turn_id, None, ())
-                accepted = tuple(proposal for proposal in self._proposals.get(session_id, ()) if proposal.turn_id == turn_id)
-                final = RecipeTurnResult("generation_failed", turn_id, None, accepted)
+                self._drop_turn_proposals(session_id, turn_id)
+                final = RecipeTurnResult("generation_failed", turn_id, None, ())
                 self._terminal_turns[session_id] = _TerminalTurn(snapshot.revision, final)
             return final

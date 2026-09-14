@@ -174,11 +174,6 @@ async def generate_recipe_improvement_turn(
             message=TextMessage(role="assistant", text=outcome.text),
             proposals=outcome.proposals,
         )
-    if outcome.kind == "generation_failed" and outcome.proposals:
-        return JSONResponse(status_code=502, content={
-            "kind": "generation_failed", "turn_id": outcome.turn_id,
-            "proposals": [proposal.model_dump(mode="json") for proposal in outcome.proposals],
-        })
     status_code = {
         "unknown": 404,
         "expired": 410,
