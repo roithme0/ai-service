@@ -68,7 +68,9 @@ Session expiry, maximum context, proposal count, and storage mechanism are imple
 
 The AI Service provides a reusable chat UI that Kochwiki can integrate into its existing application. The initial UI is designed only for smartphones in portrait orientation; other devices and orientations are explicitly out of scope. It opens as a full-screen view from a recipe, visually belongs to Kochwiki, and follows the familiar mobile chat pattern: a conversation scrolling above a bottom-anchored composer. The first version accepts plain text only. It shows a pending state while a turn runs, then displays the completed response; streaming and cancellation are not part of this UI concept.
 
-The first screen identifies the source recipe and briefly explains the improvement conversation. Subsequent content keeps user messages, assistant messages, and proposals in conversational order. A proposal uses the same host-supplied recipe rendering in both states: when its content exceeds a defined height, the shared UI clips it and offers an expand control; expanding reveals the rest of that rendering. Shorter proposals need no toggle. There is no separate summary template or prescribed set of visible recipe fields, and the clipped content does not create a second scroll area. Proposals are view-only in the initial UI; expand and collapse are their only controls. The composer remains usable above the on-screen keyboard and phone safe area. Failed turns show an error without a retry control; expiry is presented with a path to start a new session from the recipe.
+The Kochwiki-style header identifies the improvement view and uses a subtitle for the source recipe. At the top of the conversation, a full-width rounded introductory banner uses a distinct surface and may include a small icon. Subsequent content keeps user messages, assistant messages, and proposals in conversational order. User messages are colored, right-aligned bubbles. Assistant responses have no chat icon, bubble background, or enclosing padding: their text uses the available conversation width and may use ordinary Markdown formatting. Proposal cards have a visible headline.
+
+A proposal uses the same host-supplied recipe rendering in both states: when its content exceeds a defined height, the shared UI clips it and offers an expand control; expanding reveals the rest of that rendering. Shorter proposals need no toggle. There is no separate summary template or prescribed set of visible recipe fields, and the clipped content does not create a second scroll area. Proposals are view-only in the initial UI; expand and collapse are their only controls. The bottom composer remains usable above the on-screen keyboard and phone safe area. A fading background visually separates it from the scrolling history without a hard divider line. Failed turns show an error without a retry control; expiry is presented with a path to start a new session from the recipe.
 
 The shared UI owns generic conversation behavior, including message ordering, sending, pending and error states, session expiry, composer behavior, and placement of structured artifacts. Kochwiki owns its entry action and recipe-specific rendering. This ownership boundary is separate from the shared visual direction.
 
@@ -80,7 +82,7 @@ The chat UI must not import Kochwiki components or understand Kochwiki recipe pr
 - an absent or unsupported renderer produces a generic fallback rather than breaking the conversation; and
 - registering a renderer does not grant the backend or model additional domain permissions.
 
-Building the Kochwiki proposal renderer is deferred. The shared UI owns the height-based collapse/expand control around the host renderer, while the content and ordering visible within the clipped area follow Kochwiki's recipe presentation. The exact clip height remains to be worked out. The renderer contract is not deferred because proposal artifacts and chat state must let a host renderer consume structured content without reconstructing it from conversational text.
+Building the Kochwiki proposal renderer is deferred, but its implementation must share the recipe-page presentation code rather than merely imitate its appearance. Kochwiki currently composes its recipe page from ingredient, preparation, and nutrition components; the proposal renderer should reuse those components or a common composition extracted from them, adapting proposal data at the host boundary as needed. The host supplies the proposal headline; the shared UI owns its placement and the height-based collapse/expand control around the host renderer. The exact clip height remains to be worked out. The renderer contract is not deferred because proposal artifacts and chat state must let a host renderer consume structured content without reconstructing it from conversational text.
 
 The visual language follows Kochwiki's existing dark mobile theme: near-black app background, subtly lighter rounded surfaces, light text, and rose/magenta accents. The preferred integration is a small set of semantic CSS custom properties supplied by the host and consumed by the library, mapped centrally from Kochwiki's existing theme tokens. This shares concrete visual values without making the library import Kochwiki Sass files or duplicate hard-coded colors. The exact token interface is an integration detail to validate when the library is built.
 
@@ -111,7 +113,7 @@ In scope:
 - a reusable chat UI for the session lifecycle;
 - a typed extension point for host-supplied proposal renderers;
 - a portrait-smartphone full-screen chat layout with a plain-text composer; and
-- height-clipped, expandable host-rendered proposals matching Kochwiki's visual language.
+- height-clipped, expandable proposals using Kochwiki's shared recipe-page presentation code.
 
 Out of scope:
 
@@ -137,6 +139,7 @@ Out of scope:
 - Deferring the concrete renderer while defining its contract risks discovering missing data later; the first contract should be exercised with a minimal test renderer.
 - Deferring distribution avoids premature registry work, but the library must still be built as an independently consumable boundary so publication does not later require architectural separation.
 - A shared visual appearance may drift if Kochwiki and the library maintain separate color values; host-supplied semantic tokens should be exercised in a Kochwiki integration example.
+- Reusing Kochwiki's recipe-page presentation may require extracting a common composition or adapting proposal data; duplicating its markup and styles would allow the two views to diverge.
 
 ## Open Questions
 
