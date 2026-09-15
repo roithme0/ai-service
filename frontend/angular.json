@@ -6,6 +6,26 @@
   },
   "newProjectRoot": "projects",
   "projects": {
+    "chat-ui": {
+      "projectType": "library",
+      "root": "projects/chat-ui",
+      "sourceRoot": "projects/chat-ui/src",
+      "prefix": "ai",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:ng-packagr",
+          "options": {
+            "project": "projects/chat-ui/ng-package.json"
+          },
+          "configurations": {
+            "production": {
+              "tsConfig": "projects/chat-ui/tsconfig.lib.json"
+            }
+          },
+          "defaultConfiguration": "production"
+        }
+      }
+    },
     "ai-service-frontend": {
       "projectType": "application",
       "schematics": {

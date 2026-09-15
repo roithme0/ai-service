@@ -1,0 +1,46 @@
+:host {
+  display: block;
+  min-width: 0;
+  font: inherit;
+}
+
+.chat-ui {
+  display: grid;
+  gap: 1.5rem;
+  background: var(--ai-chat-background, #fff8f8);
+  color: var(--ai-chat-text, #21191c);
+  overflow-wrap: anywhere;
+}
+
+.banner {
+  padding: 1.25rem;
+  border-radius: 1rem;
+  background: var(--ai-chat-banner-background, #ffd9e1);
+  color: var(--ai-chat-banner-text, #3f001b);
+}
+
+h1, h2, p {
+  margin: 0;
+}
+
+h1, h2 {
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+h1 {
+  font-size: 1.25rem;
+}
+
+h2 {
+  font-size: 1.125rem;
+  margin-bottom: 0.75rem;
+}
+
+p {
+  line-height: 1.6;
+}
+
+.banner p {
+  margin-top: 0.75rem;
+}

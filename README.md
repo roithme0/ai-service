@@ -27,6 +27,8 @@ The checked-in `.codex/config.toml` currently comes from the repository setup te
 
 ## Workflows
 
+The Angular frontend includes a packaged chat UI integration POC. See [the library README](frontend/projects/chat-ui/README.md) for its public API, host theme properties, and the local npm tarball handoff to Kochwiki.
+
 Use workflow skills only when explicitly invoked by the user.
 
 - `$prepare-spec`: pressure-test a scoped change and create or refine its lightweight spec.

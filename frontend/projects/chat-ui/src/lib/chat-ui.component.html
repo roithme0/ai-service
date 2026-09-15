@@ -1,0 +1,19 @@
+<section class="chat-ui">
+  <div class="banner">
+    <h1>{{ bannerTitle() }}</h1>
+    <p>{{ bannerDescription() }}</p>
+  </div>
+  @if (artifact(); as demoArtifact) {
+    <section class="artifact">
+      <h2>{{ demoArtifact.headline }}</h2>
+      @if (renderer(); as demoRenderer) {
+        <ng-container
+          [ngTemplateOutlet]="demoRenderer"
+          [ngTemplateOutletContext]="{ $implicit: demoArtifact }"
+        />
+      } @else {
+        <p class="fallback">Vorschau nicht verfügbar.</p>
+      }
+    </section>
+  }
+</section>
