@@ -1,6 +1,6 @@
 # Chat UI integration POC
 
-`@ai-service/chat-ui` is a small Angular 22 library. It renders a plain-text banner, places one optional static integration artifact, and invokes an Angular template supplied by the host. It makes no backend requests.
+`@roithme0/chat-ui` is a small Angular 22 library. It renders a plain-text banner, places one optional static integration artifact, and invokes an Angular template supplied by the host. It makes no backend requests.
 
 The public entry point exports `ChatUiComponent`, `ChatDemoRendererDirective`, `IntegrationDemoArtifact`, and `ChatDemoRendererContext`. The directive types `let-artifact` in the host template through Angular's context guard. Import the component and directive into the host component's `imports`.
 
@@ -32,6 +32,28 @@ Set these CSS variables on an ancestor of `ai-chat-ui`:
 
 The component inherits typography. Styles are compiled into the library, so consumers need no separate stylesheet import. Defaults are `var()` fallback values and do not mask inherited host values. The library has no Kochwiki or Material dependencies.
 
+## GitHub Packages releases
+
+The library publishes to `https://npm.pkg.github.com` and is associated with `roithme0/ai-service`. The `Build and publish chat UI package` workflow builds the library on pull requests and pushed `chat-ui-v*` tags, uploading the built package as a workflow artifact. A separate publish job runs only for release tags and downloads that same artifact. Only the publish job receives `packages: write` permission.
+
+The tag determines the published version: `chat-ui-v0.0.2` publishes `0.0.2`. Tags must use three numeric version parts without leading zeroes; prerelease tags are not supported yet. The publish job sets the version in `dist/chat-ui/package.json` and publishes using its `GITHUB_TOKEN`. The source package keeps the local placeholder version `0.0.0` and is not modified by the workflow.
+
+For the first registry release, commit the library and workflow changes, then tag that commit and push the tag:
+
+```powershell
+git tag chat-ui-v0.0.2
+git push origin chat-ui-v0.0.2
+```
+
+For later releases, commit the library changes and push a new version tag from the repository root. No package version edit is required:
+
+```powershell
+git tag chat-ui-v0.0.3
+git push origin chat-ui-v0.0.3
+```
+
+Each release needs a new version. Before Kochwiki can install the registry package in CI, grant its repository read access under the package's **Manage Actions access** settings and configure npm authentication in its build. Kochwiki currently still consumes the original `@ai-service/chat-ui` tarball; switching its dependency and imports is a separate migration.
+
 ## Local tarball handoff
 
 From `ai-service/frontend`:
@@ -41,30 +63,29 @@ npm ci
 npm run pack:chat-ui
 ```
 
-This builds a partially compiled Angular package under `dist/chat-ui` and creates `dist/ai-service-chat-ui-0.0.1.tgz`. Angular common/core are peer dependencies rather than bundled runtimes. The package contains the public declarations, compiled component styles, and library JavaScript. The application remains independently buildable with `npm run build`.
+This builds a partially compiled Angular package under `dist/chat-ui` and creates `dist/roithme0-chat-ui-0.0.0.tgz`. Angular common/core are peer dependencies rather than bundled runtimes. The package contains the public declarations, compiled component styles, and library JavaScript. The application remains independently buildable with `npm run build`.
 
 From the common parent directory containing both repositories:
 
 ```powershell
 New-Item -ItemType Directory -Force kochwiki-v2/frontend/vendor
-Copy-Item -LiteralPath ai-service/frontend/dist/ai-service-chat-ui-0.0.1.tgz -Destination kochwiki-v2/frontend/vendor/
+Copy-Item -LiteralPath ai-service/frontend/dist/roithme0-chat-ui-0.0.0.tgz -Destination kochwiki-v2/frontend/vendor/
 Set-Location kochwiki-v2/frontend
-npm install ./vendor/ai-service-chat-ui-0.0.1.tgz
+npm install ./vendor/roithme0-chat-ui-0.0.0.tgz
 npm run build -- --configuration production --progress=false
 npm test -- --watch=false --browsers=ChromeHeadlessNoSandbox --progress=false --include=src/app/chat-ui/pages/chat-ui-demo-page/chat-ui-demo-page.component.spec.ts
 ```
 
-The installed dependency points to the copied tarball in Kochwiki's build context. Keep the tarball and updated manifest/lockfile together so `npm ci` and Docker builds do not require the AI Service checkout. Do not install using a source alias, symlink, force flag, or sibling source import.
+When migrating from the original package name, remove the old dependency and update imports to `@roithme0/chat-ui`. The installed dependency points to the copied tarball in Kochwiki's build context. Keep the tarball and updated manifest/lockfile together so `npm ci` and Docker builds do not require the AI Service checkout. Do not install using a source alias, symlink, force flag, or sibling source import.
 
-For each subsequent change, bump the library version first, rebuild and pack, copy the new versioned tarball, and reinstall it:
+Local builds always use the placeholder version. Rebuild and pack after changing the library:
 
 ```powershell
 # In ai-service/frontend:
-npm version patch --prefix projects/chat-ui --no-git-tag-version
 npm run pack:chat-ui
 ```
 
-Repeat the copy/install commands with the new tarball filename, then rerun the checks. A version bump and new tarball avoid npm reusing the old artifact. Rebuilding alone does not update Kochwiki. Registry publication and automatic rebuilds are deferred.
+Rebuilding alone does not update Kochwiki. Repeatedly installing a changed tarball with the same filename and version can reuse an old installed copy. A reliable local update process and automatic consumer rebuilds will be addressed separately.
 
 ## Browser verification
 
