@@ -10,8 +10,11 @@
     "registry": "https://npm.pkg.github.com"
   },
   "peerDependencies": {
+    "@angular/cdk": "^22.0.0",
     "@angular/common": "^22.0.0",
-    "@angular/core": "^22.0.0"
+    "@angular/core": "^22.0.0",
+    "@angular/material": "^22.0.0",
+    "@angular/platform-browser": "^22.0.0"
   },
   "dependencies": {
     "tslib": "^2.3.0"

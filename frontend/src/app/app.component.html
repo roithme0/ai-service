@@ -1,0 +1,8 @@
+<main class="demo-shell">
+  <ai-chat-ui
+    bannerTitle="Local chat UI demo"
+    bannerDescription="This preview uses representative local messages and fixed responses. It is not connected to an AI model."
+    [messages]="messages()"
+    (messageSubmitted)="handleMessage($event)"
+  />
+</main>

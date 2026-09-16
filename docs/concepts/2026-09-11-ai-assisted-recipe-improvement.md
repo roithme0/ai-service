@@ -66,9 +66,9 @@ Session expiry, maximum context, proposal count, and storage mechanism are imple
 
 ## Reusable Chat UI
 
-The AI Service provides a reusable chat UI that Kochwiki can integrate into its existing application. The initial UI is designed only for smartphones in portrait orientation; other devices and orientations are explicitly out of scope. It opens as a full-screen view from a recipe, visually belongs to Kochwiki, and follows the familiar mobile chat pattern: a conversation scrolling above a bottom-anchored composer. The first version accepts plain text only. It shows a pending state while a turn runs, then displays the completed response; streaming and cancellation are not part of this UI concept.
+The AI Service provides a reusable chat UI that Kochwiki can integrate into its existing application. The initial experience is designed only for smartphones in portrait orientation; other devices and orientations are explicitly out of scope. Kochwiki opens it as a full-screen view from a recipe and owns the surrounding page shell. The shared UI fills the space provided within that shell and follows the familiar mobile chat pattern: a conversation scrolling above a bottom-anchored composer. The first version accepts plain text only. It shows a pending state while a turn runs, then displays the completed response; streaming and cancellation are not part of this UI concept.
 
-The Kochwiki-style header identifies the improvement view and uses a subtitle for the source recipe. At the top of the conversation, a full-width rounded introductory banner uses a distinct surface and may include a small icon. Subsequent content keeps user messages, assistant messages, and proposals in conversational order. User messages are colored, right-aligned bubbles. Assistant responses have no chat icon, bubble background, or enclosing padding: their text uses the available conversation width and may use ordinary Markdown formatting. Proposal cards have a visible headline.
+Kochwiki owns the page header that identifies the improvement view and its subtitle for the source recipe; neither is part of the shared chat UI. At the top of the shared conversation, a full-width rounded introductory banner uses a distinct surface and may include a small icon. Subsequent content keeps user messages, assistant messages, and proposals in conversational order. User messages are colored, right-aligned bubbles. Assistant responses have no chat icon, bubble background, or enclosing padding: their text uses the available conversation width and may use ordinary Markdown formatting. Proposal cards have a visible headline.
 
 A proposal uses the same host-supplied recipe rendering in both states: when its content exceeds a defined height, the shared UI clips it and offers an expand control; expanding reveals the rest of that rendering. Shorter proposals need no toggle. There is no separate summary template or prescribed set of visible recipe fields, and the clipped content does not create a second scroll area. Proposals are view-only in the initial UI; expand and collapse are their only controls. The bottom composer remains usable above the on-screen keyboard and phone safe area. A fading background visually separates it from the scrolling history without a hard divider line. Failed turns show an error without a retry control; expiry is presented with a path to start a new session from the recipe.
 
@@ -98,7 +98,7 @@ The caller must supply a self-consistent recipe and foodstuff snapshot and trans
 
 Provider-specific model behavior stays behind the service's model abstraction. The structured proposal boundary and deterministic validation must not depend on a particular provider.
 
-The reusable chat UI consumes the provider-neutral AI Service contract and exposes typed integration points to its host. Kochwiki supplies its proposal renderer to the chat UI, not to the AI Service backend.
+The reusable chat UI receives host-supplied view state shaped from the provider-neutral AI Service contract and emits typed actions to its host; it does not call the AI Service directly. Kochwiki supplies its proposal renderer to the chat UI, and its frontend relays chat actions through the Kochwiki backend to the AI Service.
 
 ## Scope Boundaries
 
@@ -112,7 +112,7 @@ In scope:
 - deterministic proposal identity, lineage, and validation;
 - a reusable chat UI for the session lifecycle;
 - a typed extension point for host-supplied proposal renderers;
-- a portrait-smartphone full-screen chat layout with a plain-text composer; and
+- a portrait-smartphone chat layout that fills the space provided by its host, with a plain-text composer; and
 - height-clipped, expandable proposals using Kochwiki's shared recipe-page presentation code.
 
 Out of scope:

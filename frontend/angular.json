@@ -24,6 +24,14 @@
             }
           },
           "defaultConfiguration": "production"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "buildTarget": "chat-ui:build:production",
+            "tsConfig": "projects/chat-ui/tsconfig.spec.json",
+            "runnerConfig": "projects/chat-ui/vitest.config.ts"
+          }
         }
       }
     },
@@ -72,9 +80,7 @@
                 "input": "public"
               }
             ],
-            "styles": [
-              "src/styles.css"
-            ]
+            "styles": ["src/styles.css"]
           },
           "configurations": {
             "production": {

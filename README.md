@@ -19,7 +19,7 @@ Domain services such as Kochwiki and Home Assistant continue to own their data, 
 
 ## Tech Stack
 
-The implementation stack has not been selected yet. Do not infer a backend framework, frontend packaging model, database, model provider, or deployment mode from the project direction alone.
+The frontend is an Angular 22 workspace containing the AI Service application and the independently packaged `@roithme0/chat-ui` library. A backend framework, database, model provider, and deployment mode have not been selected yet.
 
 The intended first implementation is a provider-neutral model adapter and a generic, ephemeral, multi-turn chat. It should remain stateless where practical by accepting the relevant active conversation history from the client. Conversation persistence, listing, and resumption are not initial requirements.
 

@@ -6,6 +6,7 @@
     "start": "ng serve",
     "build": "ng build ai-service-frontend",
     "build:chat-ui": "ng build chat-ui",
+    "test:chat-ui": "ng test chat-ui --watch=false",
     "watch:chat-ui": "ng build chat-ui --watch",
     "pack:chat-ui": "npm run build:chat-ui && npm pack ./dist/chat-ui --pack-destination ./dist",
     "watch": "ng build --watch --configuration development"
@@ -13,10 +14,12 @@
   "private": true,
   "packageManager": "npm@10.7.0",
   "dependencies": {
+    "@angular/cdk": "^22.1.7",
     "@angular/common": "^22.0.0",
     "@angular/compiler": "^22.0.0",
     "@angular/core": "^22.0.0",
     "@angular/forms": "^22.0.0",
+    "@angular/material": "^22.1.7",
     "@angular/platform-browser": "^22.0.0",
     "@angular/router": "^22.0.0",
     "rxjs": "~7.8.0",
@@ -26,8 +29,10 @@
     "@angular/build": "^22.0.0",
     "@angular/cli": "^22.0.0",
     "@angular/compiler-cli": "^22.0.0",
+    "jsdom": "27.0.0",
     "ng-packagr": "^22.0.0",
     "prettier": "^3.8.1",
-    "typescript": "~6.0.0"
+    "typescript": "~6.0.0",
+    "vitest": "4.0.8"
   }
 }

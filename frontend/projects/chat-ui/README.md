@@ -1,36 +1,56 @@
-# Chat UI integration POC
+# Chat UI
 
-`@roithme0/chat-ui` is a small Angular 22 library. It renders a plain-text banner, places one optional static integration artifact, and invokes an Angular template supplied by the host. It makes no backend requests.
+`@roithme0/chat-ui` is a controlled Angular 22 conversation component. It renders host-supplied text messages and emits normalized user submissions while leaving conversation state and transport orchestration to the host. It makes no backend requests.
 
-The public entry point exports `ChatUiComponent`, `ChatDemoRendererDirective`, `IntegrationDemoArtifact`, and `ChatDemoRendererContext`. The directive types `let-artifact` in the host template through Angular's context guard. Import the component and directive into the host component's `imports`.
+The public entry point exports `ChatUiComponent`, `ChatTextMessage`, and `ChatMessageRole`. Import the component into the host component's `imports`.
 
 ```html
-<ng-template aiChatDemoRenderer #preview="aiChatDemoRenderer" let-artifact>
-  <h3>{{ artifact.payload.name }}</h3>
-  <p>{{ artifact.payload.description }}</p>
-</ng-template>
 <ai-chat-ui
-  bannerTitle="Integration demo"
-  bannerDescription="Static content supplied by the host."
-  [artifact]="demoArtifact"
-  [renderer]="preview.template"
+  bannerTitle="Improve this recipe"
+  bannerDescription="Describe what you would like to change."
+  [messages]="messages()"
+  (messageSubmitted)="handleMessage($event)"
 />
 ```
 
-The artifact has readonly fields `type: 'integration-demo'`, `id: string`, `headline: string`, and `payload: { name: string; description: string }`. It is a POC contract, not a recipe proposal. The renderer receives the artifact as `$implicit`. Without an artifact the UI contains only the banner. An artifact without a renderer displays a generic unavailable-preview message.
+Each message has readonly `id`, `role` (`user` or `assistant`), and `text` fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
+
+The component trims a valid submission, emits it once, and clears the composer. It never adds that text to `messages`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break.
 
 ## Host theme
 
+The host must install compatible Angular Material and CDK versions and provide an Angular Material theme. For example, a host can import a prebuilt theme in its global stylesheet:
+
+```css
+@import '@angular/material/prebuilt-themes/magenta-violet.css';
+```
+
+The library packages selected SVGs from Google's Material Icons collection and registers `send`, `retry`, `tts`, and `add-file` in the `ai-chat` namespace. Its controls reference them through names such as `ai-chat:send`. Hosts do not need to load the Material Icons font or register these icons. The source icons and their Apache 2.0 terms are documented in `MATERIAL_ICONS_LICENSE` in the published package.
+
 Set these CSS variables on an ancestor of `ai-chat-ui`:
 
-| Property | Purpose | Default |
-| --- | --- | --- |
-| `--ai-chat-background` | Container background | `#fff8f8` |
-| `--ai-chat-text` | General text and artifact headline | `#21191c` |
-| `--ai-chat-banner-background` | Banner background | `#ffd9e1` |
-| `--ai-chat-banner-text` | Banner text | `#3f001b` |
+| Property                          | Purpose                        | Default      |
+| --------------------------------- | ------------------------------ | ------------ |
+| `--ai-chat-background`            | Container background           | `#130d0f`    |
+| `--ai-chat-text`                  | General text                   | `#f8eef1`    |
+| `--ai-chat-banner-background`     | Banner background              | `#291c21`    |
+| `--ai-chat-banner-text`           | Banner text                    | `#f8eef1`    |
+| `--ai-chat-user-background`       | User bubble background         | `#a9004f`    |
+| `--ai-chat-user-text`             | User bubble text               | `#ffffff`    |
+| `--ai-chat-assistant-text`        | Assistant text                 | General text |
+| `--ai-chat-muted-text`            | Secondary and placeholder text | `#c6b4bb`    |
+| `--ai-chat-accent`                | Focus and quote accent         | `#e00067`    |
+| `--ai-chat-link`                  | Assistant link text            | `#ff7aad`    |
+| `--ai-chat-code-background`       | Assistant code background      | `#251a1e`    |
+| `--ai-chat-composer-background`   | Composer field background      | `#291c21`    |
+| `--ai-chat-composer-border`       | Composer field border          | `#50363f`    |
+| `--ai-chat-composer-text`         | Composer field text            | `#f8eef1`    |
+| `--ai-chat-send-background`       | Send control background        | `#c00059`    |
+| `--ai-chat-send-hover-background` | Send control hover background  | `#df0067`    |
+| `--ai-chat-send-text`             | Send control foreground        | `#ffffff`    |
+| `--ai-chat-focus`                 | Keyboard focus ring            | `#ff9fc1`    |
 
-The component inherits typography. Styles are compiled into the library, so consumers need no separate stylesheet import. Defaults are `var()` fallback values and do not mask inherited host values. The library has no Kochwiki or Material dependencies.
+The component inherits typography. Its chat-specific styles are compiled into the library, while the host-provided Angular Material theme styles its Material controls. CSS variable defaults are `var()` fallback values and do not mask inherited host values. The library has no Kochwiki dependency.
 
 ## GitHub Packages releases
 
@@ -87,7 +107,7 @@ npm ci
 npm run pack:chat-ui
 ```
 
-This builds a partially compiled Angular package under `dist/chat-ui` and creates `dist/roithme0-chat-ui-0.0.0.tgz`. Angular common/core are peer dependencies rather than bundled runtimes. The package contains the public declarations, compiled component styles, and library JavaScript. The application remains independently buildable with `npm run build`.
+This builds a partially compiled Angular package under `dist/chat-ui` and creates `dist/roithme0-chat-ui-0.0.0.tgz`. Angular common/core/platform-browser and Angular Material/CDK are peer dependencies rather than bundled runtimes. The package contains the public declarations, compiled component styles, packaged SVG icon definitions, and library JavaScript. The application remains independently buildable with `npm run build`.
 
 From the common parent directory containing both repositories:
 
@@ -97,10 +117,11 @@ Copy-Item -LiteralPath ai-service/frontend/dist/roithme0-chat-ui-0.0.0.tgz -Dest
 Set-Location kochwiki-v2/frontend
 npm install ./vendor/roithme0-chat-ui-0.0.0.tgz
 npm run build -- --configuration production --progress=false
-npm test -- --watch=false --browsers=ChromeHeadlessNoSandbox --progress=false --include=src/app/chat-ui/pages/chat-ui-demo-page/chat-ui-demo-page.component.spec.ts
 ```
 
-When migrating from the original package name, remove the old dependency and update imports to `@roithme0/chat-ui`. The installed dependency points to the copied tarball in Kochwiki's build context. Keep the tarball and updated manifest/lockfile together so `npm ci` and Docker builds do not require the AI Service checkout. Do not install using a source alias, symlink, force flag, or sibling source import.
+When migrating from the original package name or the artifact-renderer POC, remove the old dependency, update imports to `@roithme0/chat-ui`, and adapt the host to the controlled `messages` input and `messageSubmitted` output before running its build. Run the consumer's focused tests for its current chat host after that migration; they should cover message projection and submission orchestration rather than the removed POC renderer. This library does not prescribe a consumer test-file path.
+
+The installed dependency points to the copied tarball in Kochwiki's build context. Keep the tarball and updated manifest/lockfile together so `npm ci` and Docker builds do not require the AI Service checkout. Do not install using a source alias, symlink, force flag, or sibling source import.
 
 Local builds always use the placeholder version. Rebuild and pack after changing the library:
 
@@ -113,8 +134,6 @@ Rebuilding alone does not update the legacy Kochwiki tarball installation. Repea
 
 ## Browser verification
 
-Start Kochwiki's normal local stack and frontend (see its deployment documentation), select a local user, then open `/chat-ui-demo` directly. The application header stays visible. The library owns banner/headline placement and renders Kochwiki's recipe template inside its artifact area.
+Run `npm start` in `frontend` and open the AI Service frontend at a portrait-phone viewport. It is a maintained local host with representative messages and a fixed response adapter; its introductory banner explicitly identifies it as unconnected to a model.
 
-Check a portrait phone viewport in both light and dark OS themes. In developer tools, change the integration ancestor's `--ai-chat-banner-background` and `--ai-chat-banner-text`: computed banner colors should change immediately. Disable the `.chat-ui-integration` mappings to verify readable library defaults. Automated integration checks also cover missing artifact/renderer and changing inherited variables.
-
-The demo requires no AI model credentials. Kochwiki's existing user selection and application shell can still call its own backend; the chat library does not call AI Service.
+Check that the history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling. Change the semantic properties on the app shell to verify that host theme values take effect.
