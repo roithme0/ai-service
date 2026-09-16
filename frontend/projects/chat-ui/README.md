@@ -52,7 +52,7 @@ git tag chat-ui-v0.0.3
 git push origin chat-ui-v0.0.3
 ```
 
-Each release needs a new version. Before Kochwiki can install the registry package in CI, grant its repository read access under the package's **Manage Actions access** settings and configure npm authentication in its build. Kochwiki currently still consumes the original `@ai-service/chat-ui` tarball; switching its dependency and imports is a separate migration.
+Each release needs a new version. Kochwiki has read access under the package's **Manage Actions access** settings and consumes the package from GitHub Packages. Its CI passes the repository's short-lived `GITHUB_TOKEN` to Docker as a BuildKit secret.
 
 ## Local development with Kochwiki
 
