@@ -54,7 +54,31 @@ git push origin chat-ui-v0.0.3
 
 Each release needs a new version. Before Kochwiki can install the registry package in CI, grant its repository read access under the package's **Manage Actions access** settings and configure npm authentication in its build. Kochwiki currently still consumes the original `@ai-service/chat-ui` tarball; switching its dependency and imports is a separate migration.
 
-## Local tarball handoff
+## Local development with Kochwiki
+
+After Kochwiki has migrated to the published package name, use a direct local link for interactive development. No global npm link is created.
+
+Build the library once before creating the link, then leave its watcher running:
+
+```powershell
+# In ai-service/frontend:
+npm run build:chat-ui
+npm run watch:chat-ui
+```
+
+In another terminal, link Kochwiki directly to the compiled Angular package and start its development server:
+
+```powershell
+# In kochwiki-v2/frontend:
+npm run link:chat-ui
+npm start
+```
+
+Kochwiki preserves the package symlink and excludes `@roithme0/chat-ui` from development-server prebundling, so changes written to `dist/chat-ui` trigger a consumer rebuild and browser reload. Running `npm install` or `npm ci` in Kochwiki restores the declared registry dependency; rerun `npm run link:chat-ui` afterward when local library development is needed.
+
+Docker, CI, and production builds always install the declared GitHub Packages version. They do not use the sibling checkout or its link.
+
+## Legacy local tarball handoff
 
 From `ai-service/frontend`:
 
@@ -85,7 +109,7 @@ Local builds always use the placeholder version. Rebuild and pack after changing
 npm run pack:chat-ui
 ```
 
-Rebuilding alone does not update Kochwiki. Repeatedly installing a changed tarball with the same filename and version can reuse an old installed copy. A reliable local update process and automatic consumer rebuilds will be addressed separately.
+Rebuilding alone does not update the legacy Kochwiki tarball installation. Repeatedly installing a changed tarball with the same filename and version can reuse an old installed copy. Prefer the direct-link workflow after the registry migration.
 
 ## Browser verification
 

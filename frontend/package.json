@@ -6,6 +6,7 @@
     "start": "ng serve",
     "build": "ng build ai-service-frontend",
     "build:chat-ui": "ng build chat-ui",
+    "watch:chat-ui": "ng build chat-ui --watch --configuration development",
     "pack:chat-ui": "npm run build:chat-ui && npm pack ./dist/chat-ui --pack-destination ./dist",
     "watch": "ng build --watch --configuration development"
   },
