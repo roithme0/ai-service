@@ -23,7 +23,7 @@
   </div>
 
   <form class="composer" (submit)="submit($event)">
-    <div class="composer-input">
+    <div class="composer-surface">
       <textarea
         #composer
         cdkTextareaAutosize
@@ -36,15 +36,17 @@
         (input)="updateDraft(composer.value)"
         (keydown)="submitFromKeyboard($event)"
       ></textarea>
+      <div class="composer-actions">
+        <button
+          class="send-button"
+          matIconButton
+          type="submit"
+          aria-label="Send message"
+          [disabled]="draft().trim() === ''"
+        >
+          <mat-icon svgIcon="ai-chat:send" aria-hidden="true" />
+        </button>
+      </div>
     </div>
-    <button
-      class="send-button"
-      matIconButton
-      type="submit"
-      aria-label="Send message"
-      [disabled]="draft().trim() === ''"
-    >
-      <mat-icon svgIcon="ai-chat:send" aria-hidden="true" />
-    </button>
   </form>
 </section>

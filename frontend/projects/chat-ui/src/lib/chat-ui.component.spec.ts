@@ -71,6 +71,16 @@ describe('ChatUiComponent', () => {
     expect(icon).not.toBeNull();
   });
 
+  it('renders only the send action inside the composer surface', () => {
+    const fixture = createFixture([]);
+    const surface = fixture.nativeElement.querySelector('.composer-surface') as HTMLElement;
+    const actions = surface.querySelector('.composer-actions') as HTMLElement;
+
+    expect(surface.querySelector('textarea')).not.toBeNull();
+    expect(actions.querySelectorAll('button')).toHaveLength(1);
+    expect(actions.querySelector('.send-button')).not.toBeNull();
+  });
+
   it('registers the packaged Material icons in the chat namespace', async () => {
     createFixture([]);
     const registry = TestBed.inject(MatIconRegistry);
