@@ -4,6 +4,9 @@ services:
   backend:
     build:
       context: ../backend
+    environment:
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      RECIPE_IMPROVEMENT_OPENAI_MODEL: "${RECIPE_IMPROVEMENT_OPENAI_MODEL:-}"
     ports:
       - "${BACKEND_PORT:-8080}:8080"
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from functools import lru_cache
-import os
 from typing import Literal
 
 from fastapi import APIRouter, Depends
@@ -13,6 +12,7 @@ from fastapi.responses import JSONResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.config import get_settings
 from app.models.agentic_generation import AgenticGenerator
 from app.models.openai_agentic_generation import OpenAIAgenticGenerator
 from app.recipe_improvement.session_input import (
@@ -89,13 +89,18 @@ def get_recipe_improvement_session_store() -> RecipeImprovementSessionStore:
 
 
 def get_agentic_generator() -> AgenticGenerator | None:
-    return _configured_agentic_generator()
+    settings = get_settings()
+    api_key = settings.openai_api_key
+    return _configured_agentic_generator(
+        api_key.get_secret_value() if api_key is not None else None,
+        settings.recipe_improvement_openai_model,
+    )
 
 
 @lru_cache(maxsize=1)
-def _configured_agentic_generator() -> AgenticGenerator | None:
-    api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    model = os.getenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", "").strip()
+def _configured_agentic_generator(
+    api_key: str | None, model: str | None
+) -> AgenticGenerator | None:
     if not api_key or not model:
         return None
     return OpenAIAgenticGenerator(model=model, client=AsyncOpenAI(api_key=api_key, max_retries=0))

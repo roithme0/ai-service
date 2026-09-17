@@ -18,10 +18,11 @@ Run the development server:
 fastapi dev app/main.py
 ```
 
-To enable recipe-improvement turns, set `OPENAI_API_KEY` and
-`RECIPE_IMPROVEMENT_OPENAI_MODEL=gpt-5.6-sol` in the backend process environment.
-Keep the key in an ignored `backend/.env` file or secret store, never in tracked configuration;
-load it into the backend process environment when starting the service.
+To enable recipe-improvement turns, copy `.env.example` to `.env` and set
+`OPENAI_API_KEY`. The backend loads this ignored file automatically and uses
+`RECIPE_IMPROVEMENT_OPENAI_MODEL` as the use-case-specific model selection.
+In deployed environments, supply both values through the process environment or
+secret store; never put a real key in tracked configuration.
 With either setting missing, the turn endpoint returns `503 generator_unavailable`.
 The generator receives the conversation, recipe and available-foodstuff snapshots,
 and versioned recipe-specific instructions. It may register validated recipe

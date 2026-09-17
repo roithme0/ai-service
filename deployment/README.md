@@ -8,6 +8,10 @@ Run the local application from the repository root:
 docker compose -f deployment/docker-compose-local.yml up --build
 ```
 
+Docker Compose reads `deployment/.env`. To enable recipe-improvement turns in
+the container, add `OPENAI_API_KEY` and `RECIPE_IMPROVEMENT_OPENAI_MODEL` there.
+That file is ignored by Git. The variables are forwarded only to the backend.
+
 Run backend tests in a container:
 
 ```powershell

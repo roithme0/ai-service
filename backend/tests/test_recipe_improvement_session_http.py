@@ -5,6 +5,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.config import get_settings
 from app.main import app
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.models.openai_agentic_generation import OpenAIAgenticGenerator
@@ -350,6 +351,7 @@ def test_turn_endpoint_is_unavailable_without_configured_generator(
 ) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", raising=False)
+    get_settings.cache_clear()
     _configured_agentic_generator.cache_clear()
     try:
         created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
@@ -362,22 +364,27 @@ def test_turn_endpoint_is_unavailable_without_configured_generator(
         assert response.json() == {"kind": "generator_unavailable"}
         assert len(client.get(session_url).json()["messages"]) == 1
     finally:
+        get_settings.cache_clear()
         _configured_agentic_generator.cache_clear()
 
 
 def test_generator_requires_key_and_use_case_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    get_settings.cache_clear()
     _configured_agentic_generator.cache_clear()
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", raising=False)
     try:
         assert get_agentic_generator() is None
+        get_settings.cache_clear()
         _configured_agentic_generator.cache_clear()
         monkeypatch.setenv("OPENAI_API_KEY", "test-key")
         assert get_agentic_generator() is None
+        get_settings.cache_clear()
         _configured_agentic_generator.cache_clear()
         monkeypatch.setenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", "gpt-5.6-sol")
         assert isinstance(get_agentic_generator(), OpenAIAgenticGenerator)
     finally:
+        get_settings.cache_clear()
         _configured_agentic_generator.cache_clear()
 
 
