@@ -23,7 +23,9 @@ Each session:
 - retains its conversation, proposals, and proposal lineage in short-lived AI Service state; and
 - expires without becoming durable recipe or chat storage.
 
-The service produces immutable, complete recipe proposals. It assigns proposal identifiers, ordering, timestamps, and base references deterministically. The model supplies conversational content and structured recipe candidates but does not invent lifecycle metadata.
+The service produces immutable, renderer-ready recipe proposals. It assigns proposal identifiers, ordering, timestamps, and base references deterministically. The model supplies conversational content and a transient structured candidate but does not invent lifecycle metadata. That candidate is not retained as a second recipe representation.
+
+Each accepted proposal consists of its lifecycle metadata, its recipe name as the artifact headline, and one resolved recipe value matching Kochwiki's existing `RecipePresentation` shape: servings, nullable preparation time and nutritional totals, ordered ingredients containing amount and a `FoodstuffSummary`, and ordered preparation steps. The model proposes a name and presentation candidate using foodstuff references; the AI Service asks a read-only Kochwiki resolver to complete the presentation from current authoritative domain data. On success, the transient candidate is discarded and only the completed proposal is retained. Catalogue facts and deterministic values must not be copied or invented by the model or recalculated by the AI Service.
 
 The AI Service also owns generic chat UI behavior. The UI presents conversational content and proposal placement but delegates proposal rendering to a renderer supplied by the host application.
 
@@ -35,7 +37,7 @@ Providing the availability snapshot up front is intentionally the first integrat
 
 Later iterations may replace or supplement the snapshot with a bounded foodstuff search or lookup tool. Proposing a foodstuff that does not yet exist, creating foodstuffs, and resolving free-text ingredients into new catalogue entries are out of scope.
 
-The snapshot represents allowed references, not AI Service-owned domain data. It should contain only the fields needed to choose and explain an ingredient. The exact schema and catalogue-size limit remain contract-design questions.
+The snapshot represents allowed references and model context, not AI Service-owned domain data. It contains the complete foodstuff summary fields, including required nullable nutrition fields, so the model can reason about the available catalogue. Renderer-facing proposals are nevertheless resolved against current Kochwiki data rather than copied from the snapshot. The exact catalogue-size limit remains a contract-design question.
 
 ## Recipe-Improvement Instructions
 
@@ -47,8 +49,11 @@ The model may discuss different user-supplied goals, but the service does not cl
 
 ## Proposal Behavior
 
-- A proposal contains the complete recipe content needed by the caller, not a patch.
+- A proposal contains the complete recipe presentation needed by the initial caller, not a patch or a retained copy of the model candidate.
 - Every ingredient must reference the session's availability snapshot.
+- The backend exposes a renderer-ready presentation whose recipe value is compatible with Kochwiki's existing `RecipePresentation` contract: `servings`, `preptime`, `kcal`, `carbs`, `protein`, `fat`, `ingredients`, and `steps`. Each ingredient contains `index`, `amount`, and the resolved `FoodstuffSummary`; each step contains `index` and `description`.
+- Kochwiki resolves that presentation from current domain data after the AI Service validates a candidate. An unavailable resolver rejects proposal registration transiently so the assistant may still complete with text; an unknown or deleted foodstuff permanently rejects that candidate. Unresolved proposals are not retained or exposed.
+- Proposal candidates and completed proposals omit origin name and URL. Deriving a persistable Kochwiki draft from a proposal is deferred.
 - A proposal identifies the source recipe or an earlier session proposal as its base.
 - One assistant turn may emit multiple proposals when alternatives are requested.
 - The assistant can explain proposals in its conversational response; explanations are not required fields on individual proposal artifacts.
@@ -74,15 +79,19 @@ A proposal uses the same host-supplied recipe rendering in both states: when its
 
 The shared UI owns generic conversation behavior, including message ordering, sending, pending and error states, session expiry, composer behavior, and placement of structured artifacts. Kochwiki owns its entry action and recipe-specific rendering. This ownership boundary is separate from the shared visual direction.
 
-The chat UI must not import Kochwiki components or understand Kochwiki recipe presentation. Instead, it exposes a typed renderer registry or equivalent host extension point:
+The chat UI must not import Kochwiki components or understand Kochwiki recipe presentation. Instead, it exposes a generic artifact envelope with a stable identifier, type discriminator, headline, and JSON-compatible payload, plus a typed renderer registry or equivalent host extension point:
 
 - the host associates the recipe-proposal artifact type with its renderer;
 - the chat UI invokes that renderer for validated proposal artifacts;
 - the renderer receives typed proposal data and only explicitly supplied host actions;
-- an absent or unsupported renderer produces a generic fallback rather than breaking the conversation; and
+- an absent or unsupported renderer uses the library's built-in JSON renderer rather than breaking the conversation; and
 - registering a renderer does not grant the backend or model additional domain permissions.
 
-Building the Kochwiki proposal renderer is deferred, but its implementation must share the recipe-page presentation code rather than merely imitate its appearance. Kochwiki currently composes its recipe page from ingredient, preparation, and nutrition components; the proposal renderer should reuse those components or a common composition extracted from them, adapting proposal data at the host boundary as needed. The host supplies the proposal headline; the shared UI owns its placement and the height-based collapse/expand control around the host renderer. The exact clip height remains to be worked out. The renderer contract is not deferred because proposal artifacts and chat state must let a host renderer consume structured content without reconstructing it from conversational text.
+The JSON renderer is a reusable diagnostic presentation, not a recipe-specific UI. It renders nested JSON-compatible values clearly enough to inspect the complete proposal data and safely handles nulls, empty collections, deep structures, and large payloads. The artifact payload contract uses a strict recursive JSON value type rather than arbitrary objects. This fallback may be lightly polished because it remains useful for future artifact types and integration diagnosis.
+
+Building the Kochwiki proposal renderer is deferred, but its implementation must share the recipe-page presentation code rather than merely imitate its appearance. Kochwiki currently composes its recipe page from ingredient, preparation, and nutrition components; the proposal renderer should reuse those components or a common composition extracted from them. The backend's renderer-ready payload avoids requiring Kochwiki to reconstruct foodstuff summaries or recipe presentation data from conversational text. The host supplies the proposal headline; the shared UI owns its placement and the height-based collapse/expand control around both registered and fallback renderers. The exact clip height remains to be worked out.
+
+The immediate next slice integrates proposal artifacts into the current chat flow. It maps backend proposals into the library's generic artifact envelope, resolves a host renderer by artifact type, falls back to the built-in JSON renderer when no mapping exists, and applies the library-owned collapse/expand behavior. The AI Service application uses the JSON renderer to verify the complete renderer-ready payload. This slice does not implement Kochwiki's recipe renderer; the earlier renderer-injection POC already established the viability of Angular template projection, so the goal is the real proposal contract and end-to-end mapping rather than another isolated injection experiment.
 
 The visual language follows Kochwiki's existing dark mobile theme: near-black app background, subtly lighter rounded surfaces, light text, and rose/magenta accents. The preferred integration is a small set of semantic CSS custom properties supplied by the host and consumed by the library, mapped centrally from Kochwiki's existing theme tokens. This shares concrete visual values without making the library import Kochwiki Sass files or duplicate hard-coded colors. The exact token interface is an integration detail to validate when the library is built.
 
@@ -92,9 +101,9 @@ The library must retain a deliberately narrow public API so its packaging does n
 
 ## Integration Impact
 
-The AI Service backend exposes a recipe-improvement contract around session initialization, conversational turns, structured proposal artifacts, proposal lookup, and session expiry. External recipe and foodstuff identifiers remain opaque to the service.
+The AI Service backend exposes a recipe-improvement contract around session initialization, conversational turns, structured proposal artifacts, proposal lookup, and session expiry. External recipe and foodstuff identifiers remain opaque to the service. A stored proposal contains lifecycle metadata, its name, and a single renderer-ready recipe presentation resolved by Kochwiki from the transient model candidate and current domain data.
 
-The caller must supply a self-consistent recipe and foodstuff snapshot and translate returned proposals into its domain workflow. The AI Service does not read from or write to Kochwiki, create drafts, render recipes, or decide whether an external recipe changed.
+The caller must supply a self-consistent recipe and foodstuff snapshot and translate returned proposals into its domain workflow. The AI Service calls only Kochwiki's bounded, read-only presentation resolver when registering a proposal; it does not otherwise read from or write to Kochwiki, create drafts, render recipes, or decide whether an external recipe changed.
 
 Provider-specific model behavior stays behind the service's model abstraction. The structured proposal boundary and deterministic validation must not depend on a particular provider.
 
@@ -112,6 +121,8 @@ In scope:
 - deterministic proposal identity, lineage, and validation;
 - a reusable chat UI for the session lifecycle;
 - a typed extension point for host-supplied proposal renderers;
+- a generic JSON-compatible artifact envelope and reusable JSON fallback renderer;
+- mapping backend recipe proposals into conversational artifacts with renderer-ready `RecipePresentation` payloads;
 - a portrait-smartphone chat layout that fills the space provided by its host, with a plain-text composer; and
 - height-clipped, expandable proposals using Kochwiki's shared recipe-page presentation code.
 
@@ -121,7 +132,8 @@ Out of scope:
 - non-smartphone layouts and non-portrait orientations;
 - streamed responses, turn cancellation, and non-text input in the initial UI;
 - Kochwiki authorization, drafts, publication, and persistence;
-- fetching recipes or foodstuffs directly from Kochwiki;
+- deriving or persisting a Kochwiki draft from a proposal;
+- fetching source recipes or browsing foodstuffs directly from Kochwiki outside proposal presentation resolution;
 - foodstuff lookup tools in the initial capability;
 - proposing or creating unavailable foodstuffs;
 - durable chat history or session resumption;
@@ -137,20 +149,21 @@ Out of scope:
 - Short-lived state adds expiry and horizontal-scaling concerns even though durable persistence is excluded.
 - A reusable chat UI can become coupled to Kochwiki if artifact or action APIs encode recipe-specific behavior instead of generic extension points.
 - Deferring the concrete renderer while defining its contract risks discovering missing data later; the first contract should be exercised with a minimal test renderer.
+- Matching Kochwiki's current presentation model requires more foodstuff summary and nutrition data than the AI Service currently receives, plus a runtime dependency on the Kochwiki resolver for proposal registration. The model must not invent missing catalogue facts or totals, and resolver outages must not create unresolved proposals.
+- A generic JSON fallback can become unwieldy for large or deeply nested artifacts; its rendering must be bounded without hiding that data was truncated or collapsed.
 - Deferring distribution avoids premature registry work, but the library must still be built as an independently consumable boundary so publication does not later require architectural separation.
 - A shared visual appearance may drift if Kochwiki and the library maintain separate color values; host-supplied semantic tokens should be exercised in a Kochwiki integration example.
 - Reusing Kochwiki's recipe-page presentation may require extracting a common composition or adapting proposal data; duplicating its markup and styles would allow the two views to diverge.
 
 ## Open Questions
 
-- What minimum recipe and foodstuff fields are required for useful and valid proposals?
 - What catalogue-size or token-budget threshold triggers a move from an upfront snapshot to lookup tools?
 - How long should a session live, and should activity extend its expiry?
 - Which registry and release workflow should distribute the Angular chat UI library when Kochwiki integration begins?
-- What generic renderer interface and fallback representation are sufficient for recipe proposals?
+- What renderer registration API best preserves payload typing while supporting a generic JSON fallback?
 - What collapsed height gives enough context without overwhelming a phone-sized conversation?
 - What should the first screen say?
 
 ## Summary
 
-The AI Service owns a short-lived, recipe-scoped improvement session that turns caller-supplied snapshots into validated recipe proposals. It also owns a reusable, portrait-smartphone chat UI with plain-text input and height-clipped, expandable proposals rendered by the host. The UI follows Kochwiki's visual language through host-provided semantic style tokens. The initial capability uses generic instructions and is restricted to available foodstuffs. Kochwiki's renderer implementation, domain persistence, and changing external state remain outside the service boundary.
+The AI Service owns a short-lived, recipe-scoped improvement session that turns transient model candidates into validated, renderer-ready recipe proposals compatible with Kochwiki's existing presentation model. It retains one completed recipe representation per proposal rather than storing the candidate beside its resolved presentation. It also owns a reusable, portrait-smartphone chat UI with plain-text input, generic artifact-to-renderer mapping, a reusable JSON fallback, and library-controlled height clipping and expansion. The UI follows Kochwiki's visual language through host-provided semantic style tokens. The next slice connects real backend proposals to this generic rendering boundary without implementing Kochwiki's recipe renderer or draft creation. Domain persistence and changing external state remain outside the service boundary.
