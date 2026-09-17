@@ -26,9 +26,6 @@
           [class.status--error]="status.kind === 'error'"
           [class.status--assistant]="status.placement === 'assistant'"
         >
-          @if (status.kind === 'loading') {
-            <span class="loading-dots" aria-hidden="true">…</span>
-          }
           <p>{{ status.message }}</p>
           @if (status.action; as action) {
             <button
