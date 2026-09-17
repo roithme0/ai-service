@@ -3,13 +3,14 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build ai-service-frontend",
+    "start:app": "ng serve ai-service-frontend",
+    "build:app": "ng build ai-service-frontend",
     "build:chat-ui": "ng build chat-ui",
+    "test:app": "ng test ai-service-frontend --watch=false",
     "test:chat-ui": "ng test chat-ui --watch=false",
+    "watch:app": "ng build ai-service-frontend --watch --configuration development",
     "watch:chat-ui": "ng build chat-ui --watch",
-    "pack:chat-ui": "npm run build:chat-ui && npm pack ./dist/chat-ui --pack-destination ./dist",
-    "watch": "ng build --watch --configuration development"
+    "pack:chat-ui": "npm run build:chat-ui && npm pack ./dist/chat-ui --pack-destination ./dist"
   },
   "private": true,
   "packageManager": "npm@10.7.0",

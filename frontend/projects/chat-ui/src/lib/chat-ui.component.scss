@@ -89,6 +89,30 @@ p {
   line-height: 1.6;
 }
 
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--ai-chat-muted-text, #c6b4bb);
+}
+
+.status--error {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--ai-chat-error-border, #814152);
+  border-radius: 0.875rem;
+  background: var(--ai-chat-error-background, #321b22);
+  color: var(--ai-chat-error-text, #ffd9e2);
+}
+
+.status-action {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
 :host ::ng-deep .markdown > * {
   margin: 0;
 }
@@ -144,7 +168,6 @@ p {
 .composer-surface,
 textarea,
 .send-button {
-  box-sizing: border-box;
   pointer-events: auto;
 }
 

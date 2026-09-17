@@ -5,7 +5,7 @@ import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
 import { TextFieldModule } from '@angular/cdk/text-field';
 import { renderAssistantMarkdown } from './assistant-markdown';
 import { registerChatIcons } from './chat-icons';
-import type { ChatTextMessage } from './chat-message';
+import type { ChatConversationStatus, ChatSubmission, ChatTextMessage } from './chat-message';
 
 @Component({
   selector: 'ai-chat-ui',
@@ -21,7 +21,12 @@ export class ChatUiComponent {
   readonly bannerTitle = input.required<string>();
   readonly bannerDescription = input.required<string>();
   readonly messages = input.required<readonly ChatTextMessage[]>();
-  readonly messageSubmitted = output<string>();
+  readonly conversationStatus = input<ChatConversationStatus | null>(null);
+  readonly composerDisabled = input(false);
+  readonly composerPlaceholder = input('Nachricht schreiben');
+  
+  readonly messageSubmitted = output<ChatSubmission>();
+  readonly statusActionTriggered = output<string>();
 
   protected readonly draft = signal('');
   protected readonly renderAssistantMarkdown = renderAssistantMarkdown;
@@ -49,13 +54,22 @@ export class ChatUiComponent {
   }
 
   private emitDraft(): void {
+    if (this.composerDisabled()) {
+      return;
+    }
     const normalizedText = this.draft().trim();
     if (normalizedText === '') {
       return;
     }
 
-    this.messageSubmitted.emit(normalizedText);
-    this.draft.set('');
-    this.composer().nativeElement.focus();
+    this.messageSubmitted.emit({
+      text: normalizedText,
+      acknowledge: () => {
+        if (this.draft().trim() === normalizedText) {
+          this.draft.set('');
+        }
+        this.composer().nativeElement.focus();
+      },
+    });
   }
 }

@@ -4,7 +4,7 @@ import { CdkTextareaAutosize } from '@angular/cdk/text-field';
 import { MatIconRegistry } from '@angular/material/icon';
 import { firstValueFrom } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatTextMessage } from './chat-message';
+import type { ChatSubmission, ChatTextMessage } from './chat-message';
 import { ChatUiComponent } from './chat-ui.component';
 
 const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
@@ -33,7 +33,7 @@ describe('ChatUiComponent', () => {
     );
   });
 
-  it('emits one normalized submission and clears the composer', () => {
+  it('retains a submission until the host acknowledges it', () => {
     const fixture = createFixture([]);
     const component = fixture.componentInstance;
     const emit = vi.spyOn(component.messageSubmitted, 'emit');
@@ -46,7 +46,13 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
 
     expect(emit).toHaveBeenCalledOnce();
-    expect(emit).toHaveBeenCalledWith('hello there');
+    const submission = emit.mock.calls[0][0] as ChatSubmission;
+    expect(submission.text).toBe('hello there');
+    expect(textarea.value).toBe('  hello there  ');
+
+    submission.acknowledge();
+    fixture.detectChanges();
+
     expect(textarea.value).toBe('');
     expect(fixture.nativeElement.querySelectorAll('.message')).toHaveLength(0);
     expect(document.activeElement).toBe(textarea);
@@ -106,7 +112,7 @@ describe('ChatUiComponent', () => {
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     expect(emit).toHaveBeenCalledOnce();
-    expect(emit).toHaveBeenCalledWith('keyboard message');
+    expect((emit.mock.calls[0][0] as ChatSubmission).text).toBe('keyboard message');
 
     textarea.value = 'multiline draft';
     textarea.dispatchEvent(new Event('input'));
@@ -133,6 +139,36 @@ describe('ChatUiComponent', () => {
     const messages = fixture.nativeElement.querySelectorAll('.message') as NodeListOf<HTMLElement>;
     expect(messages).toHaveLength(1);
     expect(messages[0].textContent).toContain('Replacement state');
+  });
+
+  it('disables submission and renders host-controlled loading and recovery states', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      message: 'Antwort wird erstellt …',
+      placement: 'assistant',
+    });
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(
+      true,
+    );
+    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain(
+      'Antwort wird erstellt …',
+    );
+
+    const actionEmit = vi.spyOn(fixture.componentInstance.statusActionTriggered, 'emit');
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      message: 'Das Modell ist nicht verfügbar.',
+      placement: 'assistant',
+      action: { id: 'retry-turn', label: 'Erneut versuchen' },
+    });
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.status-action') as HTMLButtonElement).click();
+
+    expect(actionEmit).toHaveBeenCalledWith('retry-turn');
   });
 });
 

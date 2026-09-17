@@ -1,21 +1,26 @@
 # Chat UI
 
-`@roithme0/chat-ui` is a controlled Angular 22 conversation component. It renders host-supplied text messages and emits normalized user submissions while leaving conversation state and transport orchestration to the host. It makes no backend requests.
+`@roithme0/chat-ui` is a controlled Angular 22 conversation component. It renders host-supplied text messages and presentation states, emits normalized user submissions and generic status actions, and leaves conversation state and transport orchestration to the host. It makes no backend requests.
 
-The public entry point exports `ChatUiComponent`, `ChatTextMessage`, and `ChatMessageRole`. Import the component into the host component's `imports`.
+The public entry point exports `ChatUiComponent` and the typed message, submission, status, and status-action contracts. Import the component into the host component's `imports`.
 
 ```html
 <ai-chat-ui
-  bannerTitle="Improve this recipe"
-  bannerDescription="Describe what you would like to change."
+  bannerTitle="Rezept gemeinsam verbessern"
+  bannerDescription="Beschreibe, was du ändern möchtest."
   [messages]="messages()"
+  [composerDisabled]="pending()"
+  [conversationStatus]="status()"
   (messageSubmitted)="handleMessage($event)"
+  (statusActionTriggered)="handleStatusAction($event)"
 />
 ```
 
 Each message has readonly `id`, `role` (`user` or `assistant`), and `text` fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
 
-The component trims a valid submission, emits it once, and clears the composer. It never adds that text to `messages`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break.
+The component trims a valid submission and emits it once as a `ChatSubmission`. It retains the draft until the host calls `acknowledge`, so the visible composer can remain truthful to backend acceptance. It never adds that text to `messages`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break.
+
+`conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. `composerDisabled` blocks concurrent submissions. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
 
 ## Host theme
 
@@ -107,7 +112,7 @@ npm ci
 npm run pack:chat-ui
 ```
 
-This builds a partially compiled Angular package under `dist/chat-ui` and creates `dist/roithme0-chat-ui-0.0.0.tgz`. Angular common/core/platform-browser and Angular Material/CDK are peer dependencies rather than bundled runtimes. The package contains the public declarations, compiled component styles, packaged SVG icon definitions, and library JavaScript. The application remains independently buildable with `npm run build`.
+This builds a partially compiled Angular package under `dist/chat-ui` and creates `dist/roithme0-chat-ui-0.0.0.tgz`. Angular common/core/platform-browser and Angular Material/CDK are peer dependencies rather than bundled runtimes. The package contains the public declarations, compiled component styles, packaged SVG icon definitions, and library JavaScript. The application remains independently buildable with `npm run build:app`.
 
 From the common parent directory containing both repositories:
 
@@ -134,6 +139,6 @@ Rebuilding alone does not update the legacy Kochwiki tarball installation. Repea
 
 ## Browser verification
 
-Run `npm start` in `frontend` and open the AI Service frontend at a portrait-phone viewport. It is a maintained local host with representative messages and a fixed response adapter; its introductory banner explicitly identifies it as unconnected to a model.
+Configure the backend model environment, run the backend and `npm run start:app` in `frontend`, then open the AI Service frontend at a portrait-phone viewport. The host creates a short-lived recipe-improvement session from its POC fixture and sends confirmed messages to the configured model.
 
-Check that the history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling. Change the semantic properties on the app shell to verify that host theme values take effect.
+Check that initialization, sending, generation, inline failures, safe generation retry, and session restart remain visible in the conversation flow. Also check that history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling.

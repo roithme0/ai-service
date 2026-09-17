@@ -1,4 +1,4 @@
-<section class="chat-ui" aria-label="Chat conversation">
+<section class="chat-ui" aria-label="Chat-Unterhaltung">
   <div class="history" role="log" aria-live="polite">
     <section class="banner">
       <h2>{{ bannerTitle() }}</h2>
@@ -8,16 +8,38 @@
     <div class="messages">
       @for (message of messages(); track message.id) {
         @if (message.role === 'user') {
-          <article class="message message--user" aria-label="User message">
+          <article class="message message--user" aria-label="Nachricht des Benutzers">
             <p>{{ message.text }}</p>
           </article>
         } @else {
           <article
             class="message message--assistant markdown"
-            aria-label="Assistant message"
+            aria-label="Antwort des Assistenten"
             [innerHTML]="renderAssistantMarkdown(message.text)"
           ></article>
         }
+      }
+
+      @if (conversationStatus(); as status) {
+        <article
+          class="status"
+          [class.status--error]="status.kind === 'error'"
+          [class.status--assistant]="status.placement === 'assistant'"
+        >
+          @if (status.kind === 'loading') {
+            <span class="loading-dots" aria-hidden="true">…</span>
+          }
+          <p>{{ status.message }}</p>
+          @if (status.action; as action) {
+            <button
+              type="button"
+              class="status-action"
+              (click)="statusActionTriggered.emit(action.id)"
+            >
+              {{ action.label }}
+            </button>
+          }
+        </article>
       }
     </div>
   </div>
@@ -29,10 +51,11 @@
         cdkTextareaAutosize
         cdkAutosizeMinRows="1"
         cdkAutosizeMaxRows="5"
-        placeholder="Write a message"
-        aria-label="Message"
+        [placeholder]="composerPlaceholder()"
+        aria-label="Nachricht"
         enterkeyhint="send"
         [value]="draft()"
+        [disabled]="composerDisabled()"
         (input)="updateDraft(composer.value)"
         (keydown)="submitFromKeyboard($event)"
       ></textarea>
@@ -41,8 +64,8 @@
           class="send-button"
           matIconButton
           type="submit"
-          aria-label="Send message"
-          [disabled]="draft().trim() === ''"
+          aria-label="Nachricht senden"
+          [disabled]="composerDisabled() || draft().trim() === ''"
         >
           <mat-icon svgIcon="ai-chat:send" aria-hidden="true" />
         </button>

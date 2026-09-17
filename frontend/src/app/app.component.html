@@ -1,8 +1,12 @@
-<main class="demo-shell">
+<main class="chat-shell">
   <ai-chat-ui
-    bannerTitle="Local chat UI demo"
-    bannerDescription="This preview uses representative local messages and fixed responses. It is not connected to an AI model."
-    [messages]="messages()"
+    bannerTitle="Rezept gemeinsam verbessern"
+    bannerDescription="Beschreibe, was du an deinem Rezept ändern möchtest. Ich helfe dir dabei, passende Möglichkeiten und ihre Vor- und Nachteile zu erkunden."
+    composerPlaceholder="Nachricht schreiben"
+    [messages]="chat().messages"
+    [composerDisabled]="chat().composerDisabled"
+    [conversationStatus]="chat().status"
     (messageSubmitted)="handleMessage($event)"
+    (statusActionTriggered)="handleStatusAction($event)"
   />
 </main>
