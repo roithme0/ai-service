@@ -15,6 +15,7 @@ from app.recipe_improvement.proposals import (
     MAX_PROPOSALS_PER_SESSION,
     PreviousProposalBase,
     ProposalBase,
+    ProposalCandidateAccepted,
     ProposalRegistered,
     ProposalRegistrationOutcome,
     ProposalRejected,
@@ -22,6 +23,7 @@ from app.recipe_improvement.proposals import (
     RecipeProposal,
 )
 from app.recipe_improvement.session_input import RecipeImprovementSessionInput
+from app.recipe_improvement.resolver import RecipePresentation
 from app.recipe_improvement.validation import RecipeProposalValidationFailure, validate_recipe_proposal
 from app.sessions.text_sessions import (
     EphemeralTextSessionStore,
@@ -186,9 +188,9 @@ class RecipeImprovementSessionStore:
             assert isinstance(outcome, TextSessionReadUnknown)
             return RecipeImprovementSessionLookupUnknown(session_id=outcome.session_id)
 
-    def register_proposal(
+    def validate_proposal_candidate(
         self, session_id: str, base: ProposalBase, candidate: object, turn_id: str
-    ) -> ProposalRegistrationOutcome:
+    ) -> ProposalCandidateAccepted | ProposalRegistrationOutcome:
         with self._lock:
             if self._active_turns.get(session_id) != turn_id:
                 return ProposalSessionUnavailable(kind="unknown")
@@ -214,12 +216,37 @@ class RecipeImprovementSessionStore:
             if isinstance(validation, RecipeProposalValidationFailure):
                 return ProposalRejected(reason="invalid_candidate", issues=validation.issues)
 
+            return ProposalCandidateAccepted(candidate=validation.candidate)
+
+    def register_resolved_proposal(
+        self,
+        session_id: str,
+        base: ProposalBase,
+        name: str,
+        recipe: RecipePresentation,
+        turn_id: str,
+    ) -> ProposalRegistrationOutcome:
+        with self._lock:
+            if self._active_turns.get(session_id) != turn_id:
+                return ProposalSessionUnavailable(kind="unknown")
+            outcome = self._core.read(session_id)
+            if not isinstance(outcome, TextSessionReadActive):
+                self._proposals.pop(session_id, None)
+                return ProposalSessionUnavailable(kind=outcome.kind)
+            proposals = self._proposals.get(session_id, ())
+            if isinstance(base, PreviousProposalBase) and not any(
+                proposal.proposal_id == base.proposal_id for proposal in proposals
+            ):
+                return ProposalRejected(reason="invalid_base")
+            if len(proposals) >= MAX_PROPOSALS_PER_SESSION:
+                return ProposalRejected(reason="limit_reached")
             proposal = RecipeProposal(
                 proposal_id=str(uuid4()),
                 created_at=self._clock().astimezone(UTC),
                 order=len(proposals) + 1,
                 base=base,
-                recipe=validation.candidate,
+                name=name,
+                recipe=recipe,
                 turn_id=turn_id,
             )
             self._proposals[session_id] = (*proposals, proposal)
@@ -288,7 +315,13 @@ class RecipeImprovementSessionStore:
             elif current.session.revision != snapshot.revision:
                 final = RecipeTurnResult("conflict", turn_id, None, ())
             elif result.kind == "completed" and result.text is not None:
-                appended = self._core.append_if_revision(session_id, snapshot.revision, "assistant", result.text)
+                appended = self._core.append_if_revision(
+                    session_id,
+                    snapshot.revision,
+                    "assistant",
+                    result.text,
+                    turn_id=turn_id,
+                )
                 if isinstance(appended, TextSessionAppendAccepted):
                     final = RecipeTurnResult("completed", turn_id, result.text, result.artifacts)
                 else:

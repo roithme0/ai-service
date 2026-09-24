@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+import inspect
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
@@ -24,7 +25,9 @@ class ToolExecution(Generic[ArtifactT]):
 class RegisteredTool(Generic[ArtifactT]):
     name: str
     schema: dict[str, object]
-    execute: Callable[[AgenticToolCall], ToolExecution[ArtifactT]]
+    execute: Callable[
+        [AgenticToolCall], ToolExecution[ArtifactT] | Awaitable[ToolExecution[ArtifactT]]
+    ]
 
 
 @dataclass(frozen=True)
@@ -44,7 +47,10 @@ async def run_tool_turn(
     max_successes: int,
     max_provider_responses: int,
 ) -> ToolTurnResult[ArtifactT]:
-    handlers: dict[str, Callable[[AgenticToolCall], ToolExecution[ArtifactT]]] = {}
+    handlers: dict[
+        str,
+        Callable[[AgenticToolCall], ToolExecution[ArtifactT] | Awaitable[ToolExecution[ArtifactT]]],
+    ] = {}
     for tool in tools:
         if (not tool.name or tool.name in handlers or tool.schema.get("name") != tool.name
             or tool.schema.get("type") != "function"):
@@ -78,7 +84,12 @@ async def run_tool_turn(
                 }))
             else:
                 attempts += 1
-                execution = handler(call)
+                pending_execution = handler(call)
+                execution = (
+                    await pending_execution
+                    if inspect.isawaitable(pending_execution)
+                    else pending_execution
+                )
                 if execution.artifact is not None:
                     artifacts.append(execution.artifact)
             input_items.append({"type": "function_call_output", "call_id": call.call_id,

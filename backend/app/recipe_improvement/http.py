@@ -30,6 +30,11 @@ from app.recipe_improvement.session_lifecycle import (
 )
 from app.recipe_improvement.validation import ValidationIssue
 from app.recipe_improvement.turn_service import generate_recipe_turn
+from app.recipe_improvement.resolver import (
+    KochwikiRecipePresentationResolver,
+    RecipePresentationResolver,
+    UnavailableRecipePresentationResolver,
+)
 from app.sessions.text_sessions import (
     TextMessage,
     TextSessionAppendAccepted,
@@ -63,6 +68,24 @@ class RecipeImprovementUserMessageRequest(BaseModel):
     text: str
 
 
+class RecipeUserMessageResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    role: Literal["user"] = "user"
+    text: str
+
+
+class RecipeAssistantMessageResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    role: Literal["assistant"] = "assistant"
+    text: str
+    turn_id: str = Field(min_length=1)
+
+
+RecipeMessageResponse = RecipeUserMessageResponse | RecipeAssistantMessageResponse
+
+
 class RecipeImprovementSessionReadResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -70,7 +93,7 @@ class RecipeImprovementSessionReadResponse(BaseModel):
     expires_at: datetime
     source: RecipeImprovementSourceSnapshot
     foodstuffs: tuple[AvailableFoodstuffSnapshot, ...]
-    messages: tuple[TextMessage, ...]
+    messages: tuple[RecipeMessageResponse, ...]
     proposals: tuple[RecipeProposal, ...] = ()
     terminal_turn_id: str | None = None
     terminal_turn_kind: str | None = None
@@ -80,7 +103,7 @@ class RecipeImprovementTurnResponse(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     turn_id: str
-    message: TextMessage
+    message: RecipeAssistantMessageResponse
     proposals: tuple[RecipeProposal, ...] = ()
 
 
@@ -95,6 +118,13 @@ def get_agentic_generator() -> AgenticGenerator | None:
         api_key.get_secret_value() if api_key is not None else None,
         settings.recipe_improvement_openai_model,
     )
+
+
+def get_recipe_presentation_resolver() -> RecipePresentationResolver:
+    base_url = get_settings().kochwiki_base_url
+    if base_url is None:
+        return UnavailableRecipePresentationResolver()
+    return KochwikiRecipePresentationResolver(base_url)
 
 
 @lru_cache(maxsize=1)
@@ -134,7 +164,7 @@ def get_recipe_improvement_session(
             expires_at=outcome.session.expires_at,
             source=outcome.session.session_input.source,
             foodstuffs=outcome.session.session_input.foodstuffs,
-            messages=outcome.session.messages,
+            messages=tuple(_message_response(message) for message in outcome.session.messages),
             proposals=outcome.session.proposals,
             terminal_turn_id=outcome.session.terminal_turn_id,
             terminal_turn_kind=outcome.session.terminal_turn_kind,
@@ -161,15 +191,19 @@ def get_recipe_improvement_proposal(
     return JSONResponse(status_code=404, content={"kind": "unknown_proposal"})
 
 
-@router.post("/{session_id}/messages", response_model=TextMessage, status_code=201)
+@router.post(
+    "/{session_id}/messages",
+    response_model=RecipeUserMessageResponse,
+    status_code=201,
+)
 def append_recipe_improvement_user_message(
     session_id: str,
     request: RecipeImprovementUserMessageRequest,
     store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
-) -> TextMessage | JSONResponse:
+) -> RecipeUserMessageResponse | JSONResponse:
     outcome = store.append_user_message(session_id, request.text)
     if isinstance(outcome, TextSessionAppendAccepted):
-        return outcome.message
+        return RecipeUserMessageResponse(text=outcome.message.text)
     if isinstance(outcome, TextSessionAppendExpired):
         return JSONResponse(status_code=410, content={"kind": "expired"})
     if isinstance(outcome, TextSessionAppendLimitReached):
@@ -181,20 +215,27 @@ def append_recipe_improvement_user_message(
     return JSONResponse(status_code=404, content={"kind": "unknown"})
 
 
-@router.post("/{session_id}/turns", response_model=RecipeImprovementTurnResponse, status_code=201)
+@router.post(
+    "/{session_id}/turns",
+    response_model=RecipeImprovementTurnResponse,
+    status_code=201,
+)
 async def generate_recipe_improvement_turn(
     session_id: str,
     store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
     generator: AgenticGenerator | None = Depends(get_agentic_generator),
+    resolver: RecipePresentationResolver = Depends(get_recipe_presentation_resolver),
 ) -> RecipeImprovementTurnResponse | JSONResponse:
     if generator is None:
         return JSONResponse(status_code=503, content={"kind": "generator_unavailable"})
-    outcome = await generate_recipe_turn(store, session_id, generator)
+    outcome = await generate_recipe_turn(store, session_id, generator, resolver)
     if outcome.kind == "completed":
         assert outcome.text is not None
         return RecipeImprovementTurnResponse(
             turn_id=outcome.turn_id,
-            message=TextMessage(role="assistant", text=outcome.text),
+            message=RecipeAssistantMessageResponse(
+                text=outcome.text, turn_id=outcome.turn_id
+            ),
             proposals=outcome.proposals,
         )
     status_code = {
@@ -217,6 +258,13 @@ def _invalid_input_response(
 ) -> JSONResponse:
     response = RecipeImprovementSessionInputErrorResponse(issues=outcome.issues)
     return JSONResponse(status_code=422, content=response.model_dump(mode="json"))
+
+
+def _message_response(message: TextMessage) -> RecipeMessageResponse:
+    if message.role == "user":
+        return RecipeUserMessageResponse(text=message.text)
+    assert message.turn_id is not None
+    return RecipeAssistantMessageResponse(text=message.text, turn_id=message.turn_id)
 
 
 def _decode_json_decimal_amounts(source: object) -> object:

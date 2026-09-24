@@ -3,7 +3,7 @@
     bannerTitle="Rezept gemeinsam verbessern"
     bannerDescription="Beschreibe, was du an deinem Rezept ändern möchtest. Ich helfe dir dabei, passende Möglichkeiten und ihre Vor- und Nachteile zu erkunden."
     composerPlaceholder="Nachricht schreiben"
-    [messages]="chat().messages"
+    [content]="chat().content"
     [composerDisabled]="chat().composerDisabled"
     [conversationStatus]="chat().status"
     (messageSubmitted)="handleMessage($event)"

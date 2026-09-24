@@ -9,10 +9,15 @@ from app.core.config import get_settings
 from app.main import app
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.models.openai_agentic_generation import OpenAIAgenticGenerator
-from app.recipe_improvement.http import get_recipe_improvement_session_store, get_agentic_generator
+from app.recipe_improvement.http import (
+    get_agentic_generator,
+    get_recipe_improvement_session_store,
+    get_recipe_presentation_resolver,
+)
 from app.recipe_improvement.http import _configured_agentic_generator
 from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionStore
 from app.recipe_improvement.instructions import RECIPE_IMPROVEMENT_INSTRUCTIONS
+from app.recipe_improvement.resolver import RecipePresentation
 from app.sessions.text_sessions import MAX_MESSAGE_COUNT
 
 
@@ -46,10 +51,25 @@ class FakeGenerator:
         return AgenticGenerationResponse(output_items=(), tool_calls=(), text=self.text)
 
 
+class FakeResolver:
+    async def resolve(self, candidate: object) -> RecipePresentation:
+        return RecipePresentation.model_validate({
+            "servings": candidate.servings, "preptime": candidate.preparation_time,
+            "kcal": 10.0, "carbs": 2.0, "protein": 1.0, "fat": 0.5,
+            "ingredients": [{"index": item.index, "amount": float(item.amount), "foodstuff": {
+                "id": item.foodstuff_reference, "name": "Current oats", "brand": None,
+                "unit": "G", "unitVerbose": "g", "kcal": 370.0, "carbs": 60.0,
+                "protein": 13.0, "fat": 7.0,
+            }} for item in candidate.ingredients],
+            "steps": [step.model_dump() for step in candidate.steps],
+        })
+
+
 @pytest.fixture
 def client() -> TestClient:
     store = RecipeImprovementSessionStore()
     app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
+    app.dependency_overrides[get_recipe_presentation_resolver] = lambda: FakeResolver()
     try:
         yield TestClient(app)
     finally:
@@ -83,7 +103,8 @@ def valid_request(foodstuff_reference: int = 1) -> dict[str, object]:
             },
         },
         "foodstuffs": [
-            {"external_reference": 1, "name": "Oats", "brand": "Pantry", "unit": "G"}
+            {"external_reference": 1, "name": "Oats", "brand": "Pantry", "unit": "G",
+             "unit_verbose": "g", "kcal": 370, "carbs": 60, "protein": 13, "fat": 7}
         ],
     }
 
@@ -102,11 +123,14 @@ def test_create_and_read_return_accepted_snapshots_without_derived_index(client:
     assert read.status_code == 200
     expected_source = valid_request()["source"]
     expected_source["recipe"]["ingredients"][0]["amount"] = "125.75"
+    expected_foodstuffs = valid_request()["foodstuffs"]
+    for nutrient in ("kcal", "carbs", "protein", "fat"):
+        expected_foodstuffs[0][nutrient] = str(expected_foodstuffs[0][nutrient])
     assert read.json() == {
         "session_id": created["session_id"],
         "expires_at": created["expires_at"],
         "source": expected_source,
-        "foodstuffs": valid_request()["foodstuffs"],
+        "foodstuffs": expected_foodstuffs,
         "messages": [],
         "proposals": [],
         "terminal_turn_id": None,
@@ -139,7 +163,8 @@ def test_integer_amount_and_read_snapshot_can_initialize_sessions(client: TestCl
 def test_oversized_initial_snapshot_context_is_rejected_at_creation(client: TestClient) -> None:
     request = valid_request()
     request["foodstuffs"] = [
-        {"external_reference": index, "name": "N" * 50, "brand": "B" * 100, "unit": "G"}
+        {"external_reference": index, "name": "N" * 50, "brand": "B" * 100, "unit": "G",
+         "unit_verbose": "g", "kcal": None, "carbs": None, "protein": None, "fat": None}
         for index in range(1, 101)
     ]
 
@@ -326,7 +351,11 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
     read = client.get(session_url)
 
     assert response.status_code == 201
-    assert response.json()["message"] == {"role": "assistant", "text": "Test reply"}
+    assert response.json()["message"] == {
+        "role": "assistant",
+        "text": "Test reply",
+        "turn_id": response.json()["turn_id"],
+    }
     assert response.json()["proposals"] == []
     assert response.json()["turn_id"]
     generation_request = fake_generator.calls[0]
@@ -342,7 +371,11 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
     assert "register_recipe_proposal" in generation_request.instructions
     assert read.json()["messages"] == [
         {"role": "user", "text": "  question  "},
-        {"role": "assistant", "text": "Test reply"},
+        {
+            "role": "assistant",
+            "text": "Test reply",
+            "turn_id": response.json()["turn_id"],
+        },
     ]
 
 
@@ -438,7 +471,11 @@ def test_turn_endpoint_rejects_reply_after_new_message(
     assert response.status_code == 201
     assert client.get(session_url).json()["messages"] == [
         {"role": "user", "text": "first"},
-        {"role": "assistant", "text": "Test reply"},
+        {
+            "role": "assistant",
+            "text": "Test reply",
+            "turn_id": response.json()["turn_id"],
+        },
     ]
 
 
@@ -478,7 +515,11 @@ def test_turn_endpoint_uses_reserved_assistant_capacity(
     further_turn = client.post(f"{session_url}/turns")
 
     assert response.status_code == 201
-    assert response.json()["message"] == {"role": "assistant", "text": "Test reply"}
+    assert response.json()["message"] == {
+        "role": "assistant",
+        "text": "Test reply",
+        "turn_id": response.json()["turn_id"],
+    }
     assert answered.status_code == 200
     assert len(answered.json()["messages"]) == MAX_MESSAGE_COUNT
     assert further_message.status_code == 409
@@ -493,6 +534,8 @@ def test_partial_failure_drops_accepted_proposals_and_retry_is_stable(
     session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
     client.post(f"{session_url}/messages", json={"text": "Propose one"})
     recipe = valid_request()["source"]["recipe"]
+    recipe.pop("origin_name")
+    recipe.pop("origin_url")
     recipe["ingredients"][0]["amount"] = "125.75"
     arguments = json.dumps({"base": {"kind": "source"}, "candidate": recipe})
     fake_generator.responses = [
@@ -524,6 +567,8 @@ def test_proposal_lookup_only_exposes_completed_turn_artifacts(
     session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
     client.post(f"{session_url}/messages", json={"text": "Propose one"})
     recipe = valid_request()["source"]["recipe"]
+    recipe.pop("origin_name")
+    recipe.pop("origin_url")
     recipe["ingredients"][0]["amount"] = "125.75"
     arguments = json.dumps({"base": {"kind": "source"}, "candidate": recipe})
     fake_generator.responses = [

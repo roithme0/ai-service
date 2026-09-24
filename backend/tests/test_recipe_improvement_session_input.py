@@ -32,7 +32,9 @@ def valid_source(foodstuff_reference: int = 1) -> dict[str, object]:
 
 
 def valid_foodstuff(reference: int = 1) -> dict[str, object]:
-    return {"external_reference": reference, "name": "Oats", "brand": "Pantry", "unit": "G"}
+    return {"external_reference": reference, "name": "Oats", "brand": "Pantry", "unit": "G",
+            "unit_verbose": "g", "kcal": Decimal("370"), "carbs": Decimal("60"),
+            "protein": Decimal("13"), "fat": Decimal("7")}
 
 
 def test_accepts_source_and_unique_foodstuffs_with_derived_index() -> None:
@@ -50,6 +52,8 @@ def test_accepts_source_and_unique_foodstuffs_with_derived_index() -> None:
     [
         ({**valid_source(), "external_reference": "not-a-uuid"}, [valid_foodstuff()], ("source", "external_reference")),
         (valid_source(), [{**valid_foodstuff(), "name": ""}], ("foodstuffs", 0, "name")),
+        (valid_source(), [{key: value for key, value in valid_foodstuff().items() if key != "brand"}], ("foodstuffs", 0, "brand")),
+        (valid_source(), [{key: value for key, value in valid_foodstuff().items() if key != "kcal"}], ("foodstuffs", 0, "kcal")),
         (valid_source(), [{**valid_foodstuff(), "brand": "x" * 101}], ("foodstuffs", 0, "brand")),
         (valid_source(), [{**valid_foodstuff(), "unit": "GRAM"}], ("foodstuffs", 0, "unit")),
         (valid_source(), [valid_foodstuff(), valid_foodstuff()], ("foodstuffs",)),
@@ -135,7 +139,8 @@ def test_accepted_input_remains_compatible_with_proposal_validation() -> None:
     proposal_outcome = validate_recipe_proposal(
         outcome.session_input.source.model_dump(),
         outcome.session_input.availability_reference_index,
-        valid_source()["recipe"],
+        {key: value for key, value in valid_source()["recipe"].items()
+         if key not in ("origin_name", "origin_url")},
     )
 
     assert isinstance(proposal_outcome, RecipeProposalValidationSuccess)

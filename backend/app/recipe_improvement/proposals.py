@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.recipe_improvement.recipe import RecipeProposalCandidate
+from app.recipe_improvement.resolver import RecipePresentation
 from app.recipe_improvement.validation import ValidationIssue
 
 
@@ -37,7 +38,8 @@ class RecipeProposal(BaseModel):
     created_at: datetime
     order: int = Field(ge=1)
     base: ProposalBase
-    recipe: RecipeProposalCandidate
+    name: str = Field(min_length=1, max_length=200)
+    recipe: RecipePresentation
     turn_id: str = Field(min_length=1)
 
 
@@ -52,8 +54,18 @@ class ProposalRejected(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     kind: Literal["rejected"] = "rejected"
-    reason: Literal["invalid_base", "invalid_candidate", "limit_reached"]
+    reason: Literal[
+        "invalid_base", "invalid_candidate", "limit_reached", "resolver_unavailable"
+    ]
     issues: tuple[ValidationIssue, ...] = ()
+    retryable: bool = False
+
+
+class ProposalCandidateAccepted(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["candidate_accepted"] = "candidate_accepted"
+    candidate: RecipeProposalCandidate
 
 
 class ProposalSessionUnavailable(BaseModel):

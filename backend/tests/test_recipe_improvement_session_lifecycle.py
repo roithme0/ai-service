@@ -20,10 +20,12 @@ from app.recipe_improvement.proposals import (
     MAX_PROPOSALS_PER_SESSION,
     PreviousProposalBase,
     ProposalRegistered,
+    ProposalCandidateAccepted,
     ProposalRejected,
     ProposalSessionUnavailable,
     SourceProposalBase,
 )
+from app.recipe_improvement.resolver import RecipePresentation
 from app.sessions.text_sessions import TextSessionAppendAccepted
 from app.sessions.tool_turns import ToolTurnResult
 
@@ -53,10 +55,41 @@ def valid_session_input() -> RecipeImprovementSessionInput:
                 "steps": [{"index": 1, "description": "Combine and chill."}],
             },
         },
-        [{"external_reference": 1, "name": "Oats", "brand": "Pantry", "unit": "G"}],
+        [{"external_reference": 1, "name": "Oats", "brand": "Pantry", "unit": "G",
+          "unit_verbose": "g", "kcal": Decimal("370"), "carbs": Decimal("60"),
+          "protein": Decimal("13"), "fat": Decimal("7")}],
     )
     assert isinstance(outcome, RecipeImprovementSessionInputSuccess)
     return outcome.session_input
+
+
+def proposal_candidate() -> dict[str, object]:
+    return {
+        key: value for key, value in valid_session_input().source.recipe.model_dump().items()
+        if key not in ("origin_name", "origin_url")
+    }
+
+
+def presentation() -> RecipePresentation:
+    return RecipePresentation.model_validate({
+        "servings": 2, "preptime": 15, "kcal": 10.0, "carbs": 2.0,
+        "protein": 1.0, "fat": 0.5,
+        "ingredients": [{"index": 1, "amount": 125.75, "foodstuff": {
+            "id": 1, "name": "Oats", "brand": "Pantry", "unit": "G",
+            "unitVerbose": "g", "kcal": 370.0, "carbs": 60.0,
+            "protein": 13.0, "fat": 7.0,
+        }}],
+        "steps": [{"index": 1, "description": "Combine and chill."}],
+    })
+
+
+def register(store, session_id, base, candidate, turn_id):
+    checked = store.validate_proposal_candidate(session_id, base, candidate, turn_id)
+    if not isinstance(checked, ProposalCandidateAccepted):
+        return checked
+    return store.register_resolved_proposal(
+        session_id, base, checked.candidate.name, presentation(), turn_id
+    )
 
 
 def test_create_returns_unique_id_utc_expiry_and_retrievable_snapshot() -> None:
@@ -175,15 +208,15 @@ def test_proposals_have_explicit_validated_lineage_and_deterministic_order() -> 
     created_at = datetime(2026, 9, 12, 10, 30, tzinfo=UTC)
     store = RecipeImprovementSessionStore(clock=lambda: created_at)
     created = store.create(valid_session_input())
-    candidate = valid_session_input().source.recipe.model_dump()
+    candidate = proposal_candidate()
     store.append_user_message(created.session_id, "Improve this")
     reserved = store.reserve_turn(created.session_id)
     assert isinstance(reserved, RecipeTurnReservation)
     turn_id = reserved.turn_id
 
-    first = store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id)
+    first = register(store, created.session_id, SourceProposalBase(), candidate, turn_id)
     assert isinstance(first, ProposalRegistered)
-    second = store.register_proposal(
+    second = register(store,
         created.session_id, PreviousProposalBase(proposal_id=first.proposal.proposal_id), candidate, turn_id
     )
     assert isinstance(second, ProposalRegistered)
@@ -205,22 +238,23 @@ def test_proposals_have_explicit_validated_lineage_and_deterministic_order() -> 
     snapshot = store.lookup(created.session_id)
     assert isinstance(snapshot, RecipeImprovementSessionLookupSuccess)
     assert snapshot.session.proposals == (first.proposal, second.proposal)
+    assert snapshot.session.messages[-1].turn_id == turn_id
 
 
 def test_invalid_base_and_candidate_do_not_modify_proposal_state() -> None:
     store = RecipeImprovementSessionStore()
     created = store.create(valid_session_input())
-    candidate = valid_session_input().source.recipe.model_dump()
+    candidate = proposal_candidate()
     store.append_user_message(created.session_id, "Improve this")
     reserved = store.reserve_turn(created.session_id)
     assert isinstance(reserved, RecipeTurnReservation)
     turn_id = reserved.turn_id
 
-    invalid_base = store.register_proposal(
+    invalid_base = register(store,
         created.session_id, PreviousProposalBase(proposal_id="missing"), candidate, turn_id
     )
     candidate["ingredients"][0]["foodstuff_reference"] = 999
-    invalid_candidate = store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id)
+    invalid_candidate = register(store, created.session_id, SourceProposalBase(), candidate, turn_id)
     snapshot = store.lookup(created.session_id)
 
     assert isinstance(invalid_base, ProposalRejected)
@@ -236,22 +270,22 @@ def test_proposal_registration_respects_expiry_and_limit() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
     store = RecipeImprovementSessionStore(clock=clock.now)
     created = store.create(valid_session_input())
-    candidate = valid_session_input().source.recipe.model_dump()
+    candidate = proposal_candidate()
     store.append_user_message(created.session_id, "Improve this")
     reserved = store.reserve_turn(created.session_id)
     assert isinstance(reserved, RecipeTurnReservation)
     turn_id = reserved.turn_id
     for _ in range(MAX_PROPOSALS_PER_SESSION):
         assert isinstance(
-            store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id),
+            register(store, created.session_id, SourceProposalBase(), candidate, turn_id),
             ProposalRegistered,
         )
-    limit = store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id)
+    limit = register(store, created.session_id, SourceProposalBase(), candidate, turn_id)
     assert isinstance(limit, ProposalRejected)
     assert limit.reason == "limit_reached"
 
     clock.value = created.expires_at
-    expired = store.register_proposal(created.session_id, SourceProposalBase(), candidate, turn_id)
+    expired = register(store, created.session_id, SourceProposalBase(), candidate, turn_id)
     assert isinstance(expired, ProposalSessionUnavailable)
     assert expired.kind == "expired"
 

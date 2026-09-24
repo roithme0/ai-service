@@ -1,20 +1,21 @@
-import type { ChatConversationStatus, ChatTextMessage } from '@roithme0/chat-ui';
+import type { ChatContent, ChatConversationStatus, ChatTextMessage, JsonValue } from '@roithme0/chat-ui';
 import {
   RecipeChatApiError,
   RecipeChatNetworkError,
   type ApiMessage,
+  type RecipeProposal,
   type RecipeChatTransport,
   type SessionSnapshot,
 } from './recipe-chat-api';
 
 export interface RecipeChatViewState {
-  readonly messages: readonly ChatTextMessage[];
+  readonly content: readonly ChatContent[];
   readonly composerDisabled: boolean;
   readonly status: ChatConversationStatus | null;
 }
 
 const INITIAL_STATE: RecipeChatViewState = {
-  messages: [],
+  content: [],
   composerDisabled: true,
   status: loading('Unterhaltung wird gestartet …', 'conversation'),
 };
@@ -41,7 +42,7 @@ export class RecipeChatController {
     try {
       const created = await this.transport.createSession();
       this.sessionId = created.session_id;
-      this.setState({ messages: [], composerDisabled: false, status: null });
+      this.setState({ content: [], composerDisabled: false, status: null });
     } catch (error: unknown) {
       this.setState({
         ...this.stateValue,
@@ -59,7 +60,7 @@ export class RecipeChatController {
   async submit(text: string, acknowledge: () => void): Promise<void> {
     const sessionId = this.sessionId;
     if (sessionId === null || this.stateValue.composerDisabled) return;
-    const previousMessages = this.stateValue.messages;
+    const previousContent = this.stateValue.content;
     this.setState({
       ...this.stateValue,
       composerDisabled: true,
@@ -71,7 +72,7 @@ export class RecipeChatController {
       await this.generate(sessionId);
     } catch (error: unknown) {
       if (error instanceof RecipeChatNetworkError) {
-        await this.reconcileAppend(sessionId, previousMessages, text, acknowledge);
+        await this.reconcileAppend(sessionId, previousContent, text, acknowledge);
         return;
       }
       this.handleAppendFailure(error);
@@ -88,9 +89,9 @@ export class RecipeChatController {
 
   private acceptMessage(message: ApiMessage, acknowledge: () => void): void {
     this.setState({
-      messages: [
-        ...this.stateValue.messages,
-        presentMessage(message, this.stateValue.messages.length),
+      content: [
+        ...this.stateValue.content,
+        presentMessage(message, textContent(this.stateValue.content).length),
       ],
       composerDisabled: true,
       status: loading('Antwort wird erstellt …', 'assistant'),
@@ -107,9 +108,10 @@ export class RecipeChatController {
     try {
       const result = await this.transport.generateTurn(sessionId);
       this.setState({
-        messages: [
-          ...this.stateValue.messages,
-          presentMessage(result.message, this.stateValue.messages.length),
+        content: [
+          ...this.stateValue.content,
+          ...result.proposals.map(presentProposal),
+          presentMessage(result.message, textContent(this.stateValue.content).length),
         ],
         composerDisabled: false,
         status: null,
@@ -125,13 +127,13 @@ export class RecipeChatController {
 
   private async reconcileAppend(
     sessionId: string,
-    previousMessages: readonly ChatTextMessage[],
+    previousContent: readonly ChatContent[],
     text: string,
     acknowledge: () => void,
   ): Promise<void> {
     try {
       const snapshot = await this.transport.readSession(sessionId);
-      const messages = presentMessages(snapshot.messages);
+      const previousMessages = previousContent.filter(isTextMessage);
       const appended = snapshot.messages[previousMessages.length];
       if (
         prefixMatches(previousMessages, snapshot.messages) &&
@@ -139,7 +141,7 @@ export class RecipeChatController {
         appended.text === text
       ) {
         this.setState({
-          messages,
+          content: presentSnapshot(snapshot),
           composerDisabled: true,
           status: loading('Antwort wird erstellt …', 'assistant'),
         });
@@ -148,7 +150,7 @@ export class RecipeChatController {
         return;
       }
       this.setState({
-        messages,
+        content: presentSnapshot(snapshot),
         composerDisabled: false,
         status: failure(
           'Die Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.',
@@ -174,15 +176,15 @@ export class RecipeChatController {
   }
 
   private applyTurnSnapshot(snapshot: SessionSnapshot): void {
-    const messages = presentMessages(snapshot.messages);
+    const content = presentSnapshot(snapshot);
     const last = snapshot.messages.at(-1);
     if (last?.role === 'assistant') {
-      this.setState({ messages, composerDisabled: false, status: null });
+      this.setState({ content, composerDisabled: false, status: null });
       return;
     }
     if (snapshot.terminal_turn_kind === 'generation_failed') {
       this.setState({
-        messages,
+        content,
         composerDisabled: false,
         status: failure(
           'Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.',
@@ -192,7 +194,7 @@ export class RecipeChatController {
       return;
     }
     this.setState({
-      messages,
+      content,
       composerDisabled: true,
       status: failure(
         'Der Status der Antwort ist noch unklar.',
@@ -282,7 +284,46 @@ function presentMessages(messages: readonly ApiMessage[]): readonly ChatTextMess
 }
 
 function presentMessage(message: ApiMessage, index: number): ChatTextMessage {
-  return { id: `confirmed-${index}-${message.role}`, role: message.role, text: message.text };
+  return {
+    kind: 'text',
+    id: message.turn_id === null ? `confirmed-${index}-user` : `assistant-${message.turn_id}`,
+    role: message.role,
+    text: message.text,
+  };
+}
+
+function presentProposal(proposal: RecipeProposal): ChatContent {
+  return {
+    kind: 'artifact', id: proposal.proposal_id, type: 'recipe-proposal', headline: proposal.name,
+    payload: {
+      servings: proposal.recipe.servings, preptime: proposal.recipe.preptime,
+      kcal: proposal.recipe.kcal, carbs: proposal.recipe.carbs, protein: proposal.recipe.protein,
+      fat: proposal.recipe.fat,
+      ingredients: proposal.recipe.ingredients.map((ingredient) => ({
+        index: ingredient.index, amount: ingredient.amount,
+        foodstuff: { ...ingredient.foodstuff },
+      })),
+      steps: proposal.recipe.steps.map((step) => ({ ...step })),
+    } satisfies JsonValue,
+  };
+}
+
+function presentSnapshot(snapshot: SessionSnapshot): readonly ChatContent[] {
+  if (snapshot.proposals.length === 0) return presentMessages(snapshot.messages);
+  return snapshot.messages.flatMap((message, index) => [
+    ...snapshot.proposals
+      .filter((proposal) => proposal.turn_id === message.turn_id)
+      .map(presentProposal),
+    presentMessage(message, index),
+  ]);
+}
+
+function isTextMessage(content: ChatContent): content is ChatTextMessage {
+  return content.kind === 'text';
+}
+
+function textContent(content: readonly ChatContent[]): readonly ChatTextMessage[] {
+  return content.filter(isTextMessage);
 }
 
 function prefixMatches(

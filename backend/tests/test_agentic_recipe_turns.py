@@ -9,7 +9,8 @@ import pytest
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.recipe_improvement.session_input import RecipeImprovementSessionInput, RecipeImprovementSessionInputSuccess, validate_recipe_improvement_session_input
 from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionLookupSuccess, RecipeImprovementSessionStore
-from app.recipe_improvement.turn_service import generate_recipe_turn
+from app.recipe_improvement.turn_service import generate_recipe_turn as _generate_recipe_turn
+from app.recipe_improvement.resolver import RecipePresentation, RecipeResolutionError
 from app.recipe_improvement.tools.register_recipe_proposal import REGISTER_TOOL_SCHEMA
 
 
@@ -19,14 +20,16 @@ def session_input() -> RecipeImprovementSessionInput:
             "name": "Oats", "servings": 2, "ingredients": [
                 {"index": 1, "amount": Decimal("1.25"), "foodstuff_reference": 1}],
             "steps": [{"index": 1, "description": "Mix"}]}},
-        [{"external_reference": 1, "name": "Oats", "brand": None, "unit": "G"}],
+        [{"external_reference": 1, "name": "Oats", "brand": None, "unit": "G",
+          "unit_verbose": "g", "kcal": Decimal("370"), "carbs": Decimal("60"),
+          "protein": Decimal("13"), "fat": Decimal("7")}],
     )
     assert isinstance(result, RecipeImprovementSessionInputSuccess)
     return result.session_input
 
 
 def candidate(name: str = "Oats") -> dict[str, object]:
-    return {"name": name, "servings": 2, "ingredients": [
+    return {"name": name, "servings": 2, "preparation_time": None, "ingredients": [
         {"index": 1, "amount": "1.25", "foodstuff_reference": 1}],
         "steps": [{"index": 1, "description": "Mix"}]}
 
@@ -52,6 +55,25 @@ def final(text: str = "Done") -> AgenticGenerationResponse:
     return AgenticGenerationResponse((), (), text)
 
 
+class FakeResolver:
+    async def resolve(self, value: object) -> RecipePresentation:
+        candidate_value = value
+        return RecipePresentation.model_validate({
+            "servings": candidate_value.servings, "preptime": candidate_value.preparation_time,
+            "kcal": 10.0, "carbs": 2.0, "protein": 1.0, "fat": 0.5,
+            "ingredients": [{"index": item.index, "amount": float(item.amount), "foodstuff": {
+                "id": item.foodstuff_reference, "name": "Current oats", "brand": None,
+                "unit": "G", "unitVerbose": "g", "kcal": 370.0, "carbs": 60.0,
+                "protein": 13.0, "fat": 7.0,
+            }} for item in candidate_value.ingredients],
+            "steps": [step.model_dump() for step in candidate_value.steps],
+        })
+
+
+async def generate_recipe_turn(store, session_id, generator):
+    return await _generate_recipe_turn(store, session_id, generator, FakeResolver())
+
+
 def test_registration_tool_schema_requests_complete_recipe_with_string_amounts() -> None:
     assert REGISTER_TOOL_SCHEMA["name"] == "register_recipe_proposal"
     assert REGISTER_TOOL_SCHEMA["strict"] is False
@@ -62,7 +84,9 @@ def test_registration_tool_schema_requests_complete_recipe_with_string_amounts()
     assert base["required"] == ["kind"]
     assert base["properties"]["kind"]["enum"] == ["source", "proposal"]
     candidate_schema = parameters["properties"]["candidate"]
-    assert candidate_schema["required"] == ["name", "servings", "ingredients", "steps"]
+    assert candidate_schema["required"] == [
+        "name", "servings", "preparation_time", "ingredients", "steps"
+    ]
     ingredients = candidate_schema["properties"]["ingredients"]["items"]
     assert ingredients["required"] == ["index", "amount", "foodstuff_reference"]
     assert ingredients["properties"]["amount"] == {"type": "string"}
@@ -77,7 +101,7 @@ def test_multiple_proposals_can_chain_and_remain_typed_in_session() -> None:
 
     def second(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
         result = json.loads(request.input_items[-1]["output"])
-        return call("second", {"kind": "proposal", "proposal_id": result["proposal_id"]}, candidate("Second"))
+        return call("second", {"kind": "proposal", "proposal_id": result["proposal"]["proposal_id"]}, candidate("Second"))
 
     generator = ScriptedGenerator([call("first", {"kind": "source"}, candidate("First")), second, final()])
     outcome = asyncio.run(generate_recipe_turn(store, created.session_id, generator))
@@ -88,7 +112,7 @@ def test_multiple_proposals_can_chain_and_remain_typed_in_session() -> None:
     assert [proposal.order for proposal in outcome.proposals] == [1, 2]
     assert outcome.proposals[1].base.proposal_id == outcome.proposals[0].proposal_id
     assert all(proposal.turn_id == outcome.turn_id for proposal in outcome.proposals)
-    assert outcome.proposals[0].recipe.ingredients[0].amount == Decimal("1.25")
+    assert outcome.proposals[0].recipe.ingredients[0].amount == 1.25
     assert isinstance(read, RecipeImprovementSessionLookupSuccess)
     assert read.session.proposals == outcome.proposals
     assert len(read.session.messages) == 2
@@ -112,7 +136,7 @@ def test_later_turn_receives_full_previous_proposals_and_final_text_instruction(
     def inspect_context(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
         context = json.loads(request.input_items[0]["content"].split("\n", 1)[1])
         assert context["proposals"] == [first.proposals[0].model_dump(mode="json")]
-        assert context["proposals"][0]["recipe"]["name"] == "First"
+        assert context["proposals"][0]["name"] == "First"
         assert "not persisted or visible to the user" in request.instructions
         assert "final text response" in request.instructions
         return final("Refined")
@@ -177,7 +201,9 @@ def test_invalid_base_returns_structured_error_before_correction() -> None:
 
     def correction(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
         rejected = json.loads(request.input_items[-1]["output"])
-        assert rejected == {"kind": "rejected", "reason": "invalid_base", "issues": []}
+        assert rejected == {
+            "kind": "rejected", "reason": "invalid_base", "issues": [], "retryable": False
+        }
         return call("corrected", {"kind": "source"}, candidate())
 
     generator = ScriptedGenerator([
@@ -225,6 +251,36 @@ def test_unknown_tool_is_rejected_without_registration() -> None:
     assert outcome.kind == "completed"
     assert outcome.proposals == ()
     assert json.loads(generator.requests[-1].input_items[-1]["output"])["reason"] == "unknown_tool"
+
+
+@pytest.mark.parametrize(
+    ("retryable", "reason"), [(False, "invalid_candidate"), (True, "resolver_unavailable")]
+)
+def test_resolver_failure_is_structured_and_does_not_store_proposal(
+    retryable: bool, reason: str
+) -> None:
+    class FailingResolver:
+        async def resolve(self, value: object) -> RecipePresentation:
+            raise RecipeResolutionError(retryable=retryable)
+
+    store = RecipeImprovementSessionStore()
+    created = store.create(session_input())
+    store.append_user_message(created.session_id, "Improve it")
+
+    def inspect(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
+        rejected = json.loads(request.input_items[-1]["output"])
+        assert rejected["reason"] == reason
+        assert rejected["retryable"] is retryable
+        return final()
+
+    outcome = asyncio.run(_generate_recipe_turn(
+        store, created.session_id,
+        ScriptedGenerator([call("proposal", {"kind": "source"}, candidate()), inspect]),
+        FailingResolver(),
+    ))
+
+    assert outcome.kind == "completed"
+    assert outcome.proposals == ()
 
 
 def test_active_turn_is_busy_but_independent_session_can_complete() -> None:

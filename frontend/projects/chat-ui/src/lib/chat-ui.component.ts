@@ -5,11 +5,17 @@ import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
 import { TextFieldModule } from '@angular/cdk/text-field';
 import { renderAssistantMarkdown } from './assistant-markdown';
 import { registerChatIcons } from './chat-icons';
-import type { ChatConversationStatus, ChatSubmission, ChatTextMessage } from './chat-message';
+import { ArtifactCardComponent } from './artifact-card.component';
+import type {
+  ChatArtifactRendererMap,
+  ChatContent,
+  ChatConversationStatus,
+  ChatSubmission,
+} from './chat-message';
 
 @Component({
   selector: 'ai-chat-ui',
-  imports: [MatButtonModule, MatIconModule, TextFieldModule],
+  imports: [ArtifactCardComponent, MatButtonModule, MatIconModule, TextFieldModule],
   templateUrl: './chat-ui.component.html',
   styleUrl: './chat-ui.component.scss',
 })
@@ -20,7 +26,8 @@ export class ChatUiComponent {
 
   readonly bannerTitle = input.required<string>();
   readonly bannerDescription = input.required<string>();
-  readonly messages = input.required<readonly ChatTextMessage[]>();
+  readonly content = input.required<readonly ChatContent[]>();
+  readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
   readonly composerDisabled = input(false);
   readonly composerPlaceholder = input('Nachricht schreiben');
@@ -30,6 +37,10 @@ export class ChatUiComponent {
 
   protected readonly draft = signal('');
   protected readonly renderAssistantMarkdown = renderAssistantMarkdown;
+
+  protected rendererFor(type: string) {
+    return this.artifactRenderers()[type] ?? null;
+  }
 
   constructor() {
     registerChatIcons(this.iconRegistry, this.sanitizer);

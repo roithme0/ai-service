@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from app.models.agentic_generation import AgenticGenerator
 from app.recipe_improvement.proposals import ProposalRegistrationOutcome, RecipeProposal
@@ -21,7 +21,7 @@ async def generate_agentic_recipe_turn(
     messages: tuple[TextMessage, ...],
     context: str,
     instructions: str,
-    register: Callable[[object, object], ProposalRegistrationOutcome],
+    register: Callable[[object, object], Awaitable[ProposalRegistrationOutcome]],
 ) -> ToolTurnResult[RecipeProposal]:
     return await run_tool_turn(
         generator, messages, context, instructions,

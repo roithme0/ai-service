@@ -1,18 +1,36 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Component, TemplateRef, viewChild } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { CdkTextareaAutosize } from '@angular/cdk/text-field';
 import { MatIconRegistry } from '@angular/material/icon';
 import { firstValueFrom } from 'rxjs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatSubmission, ChatTextMessage } from './chat-message';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  artifactRenderer,
+  type ChatArtifactRenderContext,
+  type ChatContent,
+  type ChatSubmission,
+  type ChatTextMessage,
+} from './chat-message';
 import { ChatUiComponent } from './chat-ui.component';
 
 const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
-  { id: 'user-1', role: 'user', text: '**literal user text**' },
-  { id: 'assistant-1', role: 'assistant', text: '**formatted assistant text**' },
+  { kind: 'text', id: 'user-1', role: 'user', text: '**literal user text**' },
+  { kind: 'text', id: 'assistant-1', role: 'assistant', text: '**formatted assistant text**' },
 ];
 
+@Component({ template: '<ng-template #template let-payload>Custom: {{ payload.label }}</ng-template>' })
+class RendererTemplateHost {
+  readonly template = viewChild.required<
+    TemplateRef<ChatArtifactRenderContext<{ readonly label: string }>>
+  >(
+    'template',
+  );
+}
+
 describe('ChatUiComponent', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   beforeEach(() => {
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
@@ -31,6 +49,58 @@ describe('ChatUiComponent', () => {
     expect(messageElements[1].querySelector('strong')?.textContent).toBe(
       'formatted assistant text',
     );
+  });
+
+  it('uses a matching renderer and safely falls back to readable JSON', () => {
+    const templateFixture = TestBed.createComponent(RendererTemplateHost);
+    templateFixture.detectChanges();
+    const content: readonly ChatContent[] = [
+      { kind: 'artifact', id: 'custom', type: 'known', headline: 'Known', payload: { label: 'typed' } },
+      { kind: 'artifact', id: 'fallback', type: 'unknown', headline: 'Unknown', payload: {
+        nested: [true, null], empty: {}, text: '<script>unsafe()</script>',
+      } },
+    ];
+    const fixture = createFixture(content);
+    fixture.componentRef.setInput('artifactRenderers', {
+      known: artifactRenderer(templateFixture.componentInstance.template()),
+    });
+    fixture.detectChanges();
+
+    const cards = fixture.nativeElement.querySelectorAll('.artifact') as NodeListOf<HTMLElement>;
+    expect(cards).toHaveLength(2);
+    expect(cards[0].textContent).toContain('Custom: typed');
+    expect(cards[1].querySelector('script')).toBeNull();
+    expect(cards[1].querySelector('pre')?.textContent).toContain('"nested"');
+    expect(cards[1].textContent).toContain('<script>unsafe()</script>');
+  });
+
+  it('offers library-owned German expansion only for overflowing renderer bodies', () => {
+    class OverflowObserver {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+
+      observe(target: Element): void {
+        Object.defineProperties(target, {
+          scrollHeight: { configurable: true, value: 500 },
+          clientHeight: { configurable: true, value: 200 },
+        });
+        this.callback([], this as unknown as ResizeObserver);
+      }
+
+      disconnect(): void {}
+      unobserve(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', OverflowObserver);
+    const fixture = createFixture([{
+      kind: 'artifact', id: 'large', type: 'unknown', headline: 'Large', payload: { rows: [1, 2, 3] },
+    }]);
+    fixture.detectChanges();
+
+    const toggle = fixture.nativeElement.querySelector('.artifact-toggle') as HTMLButtonElement;
+    expect(toggle.textContent).toContain('Mehr anzeigen');
+    toggle.click();
+    fixture.detectChanges();
+    expect(toggle.textContent).toContain('Weniger anzeigen');
+    expect(fixture.nativeElement.querySelector('.artifact-body--expanded')).not.toBeNull();
   });
 
   it('retains a submission until the host acknowledges it', () => {
@@ -131,8 +201,8 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('.message')).toHaveLength(0);
 
-    fixture.componentRef.setInput('messages', [
-      { id: 'replacement', role: 'assistant', text: 'Replacement state' },
+    fixture.componentRef.setInput('content', [
+      { kind: 'text', id: 'replacement', role: 'assistant', text: 'Replacement state' },
     ] satisfies readonly ChatTextMessage[]);
     fixture.detectChanges();
 
@@ -172,11 +242,11 @@ describe('ChatUiComponent', () => {
   });
 });
 
-function createFixture(messages: readonly ChatTextMessage[]): ComponentFixture<ChatUiComponent> {
+function createFixture(messages: readonly ChatContent[]): ComponentFixture<ChatUiComponent> {
   const fixture = TestBed.createComponent(ChatUiComponent);
   fixture.componentRef.setInput('bannerTitle', 'Welcome');
   fixture.componentRef.setInput('bannerDescription', 'Description');
-  fixture.componentRef.setInput('messages', messages);
+  fixture.componentRef.setInput('content', messages);
   fixture.detectChanges();
   return fixture;
 }

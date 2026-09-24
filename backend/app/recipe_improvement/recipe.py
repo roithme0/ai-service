@@ -106,8 +106,41 @@ class AvailabilityReferenceIndex(BaseModel):
         return value
 
 
-class RecipeProposalCandidate(RecipeContent):
-    pass
+class RecipeProposalCandidate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    name: str = Field(min_length=1, max_length=200)
+    servings: int = Field(ge=1, le=99)
+    preparation_time: int | None = Field(ge=1, le=999)
+    ingredients: tuple[Ingredient, ...]
+    steps: tuple[PreparationStep, ...]
+
+    @field_validator("ingredients", "steps", mode="before")
+    @classmethod
+    def convert_candidate_collections_to_tuples(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @field_validator("ingredients")
+    @classmethod
+    def validate_unique_candidate_ingredients(
+        cls, value: tuple[Ingredient, ...]
+    ) -> tuple[Ingredient, ...]:
+        _validate_unique([ingredient.index for ingredient in value], "ingredient indexes")
+        _validate_unique(
+            [ingredient.foodstuff_reference for ingredient in value],
+            "ingredient foodstuff references",
+        )
+        return value
+
+    @field_validator("steps")
+    @classmethod
+    def validate_unique_candidate_step_indexes(
+        cls, value: tuple[PreparationStep, ...]
+    ) -> tuple[PreparationStep, ...]:
+        _validate_unique([step.index for step in value], "step indexes")
+        return value
 
 
 def _validate_unique(values: Sequence[int], field_name: str) -> None:

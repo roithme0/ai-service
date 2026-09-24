@@ -13,5 +13,8 @@ export const RECIPE_SESSION_FIXTURE: RecipeSessionRequest = {
       steps: [{ index: 1, description: 'Zutaten vermischen und kalt stellen.' }],
     },
   },
-  foodstuffs: [{ external_reference: 1, name: 'Haferflocken', brand: null, unit: 'G' }],
+  foodstuffs: [{
+    external_reference: 1, name: 'Haferflocken', brand: null, unit: 'G', unit_verbose: 'g',
+    kcal: 372, carbs: 59, protein: 13.5, fat: 7,
+  }],
 };

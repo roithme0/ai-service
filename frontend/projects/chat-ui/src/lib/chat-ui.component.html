@@ -6,16 +6,18 @@
     </section>
 
     <div class="messages">
-      @for (message of messages(); track message.id) {
-        @if (message.role === 'user') {
+      @for (item of content(); track item.id) {
+        @if (item.kind === 'artifact') {
+          <ai-chat-artifact-card [artifact]="item" [renderer]="rendererFor(item.type)" />
+        } @else if (item.role === 'user') {
           <article class="message message--user" aria-label="Nachricht des Benutzers">
-            <p>{{ message.text }}</p>
+            <p>{{ item.text }}</p>
           </article>
         } @else {
           <article
             class="message message--assistant markdown"
             aria-label="Antwort des Assistenten"
-            [innerHTML]="renderAssistantMarkdown(message.text)"
+            [innerHTML]="renderAssistantMarkdown(item.text)"
           ></article>
         }
       }

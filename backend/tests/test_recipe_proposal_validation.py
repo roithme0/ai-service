@@ -22,8 +22,6 @@ def valid_recipe(ingredient_reference: int) -> dict[str, object]:
         "name": "Overnight oats",
         "servings": 2,
         "preparation_time": 15,
-        "origin_name": "Kitchen",
-        "origin_url": "https://example.test/overnight-oats",
         "ingredients": [
             {"index": 4, "amount": Decimal("125.75"), "foodstuff_reference": ingredient_reference}
         ],
@@ -47,14 +45,14 @@ def test_accepts_complete_candidate_and_preserves_decimal_amount() -> None:
     assert isinstance(outcome.candidate.ingredients[0].amount, Decimal)
 
 
-def test_normalizes_empty_origin_url_to_absent() -> None:
+def test_rejects_origin_fields_on_candidate() -> None:
     candidate = valid_recipe(ingredient_reference=1)
-    candidate["origin_url"] = ""
+    candidate["origin_url"] = "https://example.test"
 
     outcome = validate_recipe_proposal(valid_source(), {"foodstuff_references": [1]}, candidate)
 
-    assert isinstance(outcome, RecipeProposalValidationSuccess)
-    assert outcome.candidate.origin_url is None
+    assert isinstance(outcome, RecipeProposalValidationFailure)
+    assert outcome.issues[0].location == ("origin_url",)
 
 
 def test_accepts_empty_ingredient_and_step_lists() -> None:

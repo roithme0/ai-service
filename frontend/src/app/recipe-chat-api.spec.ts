@@ -33,24 +33,25 @@ describe('HttpRecipeChatTransport', () => {
     );
   });
 
-  it('maps session snapshots, accepted messages, and turns while ignoring proposals', async () => {
+  it('maps session snapshots, accepted messages, and turns with proposals', async () => {
+    const proposal = proposalPayload();
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
         response(200, {
           session_id: 'session-1',
           messages: [{ role: 'user', text: 'Weniger Zucker' }],
+          proposals: [proposal],
           terminal_turn_id: null,
           terminal_turn_kind: null,
-          proposals: [{ proposal_id: 'not-rendered' }],
         }),
       )
       .mockResolvedValueOnce(response(201, { role: 'user', text: 'Weniger Zucker' }))
       .mockResolvedValueOnce(
         response(201, {
           turn_id: 'turn-1',
-          message: { role: 'assistant', text: 'Gern.' },
-          proposals: [{ proposal_id: 'not-rendered' }],
+          message: { role: 'assistant', text: 'Gern.', turn_id: 'turn-1' },
+          proposals: [proposal],
         }),
       );
     vi.stubGlobal('fetch', fetchMock);
@@ -58,17 +59,20 @@ describe('HttpRecipeChatTransport', () => {
 
     await expect(transport.readSession('session-1')).resolves.toEqual({
       session_id: 'session-1',
-      messages: [{ role: 'user', text: 'Weniger Zucker' }],
+      messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
+      proposals: [proposal],
       terminal_turn_id: null,
       terminal_turn_kind: null,
     });
     await expect(transport.appendMessage('session-1', 'Weniger Zucker')).resolves.toEqual({
       role: 'user',
       text: 'Weniger Zucker',
+      turn_id: null,
     });
     await expect(transport.generateTurn('session-1')).resolves.toEqual({
       turn_id: 'turn-1',
-      message: { role: 'assistant', text: 'Gern.' },
+      message: { role: 'assistant', text: 'Gern.', turn_id: 'turn-1' },
+      proposals: [proposal],
     });
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       '/api/v1/recipe-improvement/sessions/session-1',
@@ -77,6 +81,38 @@ describe('HttpRecipeChatTransport', () => {
     ]);
   });
 });
+
+function proposalPayload() {
+  return {
+    proposal_id: 'proposal-1',
+    turn_id: 'turn-1',
+    name: 'Leichtere Variante',
+    recipe: {
+      servings: 2,
+      preptime: null,
+      kcal: 100,
+      carbs: 12,
+      protein: 8,
+      fat: 3,
+      ingredients: [{
+        index: 1,
+        amount: 50,
+        foodstuff: {
+          id: 1,
+          name: 'Hafer',
+          brand: null,
+          unit: 'G',
+          unitVerbose: 'g',
+          kcal: 370,
+          carbs: 60,
+          protein: 13,
+          fat: 7,
+        },
+      }],
+      steps: [{ index: 1, description: 'Mischen.' }],
+    },
+  };
+}
 
 function response(status: number, payload: unknown): Response {
   return new Response(JSON.stringify(payload), {

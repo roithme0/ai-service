@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from decimal import Decimal, InvalidOperation
 
 from app.models.agentic_generation import AgenticToolCall
@@ -45,13 +45,11 @@ _STEP_SCHEMA: dict[str, object] = {
 _CANDIDATE_SCHEMA: dict[str, object] = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["name", "servings", "ingredients", "steps"],
+    "required": ["name", "servings", "preparation_time", "ingredients", "steps"],
     "properties": {
         "name": {"type": "string"},
         "servings": {"type": "integer"},
         "preparation_time": {"type": ["integer", "null"]},
-        "origin_name": {"type": ["string", "null"]},
-        "origin_url": {"type": ["string", "null"]},
         "ingredients": {"type": "array", "items": _INGREDIENT_SCHEMA},
         "steps": {"type": "array", "items": _STEP_SCHEMA},
     },
@@ -102,29 +100,33 @@ def _decode_arguments(arguments: str) -> tuple[object, object] | None:
     return value["base"], candidate_copy
 
 
-def _execute_registration(
+async def _execute_registration(
     call: AgenticToolCall,
-    register: Callable[[object, object], ProposalRegistrationOutcome],
+    register: Callable[[object, object], Awaitable[ProposalRegistrationOutcome]],
 ) -> ToolExecution[RecipeProposal]:
     decoded = _decode_arguments(call.arguments)
     if decoded is None:
         return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}))
-    outcome = register(*decoded)
+    outcome = await register(*decoded)
     if isinstance(outcome, ProposalRegistered):
         return ToolExecution(
-            json.dumps({"kind": "registered", "proposal_id": outcome.proposal.proposal_id}),
+            json.dumps({
+                "kind": "registered",
+                "proposal": outcome.proposal.model_dump(mode="json"),
+            }),
             outcome.proposal,
         )
     if outcome.kind == "rejected":
         return ToolExecution(json.dumps({
             "kind": "rejected", "reason": outcome.reason,
             "issues": [issue.model_dump(mode="json") for issue in outcome.issues],
+            "retryable": outcome.retryable,
         }))
     return ToolExecution(json.dumps({"kind": outcome.kind}))
 
 
 def proposal_registration_tool(
-    register: Callable[[object, object], ProposalRegistrationOutcome],
+    register: Callable[[object, object], Awaitable[ProposalRegistrationOutcome]],
 ) -> RegisteredTool[RecipeProposal]:
     return RegisteredTool(
         name="register_recipe_proposal",

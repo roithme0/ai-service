@@ -4,7 +4,7 @@ import { HttpRecipeChatTransport } from './recipe-chat-api';
 import { RecipeChatController, type RecipeChatViewState } from './recipe-chat-controller';
 
 const INITIAL_STATE: RecipeChatViewState = {
-  messages: [],
+  content: [],
   composerDisabled: true,
   status: {
     kind: 'loading',

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import Literal
 from uuid import UUID
 
@@ -41,8 +42,26 @@ class AvailableFoodstuffSnapshot(BaseModel):
 
     external_reference: int = Field(gt=0)
     name: str = Field(min_length=1, max_length=50)
-    brand: str | None = Field(default=None, max_length=100)
+    brand: str | None = Field(max_length=100)
     unit: Literal["G", "ML", "PIECE"]
+    unit_verbose: str = Field(min_length=1, max_length=20)
+    kcal: Decimal | None
+    carbs: Decimal | None
+    protein: Decimal | None
+    fat: Decimal | None
+
+    @field_validator("kcal", "carbs", "protein", "fat", mode="before")
+    @classmethod
+    def convert_nutrition_to_decimal(cls, value: object) -> object:
+        if value is None or isinstance(value, Decimal):
+            return value
+        if isinstance(value, (int, float, str)) and not isinstance(value, bool):
+            try:
+                converted = Decimal(str(value))
+            except InvalidOperation:
+                return value
+            return converted if converted.is_finite() else value
+        return value
 
 
 class RecipeImprovementSessionInput(BaseModel):

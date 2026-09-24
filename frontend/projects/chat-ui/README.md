@@ -1,14 +1,15 @@
 # Chat UI
 
-`@roithme0/chat-ui` is a controlled Angular 22 conversation component. It renders host-supplied text messages and presentation states, emits normalized user submissions and generic status actions, and leaves conversation state and transport orchestration to the host. It makes no backend requests.
+`@roithme0/chat-ui` is a controlled Angular 22 conversation component. It renders ordered host-supplied text and JSON-compatible artifacts, emits normalized user submissions and generic status actions, and leaves conversation state and transport orchestration to the host. It makes no backend requests.
 
-The public entry point exports `ChatUiComponent` and the typed message, submission, status, and status-action contracts. Import the component into the host component's `imports`.
+The public entry point exports `ChatUiComponent` and the typed content, artifact renderer, submission, status, and status-action contracts. Import the component into the host component's `imports`.
 
 ```html
 <ai-chat-ui
   bannerTitle="Rezept gemeinsam verbessern"
   bannerDescription="Beschreibe, was du ändern möchtest."
-  [messages]="messages()"
+  [content]="content()"
+  [artifactRenderers]="artifactRenderers"
   [composerDisabled]="pending()"
   [conversationStatus]="status()"
   (messageSubmitted)="handleMessage($event)"
@@ -16,9 +17,11 @@ The public entry point exports `ChatUiComponent` and the typed message, submissi
 />
 ```
 
-Each message has readonly `id`, `role` (`user` or `assistant`), and `text` fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
+Text content has readonly `kind`, `id`, `role` (`user` or `assistant`), and `text` fields. Artifacts have readonly `kind`, `id`, `type`, `headline`, and recursive `JsonValue` payload fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
 
-The component trims a valid submission and emits it once as a `ChatSubmission`. It retains the draft until the host calls `acknowledge`, so the visible composer can remain truthful to backend acceptance. It never adds that text to `messages`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break.
+Map artifact type discriminators to typed Angular templates with `artifactRenderer(template)`. An absent mapping uses the built-in escaped, formatted JSON view. The library frames every artifact and clips renderer bodies above `--ai-chat-artifact-collapsed-height` (default `18rem`) with German expand/collapse controls and no nested scrolling area.
+
+The component trims a valid submission and emits it once as a `ChatSubmission`. It retains the draft until the host calls `acknowledge`, so the visible composer can remain truthful to backend acceptance. It never adds that text to `content`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break.
 
 `conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. `composerDisabled` blocks concurrent submissions. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
 
@@ -47,6 +50,10 @@ Set these CSS variables on an ancestor of `ai-chat-ui`:
 | `--ai-chat-accent`                | Focus and quote accent         | `#e00067`    |
 | `--ai-chat-link`                  | Assistant link text            | `#ff7aad`    |
 | `--ai-chat-code-background`       | Assistant code background      | `#251a1e`    |
+| `--ai-chat-artifact-background`   | Artifact card background       | `#21171b`    |
+| `--ai-chat-artifact-border`       | Artifact card border           | `#50363f`    |
+| `--ai-chat-artifact-heading`      | Artifact headline              | `#f8eef1`    |
+| `--ai-chat-artifact-text`         | JSON fallback text             | `#eadde2`    |
 | `--ai-chat-composer-background`   | Composer field background      | `#291c21`    |
 | `--ai-chat-composer-border`       | Composer field border          | `#50363f`    |
 | `--ai-chat-composer-text`         | Composer field text            | `#f8eef1`    |

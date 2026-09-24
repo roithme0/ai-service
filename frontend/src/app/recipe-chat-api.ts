@@ -1,11 +1,18 @@
 import { RECIPE_SESSION_FIXTURE } from './recipe-chat-fixture';
 
-export type ApiMessageRole = 'user' | 'assistant';
-
-export interface ApiMessage {
-  readonly role: ApiMessageRole;
+export interface ApiUserMessage {
+  readonly role: 'user';
   readonly text: string;
+  readonly turn_id: null;
 }
+
+export interface ApiAssistantMessage {
+  readonly role: 'assistant';
+  readonly text: string;
+  readonly turn_id: string;
+}
+
+export type ApiMessage = ApiUserMessage | ApiAssistantMessage;
 
 export interface SessionCreation {
   readonly session_id: string;
@@ -14,7 +21,8 @@ export interface SessionCreation {
 
 export interface SessionSnapshot {
   readonly session_id: string;
-  readonly messages: readonly ApiMessage[];
+  readonly messages: ReadonlyArray<ApiMessage>;
+  readonly proposals: ReadonlyArray<RecipeProposal>;
   readonly terminal_turn_id: string | null;
   readonly terminal_turn_kind: string | null;
 }
@@ -22,6 +30,41 @@ export interface SessionSnapshot {
 export interface TurnResult {
   readonly turn_id: string;
   readonly message: ApiMessage;
+  readonly proposals: ReadonlyArray<RecipeProposal>;
+}
+
+export interface FoodstuffSummary {
+  readonly id: number;
+  readonly name: string;
+  readonly brand: string | null;
+  readonly unit: 'G' | 'ML' | 'PIECE';
+  readonly unitVerbose: string;
+  readonly kcal: number | null;
+  readonly carbs: number | null;
+  readonly protein: number | null;
+  readonly fat: number | null;
+}
+
+export interface RecipePresentation {
+  readonly servings: number;
+  readonly preptime: number | null;
+  readonly kcal: number | null;
+  readonly carbs: number | null;
+  readonly protein: number | null;
+  readonly fat: number | null;
+  readonly ingredients: ReadonlyArray<{
+    readonly index: number;
+    readonly amount: number;
+    readonly foodstuff: FoodstuffSummary;
+  }>;
+  readonly steps: ReadonlyArray<{ readonly index: number; readonly description: string }>;
+}
+
+export interface RecipeProposal {
+  readonly proposal_id: string;
+  readonly turn_id: string;
+  readonly name: string;
+  readonly recipe: RecipePresentation;
 }
 
 export interface RecipeSessionRequest {
@@ -33,20 +76,25 @@ export interface RecipeSessionRequest {
       readonly preparation_time: number | null;
       readonly origin_name: string | null;
       readonly origin_url: string | null;
-      readonly ingredients: readonly {
+      readonly ingredients: ReadonlyArray<{
         readonly index: number;
         readonly amount: number;
         readonly foodstuff_reference: number;
-      }[];
-      readonly steps: readonly { readonly index: number; readonly description: string }[];
+      }>;
+      readonly steps: ReadonlyArray<{ readonly index: number; readonly description: string }>;
     };
   };
-  readonly foodstuffs: readonly {
+  readonly foodstuffs: ReadonlyArray<{
     readonly external_reference: number;
     readonly name: string;
     readonly brand: string | null;
     readonly unit: 'G' | 'ML' | 'PIECE';
-  }[];
+    readonly unit_verbose: string;
+    readonly kcal: number | null;
+    readonly carbs: number | null;
+    readonly protein: number | null;
+    readonly fat: number | null;
+  }>;
 }
 
 export class RecipeChatApiError extends Error {
@@ -123,29 +171,111 @@ function parseSessionCreation(value: unknown): SessionCreation {
 }
 
 function parseMessage(value: unknown): ApiMessage {
+  if (!isRecord(value)) throw invalidResponse();
   const role = readString(value, 'role');
   const text = readString(value, 'text');
   if ((role !== 'user' && role !== 'assistant') || text === null) throw invalidResponse();
-  return { role, text };
+  const turnId = readOptionalNullableString(value, 'turn_id');
+  if (role === 'user') {
+    if (turnId !== null) throw invalidResponse();
+    return { role, text, turn_id: null };
+  }
+  if (turnId === null) throw invalidResponse();
+  return { role, text, turn_id: turnId };
 }
 
 function parseSessionSnapshot(value: unknown): SessionSnapshot {
-  if (!isRecord(value) || !Array.isArray(value['messages'])) throw invalidResponse();
+  if (!isRecord(value) || !Array.isArray(value['messages']) || !Array.isArray(value['proposals'])) {
+    throw invalidResponse();
+  }
   const sessionId = readString(value, 'session_id');
   if (sessionId === null) throw invalidResponse();
   return {
     session_id: sessionId,
     messages: value['messages'].map(parseMessage),
+    proposals: value['proposals'].map(parseProposal),
     terminal_turn_id: readNullableString(value, 'terminal_turn_id'),
     terminal_turn_kind: readNullableString(value, 'terminal_turn_kind'),
   };
 }
 
 function parseTurnResult(value: unknown): TurnResult {
-  if (!isRecord(value)) throw invalidResponse();
+  if (!isRecord(value) || !Array.isArray(value['proposals'])) throw invalidResponse();
   const turnId = readString(value, 'turn_id');
   if (turnId === null) throw invalidResponse();
-  return { turn_id: turnId, message: parseMessage(value['message']) };
+  return {
+    turn_id: turnId,
+    message: parseMessage(value['message']),
+    proposals: value['proposals'].map(parseProposal),
+  };
+}
+
+function parseProposal(value: unknown): RecipeProposal {
+  if (!isRecord(value)) throw invalidResponse();
+  const proposalId = readString(value, 'proposal_id');
+  const turnId = readString(value, 'turn_id');
+  const name = readString(value, 'name');
+  if (proposalId === null || turnId === null || name === null) throw invalidResponse();
+  return {
+    proposal_id: proposalId,
+    turn_id: turnId,
+    name,
+    recipe: parsePresentation(value['recipe']),
+  };
+}
+
+function parsePresentation(value: unknown): RecipePresentation {
+  if (!isRecord(value) || !Array.isArray(value['ingredients']) || !Array.isArray(value['steps'])) {
+    throw invalidResponse();
+  }
+  return {
+    servings: readNumber(value, 'servings'),
+    preptime: readNullableNumber(value, 'preptime'),
+    kcal: readNullableNumber(value, 'kcal'),
+    carbs: readNullableNumber(value, 'carbs'),
+    protein: readNullableNumber(value, 'protein'),
+    fat: readNullableNumber(value, 'fat'),
+    ingredients: value['ingredients'].map((ingredient) => {
+      if (!isRecord(ingredient)) throw invalidResponse();
+      return {
+        index: readNumber(ingredient, 'index'),
+        amount: readNumber(ingredient, 'amount'),
+        foodstuff: parseFoodstuff(ingredient['foodstuff']),
+      };
+    }),
+    steps: value['steps'].map((step) => {
+      if (!isRecord(step)) throw invalidResponse();
+      const description = readString(step, 'description');
+      if (description === null) throw invalidResponse();
+      return { index: readNumber(step, 'index'), description };
+    }),
+  };
+}
+
+function parseFoodstuff(value: unknown): FoodstuffSummary {
+  if (!isRecord(value)) throw invalidResponse();
+  const name = readString(value, 'name');
+  const brand = readNullableString(value, 'brand');
+  const unit = readString(value, 'unit');
+  const unitVerbose = readString(value, 'unitVerbose');
+  if (name === null || unitVerbose === null || (unit !== 'G' && unit !== 'ML' && unit !== 'PIECE')) {
+    throw invalidResponse();
+  }
+  return {
+    id: readNumber(value, 'id'), name, brand, unit, unitVerbose,
+    kcal: readNullableNumber(value, 'kcal'), carbs: readNullableNumber(value, 'carbs'),
+    protein: readNullableNumber(value, 'protein'), fat: readNullableNumber(value, 'fat'),
+  };
+}
+
+function readNumber(value: Record<string, unknown>, key: string): number {
+  const field = value[key];
+  if (typeof field !== 'number' || !Number.isFinite(field)) throw invalidResponse();
+  return field;
+}
+
+function readNullableNumber(value: Record<string, unknown>, key: string): number | null {
+  return value[key] === null ? null : readNumber(value, key);
 }
 
 function readString(value: unknown, key: string): string | null {
@@ -159,6 +289,10 @@ function readNullableString(value: Record<string, unknown>, key: string): string
   if (field === null) return null;
   if (typeof field === 'string') return field;
   throw invalidResponse();
+}
+
+function readOptionalNullableString(value: Record<string, unknown>, key: string): string | null {
+  return value[key] === undefined ? null : readNullableString(value, key);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

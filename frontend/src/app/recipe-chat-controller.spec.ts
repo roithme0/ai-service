@@ -32,18 +32,18 @@ describe('RecipeChatController', () => {
     const acknowledge = vi.fn();
 
     const submission = controller.submit('Weniger Zucker', acknowledge);
-    expect(controller.state.messages).toEqual([]);
+    expect(controller.state.content).toEqual([]);
     expect(controller.state.composerDisabled).toBe(true);
     expect(acknowledge).not.toHaveBeenCalled();
 
-    append.resolve({ role: 'user', text: 'Weniger Zucker' });
+    append.resolve(user('Weniger Zucker'));
     await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledOnce());
-    expect(controller.state.messages.map((message) => message.text)).toEqual(['Weniger Zucker']);
+    expect(texts(controller.state.content)).toEqual(['Weniger Zucker']);
     expect(controller.state.status?.message).toBe('Antwort wird erstellt …');
 
-    turn.resolve({ turn_id: 'turn-1', message: { role: 'assistant', text: 'Gern.' } });
+    turn.resolve({ turn_id: 'turn-1', message: assistant('Gern.', 'turn-1'), proposals: [] });
     await submission;
-    expect(controller.state.messages.map((message) => message.text)).toEqual([
+    expect(texts(controller.state.content)).toEqual([
       'Weniger Zucker',
       'Gern.',
     ]);
@@ -51,13 +51,46 @@ describe('RecipeChatController', () => {
     expect(states.at(-1)?.status).toBeNull();
   });
 
+  it('places resolved proposals between the user and final assistant text', async () => {
+    const transport = new FakeTransport();
+    transport.appendMessage.mockResolvedValue(user('Alternative'));
+    transport.generateTurn.mockResolvedValue({
+      turn_id: 'turn-1',
+      message: assistant('Hier ist sie.', 'turn-1'),
+      proposals: [{
+        proposal_id: 'proposal-1', turn_id: 'turn-1',
+        name: 'Neue Variante',
+        recipe: {
+          servings: 2, preptime: null, kcal: 100, carbs: 12, protein: 8, fat: 3,
+          ingredients: [{ index: 1, amount: 50, foodstuff: {
+            id: 1, name: 'Hafer', brand: null, unit: 'G', unitVerbose: 'g',
+            kcal: 370, carbs: 60, protein: 13, fat: 7,
+          }}],
+          steps: [{ index: 1, description: 'Mischen.' }],
+        },
+      }],
+    });
+    const controller = new RecipeChatController(transport, () => undefined);
+    await controller.start();
+
+    await controller.submit('Alternative', () => undefined);
+
+    expect(controller.state.content.map((item) => item.kind)).toEqual([
+      'text', 'artifact', 'text',
+    ]);
+    expect(controller.state.content[1]).toEqual(expect.objectContaining({
+      id: 'proposal-1', type: 'recipe-proposal', headline: 'Neue Variante',
+    }));
+  });
+
   it('reconciles an ambiguous append and never appends it a second time', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new RecipeChatNetworkError('Netzwerkfehler'));
-    transport.readSession.mockResolvedValue(snapshot([{ role: 'user', text: 'Knuspriger' }]));
+    transport.readSession.mockResolvedValue(snapshot([user('Knuspriger')]));
     transport.generateTurn.mockResolvedValue({
       turn_id: 'turn-1',
-      message: { role: 'assistant', text: 'Ja.' },
+      message: assistant('Ja.', 'turn-1'),
+      proposals: [],
     });
     const controller = new RecipeChatController(transport, () => undefined);
     await controller.start();
@@ -68,7 +101,46 @@ describe('RecipeChatController', () => {
     expect(transport.appendMessage).toHaveBeenCalledOnce();
     expect(transport.readSession).toHaveBeenCalledOnce();
     expect(acknowledge).toHaveBeenCalledOnce();
-    expect(controller.state.messages).toHaveLength(2);
+    expect(controller.state.content).toHaveLength(2);
+  });
+
+  it('preserves artifacts in their original turns when reconciling a later append', async () => {
+    const transport = new FakeTransport();
+    transport.appendMessage
+      .mockResolvedValueOnce(user('Erste Frage'))
+      .mockRejectedValueOnce(new RecipeChatNetworkError('Netzwerkfehler'));
+    transport.generateTurn
+      .mockResolvedValueOnce({
+        turn_id: 'turn-1',
+        message: assistant('Erste Antwort', 'turn-1'),
+        proposals: [proposal('proposal-1', 'turn-1')],
+      })
+      .mockResolvedValueOnce({
+        turn_id: 'turn-2',
+        message: assistant('Zweite Antwort', 'turn-2'),
+        proposals: [],
+      });
+    transport.readSession.mockResolvedValue({
+      ...snapshot([
+        user('Erste Frage'),
+        assistant('Erste Antwort', 'turn-1'),
+        user('Zweite Frage'),
+      ]),
+      proposals: [proposal('proposal-1', 'turn-1')],
+    });
+    const controller = new RecipeChatController(transport, () => undefined);
+    await controller.start();
+    await controller.submit('Erste Frage', () => undefined);
+
+    await controller.submit('Zweite Frage', () => undefined);
+
+    expect(controller.state.content.map((item) => item.id)).toEqual([
+      'confirmed-0-user',
+      'proposal-1',
+      'assistant-turn-1',
+      'confirmed-2-user',
+      'assistant-turn-2',
+    ]);
   });
 
   it('preserves the draft contract and history when appending fails', async () => {
@@ -81,7 +153,7 @@ describe('RecipeChatController', () => {
     await controller.submit('Ungültige Nachricht', acknowledge);
 
     expect(acknowledge).not.toHaveBeenCalled();
-    expect(controller.state.messages).toEqual([]);
+    expect(controller.state.content).toEqual([]);
     expect(controller.state.composerDisabled).toBe(false);
     expect(controller.state.status?.kind).toBe('error');
     expect(transport.generateTurn).not.toHaveBeenCalled();
@@ -99,19 +171,20 @@ describe('RecipeChatController', () => {
 
     expect(transport.appendMessage).toHaveBeenCalledOnce();
     expect(acknowledge).not.toHaveBeenCalled();
-    expect(controller.state.messages).toEqual([]);
+    expect(controller.state.content).toEqual([]);
     expect(controller.state.composerDisabled).toBe(false);
     expect(transport.generateTurn).not.toHaveBeenCalled();
   });
 
   it('retries only generation when the model is unavailable', async () => {
     const transport = new FakeTransport();
-    transport.appendMessage.mockResolvedValue({ role: 'user', text: 'Leichter' });
+    transport.appendMessage.mockResolvedValue(user('Leichter'));
     transport.generateTurn
       .mockRejectedValueOnce(new RecipeChatApiError(503, 'generator_unavailable'))
       .mockResolvedValueOnce({
         turn_id: 'turn-1',
-        message: { role: 'assistant', text: 'Versuche das.' },
+        message: assistant('Versuche das.', 'turn-1'),
+        proposals: [],
       });
     const controller = new RecipeChatController(transport, () => undefined);
     await controller.start();
@@ -122,12 +195,12 @@ describe('RecipeChatController', () => {
 
     expect(transport.appendMessage).toHaveBeenCalledOnce();
     expect(transport.generateTurn).toHaveBeenCalledTimes(2);
-    expect(controller.state.messages).toHaveLength(2);
+    expect(controller.state.content).toHaveLength(2);
   });
 
   it('does not offer generation retry after a recorded failure', async () => {
     const transport = new FakeTransport();
-    transport.appendMessage.mockResolvedValue({ role: 'user', text: 'Ändern' });
+    transport.appendMessage.mockResolvedValue(user('Ändern'));
     transport.generateTurn.mockRejectedValue(new RecipeChatApiError(502, 'generation_failed'));
     const controller = new RecipeChatController(transport, () => undefined);
     await controller.start();
@@ -151,7 +224,7 @@ describe('RecipeChatController', () => {
     replacement.resolve({ session_id: 'session-2', expires_at: CREATED.expires_at });
     await restarting;
 
-    expect(controller.state.messages).toEqual([]);
+    expect(controller.state.content).toEqual([]);
     expect(controller.state.composerDisabled).toBe(false);
   });
 
@@ -179,9 +252,57 @@ function snapshot(messages: readonly ApiMessage[]): SessionSnapshot {
   return {
     session_id: 'session-1',
     messages,
+    proposals: [],
     terminal_turn_id: null,
     terminal_turn_kind: null,
   };
+}
+
+function proposal(
+  proposalId: string,
+  turnId: string,
+) {
+  return {
+    proposal_id: proposalId,
+    turn_id: turnId,
+    name: 'Neue Variante',
+    recipe: {
+      servings: 2,
+      preptime: null,
+      kcal: 100,
+      carbs: 12,
+      protein: 8,
+      fat: 3,
+      ingredients: [{
+        index: 1,
+        amount: 50,
+        foodstuff: {
+          id: 1,
+          name: 'Hafer',
+          brand: null,
+          unit: 'G' as const,
+          unitVerbose: 'g',
+          kcal: 370,
+          carbs: 60,
+          protein: 13,
+          fat: 7,
+        },
+      }],
+      steps: [{ index: 1, description: 'Mischen.' }],
+    },
+  };
+}
+
+function user(text: string): ApiMessage {
+  return { role: 'user', text, turn_id: null };
+}
+
+function assistant(text: string, turnId: string): ApiMessage {
+  return { role: 'assistant', text, turn_id: turnId };
+}
+
+function texts(content: readonly { readonly kind: string; readonly text?: string }[]): readonly string[] {
+  return content.flatMap((item) => item.kind === 'text' && item.text !== undefined ? [item.text] : []);
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {

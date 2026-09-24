@@ -28,6 +28,7 @@ class TextSessionCreation:
 class TextMessage:
     role: SessionRole
     text: str
+    turn_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -201,7 +202,12 @@ class EphemeralTextSessionStore(Generic[T]):
         )
 
     def append_if_revision(
-        self, session_id: str, expected_revision: int, role: object, text: object
+        self,
+        session_id: str,
+        expected_revision: int,
+        role: object,
+        text: object,
+        turn_id: str | None = None,
     ) -> TextSessionAppendOutcome:
         return self._append(
             session_id,
@@ -209,6 +215,7 @@ class EphemeralTextSessionStore(Generic[T]):
             text,
             expected_revision=expected_revision,
             max_message_count=MAX_MESSAGE_COUNT,
+            turn_id=turn_id,
         )
 
     def _append(
@@ -218,6 +225,7 @@ class EphemeralTextSessionStore(Generic[T]):
         text: object,
         expected_revision: int | None,
         max_message_count: int,
+        turn_id: str | None = None,
     ) -> TextSessionAppendOutcome:
         with self._lock:
             now = _as_utc(self._clock())
@@ -241,7 +249,11 @@ class EphemeralTextSessionStore(Generic[T]):
                 )
             if len(session.messages) >= max_message_count:
                 return TextSessionAppendLimitReached(kind="limit_reached", session_id=session_id)
-            message = TextMessage(role=cast(SessionRole, role), text=cast(str, text))
+            message = TextMessage(
+                role=cast(SessionRole, role),
+                text=cast(str, text),
+                turn_id=turn_id,
+            )
             self._sessions[session_id] = _StoredTextSession(
                 expires_at=session.expires_at,
                 revision=session.revision + 1,

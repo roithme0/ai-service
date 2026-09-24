@@ -9,8 +9,11 @@ docker compose -f deployment/docker-compose-local.yml up --build
 ```
 
 Docker Compose reads `deployment/.env`. To enable recipe-improvement turns in
-the container, add `OPENAI_API_KEY` and `RECIPE_IMPROVEMENT_OPENAI_MODEL` there.
-That file is ignored by Git. The variables are forwarded only to the backend.
+the container, add `OPENAI_API_KEY`, `RECIPE_IMPROVEMENT_OPENAI_MODEL`, and the
+Kochwiki API base URL as `KOCHWIKI_BASE_URL`. That file is ignored by Git. The
+variables are forwarded only to the backend. When Kochwiki runs directly on the
+host, use `http://host.docker.internal:<port>/api`; `localhost` inside the backend
+container refers to that container itself.
 
 Run backend tests in a container:
 
