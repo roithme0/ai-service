@@ -2,32 +2,32 @@
 
 The AI Service provides shared, provider-neutral AI capabilities and an agent-based interface for projects in the network. It owns model integration, reusable AI operations, agent orchestration, and service connectors while domain services remain authoritative for their data and business rules.
 
-The project is currently at the initial setup stage. High-level product and architecture direction is maintained in the neighboring `plan` repository; this repository will become authoritative for its concrete implementation, API contracts, and deployment details as they are introduced.
+The current implementation includes recipe-improvement sessions, bounded model/tool orchestration, and a reusable chat UI library. This repository is authoritative for its implementation, API contracts, and deployment configuration. A shared configurable-agent foundation and deterministic UI demo are the next architectural direction, described in the [chat UI demo concept](docs/concepts/2026-09-25-chat-ui-demo.md).
 
 ## Core Features
 
-- **Universal agent**: Provide an agent that can answer general questions, retrieve changing information through explicit tools, and progressively interact with authorized project APIs. Integrations begin read-only; mutations require deliberately scoped authorization, confirmation, validation, and auditing.
+- **Universal agent direction**: Develop a shared agent with server-defined capability configurations, with recipe improvement as a restricted configuration. This generalization is planned; the current application uses the recipe-specific API.
 - **Supporting features**:
   - **Bounded AI capabilities**: Offer reusable operations requested by other services, initially including structured recipe optimization and, later, image generation.
-  - **Conversation foundation**: Support ephemeral multi-turn chat, streaming, cancellation, multiple tool calls, explicit failures, and multiple typed artifacts within one assistant turn.
+  - **Conversation foundation**: Support ephemeral multi-turn recipe chat, multiple tool calls, explicit failures, and multiple proposal artifacts within one assistant turn. Responses are returned after turn completion; streaming and user-controlled cancellation are not implemented.
   - **Provider abstraction**: Keep model- and provider-specific behavior behind stable service interfaces.
   - **Generic tool orchestration**: Establish a constrained tool interface that can serve live-data tools and later project connectors without broad database, filesystem, or network access.
-  - **Typed artifacts**: Validate versioned structured outputs at the service boundary and generate identifiers, ordering, timestamps, and references deterministically in service code rather than through the model.
-  - **Reusable chat UI direction**: Explore a shared chat foundation that owns generic conversation behavior and allows host applications to supply renderers and bounded actions for domain-specific artifacts.
+  - **Typed artifacts**: Validate recipe proposals at the service boundary and assign identifiers, ordering, timestamps, and validated base references in service code rather than through the model.
+  - **Reusable chat UI**: Render host-supplied messages, artifacts, and status through a controlled Angular component with custom renderer support and a JSON fallback. The host owns session state and transport; the library makes no backend requests.
 
 Domain services such as Kochwiki and Home Assistant continue to own their data, authorization, validation, persistence, and domain rules. They must remain useful when the AI Service is unavailable, and integrations use explicit APIs rather than direct access to their storage.
 
 ## Tech Stack
 
-The frontend is an Angular 22 workspace containing the AI Service application and the independently packaged `@roithme0/chat-ui` library. A backend framework, database, model provider, and deployment mode have not been selected yet.
+The frontend is an Angular 22 workspace containing the AI Service application and the independently packaged `@roithme0/chat-ui` library. The Python backend uses FastAPI and Pydantic, with an OpenAI Responses adapter behind a provider-neutral generation interface. Dockerfiles and Docker Compose configurations are provided for local development, testing, staging, and production.
 
-The intended first implementation is a provider-neutral model adapter and a generic, ephemeral, multi-turn chat. It should remain stateless where practical by accepting the relevant active conversation history from the client. Conversation persistence, listing, and resumption are not initial requirements.
+Sessions retain their initialization snapshots, messages, and proposals in process-local memory with a fixed 90-minute lifetime. Clients submit messages and request turns against a session identifier; the backend supplies retained history to the model. There is no database-backed conversation storage, and sessions do not survive a backend restart. Durable history, listing, and resumption are outside the current scope. See the [backend README](backend/README.md) for setup and model/resolver configuration.
 
-The checked-in `.codex/config.toml` currently comes from the repository setup template. Its Angular CLI and OpenAI documentation integrations are starter configuration, not evidence of final application technology choices, and should be reviewed once the stack is selected.
+The checked-in `.codex/config.toml` enables Angular CLI and OpenAI documentation integrations for development.
 
 ## Workflows
 
-The Angular frontend includes a packaged chat UI integration POC. See [the library README](frontend/projects/chat-ui/README.md) for its public API, host theme properties, and the local npm tarball handoff to Kochwiki.
+The Angular application currently hosts recipe chat using a fixed recipe snapshot and requires configured model and Kochwiki resolver access to produce proposals. Its replacement with a deterministic demo is planned. See [the library README](frontend/projects/chat-ui/README.md) for the public API, host theme properties, GitHub Packages releases, and local development linking.
 
 Use workflow skills only when explicitly invoked by the user.
 
