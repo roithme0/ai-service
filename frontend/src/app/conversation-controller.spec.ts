@@ -1,29 +1,80 @@
+import { presentRecipeArtifact } from './recipe-chat-domain';
+import { presentJsonArtifact } from './generic-artifact-mapper';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  RecipeChatApiError,
-  RecipeChatNetworkError,
+  ConversationApiError,
+  ConversationNetworkError,
   type ApiMessage,
-  type RecipeChatTransport,
+  type ConversationTransport,
   type SessionCreation,
   type SessionSnapshot,
   type TurnResult,
-} from './recipe-chat-api';
-import { RecipeChatController, type RecipeChatViewState } from './recipe-chat-controller';
+} from './conversation-api';
+import { ConversationController, type ConversationViewState } from './conversation-controller';
 
 const CREATED: SessionCreation = { session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z' };
 
-class FakeTransport implements RecipeChatTransport {
+class FakeTransport implements ConversationTransport {
   createSession = vi.fn<() => Promise<SessionCreation>>().mockResolvedValue(CREATED);
   readSession = vi.fn<(sessionId: string) => Promise<SessionSnapshot>>();
   appendMessage = vi.fn<(sessionId: string, text: string) => Promise<ApiMessage>>();
   generateTurn = vi.fn<(sessionId: string) => Promise<TurnResult>>();
 }
 
-describe('RecipeChatController', () => {
+describe('ConversationController', () => {
+  it('maps synthetic artifacts in order for successful turns and reconciled history', async () => {
+    const transport = new FakeTransport();
+    const later = {
+      artifact_id: 'later', type: 'other.result', created_at: '2026-09-25T12:00:00Z',
+      order: 2, turn_id: 'turn-1', payload: { value: 2 },
+    };
+    const earlier = { ...later, artifact_id: 'earlier', order: 1, payload: { value: 1 } };
+    transport.appendMessage.mockResolvedValueOnce(user('Hello')).mockResolvedValueOnce(user('Again'));
+    transport.generateTurn.mockResolvedValueOnce({
+      kind: 'completed', turn_id: 'turn-1', message: assistant('Hi', 'turn-1'), artifacts: [later, earlier],
+    }).mockRejectedValueOnce(new ConversationNetworkError('Timeout'));
+    transport.readSession.mockResolvedValue({
+      ...snapshot([user('Hello'), assistant('Hi', 'turn-1'), user('Again')]),
+      artifacts: [later, earlier],
+    });
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    await controller.start();
+    await controller.submit('Hello', () => undefined);
+    expect(controller.state.content.map((item) => item.id)).toEqual([
+      'confirmed-0-user', 'earlier', 'later', 'assistant-turn-1',
+    ]);
+    await controller.submit('Again', () => undefined);
+    expect(controller.state.content.map((item) => item.id)).toEqual([
+      'confirmed-0-user', 'earlier', 'later', 'assistant-turn-1', 'confirmed-2-user',
+    ]);
+    expect(controller.state.status?.action?.id).toBe('retry-turn');
+  });
+
+  it('reconciles a busy turn and retains the retry action when its result is still unclear', async () => {
+    const transport = new FakeTransport();
+    transport.appendMessage.mockResolvedValue(user('Hello'));
+    transport.generateTurn.mockRejectedValueOnce(new ConversationApiError(409, 'busy')).mockResolvedValueOnce({
+      kind: 'completed', turn_id: 'turn-1', message: assistant('Hi', 'turn-1'), artifacts: [],
+    });
+    transport.readSession.mockResolvedValue(snapshot([user('Hello')]));
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    await controller.start();
+
+    await controller.submit('Hello', () => undefined);
+    expect(controller.state.status?.action?.id).toBe('retry-turn');
+    expect(controller.state.composerDisabled).toBe(true);
+    await controller.performAction('retry-turn');
+    expect(transport.appendMessage).toHaveBeenCalledOnce();
+    expect(transport.generateTurn).toHaveBeenCalledTimes(2);
+    expect(controller.state.content.map((item) => item.id)).toEqual([
+      'confirmed-0-user', 'assistant-turn-1',
+    ]);
+    expect(controller.state.composerDisabled).toBe(false);
+  });
   it('reports agent unavailability during session creation', async () => {
     const transport = new FakeTransport();
-    transport.createSession.mockRejectedValue(new RecipeChatApiError(503, 'agent_unavailable'));
-    const controller = new RecipeChatController(transport, () => undefined);
+    transport.createSession.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
 
     await controller.start();
 
@@ -34,8 +85,8 @@ describe('RecipeChatController', () => {
 
   it('reports agent unavailability during message append', async () => {
     const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new RecipeChatApiError(503, 'agent_unavailable'));
-    const controller = new RecipeChatController(transport, () => undefined);
+    transport.appendMessage.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
 
     await controller.submit('Frage', () => undefined);
@@ -48,9 +99,9 @@ describe('RecipeChatController', () => {
   it('preserves agent unavailability from a reconciliation read', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Frage'));
-    transport.generateTurn.mockRejectedValue(new RecipeChatNetworkError('Timeout'));
-    transport.readSession.mockRejectedValue(new RecipeChatApiError(503, 'agent_unavailable'));
-    const controller = new RecipeChatController(transport, () => undefined);
+    transport.generateTurn.mockRejectedValue(new ConversationNetworkError('Timeout'));
+    transport.readSession.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
 
     await controller.submit('Frage', () => undefined);
@@ -66,8 +117,8 @@ describe('RecipeChatController', () => {
     const turn = deferred<TurnResult>();
     transport.appendMessage.mockReturnValue(append.promise);
     transport.generateTurn.mockReturnValue(turn.promise);
-    const states: RecipeChatViewState[] = [];
-    const controller = new RecipeChatController(transport, (state) => states.push(state));
+    const states: ConversationViewState[] = [];
+    const controller = new ConversationController(transport, presentRecipeArtifact, (state) => states.push(state));
     await controller.start();
     const acknowledge = vi.fn();
 
@@ -110,7 +161,7 @@ describe('RecipeChatController', () => {
         } },
       }],
     });
-    const controller = new RecipeChatController(transport, () => undefined);
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
 
     await controller.submit('Alternative', () => undefined);
@@ -125,7 +176,7 @@ describe('RecipeChatController', () => {
 
   it('reconciles an ambiguous append and never appends it a second time', async () => {
     const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new RecipeChatNetworkError('Netzwerkfehler'));
+    transport.appendMessage.mockRejectedValue(new ConversationNetworkError('Netzwerkfehler'));
     transport.readSession.mockResolvedValue(snapshot([user('Knuspriger')]));
     transport.generateTurn.mockResolvedValue({
       kind: 'completed',
@@ -133,7 +184,7 @@ describe('RecipeChatController', () => {
       message: assistant('Ja.', 'turn-1'),
       artifacts: [],
     });
-    const controller = new RecipeChatController(transport, () => undefined);
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();
 
@@ -149,7 +200,7 @@ describe('RecipeChatController', () => {
     const transport = new FakeTransport();
     transport.appendMessage
       .mockResolvedValueOnce(user('Erste Frage'))
-      .mockRejectedValueOnce(new RecipeChatNetworkError('Netzwerkfehler'));
+      .mockRejectedValueOnce(new ConversationNetworkError('Netzwerkfehler'));
     transport.generateTurn
       .mockResolvedValueOnce({
         kind: 'completed',
@@ -171,7 +222,7 @@ describe('RecipeChatController', () => {
       ]),
       artifacts: [proposal('proposal-1', 'turn-1')],
     });
-    const controller = new RecipeChatController(transport, () => undefined);
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
     await controller.submit('Erste Frage', () => undefined);
 
@@ -188,8 +239,8 @@ describe('RecipeChatController', () => {
 
   it('preserves the draft contract and history when appending fails', async () => {
     const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new RecipeChatApiError(422, 'invalid_message'));
-    const controller = new RecipeChatController(transport, () => undefined);
+    transport.appendMessage.mockRejectedValue(new ConversationApiError(422, 'invalid_message'));
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();
 
@@ -204,9 +255,9 @@ describe('RecipeChatController', () => {
 
   it('does not acknowledge or repeat an ambiguous append absent from the session', async () => {
     const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new RecipeChatNetworkError('Netzwerkfehler'));
+    transport.appendMessage.mockRejectedValue(new ConversationNetworkError('Netzwerkfehler'));
     transport.readSession.mockResolvedValue(snapshot([]));
-    const controller = new RecipeChatController(transport, () => undefined);
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();
 
@@ -223,14 +274,14 @@ describe('RecipeChatController', () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Leichter'));
     transport.generateTurn
-      .mockRejectedValueOnce(new RecipeChatApiError(503, 'agent_unavailable'))
+      .mockRejectedValueOnce(new ConversationApiError(503, 'agent_unavailable'))
       .mockResolvedValueOnce({
         kind: 'completed',
         turn_id: 'turn-1',
         message: assistant('Versuche das.', 'turn-1'),
         artifacts: [],
       });
-    const controller = new RecipeChatController(transport, () => undefined);
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
     await controller.submit('Leichter', () => undefined);
 
@@ -246,8 +297,8 @@ describe('RecipeChatController', () => {
   it('does not offer generation retry after a recorded failure', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Ã„ndern'));
-    transport.generateTurn.mockRejectedValue(new RecipeChatApiError(502, 'generation_failed'));
-    const controller = new RecipeChatController(transport, () => undefined);
+    transport.generateTurn.mockRejectedValue(new ConversationApiError(502, 'generation_failed'));
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
     await controller.submit('Ã„ndern', () => undefined);
 
@@ -257,8 +308,8 @@ describe('RecipeChatController', () => {
 
   it('keeps the previous conversation visible until replacement creation succeeds', async () => {
     const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new RecipeChatApiError(410, 'expired'));
-    const controller = new RecipeChatController(transport, () => undefined);
+    transport.appendMessage.mockRejectedValue(new ConversationApiError(410, 'expired'));
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
     await controller.submit('Hallo', () => undefined);
     const replacement = deferred<SessionCreation>();
@@ -279,8 +330,8 @@ describe('RecipeChatController', () => {
     ['limit_reached', 409],
   ])('offers a new session after the terminal %s outcome', async (kind, status) => {
     const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new RecipeChatApiError(status, kind));
-    const controller = new RecipeChatController(transport, () => undefined);
+    transport.appendMessage.mockRejectedValue(new ConversationApiError(status, kind));
+    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
     await controller.start();
 
     await controller.submit('Hallo', () => undefined);

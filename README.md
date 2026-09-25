@@ -27,7 +27,7 @@ The checked-in `.codex/config.toml` enables Angular CLI and OpenAI documentation
 
 ## Workflows
 
-The Angular application currently hosts recipe chat using a fixed recipe snapshot and requires configured model and Kochwiki resolver access to produce proposals. Its replacement with a deterministic demo is planned. See [the library README](frontend/projects/chat-ui/README.md) for the public API, host theme properties, GitHub Packages releases, and local development linking.
+The Angular application uses an application-level conversation controller and HTTP transport with fixed `kochwiki` configuration, a recipe snapshot, and recipe artifact presentation. Producing proposals still requires configured model and Kochwiki resolver access. Its replacement with a deterministic demo is planned; the shared application modules are not library exports. See [the library README](frontend/projects/chat-ui/README.md) for the public API, host theme properties, GitHub Packages releases, and local development linking.
 
 Use workflow skills only when explicitly invoked by the user.
 

@@ -1,5 +1,3 @@
-import { RECIPE_SESSION_FIXTURE } from './recipe-chat-fixture';
-
 export interface ApiUserMessage {
   readonly role: 'user';
   readonly text: string;
@@ -43,93 +41,33 @@ export interface ApiArtifact {
   readonly payload: unknown;
 }
 
-export interface FoodstuffSummary {
-  readonly id: number;
-  readonly name: string;
-  readonly brand: string | null;
-  readonly unit: 'G' | 'ML' | 'PIECE';
-  readonly unitVerbose: string;
-  readonly kcal: number | null;
-  readonly carbs: number | null;
-  readonly protein: number | null;
-  readonly fat: number | null;
-}
-
-export interface RecipePresentation {
-  readonly servings: number;
-  readonly preptime: number | null;
-  readonly kcal: number | null;
-  readonly carbs: number | null;
-  readonly protein: number | null;
-  readonly fat: number | null;
-  readonly ingredients: ReadonlyArray<{
-    readonly index: number;
-    readonly amount: number;
-    readonly foodstuff: FoodstuffSummary;
-  }>;
-  readonly steps: ReadonlyArray<{ readonly index: number; readonly description: string }>;
-}
-
-export interface RecipeProposal {
-  readonly artifact_id: string;
-  readonly turn_id: string;
-  readonly name: string;
-  readonly recipe: RecipePresentation;
-}
-
-export interface RecipeSessionRequest {
-  readonly source: {
-    readonly external_reference: string;
-    readonly recipe: {
-      readonly name: string;
-      readonly servings: number;
-      readonly preparation_time: number | null;
-      readonly origin_name: string | null;
-      readonly origin_url: string | null;
-      readonly ingredients: ReadonlyArray<{
-        readonly index: number;
-        readonly amount: number;
-        readonly foodstuff_reference: number;
-      }>;
-      readonly steps: ReadonlyArray<{ readonly index: number; readonly description: string }>;
-    };
-  };
-  readonly foodstuffs: ReadonlyArray<{
-    readonly external_reference: number;
-    readonly name: string;
-    readonly brand: string | null;
-    readonly unit: 'G' | 'ML' | 'PIECE';
-    readonly unit_verbose: string;
-    readonly kcal: number | null;
-    readonly carbs: number | null;
-    readonly protein: number | null;
-    readonly fat: number | null;
-  }>;
-}
-
-export class RecipeChatApiError extends Error {
+export class ConversationApiError extends Error {
   constructor(
     readonly status: number,
     readonly kind: string,
   ) {
-    super(`Recipe chat request failed: ${status} ${kind}`);
+    super(`Conversation request failed: ${status} ${kind}`);
   }
 }
 
-export class RecipeChatNetworkError extends Error {}
+export class ConversationNetworkError extends Error {}
 
-export interface RecipeChatTransport {
+export interface ConversationTransport {
   createSession(): Promise<SessionCreation>;
   readSession(sessionId: string): Promise<SessionSnapshot>;
   appendMessage(sessionId: string, text: string): Promise<ApiMessage>;
   generateTurn(sessionId: string): Promise<TurnResult>;
 }
 
-export class HttpRecipeChatTransport implements RecipeChatTransport {
-  private readonly baseUrl = '/api/v1/agents/kochwiki/sessions';
+export class HttpConversationTransport implements ConversationTransport {
+  private readonly baseUrl: string;
+
+  constructor(configuration: string, private readonly input: unknown) {
+    this.baseUrl = `/api/v1/agents/${encodeURIComponent(configuration)}/sessions`;
+  }
 
   async createSession(): Promise<SessionCreation> {
-    return parseSessionCreation(await this.request('', 'POST', { input: RECIPE_SESSION_FIXTURE }));
+    return parseSessionCreation(await this.request('', 'POST', { input: this.input }));
   }
 
   async readSession(sessionId: string): Promise<SessionSnapshot> {
@@ -153,7 +91,7 @@ export class HttpRecipeChatTransport implements RecipeChatTransport {
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (error: unknown) {
-      throw new RecipeChatNetworkError('Der Backend-Dienst ist nicht erreichbar.', {
+      throw new ConversationNetworkError('Der Backend-Dienst ist nicht erreichbar.', {
         cause: error,
       });
     }
@@ -162,12 +100,12 @@ export class HttpRecipeChatTransport implements RecipeChatTransport {
     try {
       payload = await response.json();
     } catch (error: unknown) {
-      throw new RecipeChatNetworkError('Die Antwort des Backend-Dienstes war unvollständig.', {
+      throw new ConversationNetworkError('Die Antwort des Backend-Dienstes war unvollständig.', {
         cause: error,
       });
     }
     if (!response.ok) {
-      throw new RecipeChatApiError(response.status, readString(payload, 'kind') ?? 'unknown_error');
+      throw new ConversationApiError(response.status, readString(payload, 'kind') ?? 'unknown_error');
     }
     return payload;
   }
@@ -238,71 +176,10 @@ function parseArtifact(value: unknown): ApiArtifact {
   };
 }
 
-export function parseRecipeArtifact(artifact: ApiArtifact): RecipeProposal | null {
-  if (artifact.type !== 'recipe.proposal') return null;
-  if (!isRecord(artifact.payload)) throw invalidResponse();
-  const name = readString(artifact.payload, 'name');
-  if (name === null) throw invalidResponse();
-  return {
-    artifact_id: artifact.artifact_id,
-    turn_id: artifact.turn_id,
-    name,
-    recipe: parsePresentation(artifact.payload['recipe']),
-  };
-}
-
-function parsePresentation(value: unknown): RecipePresentation {
-  if (!isRecord(value) || !Array.isArray(value['ingredients']) || !Array.isArray(value['steps'])) {
-    throw invalidResponse();
-  }
-  return {
-    servings: readNumber(value, 'servings'),
-    preptime: readNullableNumber(value, 'preptime'),
-    kcal: readNullableNumber(value, 'kcal'),
-    carbs: readNullableNumber(value, 'carbs'),
-    protein: readNullableNumber(value, 'protein'),
-    fat: readNullableNumber(value, 'fat'),
-    ingredients: value['ingredients'].map((ingredient) => {
-      if (!isRecord(ingredient)) throw invalidResponse();
-      return {
-        index: readNumber(ingredient, 'index'),
-        amount: readNumber(ingredient, 'amount'),
-        foodstuff: parseFoodstuff(ingredient['foodstuff']),
-      };
-    }),
-    steps: value['steps'].map((step) => {
-      if (!isRecord(step)) throw invalidResponse();
-      const description = readString(step, 'description');
-      if (description === null) throw invalidResponse();
-      return { index: readNumber(step, 'index'), description };
-    }),
-  };
-}
-
-function parseFoodstuff(value: unknown): FoodstuffSummary {
-  if (!isRecord(value)) throw invalidResponse();
-  const name = readString(value, 'name');
-  const brand = readNullableString(value, 'brand');
-  const unit = readString(value, 'unit');
-  const unitVerbose = readString(value, 'unitVerbose');
-  if (name === null || unitVerbose === null || (unit !== 'G' && unit !== 'ML' && unit !== 'PIECE')) {
-    throw invalidResponse();
-  }
-  return {
-    id: readNumber(value, 'id'), name, brand, unit, unitVerbose,
-    kcal: readNullableNumber(value, 'kcal'), carbs: readNullableNumber(value, 'carbs'),
-    protein: readNullableNumber(value, 'protein'), fat: readNullableNumber(value, 'fat'),
-  };
-}
-
 function readNumber(value: Record<string, unknown>, key: string): number {
   const field = value[key];
   if (typeof field !== 'number' || !Number.isFinite(field)) throw invalidResponse();
   return field;
-}
-
-function readNullableNumber(value: Record<string, unknown>, key: string): number | null {
-  return value[key] === null ? null : readNumber(value, key);
 }
 
 function readString(value: unknown, key: string): string | null {
@@ -326,6 +203,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function invalidResponse(): RecipeChatNetworkError {
-  return new RecipeChatNetworkError('Der Backend-Dienst hat eine ungültige Antwort gesendet.');
+function invalidResponse(): ConversationNetworkError {
+  return new ConversationNetworkError('Der Backend-Dienst hat eine ungültige Antwort gesendet.');
 }

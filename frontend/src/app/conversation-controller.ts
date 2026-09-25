@@ -1,36 +1,38 @@
-import type { ChatContent, ChatConversationStatus, ChatTextMessage, JsonValue } from '@roithme0/chat-ui';
+import type { ChatArtifact, ChatContent, ChatConversationStatus, ChatTextMessage } from '@roithme0/chat-ui';
 import {
-  RecipeChatApiError,
-  RecipeChatNetworkError,
+  ConversationApiError,
+  ConversationNetworkError,
+  type ApiArtifact,
   type ApiMessage,
-  type RecipeProposal,
-  type RecipeChatTransport,
+  type ConversationTransport,
   type SessionSnapshot,
-  parseRecipeArtifact,
-} from './recipe-chat-api';
+} from './conversation-api';
 
-export interface RecipeChatViewState {
+export type ArtifactMapper = (artifact: ApiArtifact) => ChatArtifact | null;
+
+export interface ConversationViewState {
   readonly content: readonly ChatContent[];
   readonly composerDisabled: boolean;
   readonly status: ChatConversationStatus | null;
 }
 
-const INITIAL_STATE: RecipeChatViewState = {
+const INITIAL_STATE: ConversationViewState = {
   content: [],
   composerDisabled: true,
   status: loading('Unterhaltung wird gestartet …', 'conversation'),
 };
 
-export class RecipeChatController {
+export class ConversationController {
   private sessionId: string | null = null;
   private stateValue = INITIAL_STATE;
 
   constructor(
-    private readonly transport: RecipeChatTransport,
-    private readonly publish: (state: RecipeChatViewState) => void,
+    private readonly transport: ConversationTransport,
+    private readonly mapArtifact: ArtifactMapper,
+    private readonly publish: (state: ConversationViewState) => void,
   ) {}
 
-  get state(): RecipeChatViewState {
+  get state(): ConversationViewState {
     return this.stateValue;
   }
 
@@ -72,7 +74,7 @@ export class RecipeChatController {
       this.acceptMessage(accepted, acknowledge);
       await this.generate(sessionId);
     } catch (error: unknown) {
-      if (error instanceof RecipeChatNetworkError) {
+      if (error instanceof ConversationNetworkError) {
         await this.reconcileAppend(sessionId, previousContent, text, acknowledge);
         return;
       }
@@ -111,14 +113,14 @@ export class RecipeChatController {
       this.setState({
         content: [
           ...this.stateValue.content,
-          ...result.artifacts.map(parseRecipeArtifact).filter(isProposal).map(presentProposal),
+          ...presentArtifacts(result.artifacts, this.mapArtifact),
           presentMessage(result.message, textContent(this.stateValue.content).length),
         ],
         composerDisabled: false,
         status: null,
       });
     } catch (error: unknown) {
-      if (error instanceof RecipeChatNetworkError || isKind(error, 'busy')) {
+      if (error instanceof ConversationNetworkError || isKind(error, 'busy')) {
         await this.reconcileTurn(sessionId);
         return;
       }
@@ -142,7 +144,7 @@ export class RecipeChatController {
         appended.text === text
       ) {
         this.setState({
-          content: presentSnapshot(snapshot),
+          content: presentSnapshot(snapshot, this.mapArtifact),
           composerDisabled: true,
           status: loading('Antwort wird erstellt …', 'assistant'),
         });
@@ -151,7 +153,7 @@ export class RecipeChatController {
         return;
       }
       this.setState({
-        content: presentSnapshot(snapshot),
+        content: presentSnapshot(snapshot, this.mapArtifact),
         composerDisabled: false,
         status: failure(
           'Die Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.',
@@ -169,15 +171,15 @@ export class RecipeChatController {
       this.applyTurnSnapshot(snapshot);
     } catch (error: unknown) {
       this.handleTurnFailure(
-        error instanceof RecipeChatNetworkError || isKind(error, 'agent_unavailable')
+        error instanceof ConversationNetworkError || isKind(error, 'agent_unavailable')
           ? error
-          : new RecipeChatNetworkError('Abgleich fehlgeschlagen.', { cause: error }),
+          : new ConversationNetworkError('Abgleich fehlgeschlagen.', { cause: error }),
       );
     }
   }
 
   private applyTurnSnapshot(snapshot: SessionSnapshot): void {
-    const content = presentSnapshot(snapshot);
+    const content = presentSnapshot(snapshot, this.mapArtifact);
     const last = snapshot.messages.at(-1);
     if (last?.role === 'assistant') {
       this.setState({ content, composerDisabled: false, status: null });
@@ -276,7 +278,7 @@ export class RecipeChatController {
     });
   }
 
-  private setState(state: RecipeChatViewState): void {
+  private setState(state: ConversationViewState): void {
     this.stateValue = state;
     this.publish(state);
   }
@@ -295,35 +297,19 @@ function presentMessage(message: ApiMessage, index: number): ChatTextMessage {
   };
 }
 
-function presentProposal(proposal: RecipeProposal): ChatContent {
-  return {
-    kind: 'artifact', id: proposal.artifact_id, type: 'recipe-proposal', headline: proposal.name,
-    payload: {
-      servings: proposal.recipe.servings, preptime: proposal.recipe.preptime,
-      kcal: proposal.recipe.kcal, carbs: proposal.recipe.carbs, protein: proposal.recipe.protein,
-      fat: proposal.recipe.fat,
-      ingredients: proposal.recipe.ingredients.map((ingredient) => ({
-        index: ingredient.index, amount: ingredient.amount,
-        foodstuff: { ...ingredient.foodstuff },
-      })),
-      steps: proposal.recipe.steps.map((step) => ({ ...step })),
-    } satisfies JsonValue,
-  };
-}
-
-function presentSnapshot(snapshot: SessionSnapshot): readonly ChatContent[] {
+function presentSnapshot(snapshot: SessionSnapshot, mapArtifact: ArtifactMapper): readonly ChatContent[] {
   if (snapshot.artifacts.length === 0) return presentMessages(snapshot.messages);
-  const proposals = snapshot.artifacts.map(parseRecipeArtifact).filter(isProposal);
   return snapshot.messages.flatMap((message, index) => [
-    ...proposals
-      .filter((proposal) => proposal.turn_id === message.turn_id)
-      .map(presentProposal),
+    ...presentArtifacts(snapshot.artifacts.filter((artifact) => artifact.turn_id === message.turn_id), mapArtifact),
     presentMessage(message, index),
   ]);
 }
 
-function isProposal(value: RecipeProposal | null): value is RecipeProposal {
-  return value !== null;
+function presentArtifacts(artifacts: readonly ApiArtifact[], mapArtifact: ArtifactMapper): readonly ChatArtifact[] {
+  return [...artifacts]
+    .sort((left, right) => left.order - right.order)
+    .map(mapArtifact)
+    .filter((artifact): artifact is ChatArtifact => artifact !== null);
 }
 
 function isTextMessage(content: ChatContent): content is ChatTextMessage {
@@ -360,7 +346,7 @@ function failure(
 }
 
 function isKind(error: unknown, kind: string): boolean {
-  return error instanceof RecipeChatApiError && error.kind === kind;
+  return error instanceof ConversationApiError && error.kind === kind;
 }
 
 function isTerminal(error: unknown): boolean {
@@ -369,5 +355,5 @@ function isTerminal(error: unknown): boolean {
 
 function messageFor(error: unknown, fallback: string): string {
   if (isKind(error, 'agent_unavailable')) return 'Der KI-Agent ist derzeit nicht verfügbar.';
-  return error instanceof RecipeChatNetworkError ? error.message : fallback;
+  return error instanceof ConversationNetworkError ? error.message : fallback;
 }

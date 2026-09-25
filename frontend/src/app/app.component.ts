@@ -1,9 +1,11 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui';
-import { HttpRecipeChatTransport } from './recipe-chat-api';
-import { RecipeChatController, type RecipeChatViewState } from './recipe-chat-controller';
+import { HttpConversationTransport } from './conversation-api';
+import { ConversationController, type ConversationViewState } from './conversation-controller';
+import { RECIPE_SESSION_FIXTURE } from './recipe-chat-fixture';
+import { presentRecipeArtifact } from './recipe-chat-domain';
 
-const INITIAL_STATE: RecipeChatViewState = {
+const INITIAL_STATE: ConversationViewState = {
   content: [],
   composerDisabled: true,
   status: {
@@ -20,9 +22,11 @@ const INITIAL_STATE: RecipeChatViewState = {
   styleUrl: './app.component.scss',
 })
 export class App implements OnInit {
-  protected readonly chat = signal<RecipeChatViewState>(INITIAL_STATE);
-  private readonly controller = new RecipeChatController(new HttpRecipeChatTransport(), (state) =>
-    this.chat.set(state),
+  protected readonly chat = signal<ConversationViewState>(INITIAL_STATE);
+  private readonly controller = new ConversationController(
+    new HttpConversationTransport('kochwiki', RECIPE_SESSION_FIXTURE),
+    presentRecipeArtifact,
+    (state) => this.chat.set(state),
   );
 
   ngOnInit(): void {

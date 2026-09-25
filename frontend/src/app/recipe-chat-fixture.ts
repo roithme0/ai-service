@@ -1,4 +1,4 @@
-import type { RecipeSessionRequest } from './recipe-chat-api';
+import type { RecipeSessionRequest } from './recipe-chat-domain';
 
 export const RECIPE_SESSION_FIXTURE: RecipeSessionRequest = {
   source: {
