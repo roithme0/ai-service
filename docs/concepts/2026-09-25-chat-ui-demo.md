@@ -28,6 +28,10 @@ Session and turn lifecycle belong to the shared conversation foundation, includi
 
 Domain capabilities retain responsibility for their inputs, validation, and domain operations. They do not supply capability-specific session or turn lifecycle hooks. Kochwiki follows the shared lifecycle rather than maintaining its own interpretation of turn completion and failure.
 
+A consistent typed conversation-store interface is a completion requirement of this concept. All configurations use the same conversation operations and result structures, parameterized by their context and artifact payload types. Domain operations may extend or work alongside this interface, but must not replace common lifecycle methods with domain-specific signatures or result structures. Recipe-specific HTTP representations are produced at the HTTP boundary.
+
+Different sessions must be able to execute turns concurrently. The shared foundation prevents overlapping turns within one session through its turn reservation. Short locks may protect store state, but no store-wide or agent-wide lock is held throughout asynchronous turn execution.
+
 ### Staged Artifacts
 
 Tools can produce artifacts staged against the active turn. A recipe tool validates and resolves a proposal before staging it; the shared foundation handles its lifecycle without interpreting its recipe payload. Staged artifacts remain available to subsequent tool calls within that turn when needed.
@@ -43,6 +47,12 @@ Configuration supplies available tools, instructions, and initial context. A sep
 The demo script determines tool calls and responses independently of submitted message text. It does not emulate an LLM provider. The configuration describes the available capabilities and context, while the execution strategy owns action selection.
 
 Hosts select a named, server-defined configuration, such as `kochwiki` or `demo`, through the shared session entry point. They do not supply individual tools or assemble arbitrary capability sets. The server resolves the selected option to its tools, instructions, context requirements, and execution strategy. A host supplies the required contextual input, such as a recipe snapshot, which is validated for that configuration. Execution strategy remains a separate responsibility internally even though the named option determines which strategy is used.
+
+Application wiring creates one configured agent service instance per server-defined configuration within each process. The recipe improvement and UI demo services are configured instances of the shared service implementation. Each binds its typed store, execution strategy, permitted tools, input validation, and settings such as artifact limits and model selection where applicable. Each service handles multiple sessions; creating a session does not create another agent service. Adding an ordinary configuration must not require adding configuration-specific branches to the shared service.
+
+Each configuration uses a typed instance of the shared conversation store, retaining one lifecycle implementation without forcing unrelated context and artifact payloads into a heterogeneous store. Configuration-specific input validation runs before a session is allocated. The store owns conversation state and lifecycle; the bound execution strategy runs turns. Session and turn execution state, including tool bindings for the active turn, remains local to that session or invocation rather than mutable state on the shared agent service.
+
+Domain entry points receive their configured agent service through server wiring. A generic HTTP entry point may use a registry to locate an already configured service, but configuration routing remains outside that service. Whether the HTTP API identifies the configuration explicitly or resolves it from a session ID remains an API design question. Execution dependencies belong to the configured service or its bound strategy; callers do not supply model generators or domain resolvers with every turn. Initializing and using the demo must remain independent of OpenAI credentials and Kochwiki availability.
 
 The selected configuration stays fixed for the session's lifetime. Conversation and tool results can evolve its context, but switching configurations requires a new session.
 
@@ -86,8 +96,8 @@ The existing recipe-improvement concept remains the source for the recipe capabi
 
 ## Open Questions
 
-- What minimal session-creation contract expresses a named configuration and its required, validated contextual input?
 - What generic session API and artifact persistence shape are sufficient for the demo while remaining useful to later non-demo consumers?
+- How does the generic HTTP API locate a configured agent service for subsequent session requests: through an explicit configuration identifier or a session-to-service lookup?
 
 ## Risks
 
