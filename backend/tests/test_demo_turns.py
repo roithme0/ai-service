@@ -45,9 +45,8 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
     assert artifact.created_at.tzinfo is not None
     assert artifact.order == 1
     assert artifact.turn_id == second.turn_id
-    assert artifact.payload.model_dump() == {
-        "type": "demo.greeting", "payload": {"message": "Hello, World!"},
-    }
+    assert artifact.type == "demo.greeting"
+    assert artifact.payload.model_dump() == {"message": "Hello, World!"}
     read = store.read(first_session.session_id)
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == (artifact,)

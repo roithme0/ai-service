@@ -8,10 +8,24 @@ import pytest
 
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.recipe_improvement.session_input import RecipeImprovementSessionInput, RecipeImprovementSessionInputSuccess, validate_recipe_improvement_session_input
-from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionLookupSuccess, RecipeImprovementSessionStore
+from app.recipe_improvement.session_lifecycle import create_recipe_session, new_recipe_session_store
+from app.recipe_improvement.proposals import RecipeProposal, RecipeProposalPayload, proposal_from_artifact
+from app.sessions.conversation import ConversationReadActive, ConversationTurnResult, StagedArtifact
 from app.recipe_improvement.turn_service import generate_recipe_turn as _generate_recipe_turn
 from app.recipe_improvement.resolver import RecipePresentation, RecipeResolutionError
 from app.recipe_improvement.tools.register_recipe_proposal import REGISTER_TOOL_SCHEMA
+
+
+def proposals(
+    value: ConversationTurnResult[RecipeProposalPayload]
+    | ConversationReadActive[RecipeImprovementSessionInput, RecipeProposalPayload],
+) -> tuple[RecipeProposal, ...]:
+    artifacts: tuple[StagedArtifact[RecipeProposalPayload], ...]
+    if isinstance(value, ConversationReadActive):
+        artifacts = value.snapshot.artifacts
+    else:
+        artifacts = value.artifacts
+    return tuple(proposal_from_artifact(artifact) for artifact in artifacts)
 
 
 def session_input() -> RecipeImprovementSessionInput:
@@ -95,8 +109,8 @@ def test_registration_tool_schema_requests_complete_recipe_with_string_amounts()
 
 
 def test_multiple_proposals_can_chain_and_remain_typed_in_session() -> None:
-    store = RecipeImprovementSessionStore(clock=lambda: datetime(2026, 9, 13, tzinfo=UTC))
-    created = store.create(session_input())
+    store = new_recipe_session_store(clock=lambda: datetime(2026, 9, 13, tzinfo=UTC))
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Give me two options")
 
     def second(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
@@ -105,22 +119,22 @@ def test_multiple_proposals_can_chain_and_remain_typed_in_session() -> None:
 
     generator = ScriptedGenerator([call("first", {"kind": "source"}, candidate("First")), second, final()])
     outcome = asyncio.run(generate_recipe_turn(store, created.session_id, generator))
-    read = store.lookup(created.session_id)
+    read = store.read(created.session_id)
 
     assert outcome.kind == "completed"
-    assert len(outcome.proposals) == 2
-    assert [proposal.order for proposal in outcome.proposals] == [1, 2]
-    assert outcome.proposals[1].base.proposal_id == outcome.proposals[0].proposal_id
-    assert all(proposal.turn_id == outcome.turn_id for proposal in outcome.proposals)
-    assert outcome.proposals[0].recipe.ingredients[0].amount == 1.25
-    assert isinstance(read, RecipeImprovementSessionLookupSuccess)
-    assert read.session.proposals == outcome.proposals
-    assert len(read.session.messages) == 2
+    assert len(proposals(outcome)) == 2
+    assert [proposal.order for proposal in proposals(outcome)] == [1, 2]
+    assert proposals(outcome)[1].base.proposal_id == proposals(outcome)[0].proposal_id
+    assert all(proposal.turn_id == outcome.turn_id for proposal in proposals(outcome))
+    assert proposals(outcome)[0].recipe.ingredients[0].amount == 1.25
+    assert isinstance(read, ConversationReadActive)
+    assert proposals(read) == proposals(outcome)
+    assert len(read.snapshot.session.messages) == 2
 
 
 def test_later_turn_receives_full_previous_proposals_and_final_text_instruction() -> None:
-    store = RecipeImprovementSessionStore()
-    created = store.create(session_input())
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Suggest an option")
     first = asyncio.run(
         generate_recipe_turn(
@@ -135,7 +149,7 @@ def test_later_turn_receives_full_previous_proposals_and_final_text_instruction(
 
     def inspect_context(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
         context = json.loads(request.input_items[0]["content"].split("\n", 1)[1])
-        assert context["proposals"] == [first.proposals[0].model_dump(mode="json")]
+        assert context["proposals"] == [proposals(first)[0].model_dump(mode="json")]
         assert context["proposals"][0]["name"] == "First"
         assert "not persisted or visible to the user" in request.instructions
         assert "final text response" in request.instructions
@@ -148,8 +162,8 @@ def test_later_turn_receives_full_previous_proposals_and_final_text_instruction(
 
 
 def test_rejected_call_can_be_corrected_and_failed_final_drops_proposals() -> None:
-    store = RecipeImprovementSessionStore()
-    created = store.create(session_input())
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Improve it")
 
     def correction(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
@@ -167,23 +181,23 @@ def test_rejected_call_can_be_corrected_and_failed_final_drops_proposals() -> No
     assert first.kind == "generation_failed"
     assert retry == first
     assert len(generator.requests) == 3
-    assert first.proposals == ()
-    read = store.lookup(created.session_id)
-    assert isinstance(read, RecipeImprovementSessionLookupSuccess)
-    assert read.session.terminal_turn_id == first.turn_id
-    assert read.session.terminal_turn_kind == "generation_failed"
-    assert read.session.proposals == ()
-    assert len(read.session.messages) == 1
+    assert proposals(first) == ()
+    read = store.read(created.session_id)
+    assert isinstance(read, ConversationReadActive)
+    assert read.snapshot.terminal_turn_id == first.turn_id
+    assert read.snapshot.terminal_turn_kind == "generation_failed"
+    assert proposals(read) == ()
+    assert len(read.snapshot.session.messages) == 1
     assert store.append_user_message(created.session_id, " ").kind == "invalid_message"
-    unchanged = store.lookup(created.session_id)
-    assert isinstance(unchanged, RecipeImprovementSessionLookupSuccess)
-    assert unchanged.session.terminal_turn_id == first.turn_id
+    unchanged = store.read(created.session_id)
+    assert isinstance(unchanged, ConversationReadActive)
+    assert unchanged.snapshot.terminal_turn_id == first.turn_id
     assert store.append_user_message(created.session_id, "New question").kind == "accepted"
-    pending = store.lookup(created.session_id)
-    assert isinstance(pending, RecipeImprovementSessionLookupSuccess)
-    assert pending.session.terminal_turn_id is None
-    assert pending.session.terminal_turn_kind is None
-    assert pending.session.proposals == ()
+    pending = store.read(created.session_id)
+    assert isinstance(pending, ConversationReadActive)
+    assert pending.snapshot.terminal_turn_id is None
+    assert pending.snapshot.terminal_turn_kind is None
+    assert proposals(pending) == ()
     def inspect_recovered_context(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
         context = json.loads(request.input_items[0]["content"].split("\n", 1)[1])
         assert "proposals" not in context
@@ -197,8 +211,8 @@ def test_rejected_call_can_be_corrected_and_failed_final_drops_proposals() -> No
 
 
 def test_invalid_base_returns_structured_error_before_correction() -> None:
-    store = RecipeImprovementSessionStore()
-    created = store.create(session_input())
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Improve it")
 
     def correction(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
@@ -214,24 +228,24 @@ def test_invalid_base_returns_structured_error_before_correction() -> None:
     ])
     outcome = asyncio.run(generate_recipe_turn(store, created.session_id, generator))
     assert outcome.kind == "completed"
-    assert len(outcome.proposals) == 1
-    assert outcome.proposals[0].order == 1
+    assert len(proposals(outcome)) == 1
+    assert proposals(outcome)[0].order == 1
 
 
 def test_success_cap_blocks_fourth_registration() -> None:
-    store = RecipeImprovementSessionStore()
-    created = store.create(session_input())
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Four options")
     generator = ScriptedGenerator([call(str(i), {"kind": "source"}, candidate(str(i))) for i in range(4)] + [final()])
     outcome = asyncio.run(generate_recipe_turn(store, created.session_id, generator))
     assert outcome.kind == "completed"
-    assert len(outcome.proposals) == 3
+    assert len(proposals(outcome)) == 3
     assert json.loads(generator.requests[-1].input_items[-1]["output"])["kind"] == "limit_reached"
 
 
 def test_six_attempt_cap_blocks_seventh_registration() -> None:
-    store = RecipeImprovementSessionStore()
-    created = store.create(session_input())
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Try")
     invalid = candidate() | {"ingredients": [{"index": 1, "amount": "1", "foodstuff_reference": 999}]}
     generator = ScriptedGenerator([
@@ -240,18 +254,18 @@ def test_six_attempt_cap_blocks_seventh_registration() -> None:
     ] + [final()])
     outcome = asyncio.run(generate_recipe_turn(store, created.session_id, generator))
     assert outcome.kind == "completed"
-    assert outcome.proposals == ()
+    assert proposals(outcome) == ()
     assert json.loads(generator.requests[-1].input_items[-1]["output"])["kind"] == "limit_reached"
 
 
 def test_unknown_tool_is_rejected_without_registration() -> None:
-    store = RecipeImprovementSessionStore()
-    created = store.create(session_input())
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Try")
     generator = ScriptedGenerator([call("bad", {"kind": "source"}, candidate(), name="unknown"), final()])
     outcome = asyncio.run(generate_recipe_turn(store, created.session_id, generator))
     assert outcome.kind == "completed"
-    assert outcome.proposals == ()
+    assert proposals(outcome) == ()
     assert json.loads(generator.requests[-1].input_items[-1]["output"])["reason"] == "unknown_tool"
 
 
@@ -265,8 +279,8 @@ def test_resolver_failure_is_structured_and_does_not_store_proposal(
         async def resolve(self, value: object) -> RecipePresentation:
             raise RecipeResolutionError(retryable=retryable)
 
-    store = RecipeImprovementSessionStore()
-    created = store.create(session_input())
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Improve it")
 
     def inspect(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
@@ -283,16 +297,16 @@ def test_resolver_failure_is_structured_and_does_not_store_proposal(
         ))
 
     assert outcome.kind == "completed"
-    assert outcome.proposals == ()
+    assert proposals(outcome) == ()
     assert "foodstuff_reference': 1" in caplog.text
     assert "stage=resolver" in caplog.text
     assert f"'reason': '{reason}'" in caplog.text
 
 
 def test_active_turn_is_busy_but_independent_session_can_complete() -> None:
-    store = RecipeImprovementSessionStore()
-    first = store.create(session_input())
-    second = store.create(session_input())
+    store = new_recipe_session_store()
+    first = create_recipe_session(store, session_input())
+    second = create_recipe_session(store, session_input())
     store.append_user_message(first.session_id, "First")
     store.append_user_message(second.session_id, "Second")
 
@@ -320,8 +334,8 @@ def test_active_turn_is_busy_but_independent_session_can_complete() -> None:
 
 
 def test_provider_response_budget_drops_accepted_proposals() -> None:
-    store = RecipeImprovementSessionStore()
-    created = store.create(session_input())
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Try")
     invalid = candidate() | {"ingredients": [{"index": 1, "amount": "1", "foodstuff_reference": 999}]}
     generator = ScriptedGenerator([call("accepted", {"kind": "source"}, candidate())] + [
@@ -329,16 +343,16 @@ def test_provider_response_budget_drops_accepted_proposals() -> None:
     ])
     result = asyncio.run(generate_recipe_turn(store, created.session_id, generator))
     assert result.kind == "generation_failed"
-    assert result.proposals == ()
-    read = store.lookup(created.session_id)
-    assert isinstance(read, RecipeImprovementSessionLookupSuccess)
-    assert read.session.proposals == ()
+    assert proposals(result) == ()
+    read = store.read(created.session_id)
+    assert isinstance(read, ConversationReadActive)
+    assert proposals(read) == ()
     assert len(generator.requests) == 8
 
 
 def test_provider_exception_after_registration_drops_proposal(caplog: pytest.LogCaptureFixture) -> None:
-    store = RecipeImprovementSessionStore()
-    created = store.create(session_input())
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Suggest an option")
 
     def fail_after_registration(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
@@ -348,19 +362,47 @@ def test_provider_exception_after_registration_drops_proposal(caplog: pytest.Log
         call("accepted", {"kind": "source"}, candidate()), fail_after_registration,
     ])
     result = asyncio.run(generate_recipe_turn(store, created.session_id, generator))
-    read = store.lookup(created.session_id)
+    read = store.read(created.session_id)
 
     assert result.kind == "generation_failed"
-    assert result.proposals == ()
-    assert isinstance(read, RecipeImprovementSessionLookupSuccess)
-    assert read.session.proposals == ()
+    assert proposals(result) == ()
+    assert isinstance(read, ConversationReadActive)
+    assert proposals(read) == ()
     assert f"session_id={created.session_id}, turn_id={result.turn_id}" in caplog.text
     assert "provider failed" in caplog.text
 
 
+def test_unexpected_resolver_failure_discards_staged_proposals() -> None:
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
+    store.append_user_message(created.session_id, "Suggest options")
+    generator = ScriptedGenerator([
+        call("accepted", {"kind": "source"}, candidate("First")),
+        call("failed", {"kind": "source"}, candidate("Second")),
+    ])
+
+    class FirstThenFail:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def resolve(self, value: object) -> RecipePresentation:
+            self.calls += 1
+            if self.calls == 2:
+                raise RuntimeError("resolver crashed")
+            return await FakeResolver().resolve(value)
+
+    result = asyncio.run(_generate_recipe_turn(store, created.session_id, generator, FirstThenFail()))
+    read = store.read(created.session_id)
+    assert result.kind == "generation_failed"
+    assert result.artifacts == ()
+    assert isinstance(read, ConversationReadActive)
+    assert read.snapshot.artifacts == ()
+    assert read.snapshot.terminal_turn_kind == "generation_failed"
+
+
 def test_cancellation_after_registration_releases_turn_and_drops_proposal() -> None:
-    store = RecipeImprovementSessionStore()
-    created = store.create(session_input())
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Suggest an option")
     entered = asyncio.Event()
 
@@ -384,10 +426,10 @@ def test_cancellation_after_registration_releases_turn_and_drops_proposal() -> N
             await task
 
     asyncio.run(run())
-    read = store.lookup(created.session_id)
-    assert isinstance(read, RecipeImprovementSessionLookupSuccess)
-    assert read.session.proposals == ()
-    assert read.session.terminal_turn_kind == "generation_failed"
+    read = store.read(created.session_id)
+    assert isinstance(read, ConversationReadActive)
+    assert proposals(read) == ()
+    assert read.snapshot.terminal_turn_kind == "generation_failed"
     assert store.append_user_message(created.session_id, "Try again").kind == "accepted"
 
 
@@ -399,8 +441,8 @@ def test_expiry_after_registration_drops_proposal_and_wins_over_busy() -> None:
             return self.value
 
     clock = Clock()
-    store = RecipeImprovementSessionStore(clock=clock.now)
-    created = store.create(session_input())
+    store = new_recipe_session_store(clock=clock.now)
+    created = create_recipe_session(store, session_input())
     store.append_user_message(created.session_id, "Improve it")
 
     def expire(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
@@ -411,4 +453,4 @@ def test_expiry_after_registration_drops_proposal_and_wins_over_busy() -> None:
     generator = ScriptedGenerator([call("accepted", {"kind": "source"}, candidate()), expire])
     result = asyncio.run(generate_recipe_turn(store, created.session_id, generator))
     assert result.kind in ("expired", "unknown")
-    assert result.proposals == ()
+    assert proposals(result) == ()

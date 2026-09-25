@@ -7,9 +7,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.recipe_improvement.recipe import RecipeProposalCandidate
 from app.recipe_improvement.resolver import RecipePresentation
 from app.recipe_improvement.validation import ValidationIssue
+from app.sessions.conversation import StagedArtifact
 
 
 MAX_PROPOSALS_PER_SESSION = 20
@@ -69,13 +69,6 @@ class ProposalRejected(BaseModel):
     retryable: bool = False
 
 
-class ProposalCandidateAccepted(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: Literal["candidate_accepted"] = "candidate_accepted"
-    candidate: RecipeProposalCandidate
-
-
 class ProposalSessionUnavailable(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -83,3 +76,15 @@ class ProposalSessionUnavailable(BaseModel):
 
 
 ProposalRegistrationOutcome = ProposalRegistered | ProposalRejected | ProposalSessionUnavailable
+
+
+def proposal_from_artifact(artifact: StagedArtifact[RecipeProposalPayload]) -> RecipeProposal:
+    return RecipeProposal(
+        proposal_id=artifact.artifact_id,
+        created_at=artifact.created_at,
+        order=artifact.order,
+        turn_id=artifact.turn_id,
+        base=artifact.payload.base,
+        name=artifact.payload.name,
+        recipe=artifact.payload.recipe,
+    )

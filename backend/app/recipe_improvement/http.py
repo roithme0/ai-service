@@ -22,12 +22,11 @@ from app.recipe_improvement.session_input import (
     validate_recipe_improvement_session_input,
 )
 from app.recipe_improvement.session_lifecycle import (
-    RecipeImprovementSessionCreation,
-    RecipeImprovementSessionLookupExpired,
-    RecipeImprovementSessionLookupSuccess,
-    RecipeMessageBusy,
     RecipeImprovementSessionStore,
+    create_recipe_session,
+    new_recipe_session_store,
 )
+from app.sessions.conversation import ConversationMessageBusy, ConversationReadActive
 from app.recipe_improvement.validation import ValidationIssue
 from app.recipe_improvement.turn_service import generate_recipe_turn
 from app.recipe_improvement.resolver import (
@@ -41,8 +40,10 @@ from app.sessions.text_sessions import (
     TextSessionAppendExpired,
     TextSessionAppendInvalidMessage,
     TextSessionAppendLimitReached,
+    TextSessionCreation,
+    TextSessionReadExpired,
 )
-from app.recipe_improvement.proposals import RecipeProposal
+from app.recipe_improvement.proposals import RecipeProposal, proposal_from_artifact
 
 
 router = APIRouter(prefix="/api/v1/recipe-improvement/sessions", tags=["recipe-improvement"])
@@ -136,20 +137,20 @@ def _configured_agentic_generator(
     return OpenAIAgenticGenerator(model=model, client=AsyncOpenAI(api_key=api_key, max_retries=0))
 
 
-recipe_improvement_session_store = RecipeImprovementSessionStore()
+recipe_improvement_session_store = new_recipe_session_store()
 
 
-@router.post("", response_model=RecipeImprovementSessionCreation, status_code=201)
+@router.post("", response_model=TextSessionCreation, status_code=201)
 def create_recipe_improvement_session(
     request: RecipeImprovementSessionCreateRequest,
     store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
-) -> RecipeImprovementSessionCreation | JSONResponse:
+) -> TextSessionCreation | JSONResponse:
     outcome = validate_recipe_improvement_session_input(
         _decode_json_decimal_amounts(request.source), request.foodstuffs
     )
     if isinstance(outcome, RecipeImprovementSessionInputFailure):
         return _invalid_input_response(outcome)
-    return store.create(outcome.session_input)
+    return create_recipe_session(store, outcome.session_input)
 
 
 @router.get("/{session_id}", response_model=RecipeImprovementSessionReadResponse)
@@ -157,19 +158,20 @@ def get_recipe_improvement_session(
     session_id: str,
     store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
 ) -> RecipeImprovementSessionReadResponse | JSONResponse:
-    outcome = store.lookup(session_id)
-    if isinstance(outcome, RecipeImprovementSessionLookupSuccess):
+    outcome = store.read(session_id)
+    if isinstance(outcome, ConversationReadActive):
+        snapshot = outcome.snapshot
         return RecipeImprovementSessionReadResponse(
-            session_id=outcome.session.session_id,
-            expires_at=outcome.session.expires_at,
-            source=outcome.session.session_input.source,
-            foodstuffs=outcome.session.session_input.foodstuffs,
-            messages=tuple(_message_response(message) for message in outcome.session.messages),
-            proposals=outcome.session.proposals,
-            terminal_turn_id=outcome.session.terminal_turn_id,
-            terminal_turn_kind=outcome.session.terminal_turn_kind,
+            session_id=snapshot.session.session_id,
+            expires_at=snapshot.session.expires_at,
+            source=snapshot.session.payload.source,
+            foodstuffs=snapshot.session.payload.foodstuffs,
+            messages=tuple(_message_response(message) for message in snapshot.session.messages),
+            proposals=tuple(proposal_from_artifact(a) for a in snapshot.artifacts),
+            terminal_turn_id=snapshot.terminal_turn_id,
+            terminal_turn_kind=snapshot.terminal_turn_kind,
         )
-    if isinstance(outcome, RecipeImprovementSessionLookupExpired):
+    if isinstance(outcome, TextSessionReadExpired):
         return JSONResponse(status_code=410, content={"kind": "expired"})
     return JSONResponse(status_code=404, content={"kind": "unknown"})
 
@@ -180,12 +182,13 @@ def get_recipe_improvement_proposal(
     proposal_id: str,
     store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
 ) -> RecipeProposal | JSONResponse:
-    outcome = store.lookup(session_id)
-    if isinstance(outcome, RecipeImprovementSessionLookupExpired):
+    outcome = store.read(session_id)
+    if isinstance(outcome, TextSessionReadExpired):
         return JSONResponse(status_code=410, content={"kind": "expired"})
-    if not isinstance(outcome, RecipeImprovementSessionLookupSuccess):
+    if not isinstance(outcome, ConversationReadActive):
         return JSONResponse(status_code=404, content={"kind": "unknown"})
-    for proposal in outcome.session.proposals:
+    for artifact in outcome.snapshot.artifacts:
+        proposal = proposal_from_artifact(artifact)
         if proposal.proposal_id == proposal_id:
             return proposal
     return JSONResponse(status_code=404, content={"kind": "unknown_proposal"})
@@ -210,7 +213,7 @@ def append_recipe_improvement_user_message(
         return JSONResponse(status_code=409, content={"kind": "limit_reached"})
     if isinstance(outcome, TextSessionAppendInvalidMessage):
         return JSONResponse(status_code=422, content={"kind": "invalid_message"})
-    if isinstance(outcome, RecipeMessageBusy):
+    if isinstance(outcome, ConversationMessageBusy):
         return JSONResponse(status_code=409, content={"kind": "busy"})
     return JSONResponse(status_code=404, content={"kind": "unknown"})
 
@@ -236,7 +239,7 @@ async def generate_recipe_improvement_turn(
             message=RecipeAssistantMessageResponse(
                 text=outcome.text, turn_id=outcome.turn_id
             ),
-            proposals=outcome.proposals,
+            proposals=tuple(proposal_from_artifact(a) for a in outcome.artifacts),
         )
     status_code = {
         "unknown": 404,

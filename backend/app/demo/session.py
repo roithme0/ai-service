@@ -28,14 +28,7 @@ class GreetingPayload(BaseModel):
     message: str
 
 
-class DemoArtifact(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    type: Literal["demo.greeting"] = "demo.greeting"
-    payload: GreetingPayload
-
-
-DemoSessionStore: TypeAlias = ConversationSessionStore[DemoContext, DemoArtifact]
+DemoSessionStore: TypeAlias = ConversationSessionStore[DemoContext, GreetingPayload]
 
 
 def _utc_now() -> datetime:

@@ -33,6 +33,7 @@ TurnKind = Literal["completed", "generation_failed", "unknown", "expired", "not_
 @dataclass(frozen=True)
 class StagedArtifact(Generic[ArtifactT]):
     artifact_id: str
+    type: str
     created_at: datetime
     order: int
     turn_id: str
@@ -202,19 +203,23 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             )
 
     def stage_artifact(
-        self, session_id: str, turn_id: str, payload: ArtifactT, required_artifact_id: str | None = None
+        self, session_id: str, turn_id: str, artifact_type: str, payload: ArtifactT,
+        referenced_artifact_id: str | None = None,
     ) -> ConversationStageAccepted[ArtifactT] | ConversationStageRejected:
         with self._lock:
             view = self.inspect_turn(session_id, turn_id)
             if isinstance(view, ConversationStageRejected):
                 return view
             artifacts = self._artifacts.get(session_id, ())
-            if required_artifact_id is not None and not any(a.artifact_id == required_artifact_id for a in artifacts):
+            if referenced_artifact_id is not None and not any(
+                a.artifact_id == referenced_artifact_id for a in artifacts
+            ):
                 return ConversationStageRejected("missing_reference")
             if len(artifacts) >= view.max_artifacts:
                 return ConversationStageRejected("limit_reached")
             artifact = StagedArtifact(
                 artifact_id=str(uuid4()),
+                type=artifact_type,
                 created_at=self._clock().astimezone(UTC),
                 order=len(artifacts) + 1,
                 turn_id=turn_id,

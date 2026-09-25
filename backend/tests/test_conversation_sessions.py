@@ -55,9 +55,10 @@ def test_staged_artifact_is_turn_visible_then_published_with_shared_identity() -
     session_id = create(conversation)
     reserved = reserve(conversation, session_id)
 
-    staged = conversation.stage_artifact(session_id, reserved.turn_id, Artifact("Hello"))
+    staged = conversation.stage_artifact(session_id, reserved.turn_id, "example", Artifact("Hello"))
     assert isinstance(staged, ConversationStageAccepted)
     assert staged.artifact.created_at == clock.value
+    assert staged.artifact.type == "example"
     assert staged.artifact.order == 1
     assert staged.artifact.turn_id == reserved.turn_id
     view = conversation.inspect_turn(session_id, reserved.turn_id)
@@ -86,8 +87,8 @@ def test_limit_counts_staged_artifacts_and_failure_releases_capacity(limit: int)
     session_id = create(conversation, limit)
     reserved = reserve(conversation, session_id)
     for _ in range(limit):
-        assert isinstance(conversation.stage_artifact(session_id, reserved.turn_id, Artifact("pending")), ConversationStageAccepted)
-    assert conversation.stage_artifact(session_id, reserved.turn_id, Artifact("extra")) == ConversationStageRejected("limit_reached")
+        assert isinstance(conversation.stage_artifact(session_id, reserved.turn_id, "example", Artifact("pending")), ConversationStageAccepted)
+    assert conversation.stage_artifact(session_id, reserved.turn_id, "example", Artifact("extra")) == ConversationStageRejected("limit_reached")
     failed = conversation.fail_turn(session_id, reserved)
     assert failed.kind == "generation_failed"
     assert failed.artifacts == ()
@@ -96,7 +97,7 @@ def test_limit_counts_staged_artifacts_and_failure_releases_capacity(limit: int)
     assert read.snapshot.artifacts == ()
     assert conversation.reserve_turn(session_id) == failed
     next_turn = reserve(conversation, session_id)
-    assert isinstance(conversation.stage_artifact(session_id, next_turn.turn_id, Artifact("replacement")), ConversationStageAccepted)
+    assert isinstance(conversation.stage_artifact(session_id, next_turn.turn_id, "example", Artifact("replacement")), ConversationStageAccepted)
 
 
 def test_different_sessions_in_one_store_use_their_own_artifact_limits() -> None:
@@ -106,24 +107,24 @@ def test_different_sessions_in_one_store_use_their_own_artifact_limits() -> None
     small_turn = reserve(conversation, small)
     large_turn = reserve(conversation, large)
 
-    assert isinstance(conversation.stage_artifact(small, small_turn.turn_id, Artifact("one")), ConversationStageAccepted)
-    assert conversation.stage_artifact(small, small_turn.turn_id, Artifact("two")).kind == "limit_reached"
-    assert isinstance(conversation.stage_artifact(large, large_turn.turn_id, Artifact("one")), ConversationStageAccepted)
-    assert isinstance(conversation.stage_artifact(large, large_turn.turn_id, Artifact("two")), ConversationStageAccepted)
-    assert conversation.stage_artifact(large, large_turn.turn_id, Artifact("three")).kind == "limit_reached"
+    assert isinstance(conversation.stage_artifact(small, small_turn.turn_id, "example", Artifact("one")), ConversationStageAccepted)
+    assert conversation.stage_artifact(small, small_turn.turn_id, "example", Artifact("two")).kind == "limit_reached"
+    assert isinstance(conversation.stage_artifact(large, large_turn.turn_id, "example", Artifact("one")), ConversationStageAccepted)
+    assert isinstance(conversation.stage_artifact(large, large_turn.turn_id, "example", Artifact("two")), ConversationStageAccepted)
+    assert conversation.stage_artifact(large, large_turn.turn_id, "example", Artifact("three")).kind == "limit_reached"
 
 
 def test_failure_discards_only_current_artifacts_and_preserves_prior_artifacts() -> None:
     conversation = store(Clock())
     session_id = create(conversation)
     first = reserve(conversation, session_id)
-    prior = conversation.stage_artifact(session_id, first.turn_id, Artifact("prior"))
+    prior = conversation.stage_artifact(session_id, first.turn_id, "example", Artifact("prior"))
     assert isinstance(prior, ConversationStageAccepted)
     assert conversation.complete_turn(session_id, first, "completed", "Done").kind == "completed"
     second = reserve(conversation, session_id)
-    pending = conversation.stage_artifact(session_id, second.turn_id, Artifact("pending"), prior.artifact.artifact_id)
+    pending = conversation.stage_artifact(session_id, second.turn_id, "example", Artifact("pending"), prior.artifact.artifact_id)
     assert isinstance(pending, ConversationStageAccepted)
-    assert conversation.stage_artifact(session_id, second.turn_id, Artifact("extra")).kind == "limit_reached"
+    assert conversation.stage_artifact(session_id, second.turn_id, "example", Artifact("extra")).kind == "limit_reached"
     assert conversation.fail_turn(session_id, second).kind == "generation_failed"
     read = conversation.read(session_id)
     assert isinstance(read, ConversationReadActive)
@@ -132,8 +133,8 @@ def test_failure_discards_only_current_artifacts_and_preserves_prior_artifacts()
     next_turn = conversation.reserve_turn(session_id)
     assert isinstance(next_turn, ConversationTurnReservation)
     assert next_turn.previous_artifacts == (prior.artifact,)
-    assert conversation.stage_artifact(session_id, next_turn.turn_id, Artifact("new"), "missing").kind == "missing_reference"
-    replacement = conversation.stage_artifact(session_id, next_turn.turn_id, Artifact("new"), prior.artifact.artifact_id)
+    assert conversation.stage_artifact(session_id, next_turn.turn_id, "example", Artifact("new"), "missing").kind == "missing_reference"
+    replacement = conversation.stage_artifact(session_id, next_turn.turn_id, "example", Artifact("new"), prior.artifact.artifact_id)
     assert isinstance(replacement, ConversationStageAccepted)
     assert replacement.artifact.order == 2
 
@@ -143,9 +144,9 @@ def test_expiry_clears_pending_artifacts_and_rejects_stale_reservations() -> Non
     conversation = store(clock)
     session_id = create(conversation)
     reserved = reserve(conversation, session_id)
-    assert isinstance(conversation.stage_artifact(session_id, reserved.turn_id, Artifact("pending")), ConversationStageAccepted)
+    assert isinstance(conversation.stage_artifact(session_id, reserved.turn_id, "example", Artifact("pending")), ConversationStageAccepted)
     clock.value = reserved.snapshot.expires_at
-    assert conversation.stage_artifact(session_id, reserved.turn_id, Artifact("late")).kind == "expired"
+    assert conversation.stage_artifact(session_id, reserved.turn_id, "example", Artifact("late")).kind == "expired"
     assert isinstance(conversation.read(session_id), TextSessionReadUnknown)
     assert conversation.complete_turn(session_id, reserved, "completed", "Late").kind == "unknown"
 
@@ -161,13 +162,13 @@ def test_opportunistic_eviction_clears_stale_turn_bookkeeping() -> None:
     reserve(conversation, reserve_id)
     stage_turn = reserve(conversation, stage_id)
     fail_turn = reserve(conversation, fail_id)
-    assert isinstance(conversation.stage_artifact(append_id, append_turn.turn_id, Artifact("pending")), ConversationStageAccepted)
+    assert isinstance(conversation.stage_artifact(append_id, append_turn.turn_id, "example", Artifact("pending")), ConversationStageAccepted)
 
     clock.value = append_turn.snapshot.expires_at
     assert isinstance(conversation.read("unrelated"), TextSessionReadUnknown)
     assert conversation.append_user_message(append_id, "Late").kind == "unknown"
     assert conversation.reserve_turn(reserve_id).kind == "unknown"
-    assert conversation.stage_artifact(stage_id, stage_turn.turn_id, Artifact("Late")).kind == "unknown"
+    assert conversation.stage_artifact(stage_id, stage_turn.turn_id, "example", Artifact("Late")).kind == "unknown"
     assert conversation.fail_turn(fail_id, fail_turn).kind == "unknown"
     assert isinstance(conversation.read(append_id), TextSessionReadUnknown)
 

@@ -15,7 +15,7 @@ from app.recipe_improvement.http import (
     get_recipe_presentation_resolver,
 )
 from app.recipe_improvement.http import _configured_agentic_generator
-from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionStore
+from app.recipe_improvement.session_lifecycle import new_recipe_session_store
 from app.recipe_improvement.instructions import RECIPE_IMPROVEMENT_INSTRUCTIONS
 from app.recipe_improvement.resolver import RecipePresentation
 from app.sessions.text_sessions import MAX_MESSAGE_COUNT
@@ -67,7 +67,7 @@ class FakeResolver:
 
 @pytest.fixture
 def client() -> TestClient:
-    store = RecipeImprovementSessionStore()
+    store = new_recipe_session_store()
     app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
     app.dependency_overrides[get_recipe_presentation_resolver] = lambda: FakeResolver()
     try:
@@ -205,7 +205,7 @@ def test_unknown_session_returns_not_found(client: TestClient) -> None:
 
 def test_retained_expired_session_returns_gone_without_snapshot() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
-    store = RecipeImprovementSessionStore(clock=clock.now)
+    store = new_recipe_session_store(clock=clock.now)
     app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
     try:
         client = TestClient(app)
@@ -292,7 +292,7 @@ def test_message_limit_returns_conflict_without_appending(client: TestClient) ->
 
 def test_unknown_and_expired_user_message_appends_do_not_expose_session_content() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
-    store = RecipeImprovementSessionStore(clock=clock.now)
+    store = new_recipe_session_store(clock=clock.now)
     app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
     try:
         client = TestClient(app)
@@ -320,7 +320,7 @@ def test_unknown_and_expired_user_message_appends_do_not_expose_session_content(
 
 def test_user_message_append_and_read_preserve_the_fixed_expiry() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
-    store = RecipeImprovementSessionStore(clock=clock.now)
+    store = new_recipe_session_store(clock=clock.now)
     app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
     try:
         client = TestClient(app)
@@ -481,7 +481,7 @@ def test_turn_endpoint_rejects_reply_after_new_message(
 
 def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGenerator) -> None:
     clock = MutableClock(datetime(2026, 9, 13, 10, 30, tzinfo=UTC))
-    store = RecipeImprovementSessionStore(clock=clock.now)
+    store = new_recipe_session_store(clock=clock.now)
     app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
     try:
         client = TestClient(app)
@@ -602,7 +602,7 @@ def test_proposal_lookup_only_exposes_completed_turn_artifacts(
 
 def test_proposal_lookup_reports_session_expiry_then_unknown() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
-    store = RecipeImprovementSessionStore(clock=clock.now)
+    store = new_recipe_session_store(clock=clock.now)
     app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
     try:
         client = TestClient(app)
