@@ -6,9 +6,8 @@ import json
 from collections.abc import Awaitable, Callable
 from decimal import Decimal, InvalidOperation
 
-from app.models.agentic_generation import AgenticToolCall
 from app.recipe_improvement.proposals import ProposalRegistered, ProposalRegistrationOutcome, RecipeProposal
-from app.sessions.tool_turns import RegisteredTool, ToolExecution
+from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation
 
 
 _BASE_SCHEMA: dict[str, object] = {
@@ -101,7 +100,7 @@ def _decode_arguments(arguments: str) -> tuple[object, object] | None:
 
 
 async def _execute_registration(
-    call: AgenticToolCall,
+    call: ToolInvocation,
     register: Callable[[object, object], Awaitable[ProposalRegistrationOutcome]],
 ) -> ToolExecution[RecipeProposal]:
     decoded = _decode_arguments(call.arguments)

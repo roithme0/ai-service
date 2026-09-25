@@ -6,7 +6,8 @@ import pytest
 
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.text_sessions import TextMessage
-from app.sessions.tool_turns import RegisteredTool, ToolExecution, run_tool_turn
+from app.sessions.tool_turns import run_tool_turn
+from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation
 
 
 class TwoToolGenerator:
@@ -33,11 +34,11 @@ def test_advertised_tools_dispatch_by_name_with_shared_limits() -> None:
     generator = TwoToolGenerator()
     invoked: list[str] = []
 
-    def first(call: AgenticToolCall) -> ToolExecution[str]:
+    def first(call: ToolInvocation) -> ToolExecution[str]:
         invoked.append("first")
         return ToolExecution("accepted", "artifact")
 
-    def second(call: AgenticToolCall) -> ToolExecution[str]:
+    def second(call: ToolInvocation) -> ToolExecution[str]:
         invoked.append("second")
         return ToolExecution("accepted", "another")
 
@@ -65,8 +66,8 @@ def test_each_advertised_name_dispatches_to_its_own_handler() -> None:
     generator = TwoToolGenerator()
     invoked: list[str] = []
 
-    def handler(name: str) -> Callable[[AgenticToolCall], ToolExecution[str]]:
-        def execute(call: AgenticToolCall) -> ToolExecution[str]:
+    def handler(name: str) -> Callable[[ToolInvocation], ToolExecution[str]]:
+        def execute(call: ToolInvocation) -> ToolExecution[str]:
             invoked.append(name)
             return ToolExecution(name, name)
         return execute
@@ -87,7 +88,7 @@ def test_each_advertised_name_dispatches_to_its_own_handler() -> None:
 def test_tool_registration_rejects_schema_dispatch_mismatch() -> None:
     generator = TwoToolGenerator()
 
-    def execute(call: AgenticToolCall) -> ToolExecution[str]:
+    def execute(call: ToolInvocation) -> ToolExecution[str]:
         return ToolExecution("unused")
 
     with pytest.raises(ValueError, match="matching their schemas"):
