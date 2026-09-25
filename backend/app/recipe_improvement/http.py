@@ -2,38 +2,22 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
 from datetime import datetime
-from functools import lru_cache
 from typing import Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from openai import AsyncOpenAI
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.config import get_settings
-from app.models.agentic_generation import AgenticGenerator
-from app.models.openai_agentic_generation import OpenAIAgenticGenerator
+from app.agents.recipe import RecipeAgent, RecipeSessionInput
+from app.agents.wiring import get_configured_agents
 from app.recipe_improvement.session_input import (
     AvailableFoodstuffSnapshot,
-    RecipeImprovementSessionInputFailure,
     RecipeImprovementSourceSnapshot,
-    validate_recipe_improvement_session_input,
-)
-from app.recipe_improvement.session_lifecycle import (
-    RecipeImprovementSessionStore,
-    create_recipe_session,
-    new_recipe_session_store,
 )
 from app.sessions.conversation import ConversationMessageBusy, ConversationReadActive
 from app.recipe_improvement.validation import ValidationIssue
-from app.recipe_improvement.turn_service import generate_recipe_turn
-from app.recipe_improvement.resolver import (
-    KochwikiRecipePresentationResolver,
-    RecipePresentationResolver,
-    UnavailableRecipePresentationResolver,
-)
+from app.sessions.agent_service import AgentInputRejected
 from app.sessions.text_sessions import (
     TextMessage,
     TextSessionAppendAccepted,
@@ -108,57 +92,34 @@ class RecipeImprovementTurnResponse(BaseModel):
     proposals: tuple[RecipeProposal, ...] = ()
 
 
-def get_recipe_improvement_session_store() -> RecipeImprovementSessionStore:
-    return recipe_improvement_session_store
+class AgentUnavailable(Exception):
+    pass
 
 
-def get_agentic_generator() -> AgenticGenerator | None:
-    settings = get_settings()
-    api_key = settings.openai_api_key
-    return _configured_agentic_generator(
-        api_key.get_secret_value() if api_key is not None else None,
-        settings.recipe_improvement_openai_model,
-    )
-
-
-def get_recipe_presentation_resolver() -> RecipePresentationResolver:
-    base_url = get_settings().kochwiki_base_url
-    if base_url is None:
-        return UnavailableRecipePresentationResolver()
-    return KochwikiRecipePresentationResolver(base_url)
-
-
-@lru_cache(maxsize=1)
-def _configured_agentic_generator(
-    api_key: str | None, model: str | None
-) -> AgenticGenerator | None:
-    if not api_key or not model:
-        return None
-    return OpenAIAgenticGenerator(model=model, client=AsyncOpenAI(api_key=api_key, max_retries=0))
-
-
-recipe_improvement_session_store = new_recipe_session_store()
+def get_recipe_agent() -> RecipeAgent:
+    agent = get_configured_agents().recipe
+    if agent is None:
+        raise AgentUnavailable()
+    return agent
 
 
 @router.post("", response_model=TextSessionCreation, status_code=201)
 def create_recipe_improvement_session(
     request: RecipeImprovementSessionCreateRequest,
-    store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
+    agent: RecipeAgent = Depends(get_recipe_agent),
 ) -> TextSessionCreation | JSONResponse:
-    outcome = validate_recipe_improvement_session_input(
-        _decode_json_decimal_amounts(request.source), request.foodstuffs
-    )
-    if isinstance(outcome, RecipeImprovementSessionInputFailure):
+    outcome = agent.create(RecipeSessionInput(request.source, request.foodstuffs))
+    if isinstance(outcome, AgentInputRejected):
         return _invalid_input_response(outcome)
-    return create_recipe_session(store, outcome.session_input)
+    return outcome
 
 
 @router.get("/{session_id}", response_model=RecipeImprovementSessionReadResponse)
 def get_recipe_improvement_session(
     session_id: str,
-    store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
+    agent: RecipeAgent = Depends(get_recipe_agent),
 ) -> RecipeImprovementSessionReadResponse | JSONResponse:
-    outcome = store.read(session_id)
+    outcome = agent.read(session_id)
     if isinstance(outcome, ConversationReadActive):
         snapshot = outcome.snapshot
         return RecipeImprovementSessionReadResponse(
@@ -180,9 +141,9 @@ def get_recipe_improvement_session(
 def get_recipe_improvement_proposal(
     session_id: str,
     proposal_id: str,
-    store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
+    agent: RecipeAgent = Depends(get_recipe_agent),
 ) -> RecipeProposal | JSONResponse:
-    outcome = store.read(session_id)
+    outcome = agent.read(session_id)
     if isinstance(outcome, TextSessionReadExpired):
         return JSONResponse(status_code=410, content={"kind": "expired"})
     if not isinstance(outcome, ConversationReadActive):
@@ -202,9 +163,9 @@ def get_recipe_improvement_proposal(
 def append_recipe_improvement_user_message(
     session_id: str,
     request: RecipeImprovementUserMessageRequest,
-    store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
+    agent: RecipeAgent = Depends(get_recipe_agent),
 ) -> RecipeUserMessageResponse | JSONResponse:
-    outcome = store.append_user_message(session_id, request.text)
+    outcome = agent.append_user_message(session_id, request.text)
     if isinstance(outcome, TextSessionAppendAccepted):
         return RecipeUserMessageResponse(text=outcome.message.text)
     if isinstance(outcome, TextSessionAppendExpired):
@@ -225,13 +186,9 @@ def append_recipe_improvement_user_message(
 )
 async def generate_recipe_improvement_turn(
     session_id: str,
-    store: RecipeImprovementSessionStore = Depends(get_recipe_improvement_session_store),
-    generator: AgenticGenerator | None = Depends(get_agentic_generator),
-    resolver: RecipePresentationResolver = Depends(get_recipe_presentation_resolver),
+    agent: RecipeAgent = Depends(get_recipe_agent),
 ) -> RecipeImprovementTurnResponse | JSONResponse:
-    if generator is None:
-        return JSONResponse(status_code=503, content={"kind": "generator_unavailable"})
-    outcome = await generate_recipe_turn(store, session_id, generator, resolver)
+    outcome = await agent.execute_turn(session_id)
     if outcome.kind == "completed":
         assert outcome.text is not None
         return RecipeImprovementTurnResponse(
@@ -257,7 +214,7 @@ async def generate_recipe_improvement_turn(
 
 
 def _invalid_input_response(
-    outcome: RecipeImprovementSessionInputFailure,
+    outcome: AgentInputRejected[ValidationIssue],
 ) -> JSONResponse:
     response = RecipeImprovementSessionInputErrorResponse(issues=outcome.issues)
     return JSONResponse(status_code=422, content=response.model_dump(mode="json"))
@@ -268,42 +225,3 @@ def _message_response(message: TextMessage) -> RecipeMessageResponse:
         return RecipeUserMessageResponse(text=message.text)
     assert message.turn_id is not None
     return RecipeAssistantMessageResponse(text=message.text, turn_id=message.turn_id)
-
-
-def _decode_json_decimal_amounts(source: object) -> object:
-    if not isinstance(source, dict):
-        return source
-    recipe = source.get("recipe")
-    if not isinstance(recipe, dict):
-        return source
-    ingredients = recipe.get("ingredients")
-    if not isinstance(ingredients, list):
-        return source
-
-    decoded_source = dict(source)
-    decoded_recipe = dict(recipe)
-    decoded_ingredients: list[object] = []
-    for ingredient in ingredients:
-        if isinstance(ingredient, dict):
-            decoded_ingredient = dict(ingredient)
-            amount = _decode_json_decimal(ingredient.get("amount"))
-            if amount is not None:
-                decoded_ingredient["amount"] = amount
-            decoded_ingredients.append(decoded_ingredient)
-        else:
-            decoded_ingredients.append(ingredient)
-    decoded_recipe["ingredients"] = decoded_ingredients
-    decoded_source["recipe"] = decoded_recipe
-    return decoded_source
-
-
-def _decode_json_decimal(value: object) -> Decimal | None:
-    if isinstance(value, bool) or not isinstance(value, int | float | str):
-        return None
-    try:
-        decimal_value = Decimal(str(value))
-    except InvalidOperation:
-        return None
-    if not decimal_value.is_finite():
-        return None
-    return decimal_value

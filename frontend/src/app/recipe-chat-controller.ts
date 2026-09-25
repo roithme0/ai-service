@@ -168,7 +168,7 @@ export class RecipeChatController {
       this.applyTurnSnapshot(snapshot);
     } catch (error: unknown) {
       this.handleTurnFailure(
-        error instanceof RecipeChatNetworkError
+        error instanceof RecipeChatNetworkError || isKind(error, 'agent_unavailable')
           ? error
           : new RecipeChatNetworkError('Abgleich fehlgeschlagen.', { cause: error }),
       );
@@ -206,7 +206,10 @@ export class RecipeChatController {
   }
 
   private handleAppendFailure(error: unknown): void {
-    if (isTerminal(error)) {
+    if (isKind(error, 'agent_unavailable')) {
+      this.setAgentUnavailable();
+      return;
+    } else if (isTerminal(error)) {
       this.setTerminal(error);
       return;
     }
@@ -223,17 +226,8 @@ export class RecipeChatController {
   private handleTurnFailure(error: unknown): void {
     if (isTerminal(error)) {
       this.setTerminal(error);
-    } else if (isKind(error, 'generator_unavailable')) {
-      this.setState({
-        ...this.stateValue,
-        composerDisabled: true,
-        status: failure(
-          'Das KI-Modell ist derzeit nicht verfügbar.',
-          'assistant',
-          'retry-turn',
-          'Erneut versuchen',
-        ),
-      });
+    } else if (isKind(error, 'agent_unavailable')) {
+      this.setAgentUnavailable();
     } else if (isKind(error, 'generation_failed')) {
       this.setState({
         ...this.stateValue,
@@ -255,6 +249,14 @@ export class RecipeChatController {
         ),
       });
     }
+  }
+
+  private setAgentUnavailable(): void {
+    this.setState({
+      ...this.stateValue,
+      composerDisabled: true,
+      status: failure('Der KI-Agent ist derzeit nicht verfügbar.', 'conversation', 'new-session', 'Erneut versuchen'),
+    });
   }
 
   private setTerminal(error: unknown): void {
@@ -360,5 +362,6 @@ function isTerminal(error: unknown): boolean {
 }
 
 function messageFor(error: unknown, fallback: string): string {
+  if (isKind(error, 'agent_unavailable')) return 'Der KI-Agent ist derzeit nicht verfügbar.';
   return error instanceof RecipeChatNetworkError ? error.message : fallback;
 }

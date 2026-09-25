@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 from app.demo.session import DemoContext, DemoSessionStore, GreetingPayload
 from app.sessions.artifacts import ArtifactPrepared, ArtifactPreparationRejected, ArtifactRegistry
 from app.sessions.conversation import ConversationStageAccepted, ConversationTurnView, StagedArtifact
 from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation
+
+
+type DemoToolFactory = Callable[
+    [DemoSessionStore, str, str], RegisteredTool[StagedArtifact[GreetingPayload]]
+]
 
 
 CREATE_GREETING_SCHEMA: dict[str, object] = {

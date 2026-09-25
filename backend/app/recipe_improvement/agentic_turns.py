@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-
 from app.models.agentic_generation import AgenticGenerator
-from app.recipe_improvement.proposals import ProposalRegistrationOutcome, RecipeProposal
-from app.recipe_improvement.tools.register_recipe_proposal import proposal_registration_tool
+from app.recipe_improvement.proposals import RecipeProposal
+from app.recipe_improvement.tools.register_recipe_proposal import (
+    RegisterRecipeProposal, RecipeToolFactory, proposal_registration_tool,
+)
 from app.sessions.text_sessions import TextMessage
 from app.sessions.tool_turns import ToolTurnResult, run_tool_turn
 
@@ -21,10 +21,14 @@ async def generate_agentic_recipe_turn(
     messages: tuple[TextMessage, ...],
     context: str,
     instructions: str,
-    register: Callable[[object, object], Awaitable[ProposalRegistrationOutcome]],
+    register: RegisterRecipeProposal,
+    tool_factory: RecipeToolFactory = proposal_registration_tool,
+    max_attempts: int = MAX_TOOL_ATTEMPTS,
+    max_successes: int = MAX_TOOL_SUCCESSES,
+    max_provider_responses: int = MAX_PROVIDER_RESPONSES,
 ) -> ToolTurnResult[RecipeProposal]:
     return await run_tool_turn(
         generator, messages, context, instructions,
-        (proposal_registration_tool(register),),
-        MAX_TOOL_ATTEMPTS, MAX_TOOL_SUCCESSES, MAX_PROVIDER_RESPONSES,
+        (tool_factory(register),),
+        max_attempts, max_successes, max_provider_responses,
     )

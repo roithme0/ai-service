@@ -2,11 +2,11 @@
 
 The AI Service provides shared, provider-neutral AI capabilities and an agent-based interface for projects in the network. It owns model integration, reusable AI operations, agent orchestration, and service connectors while domain services remain authoritative for their data and business rules.
 
-The current implementation includes recipe-improvement sessions, bounded model/tool orchestration, and a reusable chat UI library. This repository is authoritative for its implementation, API contracts, and deployment configuration. A shared configurable-agent foundation and deterministic UI demo are the next architectural direction, described in the [chat UI demo concept](docs/concepts/2026-09-25-chat-ui-demo.md).
+The current implementation includes configured recipe-improvement and deterministic demo agent services, bounded model/tool orchestration, and a reusable chat UI library. This repository is authoritative for its implementation, API contracts, and deployment configuration. A deterministic UI demo remains a planned application change, described in the [chat UI demo concept](docs/concepts/2026-09-25-chat-ui-demo.md).
 
 ## Core Features
 
-- **Universal agent direction**: Develop a shared agent with server-defined capability configurations, with recipe improvement as a restricted configuration. This generalization is planned; the current application uses the recipe-specific API.
+- **Configured agent services**: A shared typed service hosts independent server-configured recipe and demo instances. The current HTTP API remains recipe-specific; the demo is available internally.
 - **Supporting features**:
   - **Bounded AI capabilities**: Offer reusable operations requested by other services, initially including structured recipe optimization and, later, image generation.
   - **Conversation foundation**: Support ephemeral multi-turn recipe chat, multiple tool calls, explicit failures, and multiple proposal artifacts within one assistant turn. Responses are returned after turn completion; streaming and user-controlled cancellation are not implemented.

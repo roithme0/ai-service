@@ -1,20 +1,20 @@
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
+import asyncio
 import json
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config import get_settings
+from app.agents.recipe import create_recipe_agent
+from app.agents.wiring import configure_agents
+from app.core.config import Settings
 from app.main import app
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.models.openai_agentic_generation import OpenAIAgenticGenerator
 from app.recipe_improvement.http import (
-    get_agentic_generator,
-    get_recipe_improvement_session_store,
-    get_recipe_presentation_resolver,
+    AgentUnavailable,
+    get_recipe_agent,
 )
-from app.recipe_improvement.http import _configured_agentic_generator
 from app.recipe_improvement.session_lifecycle import new_recipe_session_store
 from app.recipe_improvement.instructions import RECIPE_IMPROVEMENT_INSTRUCTIONS
 from app.recipe_improvement.resolver import RecipePresentation
@@ -66,10 +66,10 @@ class FakeResolver:
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(fake_generator: FakeGenerator) -> Iterator[TestClient]:
     store = new_recipe_session_store()
-    app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
-    app.dependency_overrides[get_recipe_presentation_resolver] = lambda: FakeResolver()
+    agent = create_recipe_agent(fake_generator, FakeResolver(), store)
+    app.dependency_overrides[get_recipe_agent] = lambda: agent
     try:
         yield TestClient(app)
     finally:
@@ -77,13 +77,8 @@ def client() -> TestClient:
 
 
 @pytest.fixture
-def fake_generator() -> Iterator[FakeGenerator]:
-    generator = FakeGenerator()
-    app.dependency_overrides[get_agentic_generator] = lambda: generator
-    try:
-        yield generator
-    finally:
-        app.dependency_overrides.pop(get_agentic_generator, None)
+def fake_generator() -> FakeGenerator:
+    return FakeGenerator()
 
 
 def valid_request(foodstuff_reference: int = 1) -> dict[str, object]:
@@ -206,7 +201,7 @@ def test_unknown_session_returns_not_found(client: TestClient) -> None:
 def test_retained_expired_session_returns_gone_without_snapshot() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
     store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
+    app.dependency_overrides[get_recipe_agent] = lambda: create_recipe_agent(FakeGenerator(), FakeResolver(), store)
     try:
         client = TestClient(app)
         created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
@@ -293,7 +288,7 @@ def test_message_limit_returns_conflict_without_appending(client: TestClient) ->
 def test_unknown_and_expired_user_message_appends_do_not_expose_session_content() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
     store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
+    app.dependency_overrides[get_recipe_agent] = lambda: create_recipe_agent(FakeGenerator(), FakeResolver(), store)
     try:
         client = TestClient(app)
         unknown = client.post(
@@ -321,7 +316,7 @@ def test_unknown_and_expired_user_message_appends_do_not_expose_session_content(
 def test_user_message_append_and_read_preserve_the_fixed_expiry() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
     store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
+    app.dependency_overrides[get_recipe_agent] = lambda: create_recipe_agent(FakeGenerator(), FakeResolver(), store)
     try:
         client = TestClient(app)
         created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
@@ -379,46 +374,51 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
     ]
 
 
-def test_turn_endpoint_is_unavailable_without_configured_generator(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", raising=False)
-    get_settings.cache_clear()
-    _configured_agentic_generator.cache_clear()
+@pytest.mark.parametrize("missing", ["openai_api_key", "recipe_improvement_openai_model", "kochwiki_base_url"])
+def test_recipe_agent_requires_every_setting(missing: str) -> None:
+    values = {
+        "openai_api_key": "test-key",
+        "recipe_improvement_openai_model": "test-model",
+        "kochwiki_base_url": "https://kochwiki.test/api",
+    }
+    values[missing] = None
+    agents = configure_agents(Settings(_env_file=None, **values))
+    assert agents.recipe is None
+    assert agents.demo.create({}).session_id
+
+
+def test_locally_valid_recipe_configuration_constructs_agent_without_remote_probe() -> None:
+    agents = configure_agents(Settings(
+        _env_file=None,
+        openai_api_key="test-key",
+        recipe_improvement_openai_model="test-model",
+        kochwiki_base_url="https://kochwiki.test/api",
+    ))
     try:
-        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-        session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
-        client.post(f"{session_url}/messages", json={"text": "question"})
-
-        response = client.post(f"{session_url}/turns")
-
-        assert response.status_code == 503
-        assert response.json() == {"kind": "generator_unavailable"}
-        assert len(client.get(session_url).json()["messages"]) == 1
+        assert agents.recipe is not None
+        assert agents.demo.create(None).session_id
     finally:
-        get_settings.cache_clear()
-        _configured_agentic_generator.cache_clear()
+        asyncio.run(agents.close())
 
 
-def test_generator_requires_key_and_use_case_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    get_settings.cache_clear()
-    _configured_agentic_generator.cache_clear()
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", raising=False)
+def test_all_recipe_endpoints_report_unavailable() -> None:
+    app.dependency_overrides[get_recipe_agent] = lambda: (_ for _ in ()).throw(AgentUnavailable())
     try:
-        assert get_agentic_generator() is None
-        get_settings.cache_clear()
-        _configured_agentic_generator.cache_clear()
-        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-        assert get_agentic_generator() is None
-        get_settings.cache_clear()
-        _configured_agentic_generator.cache_clear()
-        monkeypatch.setenv("RECIPE_IMPROVEMENT_OPENAI_MODEL", "gpt-5.6-sol")
-        assert isinstance(get_agentic_generator(), OpenAIAgenticGenerator)
+        client = TestClient(app)
+        prefix = "/api/v1/recipe-improvement/sessions"
+        responses = [
+            client.post(prefix, json=valid_request()),
+            client.post(prefix),
+            client.get(f"{prefix}/missing"),
+            client.get(f"{prefix}/missing/proposals/missing"),
+            client.post(f"{prefix}/missing/messages", json={"text": "question"}),
+            client.post(f"{prefix}/missing/messages"),
+            client.post(f"{prefix}/missing/turns"),
+        ]
+        assert all(response.status_code == 503 for response in responses)
+        assert all(response.json() == {"kind": "agent_unavailable"} for response in responses)
     finally:
-        get_settings.cache_clear()
-        _configured_agentic_generator.cache_clear()
+        app.dependency_overrides.clear()
 
 
 def test_turn_endpoint_reports_unknown_and_not_ready(
@@ -482,7 +482,7 @@ def test_turn_endpoint_rejects_reply_after_new_message(
 def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGenerator) -> None:
     clock = MutableClock(datetime(2026, 9, 13, 10, 30, tzinfo=UTC))
     store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
+    app.dependency_overrides[get_recipe_agent] = lambda: create_recipe_agent(fake_generator, FakeResolver(), store)
     try:
         client = TestClient(app)
         created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
@@ -498,7 +498,7 @@ def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGene
         assert response.json()["kind"] == "expired"
         assert client.get(session_url).status_code == 404
     finally:
-        app.dependency_overrides.pop(get_recipe_improvement_session_store, None)
+        app.dependency_overrides.pop(get_recipe_agent, None)
 
 
 def test_turn_endpoint_uses_reserved_assistant_capacity(
@@ -603,7 +603,7 @@ def test_proposal_lookup_only_exposes_completed_turn_artifacts(
 def test_proposal_lookup_reports_session_expiry_then_unknown() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
     store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_recipe_improvement_session_store] = lambda: store
+    app.dependency_overrides[get_recipe_agent] = lambda: create_recipe_agent(FakeGenerator(), FakeResolver(), store)
     try:
         client = TestClient(app)
         created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()

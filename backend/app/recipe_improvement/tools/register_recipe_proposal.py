@@ -10,6 +10,10 @@ from app.recipe_improvement.proposals import ProposalRegistered, ProposalRegistr
 from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation
 
 
+type RegisterRecipeProposal = Callable[[object, object], Awaitable[ProposalRegistrationOutcome]]
+type RecipeToolFactory = Callable[[RegisterRecipeProposal], RegisteredTool[RecipeProposal]]
+
+
 _BASE_SCHEMA: dict[str, object] = {
     "type": "object",
     "additionalProperties": False,
@@ -101,7 +105,7 @@ def _decode_arguments(arguments: str) -> tuple[object, object] | None:
 
 async def _execute_registration(
     call: ToolInvocation,
-    register: Callable[[object, object], Awaitable[ProposalRegistrationOutcome]],
+    register: RegisterRecipeProposal,
 ) -> ToolExecution[RecipeProposal]:
     decoded = _decode_arguments(call.arguments)
     if decoded is None:
@@ -125,7 +129,7 @@ async def _execute_registration(
 
 
 def proposal_registration_tool(
-    register: Callable[[object, object], Awaitable[ProposalRegistrationOutcome]],
+    register: RegisterRecipeProposal,
 ) -> RegisteredTool[RecipeProposal]:
     return RegisteredTool(
         name="register_recipe_proposal",

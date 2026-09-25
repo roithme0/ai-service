@@ -20,6 +20,46 @@ class FakeTransport implements RecipeChatTransport {
 }
 
 describe('RecipeChatController', () => {
+  it('reports agent unavailability during session creation', async () => {
+    const transport = new FakeTransport();
+    transport.createSession.mockRejectedValue(new RecipeChatApiError(503, 'agent_unavailable'));
+    const controller = new RecipeChatController(transport, () => undefined);
+
+    await controller.start();
+
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status?.message).toBe('Der KI-Agent ist derzeit nicht verfügbar.');
+    expect(controller.state.status?.action?.id).toBe('new-session');
+  });
+
+  it('reports agent unavailability during message append', async () => {
+    const transport = new FakeTransport();
+    transport.appendMessage.mockRejectedValue(new RecipeChatApiError(503, 'agent_unavailable'));
+    const controller = new RecipeChatController(transport, () => undefined);
+    await controller.start();
+
+    await controller.submit('Frage', () => undefined);
+
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status?.message).toBe('Der KI-Agent ist derzeit nicht verfügbar.');
+    expect(transport.generateTurn).not.toHaveBeenCalled();
+  });
+
+  it('preserves agent unavailability from a reconciliation read', async () => {
+    const transport = new FakeTransport();
+    transport.appendMessage.mockResolvedValue(user('Frage'));
+    transport.generateTurn.mockRejectedValue(new RecipeChatNetworkError('Timeout'));
+    transport.readSession.mockRejectedValue(new RecipeChatApiError(503, 'agent_unavailable'));
+    const controller = new RecipeChatController(transport, () => undefined);
+    await controller.start();
+
+    await controller.submit('Frage', () => undefined);
+
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status?.message).toBe('Der KI-Agent ist derzeit nicht verfügbar.');
+    expect(controller.state.status?.action?.id).toBe('new-session');
+  });
+
   it('starts empty and publishes an accepted turn without optimistic messages', async () => {
     const transport = new FakeTransport();
     const append = deferred<ApiMessage>();
@@ -176,11 +216,11 @@ describe('RecipeChatController', () => {
     expect(transport.generateTurn).not.toHaveBeenCalled();
   });
 
-  it('retries only generation when the model is unavailable', async () => {
+  it('offers a new session when the agent is unavailable', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Leichter'));
     transport.generateTurn
-      .mockRejectedValueOnce(new RecipeChatApiError(503, 'generator_unavailable'))
+      .mockRejectedValueOnce(new RecipeChatApiError(503, 'agent_unavailable'))
       .mockResolvedValueOnce({
         turn_id: 'turn-1',
         message: assistant('Versuche das.', 'turn-1'),
@@ -190,12 +230,13 @@ describe('RecipeChatController', () => {
     await controller.start();
     await controller.submit('Leichter', () => undefined);
 
-    expect(controller.state.status?.action?.id).toBe('retry-turn');
-    await controller.performAction('retry-turn');
+    expect(controller.state.status?.action?.id).toBe('new-session');
+    await controller.performAction('new-session');
 
     expect(transport.appendMessage).toHaveBeenCalledOnce();
-    expect(transport.generateTurn).toHaveBeenCalledTimes(2);
-    expect(controller.state.content).toHaveLength(2);
+    expect(transport.generateTurn).toHaveBeenCalledTimes(1);
+    expect(transport.createSession).toHaveBeenCalledTimes(2);
+    expect(controller.state.content).toHaveLength(0);
   });
 
   it('does not offer generation retry after a recorded failure', async () => {

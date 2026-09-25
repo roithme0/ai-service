@@ -22,13 +22,13 @@ describe('HttpRecipeChatTransport', () => {
   it('maps typed backend errors without accepting their payload as success', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(response(503, { kind: 'generator_unavailable' })),
+      vi.fn().mockResolvedValue(response(503, { kind: 'agent_unavailable' })),
     );
 
     await expect(new HttpRecipeChatTransport().generateTurn('session-1')).rejects.toEqual(
       expect.objectContaining<Partial<RecipeChatApiError>>({
         status: 503,
-        kind: 'generator_unavailable',
+        kind: 'agent_unavailable',
       }),
     );
   });

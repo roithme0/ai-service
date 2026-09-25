@@ -6,7 +6,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 
-from app.demo.greeting import create_greeting_tool
+from app.demo.greeting import DemoToolFactory, create_greeting_tool
 from app.demo.session import DemoSessionStore, GreetingPayload
 from app.sessions.conversation import ConversationTurnResult
 from app.sessions.tools import ToolRegistry
@@ -25,6 +25,7 @@ async def run_demo_turn(
     session_id: str,
     first_turn_delay_seconds: float = FIRST_TURN_DELAY_SECONDS,
     pause: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    tool_factory: DemoToolFactory = create_greeting_tool,
 ) -> ConversationTurnResult[GreetingPayload]:
     if first_turn_delay_seconds < 0:
         raise ValueError("first_turn_delay_seconds must not be negative")
@@ -38,7 +39,7 @@ async def run_demo_turn(
             await pause(first_turn_delay_seconds)
             reply = FIRST_REPLY
         elif completed_count == 1:
-            registry = ToolRegistry((create_greeting_tool(store, session_id, reservation.turn_id),))
+            registry = ToolRegistry((tool_factory(store, session_id, reservation.turn_id),))
             execution = await registry.invoke("create_greeting", '{"name":"World"}')
             if execution.artifact is None:
                 return store.fail_turn(session_id, reservation)

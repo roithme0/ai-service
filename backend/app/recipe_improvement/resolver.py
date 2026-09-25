@@ -112,11 +112,6 @@ class KochwikiRecipePresentationResolver:
             raise RecipeResolutionError(retryable=True) from error
 
 
-class UnavailableRecipePresentationResolver:
-    async def resolve(self, candidate: RecipeProposalCandidate) -> RecipePresentation:
-        raise RecipeResolutionError(retryable=True)
-
-
 def _json_number(value: Decimal) -> int | float:
     integral = value.to_integral_value()
     return int(integral) if value == integral else float(value)
