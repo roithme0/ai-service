@@ -63,7 +63,7 @@ The service does not claim that a proposal remains valid against changing extern
 
 ## Session Lifecycle
 
-Short-lived service state is required so a proposal identifier can be resolved without trusting the model or requiring it to reconstruct recipe content. The state includes the initialization snapshots, ordered conversation content, validated proposals, and lineage. The backend exposes session-scoped proposal lookup by identifier.
+Short-lived service state retains initialization snapshots, ordered conversation content, validated proposals, and lineage without trusting the model to reconstruct recipe content. The current generic HTTP contract exposes completed proposals through turn responses and session history. It does not provide individual proposal lookup.
 
 Opening the improvement view creates the session immediately from the source recipe and available-foodstuffs snapshots; the user does not need to send a message to establish it. A failed generation leaves the user message in the conversation. The initial UI shows the failure but offers no retry of that turn; the user may continue with a new message while the session remains active.
 
@@ -101,7 +101,7 @@ The library must retain a deliberately narrow public API so its packaging does n
 
 ## Integration Impact
 
-The AI Service backend exposes a recipe-improvement contract around session initialization, conversational turns, structured proposal artifacts, proposal lookup, and session expiry. External recipe and foodstuff identifiers remain opaque to the service. A stored proposal contains lifecycle metadata, its name, and a single renderer-ready recipe presentation resolved by Kochwiki from the transient model candidate and current domain data.
+The AI Service backend exposes the Kochwiki configuration through the generic conversation HTTP contract for session initialization, messages, turns, structured proposal artifacts, and session expiry. External recipe and foodstuff identifiers remain opaque to the service. A stored proposal contains lifecycle metadata, its name, and a single renderer-ready recipe presentation resolved by Kochwiki from the transient model candidate and current domain data.
 
 The caller must supply a self-consistent recipe and foodstuff snapshot and translate returned proposals into its domain workflow. The AI Service calls only Kochwiki's bounded, read-only presentation resolver when registering a proposal; it does not otherwise read from or write to Kochwiki, create drafts, render recipes, or decide whether an external recipe changed.
 

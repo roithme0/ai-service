@@ -22,15 +22,25 @@ export interface SessionCreation {
 export interface SessionSnapshot {
   readonly session_id: string;
   readonly messages: ReadonlyArray<ApiMessage>;
-  readonly proposals: ReadonlyArray<RecipeProposal>;
+  readonly artifacts: ReadonlyArray<ApiArtifact>;
   readonly terminal_turn_id: string | null;
   readonly terminal_turn_kind: string | null;
 }
 
 export interface TurnResult {
+  readonly kind: 'completed';
   readonly turn_id: string;
   readonly message: ApiMessage;
-  readonly proposals: ReadonlyArray<RecipeProposal>;
+  readonly artifacts: ReadonlyArray<ApiArtifact>;
+}
+
+export interface ApiArtifact {
+  readonly artifact_id: string;
+  readonly type: string;
+  readonly created_at: string;
+  readonly order: number;
+  readonly turn_id: string;
+  readonly payload: unknown;
 }
 
 export interface FoodstuffSummary {
@@ -61,7 +71,7 @@ export interface RecipePresentation {
 }
 
 export interface RecipeProposal {
-  readonly proposal_id: string;
+  readonly artifact_id: string;
   readonly turn_id: string;
   readonly name: string;
   readonly recipe: RecipePresentation;
@@ -116,10 +126,10 @@ export interface RecipeChatTransport {
 }
 
 export class HttpRecipeChatTransport implements RecipeChatTransport {
-  private readonly baseUrl = '/api/v1/recipe-improvement/sessions';
+  private readonly baseUrl = '/api/v1/agents/kochwiki/sessions';
 
   async createSession(): Promise<SessionCreation> {
-    return parseSessionCreation(await this.request('', 'POST', RECIPE_SESSION_FIXTURE));
+    return parseSessionCreation(await this.request('', 'POST', { input: RECIPE_SESSION_FIXTURE }));
   }
 
   async readSession(sessionId: string): Promise<SessionSnapshot> {
@@ -185,7 +195,7 @@ function parseMessage(value: unknown): ApiMessage {
 }
 
 function parseSessionSnapshot(value: unknown): SessionSnapshot {
-  if (!isRecord(value) || !Array.isArray(value['messages']) || !Array.isArray(value['proposals'])) {
+  if (!isRecord(value) || !Array.isArray(value['messages']) || !Array.isArray(value['artifacts'])) {
     throw invalidResponse();
   }
   const sessionId = readString(value, 'session_id');
@@ -193,34 +203,51 @@ function parseSessionSnapshot(value: unknown): SessionSnapshot {
   return {
     session_id: sessionId,
     messages: value['messages'].map(parseMessage),
-    proposals: value['proposals'].map(parseProposal),
+    artifacts: value['artifacts'].map(parseArtifact),
     terminal_turn_id: readNullableString(value, 'terminal_turn_id'),
     terminal_turn_kind: readNullableString(value, 'terminal_turn_kind'),
   };
 }
 
 function parseTurnResult(value: unknown): TurnResult {
-  if (!isRecord(value) || !Array.isArray(value['proposals'])) throw invalidResponse();
+  if (!isRecord(value) || value['kind'] !== 'completed' || !Array.isArray(value['artifacts'])) throw invalidResponse();
   const turnId = readString(value, 'turn_id');
   if (turnId === null) throw invalidResponse();
   return {
+    kind: 'completed',
     turn_id: turnId,
     message: parseMessage(value['message']),
-    proposals: value['proposals'].map(parseProposal),
+    artifacts: value['artifacts'].map(parseArtifact),
   };
 }
 
-function parseProposal(value: unknown): RecipeProposal {
+function parseArtifact(value: unknown): ApiArtifact {
   if (!isRecord(value)) throw invalidResponse();
-  const proposalId = readString(value, 'proposal_id');
+  const artifactId = readString(value, 'artifact_id');
   const turnId = readString(value, 'turn_id');
-  const name = readString(value, 'name');
-  if (proposalId === null || turnId === null || name === null) throw invalidResponse();
+  const type = readString(value, 'type');
+  const createdAt = readString(value, 'created_at');
+  if (artifactId === null || turnId === null || type === null || createdAt === null || !('payload' in value)) throw invalidResponse();
   return {
-    proposal_id: proposalId,
+    artifact_id: artifactId,
+    type,
+    created_at: createdAt,
+    order: readNumber(value, 'order'),
     turn_id: turnId,
+    payload: value['payload'],
+  };
+}
+
+export function parseRecipeArtifact(artifact: ApiArtifact): RecipeProposal | null {
+  if (artifact.type !== 'recipe.proposal') return null;
+  if (!isRecord(artifact.payload)) throw invalidResponse();
+  const name = readString(artifact.payload, 'name');
+  if (name === null) throw invalidResponse();
+  return {
+    artifact_id: artifact.artifact_id,
+    turn_id: artifact.turn_id,
     name,
-    recipe: parsePresentation(value['recipe']),
+    recipe: parsePresentation(artifact.payload['recipe']),
   };
 }
 

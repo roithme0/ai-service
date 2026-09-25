@@ -12,7 +12,7 @@ from app.sessions.agent_service import AgentInputAccepted, AgentInputRejected, C
 from app.sessions.conversation import ConversationSessionSettings, ConversationTurnResult
 
 
-DemoSessionInput = dict[str, object] | None
+DemoSessionInput = object
 DemoAgent = ConfiguredAgentService[DemoSessionInput, DemoContext, GreetingPayload, str]
 
 

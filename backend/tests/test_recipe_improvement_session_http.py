@@ -6,15 +6,16 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app.agents.recipe import create_recipe_agent
+from app.agents.recipe import RecipeAgent, create_recipe_agent
 from app.agents.wiring import configure_agents
 from app.core.config import Settings
 from app.main import app
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.recipe_improvement.http import (
-    AgentUnavailable,
-    get_recipe_agent,
+from app.sessions.http import (
+    AgentTransport, ConversationTransport, _demo_issue, _recipe_input,
+    _recipe_issue, get_agent_registry,
 )
+from app.agents.demo import create_demo_agent
 from app.recipe_improvement.session_lifecycle import new_recipe_session_store
 from app.recipe_improvement.instructions import RECIPE_IMPROVEMENT_INSTRUCTIONS
 from app.recipe_improvement.resolver import RecipePresentation
@@ -69,7 +70,7 @@ class FakeResolver:
 def client(fake_generator: FakeGenerator) -> Iterator[TestClient]:
     store = new_recipe_session_store()
     agent = create_recipe_agent(fake_generator, FakeResolver(), store)
-    app.dependency_overrides[get_recipe_agent] = lambda: agent
+    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(agent)
     try:
         yield TestClient(app)
     finally:
@@ -79,6 +80,12 @@ def client(fake_generator: FakeGenerator) -> Iterator[TestClient]:
 @pytest.fixture
 def fake_generator() -> FakeGenerator:
     return FakeGenerator()
+
+
+def recipe_registry(agent: RecipeAgent | None) -> dict[str, ConversationTransport | None]:
+    return {"kochwiki": AgentTransport(agent, _recipe_input, _recipe_issue) if agent else None,
+            "demo": AgentTransport(create_demo_agent(delay_seconds=0), lambda value: value,
+                                   _demo_issue)}
 
 
 def valid_request(foodstuff_reference: int = 1) -> dict[str, object]:
@@ -105,7 +112,7 @@ def valid_request(foodstuff_reference: int = 1) -> dict[str, object]:
 
 
 def test_create_and_read_return_accepted_snapshots_without_derived_index(client: TestClient) -> None:
-    creation = client.post("/api/v1/recipe-improvement/sessions", json=valid_request())
+    creation = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()})
 
     assert creation.status_code == 201
     created = creation.json()
@@ -113,46 +120,33 @@ def test_create_and_read_return_accepted_snapshots_without_derived_index(client:
     assert created["session_id"]
     assert datetime.fromisoformat(created["expires_at"]).tzinfo is not None
 
-    read = client.get(f"/api/v1/recipe-improvement/sessions/{created['session_id']}")
+    read = client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}")
 
     assert read.status_code == 200
-    expected_source = valid_request()["source"]
-    expected_source["recipe"]["ingredients"][0]["amount"] = "125.75"
-    expected_foodstuffs = valid_request()["foodstuffs"]
-    for nutrient in ("kcal", "carbs", "protein", "fat"):
-        expected_foodstuffs[0][nutrient] = str(expected_foodstuffs[0][nutrient])
     assert read.json() == {
         "session_id": created["session_id"],
         "expires_at": created["expires_at"],
-        "source": expected_source,
-        "foodstuffs": expected_foodstuffs,
         "messages": [],
-        "proposals": [],
+        "artifacts": [],
         "terminal_turn_id": None,
         "terminal_turn_kind": None,
     }
     assert "availability_reference_index" not in read.json()
 
 
-def test_integer_amount_and_read_snapshot_can_initialize_sessions(client: TestClient) -> None:
+def test_integer_amount_is_accepted_without_exposing_input(client: TestClient) -> None:
     request = valid_request()
     request["source"]["recipe"]["ingredients"][0]["amount"] = 125
 
-    initial_creation = client.post("/api/v1/recipe-improvement/sessions", json=request)
+    initial_creation = client.post("/api/v1/agents/kochwiki/sessions", json={"input": request})
 
     assert initial_creation.status_code == 201
     snapshot = client.get(
-        f"/api/v1/recipe-improvement/sessions/{initial_creation.json()['session_id']}"
+        f"/api/v1/agents/kochwiki/sessions/{initial_creation.json()['session_id']}"
     )
     assert snapshot.status_code == 200
-    assert snapshot.json()["source"]["recipe"]["ingredients"][0]["amount"] == "125"
-
-    recreated = client.post(
-        "/api/v1/recipe-improvement/sessions",
-        json={"source": snapshot.json()["source"], "foodstuffs": snapshot.json()["foodstuffs"]},
-    )
-
-    assert recreated.status_code == 201
+    assert "source" not in snapshot.json()
+    assert "foodstuffs" not in snapshot.json()
 
 
 def test_oversized_initial_snapshot_context_is_rejected_at_creation(client: TestClient) -> None:
@@ -163,12 +157,12 @@ def test_oversized_initial_snapshot_context_is_rejected_at_creation(client: Test
         for index in range(1, 101)
     ]
 
-    response = client.post("/api/v1/recipe-improvement/sessions", json=request)
+    response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": request})
 
     assert response.status_code == 422
     assert response.json()["kind"] == "invalid_input"
     assert response.json()["issues"] == [
-        {"location": [], "message": "initial source recipe and foodstuffs context exceeds 16000 characters"}
+        {"location": ["input"], "message": "initial source recipe and foodstuffs context exceeds 16000 characters"}
     ]
 
 
@@ -182,17 +176,17 @@ def test_oversized_initial_snapshot_context_is_rejected_at_creation(client: Test
 def test_invalid_input_returns_domain_issues_and_does_not_create_session(
     client: TestClient, payload: dict[str, object], location: list[str | int]
 ) -> None:
-    response = client.post("/api/v1/recipe-improvement/sessions", json=payload)
+    response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": payload})
 
     assert response.status_code == 422
     body = response.json()
     assert body["kind"] == "invalid_input"
-    assert body["issues"][0]["location"] == location
-    assert client.get("/api/v1/recipe-improvement/sessions/not-created").status_code == 404
+    assert body["issues"][0]["location"] == ["input", *location]
+    assert client.get("/api/v1/agents/kochwiki/sessions/not-created").status_code == 404
 
 
 def test_unknown_session_returns_not_found(client: TestClient) -> None:
-    response = client.get("/api/v1/recipe-improvement/sessions/missing")
+    response = client.get("/api/v1/agents/kochwiki/sessions/missing")
 
     assert response.status_code == 404
     assert response.json() == {"kind": "unknown"}
@@ -201,33 +195,33 @@ def test_unknown_session_returns_not_found(client: TestClient) -> None:
 def test_retained_expired_session_returns_gone_without_snapshot() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
     store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_recipe_agent] = lambda: create_recipe_agent(FakeGenerator(), FakeResolver(), store)
+    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(create_recipe_agent(FakeGenerator(), FakeResolver(), store))
     try:
         client = TestClient(app)
-        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+        created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
         clock.value += timedelta(minutes=10)
 
         active_response = client.get(
-            f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+            f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
         )
 
         assert active_response.status_code == 200
         assert active_response.json()["expires_at"] == created["expires_at"]
         clock.value += timedelta(minutes=80)
 
-        response = client.get(f"/api/v1/recipe-improvement/sessions/{created['session_id']}")
+        response = client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}")
 
         assert response.status_code == 410
         assert response.json() == {"kind": "expired"}
         assert "source" not in response.json()
-        assert client.get(f"/api/v1/recipe-improvement/sessions/{created['session_id']}").status_code == 404
+        assert client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}").status_code == 404
     finally:
         app.dependency_overrides.clear()
 
 
 def test_user_messages_append_in_order_and_preserve_submitted_text(client: TestClient) -> None:
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
 
     first = client.post(f"{session_url}/messages", json={"text": "  Make it lighter.  "})
     second = client.post(f"{session_url}/messages", json={"text": "Keep it filling."})
@@ -258,8 +252,8 @@ def test_user_messages_append_in_order_and_preserve_submitted_text(client: TestC
 def test_rejected_user_messages_do_not_change_the_conversation(
     client: TestClient, payload: dict[str, object]
 ) -> None:
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
 
     response = client.post(f"{session_url}/messages", json=payload)
     read = client.get(session_url)
@@ -270,8 +264,8 @@ def test_rejected_user_messages_do_not_change_the_conversation(
 
 
 def test_message_limit_returns_conflict_without_appending(client: TestClient) -> None:
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
     for index in range(MAX_MESSAGE_COUNT - 1):
         response = client.post(f"{session_url}/messages", json={"text": str(index)})
         assert response.status_code == 201
@@ -288,20 +282,20 @@ def test_message_limit_returns_conflict_without_appending(client: TestClient) ->
 def test_unknown_and_expired_user_message_appends_do_not_expose_session_content() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
     store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_recipe_agent] = lambda: create_recipe_agent(FakeGenerator(), FakeResolver(), store)
+    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(create_recipe_agent(FakeGenerator(), FakeResolver(), store))
     try:
         client = TestClient(app)
         unknown = client.post(
-            "/api/v1/recipe-improvement/sessions/missing/messages", json={"text": "Hello"}
+            "/api/v1/agents/kochwiki/sessions/missing/messages", json={"text": "Hello"}
         )
-        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+        created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
         clock.value = datetime.fromisoformat(created["expires_at"])
 
         expired = client.post(
-            f"/api/v1/recipe-improvement/sessions/{created['session_id']}/messages",
+            f"/api/v1/agents/kochwiki/sessions/{created['session_id']}/messages",
             json={"text": "Too late"},
         )
-        read = client.get(f"/api/v1/recipe-improvement/sessions/{created['session_id']}")
+        read = client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}")
 
         assert unknown.status_code == 404
         assert unknown.json() == {"kind": "unknown"}
@@ -316,17 +310,17 @@ def test_unknown_and_expired_user_message_appends_do_not_expose_session_content(
 def test_user_message_append_and_read_preserve_the_fixed_expiry() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
     store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_recipe_agent] = lambda: create_recipe_agent(FakeGenerator(), FakeResolver(), store)
+    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(create_recipe_agent(FakeGenerator(), FakeResolver(), store))
     try:
         client = TestClient(app)
-        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
+        created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
         clock.value += timedelta(minutes=10)
 
         appended = client.post(
-            f"/api/v1/recipe-improvement/sessions/{created['session_id']}/messages",
+            f"/api/v1/agents/kochwiki/sessions/{created['session_id']}/messages",
             json={"text": "Still active"},
         )
-        read = client.get(f"/api/v1/recipe-improvement/sessions/{created['session_id']}")
+        read = client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}")
 
         assert appended.status_code == 201
         assert read.status_code == 200
@@ -338,8 +332,8 @@ def test_user_message_append_and_read_preserve_the_fixed_expiry() -> None:
 def test_turn_endpoint_returns_and_stores_assistant_reply(
     client: TestClient, fake_generator: FakeGenerator
 ) -> None:
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
     client.post(f"{session_url}/messages", json={"text": "  question  "})
 
     response = client.post(f"{session_url}/turns")
@@ -351,7 +345,7 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
         "text": "Test reply",
         "turn_id": response.json()["turn_id"],
     }
-    assert response.json()["proposals"] == []
+    assert response.json()["artifacts"] == []
     assert response.json()["turn_id"]
     generation_request = fake_generator.calls[0]
     assert generation_request.input_items[-1] == {"role": "user", "content": "  question  "}
@@ -402,15 +396,14 @@ def test_locally_valid_recipe_configuration_constructs_agent_without_remote_prob
 
 
 def test_all_recipe_endpoints_report_unavailable() -> None:
-    app.dependency_overrides[get_recipe_agent] = lambda: (_ for _ in ()).throw(AgentUnavailable())
+    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(None)
     try:
         client = TestClient(app)
-        prefix = "/api/v1/recipe-improvement/sessions"
+        prefix = "/api/v1/agents/kochwiki/sessions"
         responses = [
-            client.post(prefix, json=valid_request()),
+            client.post(prefix, json={"input": valid_request()}),
             client.post(prefix),
             client.get(f"{prefix}/missing"),
-            client.get(f"{prefix}/missing/proposals/missing"),
             client.post(f"{prefix}/missing/messages", json={"text": "question"}),
             client.post(f"{prefix}/missing/messages"),
             client.post(f"{prefix}/missing/turns"),
@@ -424,9 +417,9 @@ def test_all_recipe_endpoints_report_unavailable() -> None:
 def test_turn_endpoint_reports_unknown_and_not_ready(
     client: TestClient, fake_generator: FakeGenerator
 ) -> None:
-    unknown = client.post("/api/v1/recipe-improvement/sessions/missing/turns")
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    unknown = client.post("/api/v1/agents/kochwiki/sessions/missing/turns")
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
     not_ready = client.post(f"{session_url}/turns")
 
     assert unknown.status_code == 404
@@ -439,8 +432,8 @@ def test_turn_endpoint_reports_unknown_and_not_ready(
 def test_turn_endpoint_reports_generation_failure_without_appending(
     client: TestClient, fake_generator: FakeGenerator
 ) -> None:
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
     client.post(f"{session_url}/messages", json={"text": "question"})
     fake_generator.fail = True
 
@@ -455,8 +448,8 @@ def test_turn_endpoint_reports_generation_failure_without_appending(
 def test_turn_endpoint_rejects_reply_after_new_message(
     client: TestClient, fake_generator: FakeGenerator
 ) -> None:
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
     client.post(f"{session_url}/messages", json={"text": "first"})
 
     def append_another_message() -> None:
@@ -482,11 +475,11 @@ def test_turn_endpoint_rejects_reply_after_new_message(
 def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGenerator) -> None:
     clock = MutableClock(datetime(2026, 9, 13, 10, 30, tzinfo=UTC))
     store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_recipe_agent] = lambda: create_recipe_agent(fake_generator, FakeResolver(), store)
+    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(create_recipe_agent(fake_generator, FakeResolver(), store))
     try:
         client = TestClient(app)
-        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-        session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+        created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+        session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
         client.post(f"{session_url}/messages", json={"text": "question"})
         fake_generator.before_return = lambda: setattr(
             clock, "value", datetime.fromisoformat(created["expires_at"])
@@ -498,14 +491,14 @@ def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGene
         assert response.json()["kind"] == "expired"
         assert client.get(session_url).status_code == 404
     finally:
-        app.dependency_overrides.pop(get_recipe_agent, None)
+        app.dependency_overrides.pop(get_agent_registry, None)
 
 
 def test_turn_endpoint_uses_reserved_assistant_capacity(
     client: TestClient, fake_generator: FakeGenerator
 ) -> None:
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
     for index in range(MAX_MESSAGE_COUNT - 1):
         assert client.post(f"{session_url}/messages", json={"text": str(index)}).status_code == 201
 
@@ -530,8 +523,8 @@ def test_turn_endpoint_uses_reserved_assistant_capacity(
 def test_partial_failure_drops_accepted_proposals_and_retry_is_stable(
     client: TestClient, fake_generator: FakeGenerator
 ) -> None:
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
     client.post(f"{session_url}/messages", json={"text": "Propose one"})
     recipe = valid_request()["source"]["recipe"]
     recipe.pop("origin_name")
@@ -555,16 +548,16 @@ def test_partial_failure_drops_accepted_proposals_and_retry_is_stable(
     assert first.json() == retry.json()
     assert first.json() == {"kind": "generation_failed", "turn_id": first.json()["turn_id"]}
     assert len(fake_generator.calls) == 2
-    assert read.json()["proposals"] == []
+    assert read.json()["artifacts"] == []
     assert read.json()["terminal_turn_id"] == first.json()["turn_id"]
     assert read.json()["messages"] == [{"role": "user", "text": "Propose one"}]
 
 
-def test_proposal_lookup_only_exposes_completed_turn_artifacts(
+def test_session_read_only_exposes_completed_turn_artifacts(
     client: TestClient, fake_generator: FakeGenerator
 ) -> None:
-    created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-    session_url = f"/api/v1/recipe-improvement/sessions/{created['session_id']}"
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
     client.post(f"{session_url}/messages", json={"text": "Propose one"})
     recipe = valid_request()["source"]["recipe"]
     recipe.pop("origin_name")
@@ -584,36 +577,36 @@ def test_proposal_lookup_only_exposes_completed_turn_artifacts(
     def check_pending_proposal() -> None:
         if len(fake_generator.calls) != 2:
             return
-        pending = client.get(session_url).json()["proposals"]
+        pending = client.get(session_url).json()["artifacts"]
         assert pending == []
 
     fake_generator.before_return = check_pending_proposal
     turn = client.post(f"{session_url}/turns")
 
     assert turn.status_code == 201
-    proposal = turn.json()["proposals"][0]
-    found = client.get(f"{session_url}/proposals/{proposal['proposal_id']}")
-    missing = client.get(f"{session_url}/proposals/missing")
-    assert found.status_code == 200
-    assert found.json() == proposal
-    assert missing.status_code == 404
-    assert missing.json() == {"kind": "unknown_proposal"}
+    artifact = turn.json()["artifacts"][0]
+    history = client.get(session_url).json()["artifacts"]
+    assert history == [artifact]
+    assert artifact["artifact_id"]
+    assert artifact["type"] == "recipe.proposal"
+    assert artifact["order"] == 1
+    assert artifact["turn_id"] == turn.json()["turn_id"]
+    assert artifact["payload"]["name"] == "Overnight oats"
+    assert artifact["payload"]["recipe"]["ingredients"][0]["foodstuff"]["name"] == "Current oats"
 
 
-def test_proposal_lookup_reports_session_expiry_then_unknown() -> None:
+def test_session_history_reports_expiry_then_unknown() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
     store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_recipe_agent] = lambda: create_recipe_agent(FakeGenerator(), FakeResolver(), store)
+    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(create_recipe_agent(FakeGenerator(), FakeResolver(), store))
     try:
         client = TestClient(app)
-        created = client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).json()
-        proposal_url = (
-            f"/api/v1/recipe-improvement/sessions/{created['session_id']}/proposals/missing"
-        )
+        created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
+        session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
         clock.value = datetime.fromisoformat(created["expires_at"])
 
-        expired = client.get(proposal_url)
-        unknown = client.get(proposal_url)
+        expired = client.get(session_url)
+        unknown = client.get(session_url)
 
         assert expired.status_code == 410
         assert expired.json() == {"kind": "expired"}

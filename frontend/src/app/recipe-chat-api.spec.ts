@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HttpRecipeChatTransport, RecipeChatApiError } from './recipe-chat-api';
+import { HttpRecipeChatTransport, RecipeChatApiError, RecipeChatNetworkError, parseRecipeArtifact } from './recipe-chat-api';
 
 describe('HttpRecipeChatTransport', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -16,7 +16,8 @@ describe('HttpRecipeChatTransport', () => {
     const created = await new HttpRecipeChatTransport().createSession();
 
     expect(created.session_id).toBe('session-1');
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/recipe-improvement/sessions');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/agents/kochwiki/sessions');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toHaveProperty('input.source');
   });
 
   it('maps typed backend errors without accepting their payload as success', async () => {
@@ -41,7 +42,7 @@ describe('HttpRecipeChatTransport', () => {
         response(200, {
           session_id: 'session-1',
           messages: [{ role: 'user', text: 'Weniger Zucker' }],
-          proposals: [proposal],
+          artifacts: [proposal],
           terminal_turn_id: null,
           terminal_turn_kind: null,
         }),
@@ -50,8 +51,9 @@ describe('HttpRecipeChatTransport', () => {
       .mockResolvedValueOnce(
         response(201, {
           turn_id: 'turn-1',
+          kind: 'completed',
           message: { role: 'assistant', text: 'Gern.', turn_id: 'turn-1' },
-          proposals: [proposal],
+          artifacts: [proposal],
         }),
       );
     vi.stubGlobal('fetch', fetchMock);
@@ -60,7 +62,7 @@ describe('HttpRecipeChatTransport', () => {
     await expect(transport.readSession('session-1')).resolves.toEqual({
       session_id: 'session-1',
       messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
-      proposals: [proposal],
+      artifacts: [proposal],
       terminal_turn_id: null,
       terminal_turn_kind: null,
     });
@@ -71,23 +73,34 @@ describe('HttpRecipeChatTransport', () => {
     });
     await expect(transport.generateTurn('session-1')).resolves.toEqual({
       turn_id: 'turn-1',
+      kind: 'completed',
       message: { role: 'assistant', text: 'Gern.', turn_id: 'turn-1' },
-      proposals: [proposal],
+      artifacts: [proposal],
     });
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
-      '/api/v1/recipe-improvement/sessions/session-1',
-      '/api/v1/recipe-improvement/sessions/session-1/messages',
-      '/api/v1/recipe-improvement/sessions/session-1/turns',
+      '/api/v1/agents/kochwiki/sessions/session-1',
+      '/api/v1/agents/kochwiki/sessions/session-1/messages',
+      '/api/v1/agents/kochwiki/sessions/session-1/turns',
     ]);
+  });
+
+  it.each([null, 'invalid', []])('rejects a recipe artifact with non-object payload %j', (payload) => {
+    expect(() => parseRecipeArtifact({ ...proposalPayload(), payload })).toThrow(RecipeChatNetworkError);
+  });
+
+  it('ignores other artifact types without decoding their payload', () => {
+    expect(parseRecipeArtifact({ ...proposalPayload(), type: 'demo.greeting', payload: null })).toBeNull();
   });
 });
 
 function proposalPayload() {
   return {
-    proposal_id: 'proposal-1',
+    artifact_id: 'proposal-1',
+    type: 'recipe.proposal',
+    created_at: '2026-09-25T12:00:00Z',
+    order: 1,
     turn_id: 'turn-1',
-    name: 'Leichtere Variante',
-    recipe: {
+    payload: { name: 'Leichtere Variante', base: { kind: 'source' }, recipe: {
       servings: 2,
       preptime: null,
       kcal: 100,
@@ -110,7 +123,7 @@ function proposalPayload() {
         },
       }],
       steps: [{ index: 1, description: 'Mischen.' }],
-    },
+    } },
   };
 }
 

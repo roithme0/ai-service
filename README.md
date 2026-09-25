@@ -6,7 +6,7 @@ The current implementation includes configured recipe-improvement and determinis
 
 ## Core Features
 
-- **Configured agent services**: A shared typed service hosts independent server-configured recipe and demo instances. The current HTTP API remains recipe-specific; the demo is available internally.
+- **Configured agent services**: A shared typed service hosts independent server-configured recipe and demo instances through one generic conversation HTTP API.
 - **Supporting features**:
   - **Bounded AI capabilities**: Offer reusable operations requested by other services, initially including structured recipe optimization and, later, image generation.
   - **Conversation foundation**: Support ephemeral multi-turn recipe chat, multiple tool calls, explicit failures, and multiple proposal artifacts within one assistant turn. Responses are returned after turn completion; streaming and user-controlled cancellation are not implemented.

@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft. Establishes a shared conversation foundation, Kochwiki as a configuration of the universal agent using that foundation, and a deterministic chat UI demo using the same foundation without an LLM. The initial demonstration sequence is agreed; the concrete API shape remains open.
+Draft. The shared conversation foundation, configured Kochwiki and demo agents, and generic HTTP API are implemented. The deterministic chat UI demo remains a planned application change.
 
 ## Context
 
@@ -52,7 +52,7 @@ Application wiring creates one configured agent service instance per server-defi
 
 Each configuration uses a typed instance of the shared conversation store, retaining one lifecycle implementation without forcing unrelated context and artifact payloads into a heterogeneous store. Configuration-specific input validation runs before a session is allocated. The store owns conversation state and lifecycle; the bound execution strategy runs turns. Session and turn execution state, including tool bindings for the active turn, remains local to that session or invocation rather than mutable state on the shared agent service.
 
-Domain entry points receive their configured agent service through server wiring. A generic HTTP entry point may use a registry to locate an already configured service, but configuration routing remains outside that service. Whether the HTTP API identifies the configuration explicitly or resolves it from a session ID remains an API design question. Execution dependencies belong to the configured service or its bound strategy; callers do not supply model generators or domain resolvers with every turn. Initializing and using the demo must remain independent of OpenAI credentials and Kochwiki availability.
+Domain entry points receive their configured agent service through server wiring. The generic HTTP entry point uses a registry at the transport boundary and explicitly identifies the configuration in every request. A session addressed through another available configuration is unknown. Execution dependencies belong to the configured service or its bound strategy; callers do not supply model generators or domain resolvers with every turn. Initializing and using the demo remains independent of OpenAI credentials and Kochwiki availability.
 
 The selected configuration stays fixed for the session's lifetime. Conversation and tool results can evolve its context, but switching configurations requires a new session.
 
@@ -88,16 +88,15 @@ The first slice extracts shared session, turn, and staged-artifact ownership and
 
 ## Integration Impact
 
-The current application is wired to the recipe-improvement session API and maps proposals into artifacts. Moving the app to a UI demo will require a generic conversation contract and an application host that maps its messages, artifacts, and status to the existing chat UI inputs. The recipe-specific controller, transport, and fixed snapshot should not define that generic contract.
+The current application uses the generic conversation HTTP contract with the `kochwiki` configuration and maps recipe artifacts for presentation. Moving the app to a UI demo requires changing its host behavior to select `demo` and map messages, artifacts, and status to the existing chat UI inputs. The recipe-specific controller and fixed snapshot should not define the generic contract.
 
 Kochwiki must also use the shared session and turn lifecycle. Its configuration supplies recipe context, instructions, and available tools; recipe validation and domain operations remain within its capability implementation. The shared foundation must support both this model-driven configuration and the deterministic hello-world demo without a separate lifecycle for either.
 
 The existing recipe-improvement concept remains the source for the recipe capability. Its earlier use of the AI Service application to inspect real recipe proposals does not define the purpose of this new demo.
 
-## Open Questions
+## Resolved HTTP Decisions
 
-- What generic session API and artifact persistence shape are sufficient for the demo while remaining useful to later non-demo consumers?
-- How does the generic HTTP API locate a configured agent service for subsequent session requests: through an explicit configuration identifier or a session-to-service lookup?
+The common endpoint base is `/api/v1/agents/{configuration}/sessions`. Clients create sessions with an optional `input` in an object envelope, read session history, append user messages, and execute turns as separate operations. Published artifacts appear in completed turn responses and session history with shared identity, type, ordering, turn association, and a JSON payload. There is no individual artifact lookup endpoint or session-to-agent lookup map. The current stores remain process-local and expire sessions after 90 minutes. See the [generic conversation HTTP spec](../specs/2026-09-25-generic-conversation-http.md) for the full contract.
 
 ## Risks
 

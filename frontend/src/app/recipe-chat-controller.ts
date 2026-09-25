@@ -6,6 +6,7 @@ import {
   type RecipeProposal,
   type RecipeChatTransport,
   type SessionSnapshot,
+  parseRecipeArtifact,
 } from './recipe-chat-api';
 
 export interface RecipeChatViewState {
@@ -110,7 +111,7 @@ export class RecipeChatController {
       this.setState({
         content: [
           ...this.stateValue.content,
-          ...result.proposals.map(presentProposal),
+          ...result.artifacts.map(parseRecipeArtifact).filter(isProposal).map(presentProposal),
           presentMessage(result.message, textContent(this.stateValue.content).length),
         ],
         composerDisabled: false,
@@ -296,7 +297,7 @@ function presentMessage(message: ApiMessage, index: number): ChatTextMessage {
 
 function presentProposal(proposal: RecipeProposal): ChatContent {
   return {
-    kind: 'artifact', id: proposal.proposal_id, type: 'recipe-proposal', headline: proposal.name,
+    kind: 'artifact', id: proposal.artifact_id, type: 'recipe-proposal', headline: proposal.name,
     payload: {
       servings: proposal.recipe.servings, preptime: proposal.recipe.preptime,
       kcal: proposal.recipe.kcal, carbs: proposal.recipe.carbs, protein: proposal.recipe.protein,
@@ -311,13 +312,18 @@ function presentProposal(proposal: RecipeProposal): ChatContent {
 }
 
 function presentSnapshot(snapshot: SessionSnapshot): readonly ChatContent[] {
-  if (snapshot.proposals.length === 0) return presentMessages(snapshot.messages);
+  if (snapshot.artifacts.length === 0) return presentMessages(snapshot.messages);
+  const proposals = snapshot.artifacts.map(parseRecipeArtifact).filter(isProposal);
   return snapshot.messages.flatMap((message, index) => [
-    ...snapshot.proposals
+    ...proposals
       .filter((proposal) => proposal.turn_id === message.turn_id)
       .map(presentProposal),
     presentMessage(message, index),
   ]);
+}
+
+function isProposal(value: RecipeProposal | null): value is RecipeProposal {
+  return value !== null;
 }
 
 function isTextMessage(content: ChatContent): content is ChatTextMessage {

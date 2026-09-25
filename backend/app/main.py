@@ -1,10 +1,9 @@
 from types import TracebackType
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 
 from app.agents.wiring import get_configured_agents
-from app.recipe_improvement.http import AgentUnavailable, router as recipe_improvement_router
+from app.sessions.http import router as conversation_router
 
 
 class AgentLifespan:
@@ -27,12 +26,7 @@ class AgentLifespan:
 
 
 app = FastAPI(title="AI Service", lifespan=AgentLifespan)
-app.include_router(recipe_improvement_router)
-
-
-@app.exception_handler(AgentUnavailable)
-async def agent_unavailable(request: Request, error: AgentUnavailable) -> JSONResponse:
-    return JSONResponse(status_code=503, content={"kind": "agent_unavailable"})
+app.include_router(conversation_router)
 
 @app.get("/")
 async def hello_world() -> dict[str, str]:
