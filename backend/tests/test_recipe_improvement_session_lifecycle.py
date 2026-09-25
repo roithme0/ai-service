@@ -179,12 +179,13 @@ def test_creation_discards_expired_failed_turn_without_proposals() -> None:
     reservation = store.reserve_turn(expired_session.session_id)
     assert isinstance(reservation, RecipeTurnReservation)
     assert store.fail_turn(expired_session.session_id, reservation).kind == "generation_failed"
-    assert expired_session.session_id in store._terminal_turns
+    before_expiry = store.lookup(expired_session.session_id)
+    assert isinstance(before_expiry, RecipeImprovementSessionLookupSuccess)
+    assert before_expiry.session.terminal_turn_kind == "generation_failed"
 
     clock.value = expired_session.expires_at
     store.create(valid_session_input())
 
-    assert expired_session.session_id not in store._terminal_turns
     assert isinstance(store.lookup(expired_session.session_id), RecipeImprovementSessionLookupUnknown)
 
 
@@ -288,4 +289,26 @@ def test_proposal_registration_respects_expiry_and_limit() -> None:
     expired = register(store, created.session_id, SourceProposalBase(), candidate, turn_id)
     assert isinstance(expired, ProposalSessionUnavailable)
     assert expired.kind == "expired"
+
+
+def test_registration_rechecks_expiry_after_candidate_validation() -> None:
+    clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
+    store = RecipeImprovementSessionStore(clock=clock.now)
+    created = store.create(valid_session_input())
+    store.append_user_message(created.session_id, "Improve this")
+    reserved = store.reserve_turn(created.session_id)
+    assert isinstance(reserved, RecipeTurnReservation)
+    checked = store.validate_proposal_candidate(
+        created.session_id, SourceProposalBase(), proposal_candidate(), reserved.turn_id
+    )
+    assert isinstance(checked, ProposalCandidateAccepted)
+
+    clock.value = created.expires_at
+    outcome = store.register_resolved_proposal(
+        created.session_id, SourceProposalBase(), checked.candidate.name,
+        presentation(), reserved.turn_id,
+    )
+    assert isinstance(outcome, ProposalSessionUnavailable)
+    assert outcome.kind == "expired"
+    assert isinstance(store.lookup(created.session_id), RecipeImprovementSessionLookupUnknown)
 

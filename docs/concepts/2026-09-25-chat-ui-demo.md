@@ -74,6 +74,8 @@ The demo must clearly identify its replies as scripted. Simulated failures, reco
 
 Implementation proceeds in bounded slices, resolving slice-specific contract and design questions before each slice. The demo must run its complete sequence without OpenAI credentials, model configuration, or a reachable Kochwiki service.
 
+The first slice extracts shared session, turn, and staged-artifact ownership and routes the existing recipe flow through it while retaining the current recipe HTTP contract and UI behavior. Named configurations, generic endpoints, shared tool dispatch, and the demo follow in later slices. A recipe proposal uses the shared artifact identity, with no second proposal identity or duplicate authoritative storage. Maximum artifact count is a shared session setting; the recipe flow supplies its existing limit of 20, counting both retained and currently staged artifacts. Recipe validation and lineage rules remain domain responsibilities.
+
 ## Integration Impact
 
 The current application is wired to the recipe-improvement session API and maps proposals into artifacts. Moving the app to a UI demo will require a generic conversation contract and an application host that maps its messages, artifacts, and status to the existing chat UI inputs. The recipe-specific controller, transport, and fixed snapshot should not define that generic contract.
