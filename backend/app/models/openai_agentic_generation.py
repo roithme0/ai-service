@@ -47,8 +47,10 @@ class OpenAIAgenticGenerator:
             dumped = item.model_dump(mode="json") if hasattr(item, "model_dump") else item
             if not isinstance(dumped, dict):
                 raise ValueError("OpenAI response contained an unsupported output item")
-            output_items.append(dumped)
-            if dumped.get("type") == "function_call":
+            item_type = dumped.get("type")
+            if item_type == "reasoning":
+                output_items.append(_replay_item(dumped, ("type", "id", "summary", "encrypted_content")))
+            elif item_type == "function_call":
                 call_id = dumped.get("call_id")
                 name = dumped.get("name")
                 arguments = dumped.get("arguments")
@@ -56,6 +58,15 @@ class OpenAIAgenticGenerator:
                     or not isinstance(name, str) or not name
                     or not isinstance(arguments, str) or not arguments):
                     raise ValueError("OpenAI response contained an invalid function call")
+                output_items.append(_replay_item(dumped, ("type", "id", "call_id", "name", "arguments")))
                 calls.append(AgenticToolCall(call_id=call_id, name=name, arguments=arguments))
+            elif item_type == "message":
+                output_items.append(_replay_item(dumped, ("type", "id", "role", "content")))
+            else:
+                raise ValueError("OpenAI response contained an unsupported output item")
         text = response.output_text if isinstance(response.output_text, str) and response.output_text.strip() else None
         return AgenticGenerationResponse(tuple(output_items), tuple(calls), text)
+
+
+def _replay_item(item: dict[str, object], fields: tuple[str, ...]) -> dict[str, object]:
+    return {field: item[field] for field in fields if field in item}

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start:app": "ng serve ai-service-frontend",
+    "start:app": "ng serve ai-service-frontend --port 4204",
     "build:app": "ng build ai-service-frontend",
     "build:chat-ui": "ng build chat-ui",
     "test:app": "ng test ai-service-frontend --watch=false",

@@ -139,6 +139,8 @@ def test_later_turn_receives_full_previous_proposals_and_final_text_instruction(
         assert context["proposals"][0]["name"] == "First"
         assert "not persisted or visible to the user" in request.instructions
         assert "final text response" in request.instructions
+        assert "Never invent a foodstuff reference" in request.instructions
+        assert "amount-only change" in request.instructions
         return final("Refined")
 
     second = asyncio.run(generate_recipe_turn(store, created.session_id, ScriptedGenerator([inspect_context])))
@@ -257,7 +259,7 @@ def test_unknown_tool_is_rejected_without_registration() -> None:
     ("retryable", "reason"), [(False, "invalid_candidate"), (True, "resolver_unavailable")]
 )
 def test_resolver_failure_is_structured_and_does_not_store_proposal(
-    retryable: bool, reason: str
+    retryable: bool, reason: str, caplog: pytest.LogCaptureFixture,
 ) -> None:
     class FailingResolver:
         async def resolve(self, value: object) -> RecipePresentation:
@@ -273,14 +275,18 @@ def test_resolver_failure_is_structured_and_does_not_store_proposal(
         assert rejected["retryable"] is retryable
         return final()
 
-    outcome = asyncio.run(_generate_recipe_turn(
-        store, created.session_id,
-        ScriptedGenerator([call("proposal", {"kind": "source"}, candidate()), inspect]),
-        FailingResolver(),
-    ))
+    with caplog.at_level("INFO", logger="app.recipe_improvement.turn_service"):
+        outcome = asyncio.run(_generate_recipe_turn(
+            store, created.session_id,
+            ScriptedGenerator([call("proposal", {"kind": "source"}, candidate()), inspect]),
+            FailingResolver(),
+        ))
 
     assert outcome.kind == "completed"
     assert outcome.proposals == ()
+    assert "foodstuff_reference': 1" in caplog.text
+    assert "stage=resolver" in caplog.text
+    assert f"'reason': '{reason}'" in caplog.text
 
 
 def test_active_turn_is_busy_but_independent_session_can_complete() -> None:

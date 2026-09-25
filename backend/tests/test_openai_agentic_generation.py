@@ -22,10 +22,11 @@ def test_openai_replays_function_call_and_result_without_storage() -> None:
         requests.append(payload)
         if len(requests) == 1:
             output = [{"id": "rs_1", "type": "reasoning", "summary": [],
-                       "encrypted_content": "opaque-reasoning"},
+                       "encrypted_content": "opaque-reasoning", "status": "completed"},
                       {"id": "fc_1", "type": "function_call", "call_id": "call_1",
                        "name": "register_recipe_proposal", "arguments": "not-json", "status": "completed"}]
         else:
+            assert all("status" not in item for item in payload["input"])
             output = [{"id": "msg_1", "type": "message", "role": "assistant", "status": "completed",
                        "content": [{"type": "output_text", "text": "I could not register that.",
                                     "annotations": []}]}]
@@ -62,10 +63,10 @@ def test_openai_replays_function_call_and_result_without_storage() -> None:
     ]
     replay = requests[1]["input"]
     assert isinstance(replay, list)
-    assert replay[2]["type"] == "reasoning"
-    assert replay[2]["encrypted_content"] == "opaque-reasoning"
-    assert replay[3]["type"] == "function_call"
-    assert replay[3]["call_id"] == "call_1"
+    assert replay[2] == {"id": "rs_1", "type": "reasoning", "summary": [],
+                         "encrypted_content": "opaque-reasoning"}
+    assert replay[3] == {"id": "fc_1", "type": "function_call", "call_id": "call_1",
+                         "name": "register_recipe_proposal", "arguments": "not-json"}
     assert replay[4]["type"] == "function_call_output"
     assert replay[4]["call_id"] == "call_1"
     assert json.loads(replay[4]["output"]) == {"kind": "rejected", "reason": "invalid_arguments"}
