@@ -15,7 +15,7 @@ from app.sessions.tools import ToolRegistry
 FIRST_TURN_DELAY_SECONDS = 0.4
 FIRST_REPLY = "Hello! This is a scripted chat UI demo. Send another message to see a tool create an artifact."
 SECOND_REPLY = "This scripted demo created a greeting artifact. Send another message to finish."
-COMPLETE_REPLY = "This scripted demo is complete. Start a new session to restart it."
+COMPLETE_REPLY = "This scripted demo is complete. Refresh the page to restart it."
 
 logger = logging.getLogger(__name__)
 

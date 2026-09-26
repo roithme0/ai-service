@@ -8,6 +8,11 @@ Run the local application from the repository root:
 docker compose -f deployment/docker-compose-local.yml up --build
 ```
 
+Open `http://localhost:8000` (or the configured `GATEWAY_PORT`) for the scripted
+chat UI demo. It requires no OpenAI credentials, model configuration, or reachable
+Kochwiki service. Submit any text to advance through greeting, greeting-tool JSON
+artifact, and completion. Refresh the page to restart with a new empty session.
+
 Docker Compose reads `deployment/.env`. To enable recipe-improvement turns in
 the container, add `OPENAI_API_KEY`, `RECIPE_IMPROVEMENT_OPENAI_MODEL`, and the
 Kochwiki API base URL as `KOCHWIKI_BASE_URL`. That file is ignored by Git. The

@@ -146,6 +146,6 @@ Rebuilding alone does not update the legacy Kochwiki tarball installation. Repea
 
 ## Browser verification
 
-Configure the backend model environment, run the backend and `npm run start:app` in `frontend`, then open the AI Service frontend at a portrait-phone viewport. The host creates a short-lived recipe-improvement session from its POC fixture and sends confirmed messages to the configured model.
+Run the backend on port 8004 and `npm run start:app` in `frontend`, then open `http://localhost:4204` at a portrait-phone viewport. The host creates an empty `demo` session and advances a scripted sequence through the real backend. No model credentials or Kochwiki access is required; see [frontend setup](../../README.md) for commands.
 
-Check that initialization, sending, generation, inline failures, safe generation retry, and session restart remain visible in the conversation flow. Also check that history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling.
+Submit arbitrary text to check the brief loading state and greeting, then the `demo.greeting` artifact through JSON fallback before the assistant reply, then completion guidance. Further submissions remain enabled. Refresh to restart with empty history; no dedicated restart button is provided. Generic error recovery actions remain available when failures occur. Also check that history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling.

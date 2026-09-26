@@ -2,13 +2,13 @@
 
 ## Status
 
-Draft. The shared conversation foundation, configured Kochwiki and demo agents, and generic HTTP API are implemented. The deterministic chat UI demo remains a planned application change.
+Implemented. The shared conversation foundation, configured Kochwiki and demo agents, generic HTTP API, and deterministic frontend demo are implemented. Shared frontend modules remain application internals; publication evaluation is deferred.
 
 ## Context
 
-The current AI Service application hosts `@roithme0/chat-ui` through a recipe-specific controller and a hardcoded recipe snapshot. Creating a proposal then depends on Kochwiki's authoritative foodstuff catalogue and resolver. A locally plausible snapshot can therefore produce a rejected proposal when its foodstuff identifiers do not exist in Kochwiki. This makes the application unreliable as a way to inspect the chat UI itself.
+The previous AI Service application hosted `@roithme0/chat-ui` through a recipe-specific controller and a hardcoded recipe snapshot. Creating a proposal then depends on Kochwiki's authoritative foodstuff catalogue and resolver. A locally plausible snapshot can therefore produce a rejected proposal when its foodstuff identifiers do not exist in Kochwiki. This makes the application unreliable as a way to inspect the chat UI itself.
 
-The chat UI library already accepts host-supplied text messages and JSON-compatible artifacts, and has a fallback JSON artifact renderer. The application, rather than the library, supplies the recipe-specific session and transport behavior.
+The chat UI library accepts host-supplied text messages and JSON-compatible artifacts, and has a fallback JSON artifact renderer. The application supplies session and transport behavior through the domain-independent conversation foundation.
 
 ## Decision
 
@@ -66,7 +66,7 @@ The initial sequence is deliberately small:
 
 1. First submission: show a brief loading state, then an assistant greeting.
 2. Second submission: execute `create_greeting("World")`, then display its artifact and an assistant reply.
-3. Further submissions: explain that the demo is complete and offer a restart. Restarting creates a new session and begins the sequence again.
+3. Further submissions: explain that the demo is complete and instruct the user to refresh the page. Refresh creates a new empty session and begins the sequence again. No dedicated restart control is provided; generic error recovery actions remain available.
 
 Every submitted user message is recorded, but its text does not select the response. The sequence and its timing belong to the replaceable demo execution strategy so they can be adjusted without changing the shared session model or chat UI library.
 
@@ -88,7 +88,7 @@ The first slice extracts shared session, turn, and staged-artifact ownership and
 
 ## Integration Impact
 
-The current application uses the generic conversation HTTP contract with the `kochwiki` configuration and maps recipe artifacts for presentation. Moving the app to a UI demo requires changing its host behavior to select `demo` and map messages, artifacts, and status to the existing chat UI inputs. The recipe-specific controller and fixed snapshot should not define the generic contract.
+The application uses the generic conversation HTTP contract with fixed `demo` configuration and empty input. The shared controller and transport supply messages, artifacts, and status to the existing chat UI inputs; the generic mapper preserves artifacts for JSON fallback rendering. Recipe frontend types, mapper, fixture, and dedicated tests have been removed. The backend Kochwiki agent remains available.
 
 Kochwiki must also use the shared session and turn lifecycle. Its configuration supplies recipe context, instructions, and available tools; recipe validation and domain operations remain within its capability implementation. The shared foundation must support both this model-driven configuration and the deterministic hello-world demo without a separate lifecycle for either.
 

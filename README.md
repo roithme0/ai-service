@@ -2,7 +2,7 @@
 
 The AI Service provides shared, provider-neutral AI capabilities and an agent-based interface for projects in the network. It owns model integration, reusable AI operations, agent orchestration, and service connectors while domain services remain authoritative for their data and business rules.
 
-The current implementation includes configured recipe-improvement and deterministic demo agent services, bounded model/tool orchestration, and a reusable chat UI library. This repository is authoritative for its implementation, API contracts, and deployment configuration. A deterministic UI demo remains a planned application change, described in the [chat UI demo concept](docs/concepts/2026-09-25-chat-ui-demo.md).
+The current implementation includes configured recipe-improvement and deterministic demo agent services, bounded model/tool orchestration, and a reusable chat UI library. This repository is authoritative for its implementation, API contracts, and deployment configuration. The application runs a deterministic UI demo, described in the [chat UI demo concept](docs/concepts/2026-09-25-chat-ui-demo.md).
 
 ## Core Features
 
@@ -27,7 +27,9 @@ The checked-in `.codex/config.toml` enables Angular CLI and OpenAI documentation
 
 ## Workflows
 
-The Angular application uses an application-level conversation controller and HTTP transport with fixed `kochwiki` configuration, a recipe snapshot, and recipe artifact presentation. Producing proposals still requires configured model and Kochwiki resolver access. Its replacement with a deterministic demo is planned; the shared application modules are not library exports. See [the library README](frontend/projects/chat-ui/README.md) for the public API, host theme properties, GitHub Packages releases, and local development linking.
+The Angular application uses the shared conversation controller and HTTP transport with fixed `demo` configuration and empty input. Any submitted text advances the scripted sequence: greeting, real greeting-tool artifact rendered as JSON, then completion guidance. No AI model, OpenAI credentials, or Kochwiki access is needed. Refresh the page to restart with a new empty session. The recipe application and its fixture have been removed; the `kochwiki` backend configuration remains available for recipe integrations.
+
+Run the complete application with `docker compose -f deployment/docker-compose-local.yml up --build` and open `http://localhost:8000` (or the configured gateway port). See [frontend setup](frontend/README.md) for separate development servers and [the library README](frontend/projects/chat-ui/README.md) for its public API and releases. Shared application modules remain internal; publication evaluation is deferred.
 
 Use workflow skills only when explicitly invoked by the user.
 

@@ -1,59 +1,34 @@
-# AiServiceFrontend
+# AI Service Frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.24.
+The Angular application hosts a scripted chat UI demo using the real backend's `demo` configuration with empty initialization input. It reuses the application-level conversation controller, HTTP transport, and generic JSON artifact mapper. These shared modules remain application internals; library publication evaluation is deferred.
 
 ## Development server
 
-To start a local development server, run:
+From `backend`, run `python -m uvicorn app.main:app --port 8004`. From `frontend`, run:
 
-```bash
-ng serve
+```powershell
+npm ci
+npm run start:app
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Open `http://localhost:4204`. The existing development proxy forwards `/api` to `http://localhost:8004`. No OpenAI credentials, model configuration, or reachable Kochwiki service is required for the demo. For the container setup, see [deployment](../deployment/README.md).
 
-## Code scaffolding
+Every submitted message advances a fixed sequence regardless of its text: a brief loading state and scripted greeting, a real `demo.greeting` tool artifact with `{"message":"Hello, World!"}` displayed through the library's JSON fallback, then completion guidance. Further messages remain accepted. Refresh the page to create a new empty session and restart; there is no dedicated restart control. Generic error recovery actions remain available. Abandoned sessions expire in backend memory.
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
+The recipe application, its fixture, and its presentation mapper have been removed. The backend's `kochwiki` configuration remains supported; its model and resolver setup is documented in [backend setup](../backend/README.md).
 
 ## Building
 
-To build the project run:
-
-```bash
-ng build
+```powershell
+npm run build:app
+npm run build:chat-ui
 ```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
 
 ## Running unit tests
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
+```powershell
+npm run test:app
+npm run test:chat-ui
 ```
 
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+The reusable library owns chat rendering and accepts host-supplied content and status. See [the library README](projects/chat-ui/README.md) for its API, themes, and local linking.

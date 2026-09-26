@@ -2,8 +2,7 @@ import { Component, OnInit, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui';
 import { HttpConversationTransport } from './conversation-api';
 import { ConversationController, type ConversationViewState } from './conversation-controller';
-import { RECIPE_SESSION_FIXTURE } from './recipe-chat-fixture';
-import { presentRecipeArtifact } from './recipe-chat-domain';
+import { presentJsonArtifact } from './generic-artifact-mapper';
 
 const INITIAL_STATE: ConversationViewState = {
   content: [],
@@ -24,8 +23,8 @@ const INITIAL_STATE: ConversationViewState = {
 export class App implements OnInit {
   protected readonly chat = signal<ConversationViewState>(INITIAL_STATE);
   private readonly controller = new ConversationController(
-    new HttpConversationTransport('kochwiki', RECIPE_SESSION_FIXTURE),
-    presentRecipeArtifact,
+    new HttpConversationTransport('demo', {}),
+    presentJsonArtifact,
     (state) => this.chat.set(state),
   );
 

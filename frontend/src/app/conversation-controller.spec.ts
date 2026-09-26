@@ -1,10 +1,10 @@
-import { presentRecipeArtifact } from './recipe-chat-domain';
 import { presentJsonArtifact } from './generic-artifact-mapper';
 import { describe, expect, it, vi } from 'vitest';
 import {
   ConversationApiError,
   ConversationNetworkError,
   type ApiMessage,
+  type ApiArtifact,
   type ConversationTransport,
   type SessionCreation,
   type SessionSnapshot,
@@ -74,7 +74,7 @@ describe('ConversationController', () => {
   it('reports agent unavailability during session creation', async () => {
     const transport = new FakeTransport();
     transport.createSession.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
 
     await controller.start();
 
@@ -86,7 +86,7 @@ describe('ConversationController', () => {
   it('reports agent unavailability during message append', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
 
     await controller.submit('Frage', () => undefined);
@@ -101,7 +101,7 @@ describe('ConversationController', () => {
     transport.appendMessage.mockResolvedValue(user('Frage'));
     transport.generateTurn.mockRejectedValue(new ConversationNetworkError('Timeout'));
     transport.readSession.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
 
     await controller.submit('Frage', () => undefined);
@@ -118,50 +118,40 @@ describe('ConversationController', () => {
     transport.appendMessage.mockReturnValue(append.promise);
     transport.generateTurn.mockReturnValue(turn.promise);
     const states: ConversationViewState[] = [];
-    const controller = new ConversationController(transport, presentRecipeArtifact, (state) => states.push(state));
+    const controller = new ConversationController(transport, presentJsonArtifact, (state) => states.push(state));
     await controller.start();
     const acknowledge = vi.fn();
 
-    const submission = controller.submit('Weniger Zucker', acknowledge);
+    const submission = controller.submit('Hallo Demo', acknowledge);
     expect(controller.state.content).toEqual([]);
     expect(controller.state.composerDisabled).toBe(true);
     expect(acknowledge).not.toHaveBeenCalled();
 
-    append.resolve(user('Weniger Zucker'));
+    append.resolve(user('Hallo Demo'));
     await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledOnce());
-    expect(texts(controller.state.content)).toEqual(['Weniger Zucker']);
+    expect(texts(controller.state.content)).toEqual(['Hallo Demo']);
     expect(controller.state.status?.message).toBe('Antwort wird erstellt …');
 
     turn.resolve({ kind: 'completed', turn_id: 'turn-1', message: assistant('Gern.', 'turn-1'), artifacts: [] });
     await submission;
     expect(texts(controller.state.content)).toEqual([
-      'Weniger Zucker',
+      'Hallo Demo',
       'Gern.',
     ]);
     expect(controller.state.composerDisabled).toBe(false);
     expect(states.at(-1)?.status).toBeNull();
   });
 
-  it('places resolved proposals between the user and final assistant text', async () => {
+  it('places JSON artifacts between the user and final assistant text', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Alternative'));
     transport.generateTurn.mockResolvedValue({
       kind: 'completed',
       turn_id: 'turn-1',
       message: assistant('Hier ist sie.', 'turn-1'),
-      artifacts: [{
-        artifact_id: 'proposal-1', type: 'recipe.proposal', created_at: '2026-09-25T12:00:00Z', order: 1, turn_id: 'turn-1',
-        payload: { name: 'Neue Variante', base: { kind: 'source' }, recipe: {
-          servings: 2, preptime: null, kcal: 100, carbs: 12, protein: 8, fat: 3,
-          ingredients: [{ index: 1, amount: 50, foodstuff: {
-            id: 1, name: 'Hafer', brand: null, unit: 'G', unitVerbose: 'g',
-            kcal: 370, carbs: 60, protein: 13, fat: 7,
-          }}],
-          steps: [{ index: 1, description: 'Mischen.' }],
-        } },
-      }],
+      artifacts: [artifact('artifact-1', 'turn-1')],
     });
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
 
     await controller.submit('Alternative', () => undefined);
@@ -170,25 +160,25 @@ describe('ConversationController', () => {
       'text', 'artifact', 'text',
     ]);
     expect(controller.state.content[1]).toEqual(expect.objectContaining({
-      id: 'proposal-1', type: 'recipe-proposal', headline: 'Neue Variante',
+      id: 'artifact-1', type: 'example.result', headline: 'example.result',
     }));
   });
 
   it('reconciles an ambiguous append and never appends it a second time', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationNetworkError('Netzwerkfehler'));
-    transport.readSession.mockResolvedValue(snapshot([user('Knuspriger')]));
+    transport.readSession.mockResolvedValue(snapshot([user('Noch eine Frage')]));
     transport.generateTurn.mockResolvedValue({
       kind: 'completed',
       turn_id: 'turn-1',
       message: assistant('Ja.', 'turn-1'),
       artifacts: [],
     });
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();
 
-    await controller.submit('Knuspriger', acknowledge);
+    await controller.submit('Noch eine Frage', acknowledge);
 
     expect(transport.appendMessage).toHaveBeenCalledOnce();
     expect(transport.readSession).toHaveBeenCalledOnce();
@@ -206,7 +196,7 @@ describe('ConversationController', () => {
         kind: 'completed',
         turn_id: 'turn-1',
         message: assistant('Erste Antwort', 'turn-1'),
-        artifacts: [proposal('proposal-1', 'turn-1')],
+        artifacts: [artifact('artifact-1', 'turn-1')],
       })
       .mockResolvedValueOnce({
         kind: 'completed',
@@ -220,9 +210,9 @@ describe('ConversationController', () => {
         assistant('Erste Antwort', 'turn-1'),
         user('Zweite Frage'),
       ]),
-      artifacts: [proposal('proposal-1', 'turn-1')],
+      artifacts: [artifact('artifact-1', 'turn-1')],
     });
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
     await controller.submit('Erste Frage', () => undefined);
 
@@ -230,7 +220,7 @@ describe('ConversationController', () => {
 
     expect(controller.state.content.map((item) => item.id)).toEqual([
       'confirmed-0-user',
-      'proposal-1',
+      'artifact-1',
       'assistant-turn-1',
       'confirmed-2-user',
       'assistant-turn-2',
@@ -240,7 +230,7 @@ describe('ConversationController', () => {
   it('preserves the draft contract and history when appending fails', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(422, 'invalid_message'));
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();
 
@@ -257,7 +247,7 @@ describe('ConversationController', () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationNetworkError('Netzwerkfehler'));
     transport.readSession.mockResolvedValue(snapshot([]));
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();
 
@@ -272,7 +262,7 @@ describe('ConversationController', () => {
 
   it('offers a new session when the agent is unavailable', async () => {
     const transport = new FakeTransport();
-    transport.appendMessage.mockResolvedValue(user('Leichter'));
+    transport.appendMessage.mockResolvedValue(user('Weiter'));
     transport.generateTurn
       .mockRejectedValueOnce(new ConversationApiError(503, 'agent_unavailable'))
       .mockResolvedValueOnce({
@@ -281,9 +271,9 @@ describe('ConversationController', () => {
         message: assistant('Versuche das.', 'turn-1'),
         artifacts: [],
       });
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
-    await controller.submit('Leichter', () => undefined);
+    await controller.submit('Weiter', () => undefined);
 
     expect(controller.state.status?.action?.id).toBe('new-session');
     await controller.performAction('new-session');
@@ -298,7 +288,7 @@ describe('ConversationController', () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Ã„ndern'));
     transport.generateTurn.mockRejectedValue(new ConversationApiError(502, 'generation_failed'));
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
     await controller.submit('Ã„ndern', () => undefined);
 
@@ -309,7 +299,7 @@ describe('ConversationController', () => {
   it('keeps the previous conversation visible until replacement creation succeeds', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(410, 'expired'));
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
     await controller.submit('Hallo', () => undefined);
     const replacement = deferred<SessionCreation>();
@@ -331,7 +321,7 @@ describe('ConversationController', () => {
   ])('offers a new session after the terminal %s outcome', async (kind, status) => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(status, kind));
-    const controller = new ConversationController(transport, presentRecipeArtifact, () => undefined);
+    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
     await controller.start();
 
     await controller.submit('Hallo', () => undefined);
@@ -354,40 +344,14 @@ function snapshot(messages: readonly ApiMessage[]): SessionSnapshot {
   };
 }
 
-function proposal(
-  proposalId: string,
-  turnId: string,
-) {
+function artifact(artifactId: string, turnId: string): ApiArtifact {
   return {
-    artifact_id: proposalId,
-    type: 'recipe.proposal',
+    artifact_id: artifactId,
+    type: 'example.result',
     created_at: '2026-09-25T12:00:00Z',
     order: 1,
     turn_id: turnId,
-    payload: { name: 'Neue Variante', base: { kind: 'source' }, recipe: {
-      servings: 2,
-      preptime: null,
-      kcal: 100,
-      carbs: 12,
-      protein: 8,
-      fat: 3,
-      ingredients: [{
-        index: 1,
-        amount: 50,
-        foodstuff: {
-          id: 1,
-          name: 'Hafer',
-          brand: null,
-          unit: 'G' as const,
-          unitVerbose: 'g',
-          kcal: 370,
-          carbs: 60,
-          protein: 13,
-          fat: 7,
-        },
-      }],
-      steps: [{ index: 1, description: 'Mischen.' }],
-    } },
+    payload: { message: 'Example result' },
   };
 }
 
