@@ -1,4 +1,3 @@
-import { presentJsonArtifact } from './generic-artifact-mapper';
 import { describe, expect, it, vi } from 'vitest';
 import {
   ConversationApiError,
@@ -37,7 +36,7 @@ describe('ConversationController', () => {
       ...snapshot([user('Hello'), assistant('Hi', 'turn-1'), user('Again')]),
       artifacts: [later, earlier],
     });
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Hello', () => undefined);
     expect(controller.state.content.map((item) => item.id)).toEqual([
@@ -50,6 +49,34 @@ describe('ConversationController', () => {
     expect(controller.state.status?.action?.id).toBe('retry-turn');
   });
 
+  it('supplies complete envelopes to a custom mapper and applies filtering to turns and reconciled history', async () => {
+    const transport = new FakeTransport();
+    const artifact: ApiArtifact = { artifact_id: 'custom', type: 'custom.result',
+      created_at: '2026-09-26T12:00:00Z', order: 1, turn_id: 'turn-1', payload: { value: 1 } };
+    const hidden = { ...artifact, artifact_id: 'hidden', order: 2 };
+    const mapper = vi.fn((envelope: ApiArtifact) => envelope.artifact_id === 'hidden' ? null : ({
+      kind: 'artifact' as const, id: envelope.artifact_id, type: envelope.type,
+      headline: 'Custom headline', payload: { mapped: true },
+    }));
+    transport.appendMessage.mockResolvedValueOnce(user('Hello')).mockResolvedValueOnce(user('Again'));
+    transport.generateTurn.mockResolvedValueOnce({ kind: 'completed', turn_id: 'turn-1',
+      message: assistant('Hi', 'turn-1'), artifacts: [hidden, artifact] })
+      .mockRejectedValueOnce(new ConversationNetworkError('Timeout'));
+    transport.readSession.mockResolvedValue({ ...snapshot([user('Hello'), assistant('Hi', 'turn-1'), user('Again')]),
+      artifacts: [hidden, artifact] });
+    const controller = new ConversationController(transport, () => undefined, mapper);
+    await controller.start();
+    await controller.submit('Hello', () => undefined);
+    expect(mapper.mock.calls[0][0]).toEqual(artifact);
+    expect(controller.state.content[1]).toEqual({ kind: 'artifact', id: 'custom', type: 'custom.result',
+      headline: 'Custom headline', payload: { mapped: true } });
+    await controller.submit('Again', () => undefined);
+    expect(controller.state.content.map((item) => item.id)).toEqual([
+      'confirmed-0-user', 'custom', 'assistant-turn-1', 'confirmed-2-user',
+    ]);
+    expect(mapper).toHaveBeenCalledTimes(4);
+  });
+
   it('reconciles a busy turn and retains the retry action when its result is still unclear', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Hello'));
@@ -57,7 +84,7 @@ describe('ConversationController', () => {
       kind: 'completed', turn_id: 'turn-1', message: assistant('Hi', 'turn-1'), artifacts: [],
     });
     transport.readSession.mockResolvedValue(snapshot([user('Hello')]));
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
 
     await controller.submit('Hello', () => undefined);
@@ -74,7 +101,7 @@ describe('ConversationController', () => {
   it('reports agent unavailability during session creation', async () => {
     const transport = new FakeTransport();
     transport.createSession.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
 
     await controller.start();
 
@@ -86,7 +113,7 @@ describe('ConversationController', () => {
   it('reports agent unavailability during message append', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
 
     await controller.submit('Frage', () => undefined);
@@ -101,7 +128,7 @@ describe('ConversationController', () => {
     transport.appendMessage.mockResolvedValue(user('Frage'));
     transport.generateTurn.mockRejectedValue(new ConversationNetworkError('Timeout'));
     transport.readSession.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
 
     await controller.submit('Frage', () => undefined);
@@ -118,7 +145,7 @@ describe('ConversationController', () => {
     transport.appendMessage.mockReturnValue(append.promise);
     transport.generateTurn.mockReturnValue(turn.promise);
     const states: ConversationViewState[] = [];
-    const controller = new ConversationController(transport, presentJsonArtifact, (state) => states.push(state));
+    const controller = new ConversationController(transport, (state) => states.push(state));
     await controller.start();
     const acknowledge = vi.fn();
 
@@ -151,7 +178,7 @@ describe('ConversationController', () => {
       message: assistant('Hier ist sie.', 'turn-1'),
       artifacts: [artifact('artifact-1', 'turn-1')],
     });
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
 
     await controller.submit('Alternative', () => undefined);
@@ -174,7 +201,7 @@ describe('ConversationController', () => {
       message: assistant('Ja.', 'turn-1'),
       artifacts: [],
     });
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();
 
@@ -212,7 +239,7 @@ describe('ConversationController', () => {
       ]),
       artifacts: [artifact('artifact-1', 'turn-1')],
     });
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Erste Frage', () => undefined);
 
@@ -230,7 +257,7 @@ describe('ConversationController', () => {
   it('preserves the draft contract and history when appending fails', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(422, 'invalid_message'));
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();
 
@@ -247,7 +274,7 @@ describe('ConversationController', () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationNetworkError('Netzwerkfehler'));
     transport.readSession.mockResolvedValue(snapshot([]));
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();
 
@@ -271,7 +298,7 @@ describe('ConversationController', () => {
         message: assistant('Versuche das.', 'turn-1'),
         artifacts: [],
       });
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Weiter', () => undefined);
 
@@ -288,7 +315,7 @@ describe('ConversationController', () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Ã„ndern'));
     transport.generateTurn.mockRejectedValue(new ConversationApiError(502, 'generation_failed'));
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Ã„ndern', () => undefined);
 
@@ -299,7 +326,7 @@ describe('ConversationController', () => {
   it('keeps the previous conversation visible until replacement creation succeeds', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(410, 'expired'));
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Hallo', () => undefined);
     const replacement = deferred<SessionCreation>();
@@ -321,7 +348,7 @@ describe('ConversationController', () => {
   ])('offers a new session after the terminal %s outcome', async (kind, status) => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(status, kind));
-    const controller = new ConversationController(transport, presentJsonArtifact, () => undefined);
+    const controller = new ConversationController(transport, () => undefined);
     await controller.start();
 
     await controller.submit('Hallo', () => undefined);

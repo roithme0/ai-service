@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HttpConversationTransport, ConversationApiError, ConversationNetworkError } from './conversation-api';
+import { HttpConversationTransport, ConversationApiError, ConversationNetworkError, AgentConfiguration } from './conversation-api';
 
 describe('HttpConversationTransport', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it.each(['kochwiki', 'demo'])('uses %s for every path and sends its supplied input', async (configuration) => {
+  it.each([AgentConfiguration.Kochwiki, AgentConfiguration.Demo])('uses %s for every path and sends its supplied input', async (configuration) => {
     const fetchMock = vi.fn().mockResolvedValue(
       response(201, {
         session_id: 'session-1',
@@ -14,7 +14,7 @@ describe('HttpConversationTransport', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const input = { marker: configuration };
-    const transport = new HttpConversationTransport(configuration, input);
+    const transport = new HttpConversationTransport('/api/v1', configuration, input);
     const created = await transport.createSession();
 
     expect(created.session_id).toBe('session-1');
@@ -36,13 +36,32 @@ describe('HttpConversationTransport', () => {
     ]);
   });
 
+  it.each(['/api/v1', '/ai/api/v1/', 'https://example.test/ai/api/v1///'])('preserves the %s prefix and normalizes joining slashes', async (baseUrl) => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      session_id: 'session-1', expires_at: '2026-09-26T12:00:00Z',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    await new HttpConversationTransport(baseUrl, AgentConfiguration.Demo).createSession();
+    expect(fetchMock).toHaveBeenCalledWith(`${baseUrl.replace(/\/+$/, '')}/agents/demo/sessions`,
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ input: {} }) }));
+  });
+
+  it('classifies fetch and non-JSON failures as network errors', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(new Response('incomplete', { status: 502 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const transport = new HttpConversationTransport('/api/v1', AgentConfiguration.Demo);
+    await expect(transport.createSession()).rejects.toBeInstanceOf(ConversationNetworkError);
+    await expect(transport.createSession()).rejects.toBeInstanceOf(ConversationNetworkError);
+  });
+
   it('maps typed backend errors without accepting their payload as success', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(response(503, { kind: 'agent_unavailable' })),
     );
 
-    await expect(new HttpConversationTransport('kochwiki', { source: {} }).generateTurn('session-1')).rejects.toEqual(
+    await expect(new HttpConversationTransport('/api/v1', 'kochwiki', { source: {} }).generateTurn('session-1')).rejects.toEqual(
       expect.objectContaining<Partial<ConversationApiError>>({
         status: 503,
         kind: 'agent_unavailable',
@@ -76,7 +95,7 @@ describe('HttpConversationTransport', () => {
         }),
       );
     vi.stubGlobal('fetch', fetchMock);
-    const transport = new HttpConversationTransport('kochwiki', { source: {} });
+    const transport = new HttpConversationTransport('/api/v1', 'kochwiki', { source: {} });
 
     await expect(transport.readSession('session-1')).resolves.toEqual({
       session_id: 'session-1',
@@ -107,7 +126,7 @@ describe('HttpConversationTransport', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, {
       kind: 'completed', turn_id: 'turn-1', message: null, artifacts: [],
     })));
-    await expect(new HttpConversationTransport('demo', null).generateTurn('session-1'))
+    await expect(new HttpConversationTransport('/api/v1', 'demo', null).generateTurn('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 

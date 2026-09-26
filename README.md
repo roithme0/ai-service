@@ -29,7 +29,7 @@ The checked-in `.codex/config.toml` enables Angular CLI and OpenAI documentation
 
 The Angular application uses the shared conversation controller and HTTP transport with fixed `demo` configuration and empty input. Any submitted text advances the scripted sequence: greeting, real greeting-tool artifact rendered as JSON, then completion guidance. No AI model, OpenAI credentials, or Kochwiki access is needed. Refresh the page to restart with a new empty session. The recipe application and its fixture have been removed; the `kochwiki` backend configuration remains available for recipe integrations.
 
-Run the complete application with `docker compose -f deployment/docker-compose-local.yml up --build` and open `http://localhost:8000` (or the configured gateway port). See [frontend setup](frontend/README.md) for separate development servers and [the library README](frontend/projects/chat-ui/README.md) for its public API and releases. Shared application modules remain internal; publication evaluation is deferred.
+Run the complete application with `docker compose -f deployment/docker-compose-local.yml up --build` and open `http://localhost:8000` (or the configured gateway port). See [frontend setup](frontend/README.md) for separate development servers and [the library README](frontend/projects/chat-ui/README.md) for its public API and releases. The package exposes `/ui` for rendering and `/conversation` for AI Service integration; registry publication is outside this delivery.
 
 Use workflow skills only when explicitly invoked by the user.
 

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui';
+import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
 import { By } from '@angular/platform-browser';
 import { App } from './app.component';
 

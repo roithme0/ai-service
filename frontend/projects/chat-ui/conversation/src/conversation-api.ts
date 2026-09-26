@@ -1,3 +1,6 @@
+export const AgentConfiguration = { Demo: 'demo', Kochwiki: 'kochwiki' } as const;
+export type AgentConfiguration = (typeof AgentConfiguration)[keyof typeof AgentConfiguration];
+
 export interface ApiUserMessage {
   readonly role: 'user';
   readonly text: string;
@@ -62,8 +65,8 @@ export interface ConversationTransport {
 export class HttpConversationTransport implements ConversationTransport {
   private readonly baseUrl: string;
 
-  constructor(configuration: string, private readonly input: unknown) {
-    this.baseUrl = `/api/v1/agents/${encodeURIComponent(configuration)}/sessions`;
+  constructor(apiBaseUrl: string, configuration: AgentConfiguration, private readonly input: unknown = {}) {
+    this.baseUrl = `${apiBaseUrl.replace(/\/+$/, '')}/agents/${encodeURIComponent(configuration)}/sessions`;
   }
 
   async createSession(): Promise<SessionCreation> {

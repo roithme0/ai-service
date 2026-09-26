@@ -4,5 +4,5 @@
     "outDir": "../../out-tsc/chat-ui-spec",
     "types": ["vitest/globals"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "ui/**/*.ts", "conversation/**/*.ts"]
 }

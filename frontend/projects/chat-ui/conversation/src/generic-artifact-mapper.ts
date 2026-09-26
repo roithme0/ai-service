@@ -1,4 +1,4 @@
-import type { ChatArtifact, JsonValue } from '@roithme0/chat-ui';
+import type { ChatArtifact, JsonValue } from '@roithme0/chat-ui/ui';
 import { ConversationNetworkError, type ApiArtifact } from './conversation-api';
 
 export function presentJsonArtifact(artifact: ApiArtifact): ChatArtifact {

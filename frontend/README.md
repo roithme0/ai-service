@@ -1,6 +1,6 @@
 # AI Service Frontend
 
-The Angular application hosts a scripted chat UI demo using the real backend's `demo` configuration with empty initialization input. It reuses the application-level conversation controller, HTTP transport, and generic JSON artifact mapper. These shared modules remain application internals; library publication evaluation is deferred.
+The Angular application hosts a scripted chat UI demo using the real backend's `demo` configuration with empty initialization input. It imports the rendering component from `@roithme0/chat-ui/ui` and the controller and HTTP transport from `@roithme0/chat-ui/conversation`, using the default generic JSON mapper.
 
 ## Development server
 
@@ -31,4 +31,4 @@ npm run test:app
 npm run test:chat-ui
 ```
 
-The reusable library owns chat rendering and accepts host-supplied content and status. See [the library README](projects/chat-ui/README.md) for its API, themes, and local linking.
+The `/ui` entry point owns chat rendering and accepts host-supplied content and status without network requests. The optional `/conversation` entry point provides the AI Service controller and HTTP transport. See [the library README](projects/chat-ui/README.md) for its API, themes, and local linking.

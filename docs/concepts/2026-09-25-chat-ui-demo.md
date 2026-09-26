@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented. The shared conversation foundation, configured Kochwiki and demo agents, generic HTTP API, and deterministic frontend demo are implemented. Shared frontend modules remain application internals; publication evaluation is deferred.
+Implemented. The shared conversation foundation, configured Kochwiki and demo agents, generic HTTP API, and deterministic frontend demo are implemented. The frontend foundation is exposed through `@roithme0/chat-ui/conversation`, alongside the rendering-only `@roithme0/chat-ui/ui` entry point.
 
 ## Context
 
@@ -75,7 +75,7 @@ The demo must clearly identify its replies as scripted. Simulated failures, reco
 ## Scope Boundaries
 
 - Keep the demo in the existing frontend `app` project for now. Extracting it into a dedicated UI demo project is a possible later cleanup, not part of this direction yet.
-- Keep the reusable `@roithme0/chat-ui` library independent of the demo and of Kochwiki. It receives content and status from its host and emits user submissions and actions.
+- Keep both `@roithme0/chat-ui` entry points independent of demo choreography and Kochwiki domain types. `/ui` receives content and status and emits submissions and actions without network requests; `/conversation` provides the AI Service controller, HTTP transport, typed agent keys and default JSON mapping.
 - Base the existing Kochwiki agent on the shared foundation as a restricted configuration. New recipe features are outside scope. The demo must not require a Kochwiki recipe, foodstuff, resolver, or session.
 - Work is confined to this repository. Migrating the recipe capability here is in scope; implementing or completing its integration in the Kochwiki application is not.
 - Generalize the current operational baseline: ephemeral process-local sessions, completed responses without streaming, and existing failure and cleanup behavior. Preserve behavior during extraction; obvious, narrowly scoped fixes are allowed, but broader enhancements, durable storage, streaming, user-controlled cancellation, and recovery improvements are outside scope.
@@ -88,7 +88,7 @@ The first slice extracts shared session, turn, and staged-artifact ownership and
 
 ## Integration Impact
 
-The application uses the generic conversation HTTP contract with fixed `demo` configuration and empty input. The shared controller and transport supply messages, artifacts, and status to the existing chat UI inputs; the generic mapper preserves artifacts for JSON fallback rendering. Recipe frontend types, mapper, fixture, and dedicated tests have been removed. The backend Kochwiki agent remains available.
+The application imports `@roithme0/chat-ui/ui` and `@roithme0/chat-ui/conversation`, using the generic conversation HTTP contract with `/api/v1`, typed `AgentConfiguration.Demo` and omitted initialization input (an empty object). The shared controller and transport supply messages, artifacts, and status to the existing chat UI inputs; the generic mapper preserves artifacts for JSON fallback rendering. Recipe frontend types, mapper, fixture, and dedicated tests have been removed. The backend Kochwiki agent remains available.
 
 Kochwiki must also use the shared session and turn lifecycle. Its configuration supplies recipe context, instructions, and available tools; recipe validation and domain operations remain within its capability implementation. The shared foundation must support both this model-driven configuration and the deterministic hello-world demo without a separate lifecycle for either.
 

@@ -1,4 +1,4 @@
-import type { ChatArtifact, ChatContent, ChatConversationStatus, ChatTextMessage } from '@roithme0/chat-ui';
+import type { ChatArtifact, ChatContent, ChatConversationStatus, ChatTextMessage } from '@roithme0/chat-ui/ui';
 import {
   ConversationApiError,
   ConversationNetworkError,
@@ -7,6 +7,8 @@ import {
   type ConversationTransport,
   type SessionSnapshot,
 } from './conversation-api';
+
+import { presentJsonArtifact } from './generic-artifact-mapper';
 
 export type ArtifactMapper = (artifact: ApiArtifact) => ChatArtifact | null;
 
@@ -28,8 +30,8 @@ export class ConversationController {
 
   constructor(
     private readonly transport: ConversationTransport,
-    private readonly mapArtifact: ArtifactMapper,
     private readonly publish: (state: ConversationViewState) => void,
+    private readonly mapArtifact: ArtifactMapper = presentJsonArtifact,
   ) {}
 
   get state(): ConversationViewState {

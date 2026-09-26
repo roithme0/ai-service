@@ -1,8 +1,8 @@
 # Chat UI
 
-`@roithme0/chat-ui` is a controlled Angular 22 conversation component. It renders ordered host-supplied text and JSON-compatible artifacts, emits normalized user submissions and generic status actions, and leaves conversation state and transport orchestration to the host. It makes no backend requests.
+`@roithme0/chat-ui` is one Angular 22 package with two public entry points. `@roithme0/chat-ui/ui` provides the controlled conversation component; `@roithme0/chat-ui/conversation` optionally provides the AI Service conversation controller and HTTP transport. The UI entry point renders ordered host-supplied text and JSON-compatible artifacts, emits normalized user submissions and generic status actions, and leaves conversation state and transport orchestration to the host. It makes no backend requests.
 
-The public entry point exports `ChatUiComponent` and the typed content, artifact renderer, submission, status, and status-action contracts. Import the component into the host component's `imports`.
+The `/ui` entry point exports `ChatUiComponent` and the typed content, artifact renderer, submission, status, and status-action contracts. Import the component into the host component's `imports`.
 
 ```html
 <ai-chat-ui
@@ -24,6 +24,67 @@ Map artifact type discriminators to typed Angular templates with `artifactRender
 The component trims a valid submission and emits it once as a `ChatSubmission`. It retains the draft until the host calls `acknowledge`, so the visible composer can remain truthful to backend acceptance. It never adds that text to `content`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break.
 
 `conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. `composerDisabled` blocks concurrent submissions. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
+
+## AI Service conversation integration
+
+The root entry point exports no API. This is a breaking import migration: replace root imports with `@roithme0/chat-ui/ui`. Import conversation support from `@roithme0/chat-ui/conversation`. Upgrade consumer imports together with the package; there are no compatibility re-exports. Both entry points share the existing package version and release lifecycle.
+
+A complete minimal standalone host (with the Material theme described below):
+
+```typescript
+import { Component, OnInit, signal } from '@angular/core';
+import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
+import {
+  AgentConfiguration, ConversationController, HttpConversationTransport,
+  type ConversationViewState,
+} from '@roithme0/chat-ui/conversation';
+
+@Component({
+  selector: 'app-chat',
+  imports: [ChatUiComponent],
+  template: `
+    <ai-chat-ui
+      bannerTitle="Chat demo"
+      bannerDescription="Any text advances the scripted sequence."
+      [content]="chat().content"
+      [composerDisabled]="chat().composerDisabled"
+      [conversationStatus]="chat().status"
+      (messageSubmitted)="submit($event)"
+      (statusActionTriggered)="act($event)"
+    />`,
+})
+export class ChatHost implements OnInit {
+  readonly chat = signal<ConversationViewState>({
+    content: [], composerDisabled: true, status: null,
+  });
+  private readonly controller = new ConversationController(
+    new HttpConversationTransport('/api/v1', AgentConfiguration.Demo),
+    (state) => this.chat.set(state),
+  );
+
+  ngOnInit(): void { void this.controller.start(); }
+  submit(value: ChatSubmission): void {
+    void this.controller.submit(value.text, value.acknowledge);
+  }
+  act(id: string): void { void this.controller.performAction(id); }
+}
+```
+
+The required base URL is the prefix immediately before `/agents`: `/api/v1` yields `/api/v1/agents/demo/sessions`; `/ai/api/v1/` yields `/ai/api/v1/agents/demo/sessions`. Trailing joining slashes are normalized; another `/api/v1` is never appended. Absolute URLs use the same joining behavior. Normal deployment uses a same-origin relative prefix.
+
+`AgentConfiguration` exports `Demo: 'demo'` and `Kochwiki: 'kochwiki'`, plus the derived union type of the same name. Arbitrary string keys are rejected by the TypeScript contract. Known keys do not guarantee runtime availability; the server can return `agent_unavailable`.
+
+The transport binds the URL, agent key, and optional third constructor argument for initialization input. Omitted input sends `{ input: {} }`; supplied input uses `{ input: suppliedInput }`. Replacement sessions use the same transport settings. Server validation is authoritative, and configurations requiring domain input can reject an empty input. No recipe types or fixtures are packaged.
+
+The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ApiArtifact` envelope and returns a `ChatArtifact` or `null` to omit it. `presentJsonArtifact` is exported for explicit use and is the default when no mapper is supplied. It preserves identity, type and JSON payload; the controller sorts artifacts by backend order and associates history artifacts with their turns. The host owns view-state binding, introductory text and custom renderer registration.
+
+The supported HTTP contract is this repository's AI Service conversation API. `ConversationTransport` remains available for isolated tests. The controller retains acceptance acknowledgement, ambiguous-request reconciliation, turn execution, failure classification and existing recovery actions. It adds no polling, automatic retries, persistence, streaming or cancellation.
+
+Expected routing is host frontend ? same-origin backend/proxy ? AI Service gateway. Relays must preserve response bodies and status codes, allow agent-turn durations, and avoid automatic retries of state-changing message/turn requests. Consumer relay implementation and authentication/session authorization are deferred. Same-origin routing is not an authorization guarantee.
+
+## Built-package verification
+
+From `frontend`, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This checks actual package exports and declarations with ordinary package resolution, exercises the built conversation module, rejects arbitrary configuration keys and checks that the root exports no API. Workspace source aliases are not used.
 
 ## Host theme
 
@@ -131,7 +192,7 @@ npm install ./vendor/roithme0-chat-ui-0.0.0.tgz
 npm run build -- --configuration production --progress=false
 ```
 
-When migrating from the original package name or the artifact-renderer POC, remove the old dependency, update imports to `@roithme0/chat-ui`, and adapt the host to the controlled `messages` input and `messageSubmitted` output before running its build. Run the consumer's focused tests for its current chat host after that migration; they should cover message projection and submission orchestration rather than the removed POC renderer. This library does not prescribe a consumer test-file path.
+When migrating from the original package name or the artifact-renderer POC, remove the old dependency, update UI imports to `@roithme0/chat-ui/ui`, and adapt the host to the controlled `content` input and `messageSubmitted` output before running its build. Run the consumer's focused tests for its current chat host after that migration; they should cover message projection and submission orchestration rather than the removed POC renderer. This library does not prescribe a consumer test-file path.
 
 The installed dependency points to the copied tarball in Kochwiki's build context. Keep the tarball and updated manifest/lockfile together so `npm ci` and Docker builds do not require the AI Service checkout. Do not install using a source alias, symlink, force flag, or sibling source import.
 

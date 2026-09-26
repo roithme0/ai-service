@@ -10,7 +10,7 @@
     "chat-ui": {
       "projectType": "library",
       "root": "projects/chat-ui",
-      "sourceRoot": "projects/chat-ui/src",
+      "sourceRoot": "projects/chat-ui",
       "prefix": "ai",
       "architect": {
         "build": {

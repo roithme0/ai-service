@@ -1,8 +1,6 @@
 import { Component, OnInit, signal } from '@angular/core';
-import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui';
-import { HttpConversationTransport } from './conversation-api';
-import { ConversationController, type ConversationViewState } from './conversation-controller';
-import { presentJsonArtifact } from './generic-artifact-mapper';
+import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
+import { AgentConfiguration, HttpConversationTransport, ConversationController, type ConversationViewState } from '@roithme0/chat-ui/conversation';
 
 const INITIAL_STATE: ConversationViewState = {
   content: [],
@@ -23,8 +21,7 @@ const INITIAL_STATE: ConversationViewState = {
 export class App implements OnInit {
   protected readonly chat = signal<ConversationViewState>(INITIAL_STATE);
   private readonly controller = new ConversationController(
-    new HttpConversationTransport('demo', {}),
-    presentJsonArtifact,
+    new HttpConversationTransport('/api/v1', AgentConfiguration.Demo),
     (state) => this.chat.set(state),
   );
 
