@@ -13,7 +13,7 @@ The current implementation includes configured recipe-improvement and determinis
   - **Provider abstraction**: Keep model- and provider-specific behavior behind stable service interfaces.
   - **Generic tool orchestration**: Establish a constrained tool interface that can serve live-data tools and later project connectors without broad database, filesystem, or network access.
   - **Typed artifacts**: Validate recipe proposals at the service boundary and assign identifiers, ordering, timestamps, and validated base references in service code rather than through the model.
-  - **Reusable chat UI**: Render host-supplied messages, artifacts, and status through a controlled Angular component with custom renderer support and a JSON fallback. The host owns session state and transport; the library makes no backend requests.
+  - **Reusable chat UI**: The `/ui` entry point renders host-supplied messages, artifacts, and status through a controlled Angular component with custom renderer support and a JSON fallback, without making backend requests. The optional `/conversation` entry point provides conversation control and HTTP transport for the AI Service API; the host configures the integration and binds its view state.
 
 Domain services such as Kochwiki and Home Assistant continue to own their data, authorization, validation, persistence, and domain rules. They must remain useful when the AI Service is unavailable, and integrations use explicit APIs rather than direct access to their storage.
 
