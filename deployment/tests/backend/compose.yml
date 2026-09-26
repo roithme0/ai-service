@@ -3,5 +3,5 @@ name: ai-service-test
 services:
   backend-tests:
     build:
-      context: ../backend
+      context: ../../../backend
       dockerfile: Dockerfile.test
