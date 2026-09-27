@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 
 from app.demo.greeting import DemoToolFactory, create_greeting_tool
 from app.demo.session import DemoContext, DemoSessionStore, GreetingPayload, MAX_ARTIFACTS, new_demo_session_store
-from app.demo.turns import FIRST_TURN_DELAY_SECONDS, run_demo_turn
+from app.demo.turns import TURN_DELAY_SECONDS, run_demo_turn
 from app.sessions.agent_service import AgentInputAccepted, AgentInputRejected, ConfiguredAgentService
 from app.sessions.conversation import ConversationSessionSettings, ConversationTurnResult
 
@@ -27,7 +27,7 @@ def validate_demo_input(
 def create_demo_agent(
     store: DemoSessionStore | None = None,
     *,
-    delay_seconds: float = FIRST_TURN_DELAY_SECONDS,
+    delay_seconds: float = TURN_DELAY_SECONDS,
     max_artifacts: int = MAX_ARTIFACTS,
     pause: Callable[[float], Awaitable[None]] = asyncio.sleep,
     tool_factory: DemoToolFactory = create_greeting_tool,

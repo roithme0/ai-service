@@ -37,6 +37,11 @@ describe('Demo application', () => {
     const acknowledge = vi.fn();
     const submission: ChatSubmission = { text: 'Any text', acknowledge };
     chat.messageSubmitted.emit(submission);
+    fixture.detectChanges();
+    expect(chat.conversationStatus()?.message).toBe('Nachricht wird gesendet …');
+    expect(chat.composerDisabled()).toBe(true);
+    expect(acknowledge).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     await vi.waitFor(() => {
       fixture.detectChanges();

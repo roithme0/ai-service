@@ -38,7 +38,7 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
         FIRST_REPLY, SECOND_REPLY, COMPLETE_REPLY, COMPLETE_REPLY,
     ]
     assert third.text == fourth.text == "This scripted demo is complete. Refresh the page to restart it."
-    assert delays == [0.25]
+    assert delays == [0.25] * 4
     assert first.artifacts == third.artifacts == fourth.artifacts == ()
     assert len(second.artifacts) == 1
     artifact = second.artifacts[0]

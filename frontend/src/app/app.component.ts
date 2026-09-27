@@ -1,6 +1,7 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
-import { AgentConfiguration, HttpConversationTransport, ConversationController, type ConversationViewState } from '@roithme0/chat-ui/conversation';
+import { ConversationController, type ConversationViewState } from '@roithme0/chat-ui/conversation';
+import { DemoTransport } from './demo-transport';
 
 const INITIAL_STATE: ConversationViewState = {
   content: [],
@@ -21,7 +22,7 @@ const INITIAL_STATE: ConversationViewState = {
 export class App implements OnInit {
   protected readonly chat = signal<ConversationViewState>(INITIAL_STATE);
   private readonly controller = new ConversationController(
-    new HttpConversationTransport('/api/v1', AgentConfiguration.Demo),
+    new DemoTransport(),
     (state) => this.chat.set(state),
   );
 
