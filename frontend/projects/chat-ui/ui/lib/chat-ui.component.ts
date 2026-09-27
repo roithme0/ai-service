@@ -35,9 +35,11 @@ export class ChatUiComponent {
   private readonly iconRegistry = inject(MatIconRegistry);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly composer = viewChild.required<ElementRef<HTMLTextAreaElement>>('composer');
+  private readonly history = viewChild.required<ElementRef<HTMLElement>>('history');
   private readonly document = inject(DOCUMENT);
 
   private restoreComposerFocus = false;
+  private scrollHistoryToBottom = false;
 
   readonly bannerTitle = input.required<string>();
   readonly bannerDescription = input.required<string>();
@@ -82,6 +84,22 @@ export class ChatUiComponent {
       const activeElement = this.document.activeElement;
       if (activeElement === this.document.body || activeElement === this.composer().nativeElement) {
         this.composer().nativeElement.focus({ preventScroll: true });
+      }
+    });
+    effect(() => {
+      this.content();
+      this.conversationStatus();
+      this.statusVisible();
+      this.scrollHistoryToBottom = true;
+    });
+    afterEveryRender(() => {
+      if (!this.scrollHistoryToBottom) return;
+      this.scrollHistoryToBottom = false;
+      const history = this.history().nativeElement;
+      if (typeof history.scrollTo === 'function') {
+        history.scrollTo({ top: history.scrollHeight, behavior: 'smooth' });
+      } else {
+        history.scrollTop = history.scrollHeight;
       }
     });
     effect((onCleanup) => {

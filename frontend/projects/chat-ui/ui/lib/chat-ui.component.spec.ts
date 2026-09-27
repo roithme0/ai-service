@@ -29,12 +29,21 @@ class RendererTemplateHost {
 }
 
 describe('ChatUiComponent', () => {
+  let originalScrollTo: PropertyDescriptor | undefined;
+
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    if (originalScrollTo) {
+      Object.defineProperty(Element.prototype, 'scrollTo', originalScrollTo);
+    } else {
+      Reflect.deleteProperty(Element.prototype, 'scrollTo');
+    }
   });
 
   beforeEach(() => {
+    originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
+    Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: vi.fn() });
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
 
@@ -263,6 +272,47 @@ describe('ChatUiComponent', () => {
     const messages = fixture.nativeElement.querySelectorAll('.message') as NodeListOf<HTMLElement>;
     expect(messages).toHaveLength(1);
     expect(messages[0].textContent).toContain('Replacement state');
+  });
+
+  it('scrolls history to new messages, statuses, and errors after rendering', () => {
+    vi.useFakeTimers();
+    const scrollTo = vi.mocked(Element.prototype.scrollTo);
+      const fixture = createFixture([]);
+      const history = fixture.nativeElement.querySelector('.history') as HTMLElement;
+      Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+      const scrollToBottom = (): void => {
+        expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
+        scrollTo.mockClear();
+      };
+
+      fixture.componentRef.setInput('content', [
+        { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
+      ] satisfies readonly ChatTextMessage[]);
+      fixture.detectChanges();
+      scrollToBottom();
+
+      fixture.componentRef.setInput('conversationStatus', {
+        kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed',
+      });
+      fixture.detectChanges();
+      vi.advanceTimersByTime(300);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.status-content')?.textContent).toContain('Sending');
+      scrollToBottom();
+
+      fixture.componentRef.setInput('content', [
+        { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
+        { kind: 'text', id: 'assistant-1', role: 'assistant', text: 'Hi' },
+      ] satisfies readonly ChatTextMessage[]);
+      fixture.componentRef.setInput('conversationStatus', null);
+      fixture.detectChanges();
+      scrollToBottom();
+
+      fixture.componentRef.setInput('conversationStatus', {
+        kind: 'error', message: 'Failed', placement: 'assistant',
+      });
+      fixture.detectChanges();
+      scrollToBottom();
   });
 
   it('reveals a slow sending label after 300 ms and replaces it immediately', () => {
