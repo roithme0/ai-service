@@ -14,7 +14,7 @@ from app.sessions.text_sessions import TextSessionCreation
 
 
 SESSION_LIFETIME = timedelta(minutes=90)
-MAX_ARTIFACTS = 1
+MAX_ARTIFACTS = 2
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,14 @@ class GreetingPayload(BaseModel):
     message: str
 
 
-DemoSessionStore: TypeAlias = ConversationSessionStore[DemoContext, GreetingPayload]
+class GreetingsPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    messages: tuple[str, ...]
+
+
+type DemoPayload = GreetingPayload | GreetingsPayload
+DemoSessionStore: TypeAlias = ConversationSessionStore[DemoContext, DemoPayload]
 
 
 def _utc_now() -> datetime:

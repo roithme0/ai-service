@@ -3,17 +3,11 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 
-from app.demo.session import DemoContext, DemoSessionStore, GreetingPayload
+from app.demo.session import DemoContext, DemoPayload, DemoSessionStore, GreetingPayload
 from app.sessions.artifacts import ArtifactPrepared, ArtifactPreparationRejected, ArtifactRegistry
 from app.sessions.conversation import ConversationStageAccepted, ConversationTurnView, StagedArtifact
 from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation
-
-
-type DemoToolFactory = Callable[
-    [DemoSessionStore, str, str], RegisteredTool[StagedArtifact[GreetingPayload]]
-]
 
 
 CREATE_GREETING_SCHEMA: dict[str, object] = {
@@ -34,8 +28,8 @@ GREETING_ARTIFACT_TYPE = "demo.greeting"
 
 class GreetingHandler:
     async def prepare(
-        self, view: ConversationTurnView[DemoContext, GreetingPayload], candidate: object
-    ) -> ArtifactPrepared[GreetingPayload] | ArtifactPreparationRejected[str]:
+        self, view: ConversationTurnView[DemoContext, DemoPayload], candidate: object
+    ) -> ArtifactPrepared[DemoPayload] | ArtifactPreparationRejected[str]:
         if not isinstance(candidate, str) or not candidate.strip():
             return ArtifactPreparationRejected("invalid_arguments")
         return ArtifactPrepared(GreetingPayload(message=f"Hello, {candidate}!"))
@@ -43,10 +37,10 @@ class GreetingHandler:
 
 def create_greeting_tool(
     store: DemoSessionStore, session_id: str, turn_id: str
-) -> RegisteredTool[StagedArtifact[GreetingPayload]]:
-    registry = ArtifactRegistry(((GREETING_ARTIFACT_TYPE, GreetingHandler()),))
+) -> RegisteredTool[StagedArtifact[DemoPayload]]:
+    registry = ArtifactRegistry[DemoContext, DemoPayload, str](((GREETING_ARTIFACT_TYPE, GreetingHandler()),))
 
-    async def execute(call: ToolInvocation) -> ToolExecution[StagedArtifact[GreetingPayload]]:
+    async def execute(call: ToolInvocation) -> ToolExecution[StagedArtifact[DemoPayload]]:
         try:
             arguments: object = json.loads(call.arguments)
         except (TypeError, ValueError):

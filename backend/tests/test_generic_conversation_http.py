@@ -65,7 +65,8 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     session = f"{base}/{created['session_id']}"
     assert client.post(f"{session}/turns").json() == {"kind": "not_ready"}
     texts: list[str] = []
-    for index in range(3):
+    artifacts: list[dict[str, object]] = []
+    for index in range(4):
         message = client.post(f"{session}/messages", json={"text": f"user {index}"})
         assert message.status_code == 201
         turn = client.post(f"{session}/turns")
@@ -81,11 +82,20 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
             assert artifact["payload"] == {"message": "Hello, World!"}
             assert artifact["order"] == 1
             assert artifact["turn_id"] == body["turn_id"]
+            artifacts.append(artifact)
+        elif index == 2:
+            assert len(body["artifacts"]) == 1
+            artifact = body["artifacts"][0]
+            assert artifact["type"] == "demo.greetings"
+            assert artifact["payload"] == {"messages": [f"Hello, Visitor {number}!" for number in range(1, 31)]}
+            assert artifact["order"] == 2
+            assert artifact["turn_id"] == body["turn_id"]
+            artifacts.append(artifact)
         else:
             assert body["artifacts"] == []
     history = client.get(session).json()
-    assert len(history["messages"]) == 6
-    assert history["artifacts"] == [artifact]
+    assert len(history["messages"]) == 8
+    assert history["artifacts"] == artifacts
     assert "source" not in history
     fresh = client.post(base, json={}).json()
     fresh_session = f"{base}/{fresh['session_id']}"

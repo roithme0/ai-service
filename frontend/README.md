@@ -13,7 +13,7 @@ npm run start:app
 
 Open `http://localhost:4204`. The existing development proxy forwards `/api` to `http://localhost:8004`. No OpenAI credentials, model configuration, or reachable Kochwiki service is required for the demo. For the container setup, see [deployment](../deployment/README.md).
 
-Every submitted message advances a fixed sequence regardless of its text: a brief loading state and scripted greeting, a real `demo.greeting` tool artifact with `{"message":"Hello, World!"}` displayed through the library's JSON fallback, then completion guidance. Further messages remain accepted. Refresh the page to create a new empty session and restart; there is no dedicated restart control. Generic error recovery actions remain available. Abandoned sessions expire in backend memory.
+Every submitted message advances a fixed sequence regardless of its text: a loading state and scripted introduction, a real `demo.greeting` tool artifact with `{"message":"Hello, World!"}`, a `demo.greetings` artifact containing 30 greetings, then completion guidance. Both artifacts use the library's JSON fallback; the longer list demonstrates “Mehr anzeigen” and “Weniger anzeigen”. Further messages remain accepted. Refresh the page to create a new empty session and restart; there is no dedicated restart control. Generic error recovery actions remain available. Abandoned sessions expire in backend memory.
 
 The recipe application, its fixture, and its presentation mapper have been removed. The backend's `kochwiki` configuration remains supported; its model and resolver setup is documented in [backend setup](../backend/README.md).
 

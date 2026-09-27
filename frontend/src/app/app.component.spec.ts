@@ -7,16 +7,20 @@ import { App } from './app.component';
 describe('Demo application', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('creates an empty demo session and renders an accepted artifact through JSON fallback', async () => {
+  it.each([
+    { type: 'demo.greeting', payload: { message: 'Hello, World!' }, text: '"message": "Hello, World!"' },
+    { type: 'demo.greetings', payload: { messages: Array.from({ length: 30 }, (_, index) => `Hello, Visitor ${index + 1}!`) },
+      text: 'Hello, Visitor 30!' },
+  ])('creates an empty demo session and renders $type through JSON fallback', async ({ type, payload, text }) => {
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json({ session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z' }))
       .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Any text', turn_id: null }))
       .mockResolvedValueOnce(Response.json({
         kind: 'completed', turn_id: 'turn-2',
         message: { role: 'assistant', text: 'Scripted reply', turn_id: 'turn-2' },
-        artifacts: [{ artifact_id: 'greeting-1', type: 'demo.greeting',
+        artifacts: [{ artifact_id: 'greeting-1', type,
           created_at: '2026-09-26T12:00:00Z', order: 1, turn_id: 'turn-2',
-          payload: { message: 'Hello, World!' } }],
+          payload }],
       }));
     vi.stubGlobal('fetch', fetchMock);
     TestBed.configureTestingModule({ imports: [App] });
@@ -60,10 +64,10 @@ describe('Demo application', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/v1/agents/demo/sessions/demo-1/turns',
       expect.objectContaining({ method: 'POST' }));
     expect(chat.content().map((item) => item.id)).toEqual(['confirmed-0-user', 'greeting-1', 'assistant-turn-2']);
-    expect(chat.content()[1]).toEqual({ kind: 'artifact', id: 'greeting-1', type: 'demo.greeting',
-      headline: 'demo.greeting', payload: { message: 'Hello, World!' } });
+    expect(chat.content()[1]).toEqual({ kind: 'artifact', id: 'greeting-1', type,
+      headline: type, payload });
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.querySelector('pre')?.textContent).toContain('"message": "Hello, World!"');
+    expect(element.querySelector('pre')?.textContent).toContain(text);
     expect(element.textContent).toContain('festen Skript ohne KI-Modell');
     expect(chat.composerDisabled()).toBe(false);
   });
