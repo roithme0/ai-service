@@ -22,16 +22,20 @@ describe('Demo application', () => {
     TestBed.configureTestingModule({ imports: [App] });
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
+    const chat = fixture.debugElement.query(By.directive(ChatUiComponent)).componentInstance as ChatUiComponent;
+    expect(chat.conversationStatus()?.message).toBe('Unterhaltung wird gestartet …');
+    expect(fixture.nativeElement.querySelector('.status-content').classList.contains('status-content--fade')).toBe(true);
+    expect(chat.composerDisabled()).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/agents/demo/sessions', expect.objectContaining({
-      method: 'POST', body: JSON.stringify({ input: {} }),
-    }));
-    const chat = fixture.debugElement.query(By.directive(ChatUiComponent)).componentInstance as ChatUiComponent;
     await vi.waitFor(() => {
       fixture.detectChanges();
       expect(chat.composerDisabled()).toBe(false);
-    });
+    }, { timeout: 2500 });
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/agents/demo/sessions', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ input: {} }),
+    }));
     expect(chat.content()).toEqual([]);
     expect(chat.composerDisabled()).toBe(false);
     const acknowledge = vi.fn();
@@ -42,7 +46,10 @@ describe('Demo application', () => {
     expect(chat.composerDisabled()).toBe(true);
     expect(acknowledge).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    }, { timeout: 2000 });
     await vi.waitFor(() => {
       fixture.detectChanges();
       expect(chat.content()).toHaveLength(3);

@@ -27,16 +27,28 @@
           class="status"
           [class.status--error]="status.kind === 'error'"
           [class.status--assistant]="status.placement === 'assistant'"
+          [class.status--delayed]="status.kind === 'loading' && status.reveal === 'delayed'"
         >
-          <p>{{ status.message }}</p>
-          @if (status.action; as action) {
-            <button
-              type="button"
-              class="status-action"
-              (click)="statusActionTriggered.emit(action.id)"
+          @if (statusVisible()) {
+            @for (label of [status]; track label.message) {
+            <div
+              class="status-content"
+              [class.status-content--fade]="
+                status.kind === 'loading'
+              "
             >
-              {{ action.label }}
-            </button>
+              <p>{{ status.message }}</p>
+              @if (status.action; as action) {
+                <button
+                  type="button"
+                  class="status-action"
+                  (click)="statusActionTriggered.emit(action.id)"
+                >
+                  {{ action.label }}
+                </button>
+              }
+            </div>
+            }
           }
         </article>
       }

@@ -69,7 +69,7 @@ export class ConversationController {
     this.setState({
       ...this.stateValue,
       composerDisabled: true,
-      status: loading('Nachricht wird gesendet …', 'assistant'),
+      status: { ...loading('Nachricht wird gesendet …', 'assistant'), reveal: 'delayed' },
     });
     try {
       const accepted = await this.transport.appendMessage(sessionId, text);

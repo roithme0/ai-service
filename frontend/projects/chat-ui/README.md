@@ -23,7 +23,7 @@ Map artifact type discriminators to typed Angular templates with `artifactRender
 
 The component trims a valid submission and emits it once as a `ChatSubmission`. It retains the draft until the host calls `acknowledge`, so the visible composer can remain truthful to backend acceptance. It never adds that text to `content`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break.
 
-`conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. `composerDisabled` blocks concurrent submissions. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
+`conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. All loading labels fade in over 180 ms, including initialization and response generation. Loading states can opt into `reveal: 'delayed'`: the UI reserves a line and waits 300 ms before starting the fade. Replacing the status cancels the pending reveal. The conversation controller uses this delay for sending messages. Errors appear immediately without animation. Changing the status label restarts its fade. Fades also run when reduced motion is preferred. `composerDisabled` blocks concurrent submissions. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
 
 ## AI Service conversation integration
 

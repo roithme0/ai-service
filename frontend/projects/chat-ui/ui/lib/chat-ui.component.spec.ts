@@ -29,7 +29,10 @@ class RendererTemplateHost {
 }
 
 describe('ChatUiComponent', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   beforeEach(() => {
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
@@ -211,6 +214,57 @@ describe('ChatUiComponent', () => {
     expect(messages[0].textContent).toContain('Replacement state');
   });
 
+  it('reveals a slow sending label after 300 ms and replaces it immediately', () => {
+    vi.useFakeTimers();
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed',
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status--delayed')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
+    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    vi.advanceTimersByTime(299);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
+    vi.advanceTimersByTime(1);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status-content--fade')?.textContent).toContain('Sending');
+    const sendingLabel = fixture.nativeElement.querySelector('.status-content');
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading', message: 'Generating', placement: 'assistant',
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Generating');
+    const generatingLabel = fixture.nativeElement.querySelector('.status-content');
+    expect(generatingLabel.classList.contains('status-content--fade')).toBe(true);
+    expect(generatingLabel).not.toBe(sendingLabel);
+  });
+
+  it('cancels a quick sending reveal and starts a fresh delay for the next send', () => {
+    vi.useFakeTimers();
+    const fixture = createFixture([]);
+    const sending = { kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed' } as const;
+    fixture.componentRef.setInput('conversationStatus', sending);
+    fixture.detectChanges();
+    vi.advanceTimersByTime(100);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error', message: 'Failed', placement: 'assistant',
+    });
+    fixture.detectChanges();
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Failed');
+    fixture.componentRef.setInput('conversationStatus', sending);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Sending');
+    fixture.destroy();
+  });
+
   it('disables submission and renders host-controlled loading and recovery states', () => {
     const fixture = createFixture([]);
     fixture.componentRef.setInput('composerDisabled', true);
@@ -239,6 +293,7 @@ describe('ChatUiComponent', () => {
     (fixture.nativeElement.querySelector('.status-action') as HTMLButtonElement).click();
 
     expect(actionEmit).toHaveBeenCalledWith('retry-turn');
+    expect(fixture.nativeElement.querySelector('.status-content').classList.contains('status-content--fade')).toBe(false);
   });
 });
 

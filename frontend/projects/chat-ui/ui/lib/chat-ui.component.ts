@@ -1,4 +1,4 @@
-import { Component, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
@@ -37,6 +37,11 @@ export class ChatUiComponent {
 
   protected readonly draft = signal('');
   protected readonly renderAssistantMarkdown = renderAssistantMarkdown;
+  private readonly revealedStatus = signal<ChatConversationStatus | null>(null);
+  protected readonly statusVisible = computed(() => {
+    const status = this.conversationStatus();
+    return status?.kind !== 'loading' || status.reveal !== 'delayed' || this.revealedStatus() === status;
+  });
 
   protected rendererFor(type: string) {
     return this.artifactRenderers()[type] ?? null;
@@ -44,6 +49,13 @@ export class ChatUiComponent {
 
   constructor() {
     registerChatIcons(this.iconRegistry, this.sanitizer);
+    effect((onCleanup) => {
+      const status = this.conversationStatus();
+      this.revealedStatus.set(null);
+      if (status?.kind !== 'loading' || status.reveal !== 'delayed') return;
+      const timer = setTimeout(() => this.revealedStatus.set(status), 300);
+      onCleanup(() => clearTimeout(timer));
+    });
   }
 
   protected updateDraft(value: string): void {
