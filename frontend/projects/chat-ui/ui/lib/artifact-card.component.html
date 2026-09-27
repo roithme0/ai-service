@@ -11,7 +11,8 @@
     }
   </div>
   @if (overflowing()) {
-    <button type="button" class="artifact-toggle" (click)="expanded.set(!expanded())">
+    <button type="button" class="artifact-toggle" [attr.aria-expanded]="expanded()" (click)="expanded.set(!expanded())">
+      <mat-icon [svgIcon]="expanded() ? 'ai-chat:arrow-up' : 'ai-chat:arrow-down'" aria-hidden="true" />
       {{ expanded() ? 'Weniger anzeigen' : 'Mehr anzeigen' }}
     </button>
   }

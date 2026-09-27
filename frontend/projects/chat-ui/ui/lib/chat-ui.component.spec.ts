@@ -77,7 +77,7 @@ describe('ChatUiComponent', () => {
     expect(cards[1].textContent).toContain('<script>unsafe()</script>');
   });
 
-  it('offers library-owned German expansion only for overflowing renderer bodies', () => {
+  it('offers library-owned German expansion only for overflowing renderer bodies', async () => {
     class OverflowObserver {
       constructor(private readonly callback: ResizeObserverCallback) {}
 
@@ -97,12 +97,18 @@ describe('ChatUiComponent', () => {
       kind: 'artifact', id: 'large', type: 'unknown', headline: 'Large', payload: { rows: [1, 2, 3] },
     }]);
     fixture.detectChanges();
+    await fixture.whenStable();
 
     const toggle = fixture.nativeElement.querySelector('.artifact-toggle') as HTMLButtonElement;
     expect(toggle.textContent).toContain('Mehr anzeigen');
+    expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
     toggle.click();
     fixture.detectChanges();
+    await fixture.whenStable();
     expect(toggle.textContent).toContain('Weniger anzeigen');
+    expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 15 6-6 6 6');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(fixture.nativeElement.querySelector('.artifact-body--expanded')).not.toBeNull();
   });
 
