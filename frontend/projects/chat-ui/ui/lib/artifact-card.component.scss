@@ -1,0 +1,55 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.artifact {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--ai-chat-artifact-border, #50363f);
+  border-radius: 1rem;
+  background: var(--ai-chat-artifact-background, #21171b);
+}
+
+h3 {
+  margin: 0 0 0.875rem;
+  color: var(--ai-chat-artifact-heading, #f8eef1);
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.artifact-body {
+  max-height: var(--ai-chat-artifact-collapsed-height, 18rem);
+  overflow: hidden;
+}
+
+.artifact-body--expanded {
+  max-height: none;
+}
+
+.json-fallback {
+  min-width: 0;
+  margin: 0;
+  padding: 0.875rem;
+  border-radius: 0.75rem;
+  background: var(--ai-chat-code-background, #160f12);
+  color: var(--ai-chat-artifact-text, #eadde2);
+  font: 0.8rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.artifact-toggle {
+  margin-top: 0.75rem;
+  padding: 0.4rem 0;
+  border: 0;
+  background: none;
+  color: var(--ai-chat-link, #ff7aad);
+  font: inherit;
+  cursor: pointer;
+}
+
+.artifact-toggle:focus-visible {
+  outline: 0.15rem solid var(--ai-chat-focus, #ff9fc1);
+  outline-offset: 0.15rem;
+}

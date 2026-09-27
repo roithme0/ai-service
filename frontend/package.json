@@ -3,27 +3,37 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development"
+    "start:app": "ng serve ai-service-frontend --port 4204",
+    "build:app": "ng build ai-service-frontend",
+    "build:chat-ui": "ng build chat-ui",
+    "test:app": "ng test ai-service-frontend --watch=false",
+    "test:chat-ui": "ng test chat-ui --watch=false",
+    "watch:app": "ng build ai-service-frontend --watch --configuration development",
+    "watch:chat-ui": "ng build chat-ui --watch",
+    "pack:chat-ui": "npm run build:chat-ui && npm pack ./dist/chat-ui --pack-destination ./dist"
   },
   "private": true,
   "packageManager": "npm@10.7.0",
   "dependencies": {
-    "@angular/common": "^21.2.0",
-    "@angular/compiler": "^21.2.0",
-    "@angular/core": "^21.2.0",
-    "@angular/forms": "^21.2.0",
-    "@angular/platform-browser": "^21.2.0",
-    "@angular/router": "^21.2.0",
+    "@angular/cdk": "^22.1.7",
+    "@angular/common": "^22.0.0",
+    "@angular/compiler": "^22.0.0",
+    "@angular/core": "^22.0.0",
+    "@angular/forms": "^22.0.0",
+    "@angular/material": "^22.1.7",
+    "@angular/platform-browser": "^22.0.0",
+    "@angular/router": "^22.0.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@angular/build": "^21.2.24",
-    "@angular/cli": "^21.2.24",
-    "@angular/compiler-cli": "^21.2.0",
+    "@angular/build": "^22.0.0",
+    "@angular/cli": "^22.0.0",
+    "@angular/compiler-cli": "^22.0.0",
+    "jsdom": "27.0.0",
+    "ng-packagr": "^22.0.0",
     "prettier": "^3.8.1",
-    "typescript": "~5.9.2"
+    "typescript": "~6.0.0",
+    "vitest": "4.0.8"
   }
 }

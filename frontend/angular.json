@@ -2,10 +2,39 @@
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
   "cli": {
-    "packageManager": "npm"
+    "packageManager": "npm",
+    "analytics": false
   },
   "newProjectRoot": "projects",
   "projects": {
+    "chat-ui": {
+      "projectType": "library",
+      "root": "projects/chat-ui",
+      "sourceRoot": "projects/chat-ui",
+      "prefix": "ai",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:ng-packagr",
+          "options": {
+            "project": "projects/chat-ui/ng-package.json"
+          },
+          "configurations": {
+            "production": {
+              "tsConfig": "projects/chat-ui/tsconfig.lib.json"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "buildTarget": "chat-ui:build:production",
+            "tsConfig": "projects/chat-ui/tsconfig.spec.json",
+            "runnerConfig": "projects/chat-ui/vitest.config.ts"
+          }
+        }
+      }
+    },
     "ai-service-frontend": {
       "projectType": "application",
       "schematics": {
@@ -51,9 +80,7 @@
                 "input": "public"
               }
             ],
-            "styles": [
-              "src/styles.css"
-            ]
+            "styles": ["src/styles.css"]
           },
           "configurations": {
             "production": {
@@ -93,6 +120,14 @@
             }
           },
           "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "buildTarget": "ai-service-frontend:build:production",
+            "tsConfig": "tsconfig.spec.json",
+            "runnerConfig": "vitest.app.config.ts"
+          }
         }
       }
     }

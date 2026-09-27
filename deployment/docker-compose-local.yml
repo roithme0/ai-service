@@ -4,8 +4,10 @@ services:
   backend:
     build:
       context: ../backend
-    ports:
-      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      KOCHWIKI_BASE_URL: "${KOCHWIKI_BASE_URL:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      RECIPE_IMPROVEMENT_OPENAI_MODEL: "${RECIPE_IMPROVEMENT_OPENAI_MODEL:-}"
 
   frontend:
     build:
@@ -18,7 +20,7 @@ services:
     ports:
       - "${GATEWAY_PORT:-8000}:80"
     volumes:
-      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
       - frontend
