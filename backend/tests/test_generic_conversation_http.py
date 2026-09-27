@@ -65,27 +65,41 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     session = f"{base}/{created['session_id']}"
     assert client.post(f"{session}/turns").json() == {"kind": "not_ready"}
     texts: list[str] = []
-    for index in range(3):
+    artifacts: list[dict[str, object]] = []
+    for index in range(5):
         message = client.post(f"{session}/messages", json={"text": f"user {index}"})
         assert message.status_code == 201
         turn = client.post(f"{session}/turns")
-        assert turn.status_code == 201
         body = turn.json()
+        if index == 2:
+            assert turn.status_code == 502
+            assert body["kind"] == "generation_failed"
+            assert client.post(f"{session}/turns").json() == body
+            failed_history = client.get(session).json()
+            assert failed_history["terminal_turn_kind"] == "generation_failed"
+            assert len(failed_history["artifacts"]) == 2
+            continue
+        assert turn.status_code == 201
         assert body["kind"] == "completed"
         assert "script" in body["message"]["text"].lower() or "skript" in body["message"]["text"].lower()
         texts.append(body["message"]["text"])
         if index == 1:
-            assert len(body["artifacts"]) == 1
-            artifact = body["artifacts"][0]
-            assert artifact["type"] == "demo.greeting"
-            assert artifact["payload"] == {"message": "Hello, World!"}
-            assert artifact["order"] == 1
-            assert artifact["turn_id"] == body["turn_id"]
+            assert len(body["artifacts"]) == 2
+            greeting, greetings = body["artifacts"]
+            assert greeting["type"] == "demo.greeting"
+            assert greeting["payload"] == {"message": "Hello, World!"}
+            assert greeting["order"] == 1
+            assert greeting["turn_id"] == body["turn_id"]
+            assert greetings["type"] == "demo.greetings"
+            assert greetings["payload"] == {"messages": [f"Hello, Visitor {number}!" for number in range(1, 31)]}
+            assert greetings["order"] == 2
+            assert greetings["turn_id"] == body["turn_id"]
+            artifacts.extend((greeting, greetings))
         else:
             assert body["artifacts"] == []
     history = client.get(session).json()
-    assert len(history["messages"]) == 6
-    assert history["artifacts"] == [artifact]
+    assert len(history["messages"]) == 9
+    assert history["artifacts"] == artifacts
     assert "source" not in history
     fresh = client.post(base, json={}).json()
     fresh_session = f"{base}/{fresh['session_id']}"

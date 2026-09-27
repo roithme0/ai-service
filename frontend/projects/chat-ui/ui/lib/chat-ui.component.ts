@@ -1,4 +1,16 @@
-import { Component, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  afterEveryRender,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
@@ -23,6 +35,12 @@ export class ChatUiComponent {
   private readonly iconRegistry = inject(MatIconRegistry);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly composer = viewChild.required<ElementRef<HTMLTextAreaElement>>('composer');
+  private readonly history = viewChild.required<ElementRef<HTMLElement>>('history');
+  private readonly document = inject(DOCUMENT);
+
+  private restoreComposerFocus = false;
+  private initialFocusPending = true;
+  private scrollHistoryToBottom = false;
 
   readonly bannerTitle = input.required<string>();
   readonly bannerDescription = input.required<string>();
@@ -30,13 +48,21 @@ export class ChatUiComponent {
   readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
   readonly composerDisabled = input(false);
+  readonly focusOnReady = input(false);
   readonly composerPlaceholder = input('Nachricht schreiben');
-  
+
   readonly messageSubmitted = output<ChatSubmission>();
   readonly statusActionTriggered = output<string>();
 
   protected readonly draft = signal('');
   protected readonly renderAssistantMarkdown = renderAssistantMarkdown;
+  private readonly revealedStatus = signal<ChatConversationStatus | null>(null);
+  protected readonly statusVisible = computed(() => {
+    const status = this.conversationStatus();
+    return (
+      status?.kind !== 'loading' || status.reveal !== 'delayed' || this.revealedStatus() === status
+    );
+  });
 
   protected rendererFor(type: string) {
     return this.artifactRenderers()[type] ?? null;
@@ -44,6 +70,56 @@ export class ChatUiComponent {
 
   constructor() {
     registerChatIcons(this.iconRegistry, this.sanitizer);
+    effect((onCleanup) => {
+      if (!this.composerDisabled()) return;
+      const textarea = this.composer().nativeElement;
+      this.restoreComposerFocus = this.document.activeElement === textarea;
+      if (this.document.activeElement !== this.document.body && this.document.activeElement !== textarea) {
+        this.initialFocusPending = false;
+      }
+      const trackFocus = (event: FocusEvent): void => {
+        if (event.target !== textarea) {
+          this.restoreComposerFocus = false;
+          this.initialFocusPending = false;
+        }
+      };
+      this.document.addEventListener('focusin', trackFocus);
+      onCleanup(() => this.document.removeEventListener('focusin', trackFocus));
+    });
+    afterEveryRender(() => {
+      if (this.composerDisabled()) return;
+      const shouldFocus = this.restoreComposerFocus || (this.focusOnReady() && this.initialFocusPending);
+      this.restoreComposerFocus = false;
+      this.initialFocusPending = false;
+      if (!shouldFocus) return;
+      const activeElement = this.document.activeElement;
+      if (activeElement === this.document.body || activeElement === this.composer().nativeElement) {
+        this.composer().nativeElement.focus({ preventScroll: true });
+      }
+    });
+    effect(() => {
+      this.content();
+      this.conversationStatus();
+      this.statusVisible();
+      this.scrollHistoryToBottom = true;
+    });
+    afterEveryRender(() => {
+      if (!this.scrollHistoryToBottom) return;
+      this.scrollHistoryToBottom = false;
+      const history = this.history().nativeElement;
+      if (typeof history.scrollTo === 'function') {
+        history.scrollTo({ top: history.scrollHeight, behavior: 'smooth' });
+      } else {
+        history.scrollTop = history.scrollHeight;
+      }
+    });
+    effect((onCleanup) => {
+      const status = this.conversationStatus();
+      this.revealedStatus.set(null);
+      if (status?.kind !== 'loading' || status.reveal !== 'delayed') return;
+      const timer = setTimeout(() => this.revealedStatus.set(status), 300);
+      onCleanup(() => clearTimeout(timer));
+    });
   }
 
   protected updateDraft(value: string): void {

@@ -29,9 +29,21 @@ class RendererTemplateHost {
 }
 
 describe('ChatUiComponent', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  let originalScrollTo: PropertyDescriptor | undefined;
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    if (originalScrollTo) {
+      Object.defineProperty(Element.prototype, 'scrollTo', originalScrollTo);
+    } else {
+      Reflect.deleteProperty(Element.prototype, 'scrollTo');
+    }
+  });
 
   beforeEach(() => {
+    originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
+    Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: vi.fn() });
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
 
@@ -74,7 +86,7 @@ describe('ChatUiComponent', () => {
     expect(cards[1].textContent).toContain('<script>unsafe()</script>');
   });
 
-  it('offers library-owned German expansion only for overflowing renderer bodies', () => {
+  it('offers library-owned German expansion only for overflowing renderer bodies', async () => {
     class OverflowObserver {
       constructor(private readonly callback: ResizeObserverCallback) {}
 
@@ -94,12 +106,21 @@ describe('ChatUiComponent', () => {
       kind: 'artifact', id: 'large', type: 'unknown', headline: 'Large', payload: { rows: [1, 2, 3] },
     }]);
     fixture.detectChanges();
+    await fixture.whenStable();
 
     const toggle = fixture.nativeElement.querySelector('.artifact-toggle') as HTMLButtonElement;
     expect(toggle.textContent).toContain('Mehr anzeigen');
+    expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    const body = fixture.nativeElement.querySelector('.artifact-body') as HTMLElement;
+    expect(body.classList.contains('artifact-body--faded')).toBe(true);
     toggle.click();
     fixture.detectChanges();
+    await fixture.whenStable();
     expect(toggle.textContent).toContain('Weniger anzeigen');
+    expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 15 6-6 6 6');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(body.classList.contains('artifact-body--faded')).toBe(false);
     expect(fixture.nativeElement.querySelector('.artifact-body--expanded')).not.toBeNull();
   });
 
@@ -126,6 +147,77 @@ describe('ChatUiComponent', () => {
     expect(textarea.value).toBe('');
     expect(fixture.nativeElement.querySelectorAll('.message')).toHaveLength(0);
     expect(document.activeElement).toBe(textarea);
+  });
+
+  it('restores composer focus after a disabled interval', () => {
+    const fixture = createFixture([]);
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.focus();
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.detectChanges();
+    textarea.blur();
+    fixture.componentRef.setInput('composerDisabled', false);
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  it('focuses the composer once when an initially disabled conversation becomes ready', () => {
+    const fixture = createFixture([], { disabled: true, focusOnReady: true });
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    expect(document.activeElement).not.toBe(textarea);
+    fixture.componentRef.setInput('composerDisabled', false);
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(textarea);
+
+    textarea.blur();
+    fixture.detectChanges();
+    expect(document.activeElement).not.toBe(textarea);
+  });
+
+  it('preserves focus changes made while initial readiness is pending', () => {
+    const fixture = createFixture([], { disabled: true, focusOnReady: true });
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const other = document.createElement('button');
+    document.body.append(other);
+    try {
+      other.focus();
+      other.blur();
+      fixture.componentRef.setInput('composerDisabled', false);
+      fixture.detectChanges();
+      expect(document.activeElement).not.toBe(textarea);
+    } finally {
+      other.remove();
+    }
+  });
+
+  it.each([false, true])('preserves another focus target even if it subsequently blurs (%s)', (blur) => {
+    const fixture = createFixture([]);
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const other = document.createElement('button');
+    document.body.append(other);
+    try {
+      textarea.focus();
+      fixture.componentRef.setInput('composerDisabled', true);
+      fixture.detectChanges();
+      other.focus();
+      if (blur) other.blur();
+      fixture.componentRef.setInput('composerDisabled', false);
+      fixture.detectChanges();
+      expect(document.activeElement).toBe(blur ? document.body : other);
+    } finally {
+      other.remove();
+    }
+  });
+
+  it('does not claim focus when the composer was unfocused before disabling', () => {
+    const fixture = createFixture([]);
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const focus = vi.spyOn(textarea, 'focus');
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.detectChanges();
+    fixture.componentRef.setInput('composerDisabled', false);
+    fixture.detectChanges();
+    expect(focus).not.toHaveBeenCalled();
   });
 
   it('autosizes the composer from one up to five lines', () => {
@@ -211,6 +303,98 @@ describe('ChatUiComponent', () => {
     expect(messages[0].textContent).toContain('Replacement state');
   });
 
+  it('scrolls history to new messages, statuses, and errors after rendering', () => {
+    vi.useFakeTimers();
+    const scrollTo = vi.mocked(Element.prototype.scrollTo);
+      const fixture = createFixture([]);
+      const history = fixture.nativeElement.querySelector('.history') as HTMLElement;
+      Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+      const scrollToBottom = (): void => {
+        expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
+        scrollTo.mockClear();
+      };
+
+      fixture.componentRef.setInput('content', [
+        { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
+      ] satisfies readonly ChatTextMessage[]);
+      fixture.detectChanges();
+      scrollToBottom();
+
+      fixture.componentRef.setInput('conversationStatus', {
+        kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed',
+      });
+      fixture.detectChanges();
+      vi.advanceTimersByTime(300);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.status-content')?.textContent).toContain('Sending');
+      scrollToBottom();
+
+      fixture.componentRef.setInput('content', [
+        { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
+        { kind: 'text', id: 'assistant-1', role: 'assistant', text: 'Hi' },
+      ] satisfies readonly ChatTextMessage[]);
+      fixture.componentRef.setInput('conversationStatus', null);
+      fixture.detectChanges();
+      scrollToBottom();
+
+      fixture.componentRef.setInput('conversationStatus', {
+        kind: 'error', message: 'Failed', placement: 'assistant',
+      });
+      fixture.detectChanges();
+      scrollToBottom();
+  });
+
+  it('reveals a slow sending label after 300 ms and replaces it immediately', () => {
+    vi.useFakeTimers();
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed',
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status--delayed')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
+    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    vi.advanceTimersByTime(299);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
+    vi.advanceTimersByTime(1);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status-content--fade')?.textContent).toContain('Sending');
+    const sendingLabel = fixture.nativeElement.querySelector('.status-content');
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading', message: 'Generating', placement: 'assistant',
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Generating');
+    const generatingLabel = fixture.nativeElement.querySelector('.status-content');
+    expect(generatingLabel.classList.contains('status-content--fade')).toBe(true);
+    expect(generatingLabel).not.toBe(sendingLabel);
+  });
+
+  it('cancels a quick sending reveal and starts a fresh delay for the next send', () => {
+    vi.useFakeTimers();
+    const fixture = createFixture([]);
+    const sending = { kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed' } as const;
+    fixture.componentRef.setInput('conversationStatus', sending);
+    fixture.detectChanges();
+    vi.advanceTimersByTime(100);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error', message: 'Failed', placement: 'assistant',
+    });
+    fixture.detectChanges();
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Failed');
+    fixture.componentRef.setInput('conversationStatus', sending);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Sending');
+    fixture.destroy();
+  });
+
   it('disables submission and renders host-controlled loading and recovery states', () => {
     const fixture = createFixture([]);
     fixture.componentRef.setInput('composerDisabled', true);
@@ -239,14 +423,20 @@ describe('ChatUiComponent', () => {
     (fixture.nativeElement.querySelector('.status-action') as HTMLButtonElement).click();
 
     expect(actionEmit).toHaveBeenCalledWith('retry-turn');
+    expect(fixture.nativeElement.querySelector('.status-content').classList.contains('status-content--fade')).toBe(false);
   });
 });
 
-function createFixture(messages: readonly ChatContent[]): ComponentFixture<ChatUiComponent> {
+function createFixture(
+  messages: readonly ChatContent[],
+  options: { disabled?: boolean; focusOnReady?: boolean } = {},
+): ComponentFixture<ChatUiComponent> {
   const fixture = TestBed.createComponent(ChatUiComponent);
   fixture.componentRef.setInput('bannerTitle', 'Welcome');
   fixture.componentRef.setInput('bannerDescription', 'Description');
   fixture.componentRef.setInput('content', messages);
+  fixture.componentRef.setInput('composerDisabled', options.disabled ?? false);
+  fixture.componentRef.setInput('focusOnReady', options.focusOnReady ?? false);
   fixture.detectChanges();
   return fixture;
 }

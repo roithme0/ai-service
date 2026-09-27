@@ -1,6 +1,6 @@
 <article class="artifact" [attr.aria-label]="artifact().headline">
   <h3>{{ artifact().headline }}</h3>
-  <div #body class="artifact-body" [class.artifact-body--expanded]="expanded()">
+  <div #body class="artifact-body" [class.artifact-body--expanded]="expanded()" [class.artifact-body--faded]="overflowing() && !expanded()">
     @if (renderer(); as selected) {
       <ng-container
         [ngTemplateOutlet]="selected.template"
@@ -11,7 +11,8 @@
     }
   </div>
   @if (overflowing()) {
-    <button type="button" class="artifact-toggle" (click)="expanded.set(!expanded())">
+    <button type="button" class="artifact-toggle" [attr.aria-expanded]="expanded()" (click)="expanded.set(!expanded())">
+      <mat-icon [svgIcon]="expanded() ? 'ai-chat:arrow-up' : 'ai-chat:arrow-down'" aria-hidden="true" />
       {{ expanded() ? 'Weniger anzeigen' : 'Mehr anzeigen' }}
     </button>
   }

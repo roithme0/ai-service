@@ -53,5 +53,6 @@ export interface ChatConversationStatus {
   readonly kind: 'loading' | 'error';
   readonly message: string;
   readonly placement: 'conversation' | 'assistant';
+  readonly reveal?: 'delayed';
   readonly action?: ChatStatusAction;
 }

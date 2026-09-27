@@ -9,11 +9,12 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
 import type { ChatArtifact, ChatArtifactRenderer, JsonValue } from './chat-message';
 
 @Component({
   selector: 'ai-chat-artifact-card',
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, MatIconModule],
   templateUrl: './artifact-card.component.html',
   styleUrl: './artifact-card.component.scss',
 })
