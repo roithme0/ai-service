@@ -39,6 +39,7 @@ export class ChatUiComponent {
   private readonly document = inject(DOCUMENT);
 
   private restoreComposerFocus = false;
+  private initialFocusPending = true;
   private scrollHistoryToBottom = false;
 
   readonly bannerTitle = input.required<string>();
@@ -47,6 +48,7 @@ export class ChatUiComponent {
   readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
   readonly composerDisabled = input(false);
+  readonly focusOnReady = input(false);
   readonly composerPlaceholder = input('Nachricht schreiben');
 
   readonly messageSubmitted = output<ChatSubmission>();
@@ -72,15 +74,24 @@ export class ChatUiComponent {
       if (!this.composerDisabled()) return;
       const textarea = this.composer().nativeElement;
       this.restoreComposerFocus = this.document.activeElement === textarea;
+      if (this.document.activeElement !== this.document.body && this.document.activeElement !== textarea) {
+        this.initialFocusPending = false;
+      }
       const trackFocus = (event: FocusEvent): void => {
-        if (event.target !== textarea) this.restoreComposerFocus = false;
+        if (event.target !== textarea) {
+          this.restoreComposerFocus = false;
+          this.initialFocusPending = false;
+        }
       };
       this.document.addEventListener('focusin', trackFocus);
       onCleanup(() => this.document.removeEventListener('focusin', trackFocus));
     });
     afterEveryRender(() => {
-      if (this.composerDisabled() || !this.restoreComposerFocus) return;
+      if (this.composerDisabled()) return;
+      const shouldFocus = this.restoreComposerFocus || (this.focusOnReady() && this.initialFocusPending);
       this.restoreComposerFocus = false;
+      this.initialFocusPending = false;
+      if (!shouldFocus) return;
       const activeElement = this.document.activeElement;
       if (activeElement === this.document.body || activeElement === this.composer().nativeElement) {
         this.composer().nativeElement.focus({ preventScroll: true });

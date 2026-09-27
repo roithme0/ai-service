@@ -161,6 +161,35 @@ describe('ChatUiComponent', () => {
     expect(document.activeElement).toBe(textarea);
   });
 
+  it('focuses the composer once when an initially disabled conversation becomes ready', () => {
+    const fixture = createFixture([], { disabled: true, focusOnReady: true });
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    expect(document.activeElement).not.toBe(textarea);
+    fixture.componentRef.setInput('composerDisabled', false);
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(textarea);
+
+    textarea.blur();
+    fixture.detectChanges();
+    expect(document.activeElement).not.toBe(textarea);
+  });
+
+  it('preserves focus changes made while initial readiness is pending', () => {
+    const fixture = createFixture([], { disabled: true, focusOnReady: true });
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const other = document.createElement('button');
+    document.body.append(other);
+    try {
+      other.focus();
+      other.blur();
+      fixture.componentRef.setInput('composerDisabled', false);
+      fixture.detectChanges();
+      expect(document.activeElement).not.toBe(textarea);
+    } finally {
+      other.remove();
+    }
+  });
+
   it.each([false, true])('preserves another focus target even if it subsequently blurs (%s)', (blur) => {
     const fixture = createFixture([]);
     const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
@@ -398,11 +427,16 @@ describe('ChatUiComponent', () => {
   });
 });
 
-function createFixture(messages: readonly ChatContent[]): ComponentFixture<ChatUiComponent> {
+function createFixture(
+  messages: readonly ChatContent[],
+  options: { disabled?: boolean; focusOnReady?: boolean } = {},
+): ComponentFixture<ChatUiComponent> {
   const fixture = TestBed.createComponent(ChatUiComponent);
   fixture.componentRef.setInput('bannerTitle', 'Welcome');
   fixture.componentRef.setInput('bannerDescription', 'Description');
   fixture.componentRef.setInput('content', messages);
+  fixture.componentRef.setInput('composerDisabled', options.disabled ?? false);
+  fixture.componentRef.setInput('focusOnReady', options.focusOnReady ?? false);
   fixture.detectChanges();
   return fixture;
 }

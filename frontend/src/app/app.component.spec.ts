@@ -42,6 +42,7 @@ describe('Demo application', () => {
     }));
     expect(chat.content()).toEqual([]);
     expect(chat.composerDisabled()).toBe(false);
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('textarea'));
     const acknowledge = vi.fn();
     const submission: ChatSubmission = { text: 'Any text', acknowledge };
     chat.messageSubmitted.emit(submission);
