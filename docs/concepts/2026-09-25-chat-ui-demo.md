@@ -67,11 +67,12 @@ The initial sequence is deliberately small:
 1. First submission: show a brief loading state, then an assistant greeting.
 2. Second submission: execute `create_greeting("World")`, then display its artifact and an assistant reply.
 3. Third submission: execute `create_greetings` with 30 visitor names, then display its collapsible greeting list and an assistant reply.
-4. Further submissions: explain that the demo is complete and instruct the user to refresh the page. Refresh creates a new empty session and begins the sequence again. No dedicated restart control is provided; generic error recovery actions remain available.
+4. Fourth submission: fail once to display the existing error state. The composer remains enabled for another message.
+5. Further submissions: explain that the demo is complete and instruct the user to refresh the page. Refresh creates a new empty session and begins the sequence again. No dedicated restart control is provided; generic error recovery actions remain available.
 
 Every submitted user message is recorded, but its text does not select the response. The sequence and its timing belong to the replaceable demo execution strategy so they can be adjusted without changing the shared session model or chat UI library.
 
-The demo must clearly identify its replies as scripted. Simulated failures, recovery demonstrations, and larger or nested JSON examples are deferred; the initial sequence covers messages, loading, real tool execution, artifact presentation through the JSON fallback, and restart.
+The demo must clearly identify its replies as scripted. A one-time failure demonstrates the existing error display and continuation through a new message. Larger or nested JSON examples remain deferred.
 
 ## Scope Boundaries
 

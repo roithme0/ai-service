@@ -33,14 +33,18 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
     third = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
     store.append_user_message(first_session.session_id, "Again")
     fourth = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
+    repeated_failure = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
     store.append_user_message(first_session.session_id, "Still more")
     fifth = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
 
-    assert [turn.kind for turn in (first, second, third, fourth, fifth)] == ["completed"] * 5
-    assert [turn.text for turn in (first, second, third, fourth, fifth)] == [
-        FIRST_REPLY, SECOND_REPLY, THIRD_REPLY, COMPLETE_REPLY, COMPLETE_REPLY,
+    assert [turn.kind for turn in (first, second, third, fourth, fifth)] == [
+        "completed", "completed", "completed", "generation_failed", "completed",
     ]
-    assert fourth.text == fifth.text == "This scripted demo is complete. Refresh the page to restart it."
+    assert repeated_failure == fourth
+    assert [turn.text for turn in (first, second, third, fourth, fifth)] == [
+        FIRST_REPLY, SECOND_REPLY, THIRD_REPLY, None, COMPLETE_REPLY,
+    ]
+    assert fifth.text == "This scripted demo is complete. Refresh the page to restart it."
     assert delays == [0.25] * 5
     assert first.artifacts == fourth.artifacts == fifth.artifacts == ()
     assert len(second.artifacts) == 1
@@ -61,7 +65,7 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
     read = store.read(first_session.session_id)
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == (artifact, greetings)
-    assert [message.role for message in read.snapshot.session.messages] == ["user", "assistant"] * 5
+    assert [message.role for message in read.snapshot.session.messages] == ["user", "assistant"] * 3 + ["user", "user", "assistant"]
     assert [message.text for message in read.snapshot.session.messages if message.role == "user"] == [
         "Anything", "Unrelated text", "More", "Again", "Still more",
     ]

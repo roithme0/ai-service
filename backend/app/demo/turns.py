@@ -18,7 +18,7 @@ from app.sessions.tools import ToolRegistry
 TURN_DELAY_SECONDS = 1.5
 FIRST_REPLY = "Hello! This is a scripted chat UI demo. Send another message to see a tool create an artifact."
 SECOND_REPLY = "This scripted demo created a single greeting. Send another message to see a longer list of greetings."
-THIRD_REPLY = "This scripted demo created 30 greetings. Expand the artifact to see them all. Send another message to finish."
+THIRD_REPLY = "This scripted demo created 30 greetings. Expand the artifact to see them all. Send another message to see an error state."
 COMPLETE_REPLY = "This scripted demo is complete. Refresh the page to restart it."
 
 logger = logging.getLogger(__name__)
@@ -57,6 +57,8 @@ async def run_demo_turn(
             if execution.artifact is None:
                 return store.fail_turn(session_id, reservation)
             reply = THIRD_REPLY
+        elif completed_count == 3 and reservation.snapshot.messages[-2].role == "assistant":
+            return store.fail_turn(session_id, reservation)
         else:
             reply = COMPLETE_REPLY
         return store.complete_turn(session_id, reservation, "completed", reply)

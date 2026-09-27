@@ -66,12 +66,20 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     assert client.post(f"{session}/turns").json() == {"kind": "not_ready"}
     texts: list[str] = []
     artifacts: list[dict[str, object]] = []
-    for index in range(4):
+    for index in range(5):
         message = client.post(f"{session}/messages", json={"text": f"user {index}"})
         assert message.status_code == 201
         turn = client.post(f"{session}/turns")
-        assert turn.status_code == 201
         body = turn.json()
+        if index == 3:
+            assert turn.status_code == 502
+            assert body["kind"] == "generation_failed"
+            assert client.post(f"{session}/turns").json() == body
+            failed_history = client.get(session).json()
+            assert failed_history["terminal_turn_kind"] == "generation_failed"
+            assert len(failed_history["artifacts"]) == 2
+            continue
+        assert turn.status_code == 201
         assert body["kind"] == "completed"
         assert "script" in body["message"]["text"].lower() or "skript" in body["message"]["text"].lower()
         texts.append(body["message"]["text"])
@@ -94,7 +102,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
         else:
             assert body["artifacts"] == []
     history = client.get(session).json()
-    assert len(history["messages"]) == 8
+    assert len(history["messages"]) == 9
     assert history["artifacts"] == artifacts
     assert "source" not in history
     fresh = client.post(base, json={}).json()

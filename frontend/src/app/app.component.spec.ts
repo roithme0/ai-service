@@ -71,4 +71,33 @@ describe('Demo application', () => {
     expect(element.textContent).toContain('festen Skript ohne KI-Modell');
     expect(chat.composerDisabled()).toBe(false);
   });
+
+  it('shows a no-op action for the demo generation error', async () => {
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z' }))
+      .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Show error', turn_id: null }))
+      .mockResolvedValueOnce(Response.json({ kind: 'generation_failed', turn_id: 'turn-4' }, { status: 502 }));
+    vi.stubGlobal('fetch', fetchMock);
+    TestBed.configureTestingModule({ imports: [App] });
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const chat = fixture.debugElement.query(By.directive(ChatUiComponent)).componentInstance as ChatUiComponent;
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(chat.composerDisabled()).toBe(false);
+    }, { timeout: 2500 });
+
+    chat.messageSubmitted.emit({ text: 'Show error', acknowledge: vi.fn() });
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(chat.conversationStatus()?.action?.id).toBe('demo-noop');
+    }, { timeout: 2500 });
+    const action = fixture.nativeElement.querySelector('.status-action') as HTMLButtonElement;
+    expect(action.textContent).toContain('Demo-Aktion (ohne Funktion)');
+    action.click();
+    fixture.detectChanges();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(chat.conversationStatus()?.action?.id).toBe('demo-noop');
+    expect(chat.composerDisabled()).toBe(false);
+  });
 });
