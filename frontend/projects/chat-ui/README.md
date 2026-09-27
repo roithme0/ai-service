@@ -129,7 +129,7 @@ The component inherits typography. Its chat-specific styles are compiled into th
 
 The library publishes to `https://npm.pkg.github.com` and is associated with `roithme0/ai-service`. The `Build and publish chat UI package` workflow builds the library on pull requests and pushed `chat-ui-v*` tags, uploading the built package as a workflow artifact. A separate publish job runs only for release tags and downloads that same artifact. Only the publish job receives `packages: write` permission.
 
-The tag determines the published version: `chat-ui-v0.0.2` publishes `0.0.2`. Tags must use three numeric version parts without leading zeroes; prerelease tags are not supported yet. The publish job sets the version in `dist/chat-ui/package.json` and publishes using its `GITHUB_TOKEN`. The source package keeps the local placeholder version `0.0.0` and is not modified by the workflow.
+The tag determines the published version and npm channel: `chat-ui-v0.0.2` publishes `0.0.2` under `latest`; `chat-ui-v0.0.2-alpha` or `chat-ui-v0.0.2-alpha.123` publishes the corresponding prerelease under `alpha`. Tags must use three numeric version parts, optionally followed by `-alpha` or `-alpha.N`, where `N` contains one or more digits. Numeric parts cannot have leading zeroes except for `0`; other suffixes are rejected. Release tags are validated before dependency installation and the library build. The publish job sets the version in `dist/chat-ui/package.json` and publishes using its `GITHUB_TOKEN` with an explicit npm dist-tag. The source package keeps the local placeholder version `0.0.0` and is not modified by the workflow.
 
 For the first registry release, commit the library and workflow changes, then tag that commit and push the tag:
 

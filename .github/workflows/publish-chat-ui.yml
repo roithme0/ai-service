@@ -12,6 +12,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      channel: ${{ steps.release.outputs.channel }}
     defaults:
       run:
         working-directory: frontend
@@ -25,6 +28,22 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Validate release tag
+        if: github.event_name == 'push'
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          const match = /^chat-ui-v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(-alpha(?:\.(?:0|[1-9]\d*))?)?)$/.exec(process.env.RELEASE_TAG ?? '');
+          if (!match) {
+            throw new Error('Expected chat-ui-v1.2.0, chat-ui-v1.2.0-alpha, or chat-ui-v1.2.0-alpha.123 (no leading zeros).');
+          }
+          const channel = match[2] ? 'alpha' : 'latest';
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${match[1]}\nchannel=${channel}\n`);
+          NODE
 
       - name: Install dependencies
         run: npm ci
@@ -43,6 +62,9 @@ jobs:
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/chat-ui-v')
     runs-on: ubuntu-latest
+    env:
+      CHAT_UI_VERSION: ${{ needs.build.outputs.version }}
+      CHAT_UI_CHANNEL: ${{ needs.build.outputs.channel }}
     permissions:
       contents: read
       packages: write
@@ -63,21 +85,10 @@ jobs:
           name: chat-ui-package
           path: frontend/dist/chat-ui/
 
-      - name: Validate release tag
-        run: |
-          node --input-type=module <<'NODE'
-          import { appendFileSync } from 'node:fs';
-          const match = /^chat-ui-v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$/.exec(process.env.GITHUB_REF_NAME ?? '');
-          if (!match) {
-            throw new Error('Expected a release tag such as chat-ui-v0.0.2');
-          }
-          appendFileSync(process.env.GITHUB_ENV, `CHAT_UI_VERSION=${match[1]}\n`);
-          NODE
-
       - name: Set published package version
         run: npm version "$CHAT_UI_VERSION" --prefix dist/chat-ui --no-git-tag-version --allow-same-version
 
       - name: Publish library
-        run: npm publish ./dist/chat-ui
+        run: npm publish ./dist/chat-ui --tag "$CHAT_UI_CHANNEL"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
