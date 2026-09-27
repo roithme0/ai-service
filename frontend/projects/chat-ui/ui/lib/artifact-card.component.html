@@ -1,6 +1,6 @@
 <article class="artifact" [attr.aria-label]="artifact().headline">
   <h3>{{ artifact().headline }}</h3>
-  <div #body class="artifact-body" [class.artifact-body--expanded]="expanded()">
+  <div #body class="artifact-body" [class.artifact-body--expanded]="expanded()" [class.artifact-body--faded]="overflowing() && !expanded()">
     @if (renderer(); as selected) {
       <ng-container
         [ngTemplateOutlet]="selected.template"

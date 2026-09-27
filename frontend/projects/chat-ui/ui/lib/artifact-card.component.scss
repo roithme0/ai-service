@@ -27,6 +27,10 @@ h3 {
   max-height: none;
 }
 
+.artifact-body--faded {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent 100%);
+}
+
 .json-fallback {
   min-width: 0;
   margin: 0;

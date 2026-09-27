@@ -103,12 +103,15 @@ describe('ChatUiComponent', () => {
     expect(toggle.textContent).toContain('Mehr anzeigen');
     expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    const body = fixture.nativeElement.querySelector('.artifact-body') as HTMLElement;
+    expect(body.classList.contains('artifact-body--faded')).toBe(true);
     toggle.click();
     fixture.detectChanges();
     await fixture.whenStable();
     expect(toggle.textContent).toContain('Weniger anzeigen');
     expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 15 6-6 6 6');
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(body.classList.contains('artifact-body--faded')).toBe(false);
     expect(fixture.nativeElement.querySelector('.artifact-body--expanded')).not.toBeNull();
   });
 
