@@ -27,7 +27,7 @@ secret store; never put a real key in tracked configuration. Missing or invalid
 local recipe configuration makes every Kochwiki session endpoint return
 `503 agent_unavailable`. The deterministic demo HTTP configuration remains available
 without model credentials or Kochwiki access. The frontend now uses this demo:
-any text advances its introduction, single greeting artifact, list of 30 greetings, one scripted failure, and completion sequence.
+any text advances its introduction, two greeting artifacts in one turn, one scripted failure, and completion sequence.
 Refresh the page to restart with a new session; further submissions remain accepted.
 The generator receives the conversation, recipe and available-foodstuff snapshots,
 and versioned recipe-specific instructions. It may register validated recipe

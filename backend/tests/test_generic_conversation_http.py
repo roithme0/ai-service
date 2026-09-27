@@ -71,7 +71,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
         assert message.status_code == 201
         turn = client.post(f"{session}/turns")
         body = turn.json()
-        if index == 3:
+        if index == 2:
             assert turn.status_code == 502
             assert body["kind"] == "generation_failed"
             assert client.post(f"{session}/turns").json() == body
@@ -84,21 +84,17 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
         assert "script" in body["message"]["text"].lower() or "skript" in body["message"]["text"].lower()
         texts.append(body["message"]["text"])
         if index == 1:
-            assert len(body["artifacts"]) == 1
-            artifact = body["artifacts"][0]
-            assert artifact["type"] == "demo.greeting"
-            assert artifact["payload"] == {"message": "Hello, World!"}
-            assert artifact["order"] == 1
-            assert artifact["turn_id"] == body["turn_id"]
-            artifacts.append(artifact)
-        elif index == 2:
-            assert len(body["artifacts"]) == 1
-            artifact = body["artifacts"][0]
-            assert artifact["type"] == "demo.greetings"
-            assert artifact["payload"] == {"messages": [f"Hello, Visitor {number}!" for number in range(1, 31)]}
-            assert artifact["order"] == 2
-            assert artifact["turn_id"] == body["turn_id"]
-            artifacts.append(artifact)
+            assert len(body["artifacts"]) == 2
+            greeting, greetings = body["artifacts"]
+            assert greeting["type"] == "demo.greeting"
+            assert greeting["payload"] == {"message": "Hello, World!"}
+            assert greeting["order"] == 1
+            assert greeting["turn_id"] == body["turn_id"]
+            assert greetings["type"] == "demo.greetings"
+            assert greetings["payload"] == {"messages": [f"Hello, Visitor {number}!" for number in range(1, 31)]}
+            assert greetings["order"] == 2
+            assert greetings["turn_id"] == body["turn_id"]
+            artifacts.extend((greeting, greetings))
         else:
             assert body["artifacts"] == []
     history = client.get(session).json()

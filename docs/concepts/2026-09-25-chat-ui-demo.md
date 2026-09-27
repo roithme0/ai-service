@@ -60,15 +60,14 @@ The selected configuration stays fixed for the session's lifetime. Conversation 
 
 The demo uses a minimal hello-world configuration with a real, simple tool that produces a staged artifact. Deterministic execution explicitly invokes that tool without consulting an LLM. The tool has no Kochwiki or external-data dependency and uses the shared tool execution and artifact-staging path. Scripted response selection belongs to the demo behavior, while tool execution and session handling belong to the shared foundation.
 
-The tools are `create_greeting(name)` and `create_greetings(names)`. The script supplies `"World"` to the first tool, which stages a `demo.greeting` artifact with payload `{"message": "Hello, World!"}`. The second tool receives 30 visitor names and stages a `demo.greetings` artifact with a `messages` list. The session permits two artifacts. The UI displays both through the existing JSON fallback; the longer list exercises the default collapsed height and expansion control. No custom artifact renderer is included in the current scope.
+The tools are `create_greeting(name)` and `create_greetings(names)`. In one turn, the script supplies `"World"` to the first tool, which stages a `demo.greeting` artifact with payload `{"message": "Hello, World!"}`, then supplies 30 visitor names to the second tool, which stages a `demo.greetings` artifact with a `messages` list. Both artifacts are published together when the turn completes. The session permits two artifacts. The UI displays both through the existing JSON fallback; the longer list exercises the default collapsed height and expansion control. No custom artifact renderer is included in the current scope.
 
 The initial sequence is deliberately small:
 
 1. First submission: show a brief loading state, then an assistant greeting.
-2. Second submission: execute `create_greeting("World")`, then display its artifact and an assistant reply.
-3. Third submission: execute `create_greetings` with 30 visitor names, then display its collapsible greeting list and an assistant reply.
-4. Fourth submission: fail once to display the existing error state. The composer remains enabled for another message.
-5. Further submissions: explain that the demo is complete and instruct the user to refresh the page. Refresh creates a new empty session and begins the sequence again. No dedicated restart control is provided; generic error recovery actions remain available.
+2. Second submission: execute `create_greeting("World")` and `create_greetings` with 30 visitor names, then display both artifacts and an assistant reply.
+3. Third submission: fail once to display the existing error state and its demo-only no-op action. The composer remains enabled for another message.
+4. Further submissions: explain that the demo is complete and instruct the user to refresh the page. Refresh creates a new empty session and begins the sequence again. No dedicated restart control is provided; generic error recovery actions remain available.
 
 Every submitted user message is recorded, but its text does not select the response. The sequence and its timing belong to the replaceable demo execution strategy so they can be adjusted without changing the shared session model or chat UI library.
 

@@ -55,16 +55,17 @@ def test_demo_validation_and_configured_sequence_without_model() -> None:
     second = asyncio.run(agent.execute_turn(created.session_id))
     assert first.kind == second.kind == "completed"
     assert pauses == [0.2, 0.2]
-    assert len(second.artifacts) == 1
+    assert len(second.artifacts) == 2
     assert second.artifacts[0].type == "demo.greeting"
     assert isinstance(second.artifacts[0].payload, GreetingPayload)
     assert second.artifacts[0].payload.message == "Hello, World!"
+    assert second.artifacts[1].type == "demo.greetings"
+    assert isinstance(second.artifacts[1].payload, GreetingsPayload)
+    assert len(second.artifacts[1].payload.messages) == 30
     agent.append_user_message(created.session_id, "third")
     third = asyncio.run(agent.execute_turn(created.session_id))
-    assert third.kind == "completed"
-    assert third.artifacts[0].type == "demo.greetings"
-    assert isinstance(third.artifacts[0].payload, GreetingsPayload)
-    assert len(third.artifacts[0].payload.messages) == 30
+    assert third.kind == "generation_failed"
+    assert third.artifacts == ()
     assert pauses == [0.2] * 3
 
 

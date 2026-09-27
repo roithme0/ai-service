@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import GreetingsPayload, create_demo_session, new_demo_session_store
-from app.demo.turns import COMPLETE_REPLY, FIRST_REPLY, SECOND_REPLY, THIRD_REPLY, run_demo_turn
+from app.demo.turns import COMPLETE_REPLY, FIRST_REPLY, SECOND_REPLY, run_demo_turn
 from app.sessions.conversation import (
     ConversationReadActive,
     ConversationTurnReservation,
@@ -31,23 +31,23 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
     second = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
     store.append_user_message(first_session.session_id, "More")
     third = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
+    repeated_failure = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
     store.append_user_message(first_session.session_id, "Again")
     fourth = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
-    repeated_failure = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
     store.append_user_message(first_session.session_id, "Still more")
     fifth = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
 
     assert [turn.kind for turn in (first, second, third, fourth, fifth)] == [
-        "completed", "completed", "completed", "generation_failed", "completed",
+        "completed", "completed", "generation_failed", "completed", "completed",
     ]
-    assert repeated_failure == fourth
+    assert repeated_failure == third
     assert [turn.text for turn in (first, second, third, fourth, fifth)] == [
-        FIRST_REPLY, SECOND_REPLY, THIRD_REPLY, None, COMPLETE_REPLY,
+        FIRST_REPLY, SECOND_REPLY, None, COMPLETE_REPLY, COMPLETE_REPLY,
     ]
-    assert fifth.text == "This scripted demo is complete. Refresh the page to restart it."
+    assert fourth.text == fifth.text == "This scripted demo is complete. Refresh the page to restart it."
     assert delays == [0.25] * 5
-    assert first.artifacts == fourth.artifacts == fifth.artifacts == ()
-    assert len(second.artifacts) == 1
+    assert first.artifacts == third.artifacts == fourth.artifacts == fifth.artifacts == ()
+    assert len(second.artifacts) == 2
     artifact = second.artifacts[0]
     assert artifact.artifact_id
     assert artifact.created_at.tzinfo is not None
@@ -55,17 +55,18 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
     assert artifact.turn_id == second.turn_id
     assert artifact.type == "demo.greeting"
     assert artifact.payload.model_dump() == {"message": "Hello, World!"}
-    assert len(third.artifacts) == 1
-    greetings = third.artifacts[0]
+    greetings = second.artifacts[1]
     assert greetings.type == "demo.greetings"
     assert greetings.order == 2
-    assert greetings.turn_id == third.turn_id
+    assert greetings.turn_id == second.turn_id
     assert isinstance(greetings.payload, GreetingsPayload)
     assert greetings.payload.messages == tuple(f"Hello, Visitor {index}!" for index in range(1, 31))
     read = store.read(first_session.session_id)
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == (artifact, greetings)
-    assert [message.role for message in read.snapshot.session.messages] == ["user", "assistant"] * 3 + ["user", "user", "assistant"]
+    assert [message.role for message in read.snapshot.session.messages] == [
+        "user", "assistant", "user", "assistant", "user", "user", "assistant", "user", "assistant",
+    ]
     assert [message.text for message in read.snapshot.session.messages if message.role == "user"] == [
         "Anything", "Unrelated text", "More", "Again", "Still more",
     ]
@@ -124,27 +125,29 @@ def test_greetings_tool_validates_list_and_publishes_only_on_completion() -> Non
     assert store.complete_turn(session_id, reservation, "completed", "Created").artifacts == (accepted.artifact,)
 
 
-def test_failed_third_turn_discards_list_and_retries_without_duplicating_single_greeting() -> None:
+def test_failed_second_turn_discards_both_staged_artifacts_before_retry() -> None:
     store = new_demo_session_store()
     session_id = create_demo_session(store).session_id
-    for message in ("First", "Second"):
-        store.append_user_message(session_id, message)
-        assert asyncio.run(run_demo_turn(store, session_id, 0, no_delay)).kind == "completed"
-    store.append_user_message(session_id, "Third")
+    store.append_user_message(session_id, "First")
+    assert asyncio.run(run_demo_turn(store, session_id, 0, no_delay)).kind == "completed"
+    store.append_user_message(session_id, "Second")
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
-    registry = ToolRegistry((create_greetings_tool(store, session_id, reservation.turn_id),))
+    registry = ToolRegistry((
+        create_greeting_tool(store, session_id, reservation.turn_id),
+        create_greetings_tool(store, session_id, reservation.turn_id),
+    ))
+    assert asyncio.run(registry.invoke("create_greeting", '{"name":"World"}')).artifact is not None
     assert asyncio.run(registry.invoke("create_greetings", '{"names":["World"]}')).artifact is not None
     assert store.fail_turn(session_id, reservation).kind == "generation_failed"
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert [artifact.type for artifact in read.snapshot.artifacts] == ["demo.greeting"]
+    assert read.snapshot.artifacts == ()
     store.append_user_message(session_id, "Retry")
     retry = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
-    assert retry.text == THIRD_REPLY
-    assert len(retry.artifacts) == 1
-    assert retry.artifacts[0].type == "demo.greetings"
-    assert retry.artifacts[0].order == 2
+    assert retry.text == SECOND_REPLY
+    assert [artifact.type for artifact in retry.artifacts] == ["demo.greeting", "demo.greetings"]
+    assert [artifact.order for artifact in retry.artifacts] == [1, 2]
 
 
 def test_busy_cancellation_and_retry_keep_first_step() -> None:
@@ -202,8 +205,8 @@ def test_failed_second_turn_discards_greeting_and_retries_second_step() -> None:
     store.append_user_message(session_id, "Retry")
     retry = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
     assert retry.text == SECOND_REPLY
-    assert len(retry.artifacts) == 1
-    assert retry.artifacts[0].order == 1
+    assert len(retry.artifacts) == 2
+    assert [artifact.order for artifact in retry.artifacts] == [1, 2]
 
 
 def test_expiry_during_delay_uses_shared_expiry_result() -> None:

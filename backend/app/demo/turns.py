@@ -16,9 +16,8 @@ from app.sessions.tools import ToolRegistry
 
 
 TURN_DELAY_SECONDS = 1.5
-FIRST_REPLY = "Hello! This is a scripted chat UI demo. Send another message to see a tool create an artifact."
-SECOND_REPLY = "This scripted demo created a single greeting. Send another message to see a longer list of greetings."
-THIRD_REPLY = "This scripted demo created 30 greetings. Expand the artifact to see them all. Send another message to see an error state."
+FIRST_REPLY = "Hello! This is a scripted chat UI demo. Send another message to see two tools create artifacts."
+SECOND_REPLY = "This scripted demo created two greetings artifacts. Expand the longer list to see them all. Send another message to see an error state."
 COMPLETE_REPLY = "This scripted demo is complete. Refresh the page to restart it."
 
 logger = logging.getLogger(__name__)
@@ -44,20 +43,20 @@ async def run_demo_turn(
         if completed_count == 0:
             reply = FIRST_REPLY
         elif completed_count == 1:
-            registry = ToolRegistry((single_greeting_tool_factory(store, session_id, reservation.turn_id),))
-            execution = await registry.invoke("create_greeting", '{"name":"World"}')
-            if execution.artifact is None:
+            registry = ToolRegistry((
+                single_greeting_tool_factory(store, session_id, reservation.turn_id),
+                greeting_list_tool_factory(store, session_id, reservation.turn_id),
+            ))
+            greeting = await registry.invoke("create_greeting", '{"name":"World"}')
+            if greeting.artifact is None:
                 return store.fail_turn(session_id, reservation)
-            reply = SECOND_REPLY
-        elif completed_count == 2:
-            registry = ToolRegistry((greeting_list_tool_factory(store, session_id, reservation.turn_id),))
-            execution = await registry.invoke(
+            greetings = await registry.invoke(
                 "create_greetings", json.dumps({"names": [f"Visitor {index}" for index in range(1, 31)]})
             )
-            if execution.artifact is None:
+            if greetings.artifact is None:
                 return store.fail_turn(session_id, reservation)
-            reply = THIRD_REPLY
-        elif completed_count == 3 and reservation.snapshot.messages[-2].role == "assistant":
+            reply = SECOND_REPLY
+        elif completed_count == 2 and reservation.snapshot.messages[-2].role == "assistant":
             return store.fail_turn(session_id, reservation)
         else:
             reply = COMPLETE_REPLY
