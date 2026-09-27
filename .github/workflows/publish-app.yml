@@ -46,7 +46,6 @@ jobs:
         with:
           images: ${{ matrix.image }}
           tags: |
-            type=sha
             type=ref,event=tag
 
       - name: Build and push image
