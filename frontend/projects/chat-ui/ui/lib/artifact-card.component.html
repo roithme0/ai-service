@@ -1,0 +1,18 @@
+<article class="artifact" [attr.aria-label]="artifact().headline">
+  <h3>{{ artifact().headline }}</h3>
+  <div #body class="artifact-body" [class.artifact-body--expanded]="expanded()">
+    @if (renderer(); as selected) {
+      <ng-container
+        [ngTemplateOutlet]="selected.template"
+        [ngTemplateOutletContext]="renderContext()"
+      />
+    } @else {
+      <pre class="json-fallback">{{ formattedPayload() }}</pre>
+    }
+  </div>
+  @if (overflowing()) {
+    <button type="button" class="artifact-toggle" (click)="expanded.set(!expanded())">
+      {{ expanded() ? 'Weniger anzeigen' : 'Mehr anzeigen' }}
+    </button>
+  }
+</article>

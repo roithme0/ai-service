@@ -1,0 +1,12 @@
+<main class="chat-shell">
+  <ai-chat-ui
+    bannerTitle="Chat-UI-Demo"
+    bannerDescription="Diese Demo folgt einem festen Skript ohne KI-Modell. Jede Nachricht führt zum nächsten Schritt. Lade die Seite neu, um von vorn zu beginnen."
+    composerPlaceholder="Nachricht schreiben"
+    [content]="chat().content"
+    [composerDisabled]="chat().composerDisabled"
+    [conversationStatus]="chat().status"
+    (messageSubmitted)="handleMessage($event)"
+    (statusActionTriggered)="handleStatusAction($event)"
+  />
+</main>
