@@ -30,6 +30,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Validate release tag
+        if: github.event_name == 'push'
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from 'node:fs';
+          const match = /^app-v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(-alpha(?:\.(?:0|[1-9]\d*))?)?)$/.exec(process.env.RELEASE_TAG ?? '');
+          if (!match) {
+            throw new Error('Expected app-v1.2.0, app-v1.2.0-alpha, or app-v1.2.0-alpha.123 (no leading zeros).');
+          }
+          const channel = match[2] ? 'alpha' : 'latest';
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${match[1]}\nchannel=${channel}\n`);
+          NODE
+
       - name: Log in to Docker Hub
         if: github.event_name == 'push'
         uses: docker/login-action@v4
@@ -45,8 +61,12 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ matrix.image }}
+          flavor: |
+            latest=false
           tags: |
-            type=ref,event=tag
+            type=ref,event=pr
+            type=raw,value=${{ steps.release.outputs.version }},enable=${{ github.event_name == 'push' }}
+            type=raw,value=${{ steps.release.outputs.channel }},enable=${{ github.event_name == 'push' }}
 
       - name: Build and push image
         uses: docker/build-push-action@v7
