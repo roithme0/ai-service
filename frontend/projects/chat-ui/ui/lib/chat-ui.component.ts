@@ -1,4 +1,16 @@
-import { Component, ElementRef, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  afterEveryRender,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
@@ -23,6 +35,9 @@ export class ChatUiComponent {
   private readonly iconRegistry = inject(MatIconRegistry);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly composer = viewChild.required<ElementRef<HTMLTextAreaElement>>('composer');
+  private readonly document = inject(DOCUMENT);
+
+  private restoreComposerFocus = false;
 
   readonly bannerTitle = input.required<string>();
   readonly bannerDescription = input.required<string>();
@@ -31,7 +46,7 @@ export class ChatUiComponent {
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
   readonly composerDisabled = input(false);
   readonly composerPlaceholder = input('Nachricht schreiben');
-  
+
   readonly messageSubmitted = output<ChatSubmission>();
   readonly statusActionTriggered = output<string>();
 
@@ -40,7 +55,9 @@ export class ChatUiComponent {
   private readonly revealedStatus = signal<ChatConversationStatus | null>(null);
   protected readonly statusVisible = computed(() => {
     const status = this.conversationStatus();
-    return status?.kind !== 'loading' || status.reveal !== 'delayed' || this.revealedStatus() === status;
+    return (
+      status?.kind !== 'loading' || status.reveal !== 'delayed' || this.revealedStatus() === status
+    );
   });
 
   protected rendererFor(type: string) {
@@ -49,6 +66,24 @@ export class ChatUiComponent {
 
   constructor() {
     registerChatIcons(this.iconRegistry, this.sanitizer);
+    effect((onCleanup) => {
+      if (!this.composerDisabled()) return;
+      const textarea = this.composer().nativeElement;
+      this.restoreComposerFocus = this.document.activeElement === textarea;
+      const trackFocus = (event: FocusEvent): void => {
+        if (event.target !== textarea) this.restoreComposerFocus = false;
+      };
+      this.document.addEventListener('focusin', trackFocus);
+      onCleanup(() => this.document.removeEventListener('focusin', trackFocus));
+    });
+    afterEveryRender(() => {
+      if (this.composerDisabled() || !this.restoreComposerFocus) return;
+      this.restoreComposerFocus = false;
+      const activeElement = this.document.activeElement;
+      if (activeElement === this.document.body || activeElement === this.composer().nativeElement) {
+        this.composer().nativeElement.focus({ preventScroll: true });
+      }
+    });
     effect((onCleanup) => {
       const status = this.conversationStatus();
       this.revealedStatus.set(null);

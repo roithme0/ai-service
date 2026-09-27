@@ -131,6 +131,48 @@ describe('ChatUiComponent', () => {
     expect(document.activeElement).toBe(textarea);
   });
 
+  it('restores composer focus after a disabled interval', () => {
+    const fixture = createFixture([]);
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.focus();
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.detectChanges();
+    textarea.blur();
+    fixture.componentRef.setInput('composerDisabled', false);
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  it.each([false, true])('preserves another focus target even if it subsequently blurs (%s)', (blur) => {
+    const fixture = createFixture([]);
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const other = document.createElement('button');
+    document.body.append(other);
+    try {
+      textarea.focus();
+      fixture.componentRef.setInput('composerDisabled', true);
+      fixture.detectChanges();
+      other.focus();
+      if (blur) other.blur();
+      fixture.componentRef.setInput('composerDisabled', false);
+      fixture.detectChanges();
+      expect(document.activeElement).toBe(blur ? document.body : other);
+    } finally {
+      other.remove();
+    }
+  });
+
+  it('does not claim focus when the composer was unfocused before disabling', () => {
+    const fixture = createFixture([]);
+    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const focus = vi.spyOn(textarea, 'focus');
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.detectChanges();
+    fixture.componentRef.setInput('composerDisabled', false);
+    fixture.detectChanges();
+    expect(focus).not.toHaveBeenCalled();
+  });
+
   it('autosizes the composer from one up to five lines', () => {
     const fixture = createFixture([]);
     const autosize = fixture.debugElement
