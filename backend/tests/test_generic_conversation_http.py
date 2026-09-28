@@ -200,6 +200,8 @@ def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClien
     document = client.get("/api/openapi.json").json()
     paths = document["paths"]
     base = "/api/v1/agents/{configuration}/sessions"
+    for path in (base, f"{base}/{{session_id}}/messages", f"{base}/{{session_id}}/turns"):
+        assert paths[path]["post"]["responses"]["422"]["description"] == "Unprocessable Content"
     expected = {
         base: {404: "ErrorResponse", 422: "InvalidInputResponse", 503: "ErrorResponse"},
         f"{base}/{{session_id}}": {404: "ErrorResponse", 410: "ErrorResponse", 503: "ErrorResponse"},

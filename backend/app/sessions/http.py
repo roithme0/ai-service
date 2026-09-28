@@ -242,7 +242,7 @@ def _request_body(model: type[BaseModel], *, required: bool = True) -> dict[str,
 
 @router.post("", status_code=201, response_model=SessionCreationResponse, responses={
     404: {"model": ErrorResponse},
-    422: {"model": InvalidInputResponse},
+    422: {"model": InvalidInputResponse, "description": "Unprocessable Content"},
     503: {"model": ErrorResponse},
 }, openapi_extra=_request_body(SessionCreationRequest))
 async def create_session(
@@ -287,7 +287,7 @@ def read_session(
     404: {"model": ErrorResponse},
     409: {"model": ErrorResponse},
     410: {"model": ErrorResponse},
-    422: {"model": ErrorResponse},
+    422: {"model": ErrorResponse, "description": "Unprocessable Content"},
     503: {"model": ErrorResponse},
 }, openapi_extra=_request_body(UserMessageRequest))
 async def append_message(
@@ -308,7 +308,7 @@ async def append_message(
     404: {"model": ErrorResponse},
     409: {"model": ErrorResponse},
     410: {"model": ErrorResponse},
-    422: {"model": InvalidInputResponse},
+    422: {"model": InvalidInputResponse, "description": "Unprocessable Content"},
     502: {"model": ErrorResponse},
     503: {"model": ErrorResponse},
 }, openapi_extra=_request_body(EmptyTurnRequest, required=False))
