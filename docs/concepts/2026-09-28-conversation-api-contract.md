@@ -62,6 +62,7 @@ The frontend package publishes `/conversation` separately but shares one package
 - **Completed Zod error-response slice:** The transport validates failed JSON bodies against generated `ErrorResponse` and `InvalidInputResponse` schemas. Valid bodies remain `ConversationApiError`; malformed bodies become `ConversationNetworkError` so uncertain operations can be reconciled. Status-to-kind precision is deferred because the shared backend error schema does not encode it.
 - **Completed generic request-contract slice:** Pydantic models validate creation, message, and optional empty turn request envelopes. Their validation schemas are published as OpenAPI request bodies while preserving agent-availability precedence and existing 422 error kinds. The generated operation types now describe the actual request bodies, and the transport checks its outgoing creation and message objects against them. Configuration-specific `input` remains open.
 - **Completed application release gate:** The application image workflow runs the existing contract drift check once for pull requests and app release tags. Both image builds wait for that check, so stale generated output prevents publication.
+- **Completed configuration-name alignment:** The backend configuration enum supplies registry keys and OpenAPI path parameter values. Generated TypeScript and Zod output supplies the frontend transport's configuration type and runtime values; unknown names still reach the backend's `unknown_configuration` response.
 
 ## Open Questions
 

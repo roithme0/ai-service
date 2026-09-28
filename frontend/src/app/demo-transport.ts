@@ -2,7 +2,7 @@ import { AgentConfiguration, HttpConversationTransport, type UserMessageResponse
 
 export class DemoTransport extends HttpConversationTransport {
   constructor() {
-    super('/api/v1', AgentConfiguration.Demo);
+    super('/api/v1', AgentConfiguration.demo);
   }
 
   override async createSession(): Promise<SessionCreationResponse> {

@@ -4,7 +4,7 @@ import { HttpConversationTransport, ConversationApiError, ConversationNetworkErr
 describe('HttpConversationTransport', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it.each([AgentConfiguration.Kochwiki, AgentConfiguration.Demo])('uses %s for every path and sends its supplied input', async (configuration) => {
+  it.each([AgentConfiguration.kochwiki, AgentConfiguration.demo])('uses %s for every path and sends its supplied input', async (configuration) => {
     const fetchMock = vi.fn().mockResolvedValue(
       response(201, {
         session_id: 'session-1',
@@ -42,7 +42,7 @@ describe('HttpConversationTransport', () => {
       session_id: 'session-1', expires_at: '2026-09-26T12:00:00Z',
     }));
     vi.stubGlobal('fetch', fetchMock);
-    await new HttpConversationTransport(baseUrl, AgentConfiguration.Demo).createSession();
+    await new HttpConversationTransport(baseUrl, AgentConfiguration.demo).createSession();
     expect(fetchMock).toHaveBeenCalledWith(`${baseUrl.replace(/\/+$/, '')}/agents/demo/sessions`,
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ input: {} }) }));
   });
@@ -51,7 +51,7 @@ describe('HttpConversationTransport', () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(new Response('incomplete', { status: 502 }));
     vi.stubGlobal('fetch', fetchMock);
-    const transport = new HttpConversationTransport('/api/v1', AgentConfiguration.Demo);
+    const transport = new HttpConversationTransport('/api/v1', AgentConfiguration.demo);
     await expect(transport.createSession()).rejects.toBeInstanceOf(ConversationNetworkError);
     await expect(transport.createSession()).rejects.toBeInstanceOf(ConversationNetworkError);
   });
@@ -138,7 +138,7 @@ describe('HttpConversationTransport', () => {
       kind: 'invalid_input', issues: [{ location: ['input', 0], message: 'Invalid value' }],
     })));
 
-    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.Demo).createSession()).rejects.toEqual(
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession()).rejects.toEqual(
       expect.objectContaining<Partial<ConversationApiError>>({ status: 422, kind: 'invalid_input' }),
     );
   });
@@ -150,7 +150,7 @@ describe('HttpConversationTransport', () => {
   ])('classifies malformed error bodies as uncertain responses: %j', async (payload) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, payload)));
 
-    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.Demo).createSession())
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession())
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 

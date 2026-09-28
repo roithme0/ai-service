@@ -15,7 +15,9 @@ for (const entry of ['.', './ui', './conversation']) {
 const root = await import(pathToFileURL(resolve(packageRoot, manifest.exports['.'].default)).href);
 assert.deepEqual(Object.keys(root), [], 'Root must export no API');
 const conversation = await import(pathToFileURL(resolve(packageRoot, manifest.exports['./conversation'].default)).href);
-assert.deepEqual(conversation.AgentConfiguration, { Demo: 'demo', Kochwiki: 'kochwiki' });
+for (const [name, value] of Object.entries(conversation.AgentConfiguration)) {
+  assert.equal(name, value);
+}
 const requests = [];
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (url, options) => {
@@ -24,7 +26,7 @@ globalThis.fetch = async (url, options) => {
 };
 try {
   const controller = new conversation.ConversationController(
-    new conversation.HttpConversationTransport('/ai/api/v1/', conversation.AgentConfiguration.Demo),
+    new conversation.HttpConversationTransport('/ai/api/v1/', conversation.AgentConfiguration.demo),
     () => {},
   );
   await controller.start();
@@ -55,12 +57,12 @@ import { AgentConfiguration, ConversationController, HttpConversationTransport, 
 } from '@roithme0/chat-ui/conversation';
 import * as Root from '@roithme0/chat-ui';
 const emptyRoot: keyof typeof Root extends never ? true : false = true;
-const config: Configuration = AgentConfiguration.Demo;
+const config: Configuration = AgentConfiguration.demo;
 const publish = (state: ConversationViewState): void => { const content: readonly ChatContent[] = state.content; };
 const transport: ConversationTransport = new HttpConversationTransport('/api/v1', config);
 const controller = new ConversationController(transport, publish);
 const mapper: ArtifactMapper = (artifact) => presentJsonArtifact(artifact);
-new ConversationController(new HttpConversationTransport('/ai/api/v1/', AgentConfiguration.Kochwiki, { source: {} }), publish, mapper);
+new ConversationController(new HttpConversationTransport('/ai/api/v1/', AgentConfiguration.kochwiki, { source: {} }), publish, mapper);
 // @ts-expect-error Arbitrary agent keys are not public configuration.
 new HttpConversationTransport('/api/v1', 'arbitrary');
 // @ts-expect-error Root compatibility exports must be absent.

@@ -249,7 +249,7 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostData = {
         /**
          * Configuration
          */
-        configuration: string;
+        configuration: 'demo' | 'kochwiki';
     };
     query?: never;
     url: '/api/v1/agents/{configuration}/sessions';
@@ -287,7 +287,7 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetData = {
         /**
          * Configuration
          */
-        configuration: string;
+        configuration: 'demo' | 'kochwiki';
         /**
          * Session Id
          */
@@ -341,7 +341,7 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostDa
         /**
          * Configuration
          */
-        configuration: string;
+        configuration: 'demo' | 'kochwiki';
         /**
          * Session Id
          */
@@ -396,7 +396,7 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostData = 
         /**
          * Configuration
          */
-        configuration: string;
+        configuration: 'demo' | 'kochwiki';
         /**
          * Session Id
          */

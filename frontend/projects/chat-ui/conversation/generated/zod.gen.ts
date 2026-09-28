@@ -139,7 +139,7 @@ export const zCreateSessionApiV1AgentsConfigurationSessionsPostBody = z.object({
 });
 
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostPath = z.object({
-    configuration: z.string()
+    configuration: z.enum(['demo', 'kochwiki'])
 });
 
 /**
@@ -148,7 +148,7 @@ export const zCreateSessionApiV1AgentsConfigurationSessionsPostPath = z.object({
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostResponse = zSessionCreationResponse;
 
 export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetPath = z.object({
-    configuration: z.string(),
+    configuration: z.enum(['demo', 'kochwiki']),
     session_id: z.string()
 });
 
@@ -165,7 +165,7 @@ export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPost
 });
 
 export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostPath = z.object({
-    configuration: z.string(),
+    configuration: z.enum(['demo', 'kochwiki']),
     session_id: z.string()
 });
 
@@ -180,7 +180,7 @@ export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPost
 export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostBody = z.record(z.string(), z.never());
 
 export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostPath = z.object({
-    configuration: z.string(),
+    configuration: z.enum(['demo', 'kochwiki']),
     session_id: z.string()
 });
 

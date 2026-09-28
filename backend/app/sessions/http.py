@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated, Generic, Literal, Protocol, TypeVar
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_serializer
 
@@ -24,6 +25,18 @@ from app.sessions.text_sessions import (
 
 
 router = APIRouter(prefix="/api/v1/agents/{configuration}/sessions", tags=["agents"])
+
+
+class AgentConfiguration(StrEnum):
+    DEMO = "demo"
+    KOCHWIKI = "kochwiki"
+
+
+ConfigurationPath = Annotated[
+    str, Path(json_schema_extra={"enum": [configuration.value for configuration in AgentConfiguration]})
+]
+
+
 InputT = TypeVar("InputT")
 ContextT = TypeVar("ContextT")
 PayloadT = TypeVar("PayloadT", bound=BaseModel)
@@ -204,7 +217,7 @@ def get_agent_registry() -> dict[str, ConversationTransport | None]:
         AgentTransport(agents.recipe, _recipe_input, _recipe_issue) if agents.recipe else None
     )
     demo: ConversationTransport = AgentTransport(agents.demo, lambda value: value, _demo_issue)
-    return {"kochwiki": recipe, "demo": demo}
+    return {AgentConfiguration.KOCHWIKI: recipe, AgentConfiguration.DEMO: demo}
 
 
 def _agent(configuration: str, registry: dict[str, ConversationTransport | None]) -> ConversationTransport | JSONResponse:
@@ -233,7 +246,7 @@ def _request_body(model: type[BaseModel], *, required: bool = True) -> dict[str,
     503: {"model": ErrorResponse},
 }, openapi_extra=_request_body(SessionCreationRequest))
 async def create_session(
-    configuration: str, request: Request,
+    configuration: ConfigurationPath, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
 ) -> SessionCreationResponse | JSONResponse:
     agent = _agent(configuration, registry)
@@ -263,7 +276,7 @@ async def create_session(
     503: {"model": ErrorResponse},
 })
 def read_session(
-    configuration: str, session_id: str,
+    configuration: ConfigurationPath, session_id: str,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
 ) -> SessionSnapshotResponse | JSONResponse:
     agent = _agent(configuration, registry)
@@ -278,7 +291,7 @@ def read_session(
     503: {"model": ErrorResponse},
 }, openapi_extra=_request_body(UserMessageRequest))
 async def append_message(
-    configuration: str, session_id: str, request: Request,
+    configuration: ConfigurationPath, session_id: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
 ) -> UserMessageResponse | JSONResponse:
     agent = _agent(configuration, registry)
@@ -300,7 +313,7 @@ async def append_message(
     503: {"model": ErrorResponse},
 }, openapi_extra=_request_body(EmptyTurnRequest, required=False))
 async def execute_turn(
-    configuration: str, session_id: str, request: Request,
+    configuration: ConfigurationPath, session_id: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
 ) -> CompletedTurnResponse | JSONResponse:
     agent = _agent(configuration, registry)

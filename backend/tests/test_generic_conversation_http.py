@@ -11,7 +11,7 @@ from app.agents.demo import create_demo_agent
 from app.agents.recipe import create_recipe_agent
 from app.main import app
 from app.sessions.http import (
-    AgentTransport, ConversationTransport, ErrorResponse, InvalidInputResponse,
+    AgentConfiguration, AgentTransport, ConversationTransport, ErrorResponse, InvalidInputResponse,
     _demo_issue, _recipe_input, _recipe_issue, get_agent_registry,
 )
 from test_recipe_improvement_session_http import FakeGenerator, FakeResolver, valid_request
@@ -28,6 +28,10 @@ def client() -> Iterator[TestClient]:
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+
+
+def test_configuration_registry_matches_published_names() -> None:
+    assert set(get_agent_registry()) == set(AgentConfiguration)
 
 
 def test_registry_and_creation_envelopes(client: TestClient) -> None:
@@ -157,6 +161,18 @@ def test_request_bodies_are_published_and_enforced(client: TestClient) -> None:
     creation = paths[base]["post"]["requestBody"]
     message = paths[f"{base}/{{session_id}}/messages"]["post"]["requestBody"]
     turn = paths[f"{base}/{{session_id}}/turns"]["post"]["requestBody"]
+
+    for path, method in (
+        (base, "post"),
+        (f"{base}/{{session_id}}", "get"),
+        (f"{base}/{{session_id}}/messages", "post"),
+        (f"{base}/{{session_id}}/turns", "post"),
+    ):
+        configuration = next(
+            parameter for parameter in paths[path][method]["parameters"]
+            if parameter["name"] == "configuration"
+        )
+        assert configuration["schema"]["enum"] == ["demo", "kochwiki"]
 
     creation_schema = creation["content"]["application/json"]["schema"]
     message_schema = message["content"]["application/json"]["schema"]

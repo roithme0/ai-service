@@ -8,6 +8,7 @@ import type {
 } from '../generated/types.gen';
 import {
   zCompletedTurnResponse,
+  zCreateSessionApiV1AgentsConfigurationSessionsPostPath,
   zErrorResponse,
   zInvalidInputResponse,
   zSessionCreationResponse,
@@ -18,8 +19,8 @@ import { z, type ZodType } from 'zod';
 
 const errorResponseSchema = z.union([zErrorResponse, zInvalidInputResponse]);
 
-export const AgentConfiguration = { Demo: 'demo', Kochwiki: 'kochwiki' } as const;
-export type AgentConfiguration = (typeof AgentConfiguration)[keyof typeof AgentConfiguration];
+export const AgentConfiguration = zCreateSessionApiV1AgentsConfigurationSessionsPostPath.shape.configuration.enum;
+export type AgentConfiguration = CreateSessionApiV1AgentsConfigurationSessionsPostData['path']['configuration'];
 
 export type ApiMessage = SessionSnapshotResponse['messages'][number];
 

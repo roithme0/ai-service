@@ -400,6 +400,10 @@
             "name": "configuration",
             "required": true,
             "schema": {
+              "enum": [
+                "demo",
+                "kochwiki"
+              ],
               "title": "Configuration",
               "type": "string"
             }
@@ -479,6 +483,10 @@
             "name": "configuration",
             "required": true,
             "schema": {
+              "enum": [
+                "demo",
+                "kochwiki"
+              ],
               "title": "Configuration",
               "type": "string"
             }
@@ -560,6 +568,10 @@
             "name": "configuration",
             "required": true,
             "schema": {
+              "enum": [
+                "demo",
+                "kochwiki"
+              ],
               "title": "Configuration",
               "type": "string"
             }
@@ -672,6 +684,10 @@
             "name": "configuration",
             "required": true,
             "schema": {
+              "enum": [
+                "demo",
+                "kochwiki"
+              ],
               "title": "Configuration",
               "type": "string"
             }
