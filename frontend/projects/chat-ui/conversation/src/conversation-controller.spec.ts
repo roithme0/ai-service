@@ -364,6 +364,7 @@ describe('ConversationController', () => {
 function snapshot(messages: readonly ApiMessage[]): SessionSnapshot {
   return {
     session_id: 'session-1',
+    expires_at: CREATED.expires_at,
     messages,
     artifacts: [],
     terminal_turn_id: null,

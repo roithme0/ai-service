@@ -22,6 +22,7 @@ export interface SessionCreation {
 
 export interface SessionSnapshot {
   readonly session_id: string;
+  readonly expires_at: string;
   readonly messages: ReadonlyArray<ApiMessage>;
   readonly artifacts: ReadonlyArray<ApiArtifact>;
   readonly terminal_turn_id: string | null;
@@ -140,9 +141,11 @@ function parseSessionSnapshot(value: unknown): SessionSnapshot {
     throw invalidResponse();
   }
   const sessionId = readString(value, 'session_id');
-  if (sessionId === null) throw invalidResponse();
+  const expiresAt = readString(value, 'expires_at');
+  if (sessionId === null || expiresAt === null) throw invalidResponse();
   return {
     session_id: sessionId,
+    expires_at: expiresAt,
     messages: value['messages'].map(parseMessage),
     artifacts: value['artifacts'].map(parseArtifact),
     terminal_turn_id: readNullableString(value, 'terminal_turn_id'),

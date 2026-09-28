@@ -21,7 +21,8 @@ describe('HttpConversationTransport', () => {
     expect(fetchMock.mock.calls[0][0]).toBe(`/api/v1/agents/${configuration}/sessions`);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ input });
     fetchMock.mockResolvedValueOnce(response(200, {
-      session_id: 'session-1', messages: [], artifacts: [], terminal_turn_id: null, terminal_turn_kind: null,
+      session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z',
+      messages: [], artifacts: [], terminal_turn_id: null, terminal_turn_kind: null,
     })).mockResolvedValueOnce(response(201, { role: 'user', text: 'Hello', turn_id: null })).mockResolvedValueOnce(response(201, {
       kind: 'completed', turn_id: 'turn-1', message: { role: 'assistant', text: 'Hi', turn_id: 'turn-1' }, artifacts: [],
     }));
@@ -79,6 +80,7 @@ describe('HttpConversationTransport', () => {
       .mockResolvedValueOnce(
         response(200, {
           session_id: 'session-1',
+          expires_at: '2026-09-17T12:00:00Z',
           messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
           artifacts: [artifact],
           terminal_turn_id: null,
@@ -99,6 +101,7 @@ describe('HttpConversationTransport', () => {
 
     await expect(transport.readSession('session-1')).resolves.toEqual({
       session_id: 'session-1',
+      expires_at: '2026-09-17T12:00:00Z',
       messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
       artifacts: [artifact],
       terminal_turn_id: null,
@@ -136,6 +139,13 @@ describe('HttpConversationTransport', () => {
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
+  it('rejects a snapshot without its required expiry', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, {
+      session_id: 'session-1', messages: [], artifacts: [], terminal_turn_id: null, terminal_turn_kind: null,
+    })));
+    await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
+      .rejects.toBeInstanceOf(ConversationNetworkError);
+  });
 });
 
 function response(status: number, payload: unknown): Response {
