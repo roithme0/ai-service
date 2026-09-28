@@ -11,6 +11,25 @@ const contract = join(frontend, 'projects', 'chat-ui', 'conversation', 'generate
 const files = ['openapi.json', 'index.ts', 'types.gen.ts', 'zod.gen.ts'];
 const check = process.argv[2] === '--check';
 
+function mismatchDetails(committed, generated) {
+  if (committed === null) return 'The checked-in file is missing.';
+
+  const checkedIn = committed.toString('utf8');
+  const produced = generated.toString('utf8');
+  if (checkedIn.replaceAll('\r\n', '\n') === produced.replaceAll('\r\n', '\n')) {
+    return 'Only line endings differ (CRLF versus LF).';
+  }
+
+  const checkedInLines = checkedIn.split(/\r?\n/);
+  const producedLines = produced.split(/\r?\n/);
+  let line = 0;
+  while (line < Math.max(checkedInLines.length, producedLines.length)
+    && checkedInLines[line] === producedLines[line]) line++;
+
+  const show = (value) => value === undefined ? '<end of file>' : JSON.stringify(value.slice(0, 240));
+  return `First difference at line ${line + 1}:\n  checked-in: ${show(checkedInLines[line])}\n  generated:  ${show(producedLines[line])}`;
+}
+
 if (process.argv.length > 3 || (process.argv[2] && !check)) {
   throw new Error('Usage: node scripts/conversation-contract.mjs [--check]');
 }
@@ -32,7 +51,7 @@ try {
     if (check) {
       const committed = await readFile(destination).catch(() => null);
       if (!committed?.equals(generated)) {
-        throw new Error(`${destination} is stale. Run npm run generate:conversation-contract.`);
+        throw new Error(`${destination} is stale. ${mismatchDetails(committed, generated)}\nRun npm run generate:conversation-contract.`);
       }
     } else {
       await mkdir(contract, { recursive: true });
