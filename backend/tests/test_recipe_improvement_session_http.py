@@ -228,13 +228,13 @@ def test_user_messages_append_in_order_and_preserve_submitted_text(client: TestC
     read = client.get(session_url)
 
     assert first.status_code == 201
-    assert first.json() == {"role": "user", "text": "  Make it lighter.  "}
+    assert first.json() == {"role": "user", "text": "  Make it lighter.  ", "turn_id": None}
     assert second.status_code == 201
-    assert second.json() == {"role": "user", "text": "Keep it filling."}
+    assert second.json() == {"role": "user", "text": "Keep it filling.", "turn_id": None}
     assert read.status_code == 200
     assert read.json()["messages"] == [
-        {"role": "user", "text": "  Make it lighter.  "},
-        {"role": "user", "text": "Keep it filling."},
+        {"role": "user", "text": "  Make it lighter.  ", "turn_id": None},
+        {"role": "user", "text": "Keep it filling.", "turn_id": None},
     ]
 
 
@@ -276,7 +276,7 @@ def test_message_limit_returns_conflict_without_appending(client: TestClient) ->
     assert rejected.status_code == 409
     assert read.status_code == 200
     assert len(read.json()["messages"]) == MAX_MESSAGE_COUNT - 1
-    assert read.json()["messages"][-1] == {"role": "user", "text": "98"}
+    assert read.json()["messages"][-1] == {"role": "user", "text": "98", "turn_id": None}
 
 
 def test_unknown_and_expired_user_message_appends_do_not_expose_session_content() -> None:
@@ -359,7 +359,7 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
     assert "For health-related questions" in generation_request.instructions
     assert "register_recipe_proposal" in generation_request.instructions
     assert read.json()["messages"] == [
-        {"role": "user", "text": "  question  "},
+        {"role": "user", "text": "  question  ", "turn_id": None},
         {
             "role": "assistant",
             "text": "Test reply",
@@ -442,7 +442,7 @@ def test_turn_endpoint_reports_generation_failure_without_appending(
     assert response.status_code == 502
     assert response.json()["kind"] == "generation_failed"
     assert response.json()["turn_id"]
-    assert client.get(session_url).json()["messages"] == [{"role": "user", "text": "question"}]
+    assert client.get(session_url).json()["messages"] == [{"role": "user", "text": "question", "turn_id": None}]
 
 
 def test_turn_endpoint_rejects_reply_after_new_message(
@@ -463,7 +463,7 @@ def test_turn_endpoint_rejects_reply_after_new_message(
 
     assert response.status_code == 201
     assert client.get(session_url).json()["messages"] == [
-        {"role": "user", "text": "first"},
+        {"role": "user", "text": "first", "turn_id": None},
         {
             "role": "assistant",
             "text": "Test reply",
@@ -550,7 +550,7 @@ def test_partial_failure_drops_accepted_proposals_and_retry_is_stable(
     assert len(fake_generator.calls) == 2
     assert read.json()["artifacts"] == []
     assert read.json()["terminal_turn_id"] == first.json()["turn_id"]
-    assert read.json()["messages"] == [{"role": "user", "text": "Propose one"}]
+    assert read.json()["messages"] == [{"role": "user", "text": "Propose one", "turn_id": None}]
 
 
 def test_session_read_only_exposes_completed_turn_artifacts(

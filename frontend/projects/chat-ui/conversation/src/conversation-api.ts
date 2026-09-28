@@ -126,7 +126,7 @@ function parseMessage(value: unknown): ApiMessage {
   const role = readString(value, 'role');
   const text = readString(value, 'text');
   if ((role !== 'user' && role !== 'assistant') || text === null) throw invalidResponse();
-  const turnId = readOptionalNullableString(value, 'turn_id');
+  const turnId = readNullableString(value, 'turn_id');
   if (role === 'user') {
     if (turnId !== null) throw invalidResponse();
     return { role, text, turn_id: null };
@@ -196,10 +196,6 @@ function readNullableString(value: Record<string, unknown>, key: string): string
   if (field === null) return null;
   if (typeof field === 'string') return field;
   throw invalidResponse();
-}
-
-function readOptionalNullableString(value: Record<string, unknown>, key: string): string | null {
-  return value[key] === undefined ? null : readNullableString(value, key);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

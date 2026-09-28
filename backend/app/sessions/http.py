@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Generic, Protocol, TypeVar
+from datetime import datetime
+from typing import Annotated, Generic, Literal, Protocol, TypeVar
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_serializer
 
 from app.agents.recipe import RecipeSessionInput
 from app.agents.wiring import get_configured_agents
 from app.recipe_improvement.validation import ValidationIssue
 from app.sessions.agent_service import AgentInputRejected, ConfiguredAgentService
-from app.sessions.conversation import ConversationMessageBusy, ConversationReadActive, StagedArtifact
+from app.sessions.conversation import ConversationMessageBusy, ConversationReadActive, StagedArtifact, TurnKind
 from app.sessions.text_sessions import (
     TextMessage, TextSessionAppendAccepted, TextSessionAppendExpired,
     TextSessionAppendInvalidMessage, TextSessionAppendLimitReached,
@@ -39,10 +40,51 @@ class UserMessageRequest(BaseModel):
     text: str
 
 
+class UserMessageResponse(BaseModel):
+    role: Literal["user"]
+    text: str
+    turn_id: None
+
+
+class AssistantMessageResponse(BaseModel):
+    role: Literal["assistant"]
+    text: str
+    turn_id: str
+
+
+MessageResponse = Annotated[UserMessageResponse | AssistantMessageResponse, Field(discriminator="role")]
+
+
+class ArtifactResponse(BaseModel):
+    artifact_id: str
+    type: str
+    created_at: datetime
+    order: int
+    turn_id: str
+    payload: dict[str, object]
+
+    @field_serializer("created_at")
+    def serialize_created_at(self, value: datetime) -> str:
+        return value.isoformat()
+
+
+class SessionSnapshotResponse(BaseModel):
+    session_id: str
+    expires_at: datetime
+    messages: list[MessageResponse]
+    artifacts: list[ArtifactResponse]
+    terminal_turn_id: str | None
+    terminal_turn_kind: TurnKind | None
+
+    @field_serializer("expires_at")
+    def serialize_expires_at(self, value: datetime) -> str:
+        return value.isoformat()
+
+
 class ConversationTransport(Protocol):
     def create(self, value: object) -> JSONResponse: ...
-    def read(self, session_id: str) -> JSONResponse: ...
-    def append(self, session_id: str, text: str) -> JSONResponse: ...
+    def read(self, session_id: str) -> SessionSnapshotResponse | JSONResponse: ...
+    def append(self, session_id: str, text: str) -> UserMessageResponse | JSONResponse: ...
     async def turn(self, session_id: str) -> JSONResponse: ...
 
 
@@ -60,24 +102,24 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
             ]})
         return _json(201, _creation(outcome))
 
-    def read(self, session_id: str) -> JSONResponse:
+    def read(self, session_id: str) -> SessionSnapshotResponse | JSONResponse:
         outcome = self.agent.read(session_id)
         if isinstance(outcome, ConversationReadActive):
             snapshot = outcome.snapshot
-            return _json(200, {
-                "session_id": snapshot.session.session_id,
-                "expires_at": snapshot.session.expires_at.isoformat(),
-                "messages": [_message(message) for message in snapshot.session.messages],
-                "artifacts": [_artifact(artifact) for artifact in snapshot.artifacts],
-                "terminal_turn_id": snapshot.terminal_turn_id,
-                "terminal_turn_kind": snapshot.terminal_turn_kind,
-            })
+            return SessionSnapshotResponse(
+                session_id=snapshot.session.session_id,
+                expires_at=snapshot.session.expires_at,
+                messages=[_message(message) for message in snapshot.session.messages],
+                artifacts=[ArtifactResponse.model_validate(_artifact(artifact)) for artifact in snapshot.artifacts],
+                terminal_turn_id=snapshot.terminal_turn_id,
+                terminal_turn_kind=snapshot.terminal_turn_kind,
+            )
         return _error("expired" if isinstance(outcome, TextSessionReadExpired) else "unknown")
 
-    def append(self, session_id: str, text: str) -> JSONResponse:
+    def append(self, session_id: str, text: str) -> UserMessageResponse | JSONResponse:
         outcome = self.agent.append_user_message(session_id, text)
         if isinstance(outcome, TextSessionAppendAccepted):
-            return _json(201, _message(outcome.message))
+            return _user_message(outcome.message)
         if isinstance(outcome, TextSessionAppendExpired):
             return _error("expired")
         if isinstance(outcome, TextSessionAppendLimitReached):
@@ -153,20 +195,20 @@ async def create_session(
     return agent.create(body.get("input"))
 
 
-@router.get("/{session_id}")
+@router.get("/{session_id}", response_model=SessionSnapshotResponse)
 def read_session(
     configuration: str, session_id: str,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
-) -> JSONResponse:
+) -> SessionSnapshotResponse | JSONResponse:
     agent = _agent(configuration, registry)
     return agent if isinstance(agent, JSONResponse) else agent.read(session_id)
 
 
-@router.post("/{session_id}/messages", status_code=201)
+@router.post("/{session_id}/messages", status_code=201, response_model=UserMessageResponse)
 async def append_message(
     configuration: str, session_id: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
-) -> JSONResponse:
+) -> UserMessageResponse | JSONResponse:
     agent = _agent(configuration, registry)
     if isinstance(agent, JSONResponse):
         return agent
@@ -197,11 +239,14 @@ def _creation(value: TextSessionCreation) -> dict[str, str]:
     return {"session_id": value.session_id, "expires_at": value.expires_at.isoformat()}
 
 
-def _message(value: TextMessage) -> dict[str, str]:
-    result = {"role": value.role, "text": value.text}
-    if value.turn_id is not None:
-        result["turn_id"] = value.turn_id
-    return result
+def _user_message(value: TextMessage) -> UserMessageResponse:
+    return UserMessageResponse.model_validate({"role": value.role, "text": value.text, "turn_id": value.turn_id})
+
+
+def _message(value: TextMessage) -> UserMessageResponse | AssistantMessageResponse:
+    if value.role == "user":
+        return _user_message(value)
+    return AssistantMessageResponse.model_validate({"role": value.role, "text": value.text, "turn_id": value.turn_id})
 
 
 def _artifact(value: StagedArtifact[PayloadT]) -> dict[str, object]:

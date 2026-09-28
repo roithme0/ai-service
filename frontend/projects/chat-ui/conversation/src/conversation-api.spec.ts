@@ -22,7 +22,7 @@ describe('HttpConversationTransport', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ input });
     fetchMock.mockResolvedValueOnce(response(200, {
       session_id: 'session-1', messages: [], artifacts: [], terminal_turn_id: null, terminal_turn_kind: null,
-    })).mockResolvedValueOnce(response(201, { role: 'user', text: 'Hello' })).mockResolvedValueOnce(response(201, {
+    })).mockResolvedValueOnce(response(201, { role: 'user', text: 'Hello', turn_id: null })).mockResolvedValueOnce(response(201, {
       kind: 'completed', turn_id: 'turn-1', message: { role: 'assistant', text: 'Hi', turn_id: 'turn-1' }, artifacts: [],
     }));
     await transport.readSession('session-1');
@@ -79,13 +79,13 @@ describe('HttpConversationTransport', () => {
       .mockResolvedValueOnce(
         response(200, {
           session_id: 'session-1',
-          messages: [{ role: 'user', text: 'Weniger Zucker' }],
+          messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
           artifacts: [artifact],
           terminal_turn_id: null,
           terminal_turn_kind: null,
         }),
       )
-      .mockResolvedValueOnce(response(201, { role: 'user', text: 'Weniger Zucker' }))
+      .mockResolvedValueOnce(response(201, { role: 'user', text: 'Weniger Zucker', turn_id: null }))
       .mockResolvedValueOnce(
         response(201, {
           turn_id: 'turn-1',
@@ -127,6 +127,12 @@ describe('HttpConversationTransport', () => {
       kind: 'completed', turn_id: 'turn-1', message: null, artifacts: [],
     })));
     await expect(new HttpConversationTransport('/api/v1', 'demo', null).generateTurn('session-1'))
+      .rejects.toBeInstanceOf(ConversationNetworkError);
+  });
+
+  it('rejects a user message without the required null turn_id', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(201, { role: 'user', text: 'Hello' })));
+    await expect(new HttpConversationTransport('/api/v1', 'demo').appendMessage('session-1', 'Hello'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 

@@ -2,19 +2,19 @@
 
 ## Status
 
-Draft. The contract source, validation boundaries, and user-message wire shape are agreed. Generator selection and delivery details remain open. This concept does not itself change the API, parser, dependencies, or build configuration.
+Draft. The contract source, validation boundaries, and user-message wire shape are agreed. Generator selection and delivery details remain open. The first implementation slice models and validates session reads and user-message appends while retaining the current frontend transport.
 
 ## Context
 
 The generic conversation HTTP API is implemented in `backend/app/sessions/http.py`. The published `@roithme0/chat-ui/conversation` entry point contains a handwritten transport, response interfaces, and five success-response parsers in `frontend/projects/chat-ui/conversation/src/conversation-api.ts`. The parsers validate session creation, messages, session snapshots, completed turns, and artifact envelopes at runtime. The controller relies on their validated output when reconciling failed requests.
 
-The Python endpoint functions currently return constructed dictionaries through `JSONResponse`, without declared success response models. FastAPI therefore cannot currently expose the complete success contract for client generation. The frontend interfaces and backend response shapes can change independently. Maintaining the parsers adds a second handwritten representation of the contract.
+Session reads and user-message appends now declare Pydantic success response models and pass through FastAPI's response validation. Session creation and completed turns still return constructed dictionaries through `JSONResponse`, so OpenAPI does not yet expose the complete success contract for client generation. The frontend interfaces and backend response shapes can still change independently. Maintaining the remaining parsers adds a second handwritten representation of the contract.
 
 ## Problem
 
 The desired solution must reduce both contract drift and manual parsing work. TypeScript types alone do not validate JSON received at runtime. Removing the parsers in favor of generated types alone would weaken the transport boundary. Defining independent frontend validation schemas would simplify parsing but retain two separately maintained contract definitions.
 
-There is already a shape mismatch: the backend omits `turn_id` from user messages, while the frontend parser supplies `turn_id: null`. The agreed contract will send explicit `turn_id: null` for user messages.
+The first slice resolved a shape mismatch: the backend previously omitted `turn_id` from user messages while the frontend parser supplied `turn_id: null`. The backend now sends explicit `null`, and the frontend parser requires it.
 
 ## Proposed Direction
 
@@ -47,6 +47,11 @@ The backend must describe success and error responses accurately, including stat
 
 The frontend package publishes `/conversation` separately but shares one package manifest with `/ui`. A runtime validator must be included in the published package's dependencies and tested through the library build. Generation should be deterministic and usable in local development and CI without fetching a live server. The checked-in OpenAPI and generated output should be checked against the current backend model, rather than becoming independent sources of truth.
 
+## Delivery Progress
+
+- **Completed first slice:** Session snapshot and user-message append success paths return Pydantic model instances and use FastAPI's validating response path. Their error responses remain direct `JSONResponse` objects. The session schema includes a discriminated user/assistant message union and an open artifact payload. Successful user messages send `turn_id: null`, and the frontend parser rejects omission. Focused backend and frontend tests cover the wire shape and published OpenAPI references.
+- **Next slice:** Model the remaining session creation and completed-turn success responses, then evaluate generator output against all success shapes. Keep the existing frontend parsers until generated validators can replace them with equivalent error classification.
+
 ## Open Questions
 
 - Which generator produces maintainable TypeScript types and runtime validators for this FastAPI OpenAPI output, and how does it handle unions, nullable values, dates, and arbitrary JSON payloads?
@@ -63,4 +68,4 @@ The frontend package publishes `/conversation` separately but shares one package
 
 ## Summary
 
-Make the backend's typed conversation responses the contract source and derive both frontend types and runtime validators from OpenAPI. Send explicit `turn_id: null` for user messages. Retain the existing transport and recovery behavior. Settle generator choice and generation checks before implementation.
+Make the backend's typed conversation responses the contract source and derive both frontend types and runtime validators from OpenAPI. Send explicit `turn_id: null` for user messages. Retain the existing transport and recovery behavior. The first backend response models and wire-shape change are in place; settle generator choice and generation checks before introducing generated frontend code.

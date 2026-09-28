@@ -1,7 +1,9 @@
 import asyncio
 from collections.abc import Iterator
+from unittest.mock import patch
 
 import pytest
+from fastapi.exceptions import ResponseValidationError
 from fastapi.testclient import TestClient
 
 from app.agents.demo import create_demo_agent
@@ -69,6 +71,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     for index in range(5):
         message = client.post(f"{session}/messages", json={"text": f"user {index}"})
         assert message.status_code == 201
+        assert message.json() == {"role": "user", "text": f"user {index}", "turn_id": None}
         turn = client.post(f"{session}/turns")
         body = turn.json()
         if index == 2:
@@ -99,12 +102,40 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
             assert body["artifacts"] == []
     history = client.get(session).json()
     assert len(history["messages"]) == 9
+    assert history["messages"][0] == {"role": "user", "text": "user 0", "turn_id": None}
     assert history["artifacts"] == artifacts
     assert "source" not in history
     fresh = client.post(base, json={}).json()
     fresh_session = f"{base}/{fresh['session_id']}"
     client.post(f"{fresh_session}/messages", json={"text": "again"})
     assert client.post(f"{fresh_session}/turns").json()["message"]["text"] == texts[0]
+
+
+def test_read_and_append_success_schemas_are_published(client: TestClient) -> None:
+    document = client.get("/openapi.json").json()
+    path = document["paths"]["/api/v1/agents/{configuration}/sessions/{session_id}"]
+    append_path = document["paths"]["/api/v1/agents/{configuration}/sessions/{session_id}/messages"]
+    schemas = document["components"]["schemas"]
+
+    assert path["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/SessionSnapshotResponse"
+    )
+    assert append_path["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/UserMessageResponse"
+    )
+    assert "turn_id" in schemas["UserMessageResponse"]["required"]
+    assert schemas["UserMessageResponse"]["properties"]["turn_id"]["type"] == "null"
+    assert schemas["SessionSnapshotResponse"]["properties"]["messages"]["items"]["discriminator"]["propertyName"] == "role"
+
+
+def test_read_and_append_success_bodies_are_validated(client: TestClient) -> None:
+    with patch.object(AgentTransport, "read", return_value={"session_id": "session-1"}):
+        with pytest.raises(ResponseValidationError):
+            client.get("/api/v1/agents/demo/sessions/session-1")
+
+    with patch.object(AgentTransport, "append", return_value={"role": "user", "text": "Hello"}):
+        with pytest.raises(ResponseValidationError):
+            client.post("/api/v1/agents/demo/sessions/session-1/messages", json={"text": "Hello"})
 
 
 def test_unavailable_agent_precedes_malformed_body() -> None:
