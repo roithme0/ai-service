@@ -25,7 +25,7 @@ class AgentLifespan:
             get_configured_agents.cache_clear()
 
 
-app = FastAPI(title="AI Service", lifespan=AgentLifespan, root_path="/api/v1")
+app = FastAPI(title="AI Service", lifespan=AgentLifespan)
 app.include_router(conversation_router)
 
 

@@ -6,11 +6,15 @@ import type {
 } from '../generated/types.gen';
 import {
   zCompletedTurnResponse,
+  zErrorResponse,
+  zInvalidInputResponse,
   zSessionCreationResponse,
   zSessionSnapshotResponse,
   zUserMessageResponse,
 } from '../generated/zod.gen';
-import type { ZodType } from 'zod';
+import { z, type ZodType } from 'zod';
+
+const errorResponseSchema = z.union([zErrorResponse, zInvalidInputResponse]);
 
 export const AgentConfiguration = { Demo: 'demo', Kochwiki: 'kochwiki' } as const;
 export type AgentConfiguration = (typeof AgentConfiguration)[keyof typeof AgentConfiguration];
@@ -81,7 +85,8 @@ export class HttpConversationTransport implements ConversationTransport {
       });
     }
     if (!response.ok) {
-      throw new ConversationApiError(response.status, readString(payload, 'kind') ?? 'unknown_error');
+      const errorBody = parseResponse(errorResponseSchema, payload);
+      throw new ConversationApiError(response.status, errorBody.kind);
     }
     return payload;
   }
@@ -91,16 +96,6 @@ function parseResponse<T>(schema: ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw invalidResponse();
   return result.data;
-}
-
-function readString(value: unknown, key: string): string | null {
-  if (!isRecord(value)) return null;
-  const field = value[key];
-  return typeof field === 'string' ? field : null;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function invalidResponse(): ConversationNetworkError {

@@ -133,6 +133,27 @@ describe('HttpConversationTransport', () => {
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
+  it('maps a validated invalid-input response to an API error', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, {
+      kind: 'invalid_input', issues: [{ location: ['input', 0], message: 'Invalid value' }],
+    })));
+
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.Demo).createSession()).rejects.toEqual(
+      expect.objectContaining<Partial<ConversationApiError>>({ status: 422, kind: 'invalid_input' }),
+    );
+  });
+
+  it.each([
+    { kind: 'future_kind' },
+    { kind: 'invalid_input', issues: 'invalid' },
+    { issues: [] },
+  ])('classifies malformed error bodies as uncertain responses: %j', async (payload) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, payload)));
+
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.Demo).createSession())
+      .rejects.toBeInstanceOf(ConversationNetworkError);
+  });
+
   it('rejects a user message without the required null turn_id', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(201, { role: 'user', text: 'Hello' })));
     await expect(new HttpConversationTransport('/api/v1', 'demo').appendMessage('session-1', 'Hello'))
