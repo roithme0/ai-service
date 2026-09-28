@@ -174,6 +174,28 @@ describe('HttpConversationTransport', () => {
     await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
+
+  it('strips additive response fields while preserving extensible artifact payloads', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, {
+      session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z', future_field: true,
+      messages: [{ role: 'user', text: 'Hello', turn_id: null, future_field: true }],
+      artifacts: [{
+        artifact_id: 'artifact-1', type: 'demo', created_at: '2026-09-17T12:00:00Z',
+        order: 0, turn_id: 'turn-1', future_field: true, payload: { future_field: true },
+      }],
+      terminal_turn_id: null, terminal_turn_kind: null,
+    })));
+
+    await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1')).resolves.toEqual({
+      session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z',
+      messages: [{ role: 'user', text: 'Hello', turn_id: null }],
+      artifacts: [{
+        artifact_id: 'artifact-1', type: 'demo', created_at: '2026-09-17T12:00:00Z',
+        order: 0, turn_id: 'turn-1', payload: { future_field: true },
+      }],
+      terminal_turn_id: null, terminal_turn_kind: null,
+    });
+  });
 });
 
 function response(status: number, payload: unknown): Response {

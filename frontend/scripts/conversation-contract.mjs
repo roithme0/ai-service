@@ -8,7 +8,7 @@ import { createClient } from '@hey-api/openapi-ts';
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const backend = resolve(frontend, '..', 'backend');
 const contract = join(frontend, 'projects', 'chat-ui', 'conversation', 'generated');
-const files = ['openapi.json', 'index.ts', 'types.gen.ts'];
+const files = ['openapi.json', 'index.ts', 'types.gen.ts', 'zod.gen.ts'];
 const check = process.argv[2] === '--check';
 
 if (process.argv.length > 3 || (process.argv[2] && !check)) {
@@ -24,7 +24,7 @@ try {
   const input = join(temporary, 'openapi.json');
   const output = join(temporary, 'generated');
   await writeFile(input, document);
-  await createClient({ input, output, plugins: ['@hey-api/typescript'] });
+  await createClient({ input, output, plugins: ['@hey-api/typescript', 'zod'] });
 
   for (const name of files) {
     const generated = await readFile(name === 'openapi.json' ? input : join(output, name));

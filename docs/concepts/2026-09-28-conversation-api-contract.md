@@ -2,13 +2,13 @@
 
 ## Status
 
-Draft. The contract source, validation boundaries, user-message wire shape, and generation dependencies are agreed. All four generic conversation success endpoints publish and validate typed response models. Error bodies are constructed from typed models and documented in OpenAPI. Hey API now generates checked-in TypeScript types, and the frontend transport uses them while retaining handwritten runtime parsers. Zod validation remains the next slice.
+Implementation in progress. All four generic conversation success endpoints publish and validate typed response models. Error bodies are constructed from typed models and documented in OpenAPI. Hey API generates checked-in TypeScript types and regular Zod schemas. The frontend transport validates successful responses with those schemas. Frontend error-body handling remains a separate decision.
 
 ## Context
 
-The generic conversation HTTP API is implemented in `backend/app/sessions/http.py`. The published `@roithme0/chat-ui/conversation` entry point contains a handwritten transport, response interfaces, and five success-response parsers in `frontend/projects/chat-ui/conversation/src/conversation-api.ts`. The parsers validate session creation, messages, session snapshots, completed turns, and artifact envelopes at runtime. The controller relies on their validated output when reconciling failed requests.
+The generic conversation HTTP API is implemented in `backend/app/sessions/http.py`. The published `@roithme0/chat-ui/conversation` entry point contains a handwritten transport. Generated Zod schemas validate session creation, messages, session snapshots, completed turns, and artifact envelopes at runtime. The controller relies on their validated output when reconciling failed requests.
 
-Session creation, session reads, user-message appends, and completed turns declare Pydantic success response models and pass through FastAPI's response validation. Error responses use validated Pydantic models before direct `JSONResponse` serialization, and OpenAPI exposes their schemas. The frontend interfaces and backend response shapes can still change independently. Maintaining the parsers adds a second handwritten representation of the contract.
+Session creation, session reads, user-message appends, and completed turns declare Pydantic success response models and pass through FastAPI's response validation. Error responses use validated Pydantic models before direct `JSONResponse` serialization, and OpenAPI exposes their schemas. The generation check detects when the checked-in frontend contract differs from the backend document.
 
 ## Problem
 
@@ -57,22 +57,22 @@ The frontend package publishes `/conversation` separately but shares one package
 - **Completed error-contract slice:** Common error kinds and `invalid_input` issues use typed Pydantic models. Error helpers serialize only validated model instances to `JSONResponse`, preserving status codes and omitted `turn_id` fields. OpenAPI documents error schemas per endpoint. Direct `JSONResponse` still bypasses FastAPI response-model validation; the model construction is the error validation boundary.
 - **Completed snapshot alignment:** The frontend snapshot type and parser now require and return the backend's `expires_at` field.
 - **Completed generator evaluation:** A temporary Hey API and Zod Mini trial preserved the required `turn_id: null`, nullable fields, assistant-only completed-turn message, and object artifact payload. The generated response types matched the validators' inferred types in a strict TypeScript check. The user selected Hey API with regular Zod without further runtime evaluation.
-- **Completed Hey API types slice:** Pinned `@hey-api/openapi-ts` generates checked-in OpenAPI and TypeScript types from `app.openapi()`. The conversation entry point exports the generated response names directly; `ApiMessage` remains a derived union because the generator does not name the message union. A generation command and drift check are available; the package release workflow runs the check. Existing parsers continue to validate runtime responses and now enforce the generated contract's assistant-only completed turn, object artifact payload, and terminal turn kind.
-- **Next slice:** Add regular Zod and generated validators, then replace handwritten frontend success parsers while preserving error classification. Validate the generated output and Angular package build as part of implementation.
+- **Completed Hey API types slice:** Pinned `@hey-api/openapi-ts` generates checked-in OpenAPI and TypeScript types from `app.openapi()`. The conversation entry point exports the generated response names directly; `ApiMessage` remains a derived union because the generator does not name the message union. A generation command and drift check are available; the package release workflow runs the check.
+- **Completed Zod success-response slice:** The same generator emits regular Zod schemas, and the transport uses them for all four successful HTTP responses. Invalid success bodies remain `ConversationNetworkError`; error bodies retain their existing classification. The drift check covers generated validators. A transport test confirms additive envelope fields are stripped while artifact payload fields are preserved.
 
 ## Open Questions
 
-- Should generated frontend validators cover error bodies and configuration-specific requests in the initial generation workflow, or start with success bodies while preserving the current error classification?
+- Should the transport validate error bodies with generated schemas, and how should malformed error bodies be classified?
+- Should configuration-specific requests receive generated frontend validation?
 - Should the application image release workflow also run the contract drift check, in addition to the package release workflow?
 - Do any consumers require a staged release for a revised message wire shape or a new package runtime dependency?
 
 ## Risks
 
 - An incomplete OpenAPI document would automate the current drift rather than fix it. Backend response construction and schema output must be checked against real endpoint behavior.
-- Regular-Zod output from Hey API still needs contract tests against the actual generated code; the completed runtime trial used Zod Mini.
-- Generated validators add browser bundle weight and a dependency to the published library. Bundle size is secondary, but the Angular package build should still be checked.
-- The trial Hey API schemas accepted and stripped additive object fields. The implementation should confirm that regular-Zod output retains this behavior and that it fits the intended extension policy.
+- Generated validators add browser bundle weight and a dependency to the published library. The Angular package and application builds pass; bundle size remains secondary.
+- Regular Zod schemas strip additive object fields while retaining arbitrary artifact payload properties. This behavior should remain part of the intended extension policy.
 
 ## Summary
 
-Make the backend's typed conversation responses the contract source and derive both frontend types and regular-Zod runtime validators with Hey API. Send explicit `turn_id: null` for user messages. Retain the existing transport and recovery behavior. Generated types and the drift check are in place; replacing the handwritten parsers with generated Zod validators is the next implementation work.
+The backend's typed conversation responses are the contract source for Hey API generated TypeScript types and regular Zod validators. The frontend validates successful responses at the transport boundary. Error-body validation is the next design discussion.
