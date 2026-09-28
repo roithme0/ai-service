@@ -25,8 +25,9 @@ class AgentLifespan:
             get_configured_agents.cache_clear()
 
 
-app = FastAPI(title="AI Service", lifespan=AgentLifespan)
+app = FastAPI(title="AI Service", lifespan=AgentLifespan, root_path="/api/v1")
 app.include_router(conversation_router)
+
 
 @app.get("/")
 async def hello_world() -> dict[str, str]:
