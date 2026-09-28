@@ -131,6 +131,13 @@ export const zHttpValidationError = z.object({
  */
 export const zHelloWorldGetResponse = z.record(z.string(), z.string());
 
+/**
+ * SessionCreationRequest
+ */
+export const zCreateSessionApiV1AgentsConfigurationSessionsPostBody = z.object({
+    input: z.unknown().optional()
+});
+
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostPath = z.object({
     configuration: z.string()
 });
@@ -150,6 +157,13 @@ export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetPath = z.ob
  */
 export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetResponse = zSessionSnapshotResponse;
 
+/**
+ * UserMessageRequest
+ */
+export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostBody = z.object({
+    text: z.string()
+});
+
 export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostPath = z.object({
     configuration: z.string(),
     session_id: z.string()
@@ -159,6 +173,11 @@ export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPost
  * Successful Response
  */
 export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostResponse = zUserMessageResponse;
+
+/**
+ * EmptyTurnRequest
+ */
+export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostBody = z.record(z.string(), z.never());
 
 export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostPath = z.object({
     configuration: z.string(),

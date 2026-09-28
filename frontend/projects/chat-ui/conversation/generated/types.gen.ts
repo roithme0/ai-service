@@ -236,7 +236,15 @@ export type HelloWorldGetResponses = {
 export type HelloWorldGetResponse = HelloWorldGetResponses[keyof HelloWorldGetResponses];
 
 export type CreateSessionApiV1AgentsConfigurationSessionsPostData = {
-    body?: never;
+    /**
+     * SessionCreationRequest
+     */
+    body: {
+        /**
+         * Input
+         */
+        input?: unknown;
+    };
     path: {
         /**
          * Configuration
@@ -320,7 +328,15 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetResponses = {
 export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetResponse = ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetResponses[keyof ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetResponses];
 
 export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostData = {
-    body?: never;
+    /**
+     * UserMessageRequest
+     */
+    body: {
+        /**
+         * Text
+         */
+        text: string;
+    };
     path: {
         /**
          * Configuration
@@ -370,7 +386,12 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostRe
 export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostResponse = AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostResponses[keyof AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostResponses];
 
 export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostData = {
-    body?: never;
+    /**
+     * EmptyTurnRequest
+     */
+    body?: {
+        [key: string]: never;
+    };
     path: {
         /**
          * Configuration

@@ -405,6 +405,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "input": {
+                    "title": "Input"
+                  }
+                },
+                "title": "SessionCreationRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {
@@ -557,6 +574,27 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "text": {
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ],
+                "title": "UserMessageRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "201": {
             "content": {
@@ -648,6 +686,19 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "EmptyTurnRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "201": {
             "content": {

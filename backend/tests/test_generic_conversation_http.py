@@ -38,6 +38,10 @@ def test_registry_and_creation_envelopes(client: TestClient) -> None:
 
     for value in ({}, {"input": None}, {"input": {}}):
         assert client.post(f"{base}/demo/sessions", json=value).status_code == 201
+    assert client.post(f"{base}/demo/sessions", json=[]).json() == {
+        "kind": "invalid_input",
+        "issues": [{"location": [], "message": "request must be an object"}],
+    }
     for value, location in (
         ({"input": {"tools": []}}, ["input"]),
         ({"input": []}, ["input"]),
@@ -145,6 +149,35 @@ def test_success_schemas_are_published(client: TestClient) -> None:
         "#/components/schemas/AssistantMessageResponse"
     )
     assert schemas["CompletedTurnResponse"]["properties"]["kind"]["const"] == "completed"
+
+
+def test_request_bodies_are_published_and_enforced(client: TestClient) -> None:
+    paths = client.get("/api/openapi.json").json()["paths"]
+    base = "/api/v1/agents/{configuration}/sessions"
+    creation = paths[base]["post"]["requestBody"]
+    message = paths[f"{base}/{{session_id}}/messages"]["post"]["requestBody"]
+    turn = paths[f"{base}/{{session_id}}/turns"]["post"]["requestBody"]
+
+    creation_schema = creation["content"]["application/json"]["schema"]
+    message_schema = message["content"]["application/json"]["schema"]
+    turn_schema = turn["content"]["application/json"]["schema"]
+    assert creation["required"] is True
+    assert creation_schema["additionalProperties"] is False
+    assert set(creation_schema["properties"]) == {"input"}
+    assert message["required"] is True
+    assert message_schema["required"] == ["text"]
+    assert message_schema["additionalProperties"] is False
+    assert turn["required"] is False
+    assert turn_schema["properties"] == {}
+    assert turn_schema["additionalProperties"] is False
+
+    session_id = client.post("/api/v1/agents/demo/sessions", json={}).json()["session_id"]
+    session = f"/api/v1/agents/demo/sessions/{session_id}"
+    assert client.post(f"{session}/messages", json={"text": "Hello", "extra": True}).json() == {
+        "kind": "invalid_message"
+    }
+    assert client.post(f"{session}/turns", content="null", headers={"content-type": "application/json"}).status_code == 422
+    assert client.post(f"{session}/turns", json={}).json() == {"kind": "not_ready"}
 
 
 def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClient) -> None:

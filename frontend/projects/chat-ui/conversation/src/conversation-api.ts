@@ -1,5 +1,7 @@
 import type {
+  AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostData,
   CompletedTurnResponse,
+  CreateSessionApiV1AgentsConfigurationSessionsPostData,
   SessionCreationResponse,
   SessionSnapshotResponse,
   UserMessageResponse,
@@ -47,7 +49,8 @@ export class HttpConversationTransport implements ConversationTransport {
   }
 
   async createSession(): Promise<SessionCreationResponse> {
-    return parseResponse(zSessionCreationResponse, await this.request('', 'POST', { input: this.input }));
+    const body = { input: this.input } satisfies CreateSessionApiV1AgentsConfigurationSessionsPostData['body'];
+    return parseResponse(zSessionCreationResponse, await this.request('', 'POST', body));
   }
 
   async readSession(sessionId: string): Promise<SessionSnapshotResponse> {
@@ -55,7 +58,8 @@ export class HttpConversationTransport implements ConversationTransport {
   }
 
   async appendMessage(sessionId: string, text: string): Promise<UserMessageResponse> {
-    return parseResponse(zUserMessageResponse, await this.request(`/${sessionId}/messages`, 'POST', { text }));
+    const body = { text } satisfies AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostData['body'];
+    return parseResponse(zUserMessageResponse, await this.request(`/${sessionId}/messages`, 'POST', body));
   }
 
   async generateTurn(sessionId: string): Promise<CompletedTurnResponse> {

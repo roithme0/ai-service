@@ -54,9 +54,18 @@ class InvalidInputResponse(BaseModel):
     issues: list[InputIssue]
 
 
+class SessionCreationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    input: object = None
+
+
 class UserMessageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     text: str
+
+
+class EmptyTurnRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
 
 
 class UserMessageResponse(BaseModel):
@@ -211,11 +220,18 @@ async def _body(request: Request) -> object:
         return None
 
 
+def _request_body(model: type[BaseModel], *, required: bool = True) -> dict[str, object]:
+    return {"requestBody": {
+        "required": required,
+        "content": {"application/json": {"schema": model.model_json_schema(mode="validation")}},
+    }}
+
+
 @router.post("", status_code=201, response_model=SessionCreationResponse, responses={
     404: {"model": ErrorResponse},
     422: {"model": InvalidInputResponse},
     503: {"model": ErrorResponse},
-})
+}, openapi_extra=_request_body(SessionCreationRequest))
 async def create_session(
     configuration: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
@@ -223,13 +239,22 @@ async def create_session(
     agent = _agent(configuration, registry)
     if isinstance(agent, JSONResponse):
         return agent
-    body = await _body(request)
-    if not isinstance(body, dict):
-        return _input_error((InputIssue(location=(), message="request must be an object"),))
-    extras = body.keys() - {"input"}
-    if extras:
-        return _input_error(tuple(InputIssue(location=(key,), message="extra field not permitted") for key in sorted(extras)))
-    return agent.create(body.get("input"))
+    try:
+        body = SessionCreationRequest.model_validate(await _body(request))
+    except ValidationError as error:
+        issues = tuple(
+            InputIssue(
+                location=tuple(issue["loc"]),
+                message=(
+                    "request must be an object" if issue["type"] == "model_type"
+                    else "extra field not permitted" if issue["type"] == "extra_forbidden"
+                    else issue["msg"]
+                ),
+            )
+            for issue in error.errors()
+        )
+        return _input_error(issues)
+    return agent.create(body.input)
 
 
 @router.get("/{session_id}", response_model=SessionSnapshotResponse, responses={
@@ -251,7 +276,7 @@ def read_session(
     410: {"model": ErrorResponse},
     422: {"model": ErrorResponse},
     503: {"model": ErrorResponse},
-})
+}, openapi_extra=_request_body(UserMessageRequest))
 async def append_message(
     configuration: str, session_id: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
@@ -273,7 +298,7 @@ async def append_message(
     422: {"model": InvalidInputResponse},
     502: {"model": ErrorResponse},
     503: {"model": ErrorResponse},
-})
+}, openapi_extra=_request_body(EmptyTurnRequest, required=False))
 async def execute_turn(
     configuration: str, session_id: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
@@ -283,8 +308,9 @@ async def execute_turn(
         return agent
     raw_body = await request.body()
     if raw_body:
-        body = await _body(request)
-        if body != {}:
+        try:
+            EmptyTurnRequest.model_validate(await _body(request))
+        except ValidationError:
             return _input_error((InputIssue(location=(), message="turn request must be empty"),))
     return await agent.turn(session_id)
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation in progress. All four generic conversation success endpoints publish and validate typed response models. Error bodies are constructed from typed models and documented in OpenAPI. Hey API generates checked-in TypeScript types and regular Zod schemas. The frontend transport validates successful and failed response bodies with those schemas.
+Implementation in progress. The generic conversation endpoints publish and validate typed success, error, and request models. Hey API generates checked-in TypeScript types and regular Zod schemas. The frontend transport validates successful and failed response bodies with those schemas and checks outgoing request envelopes against generated types.
 
 ## Context
 
@@ -60,6 +60,7 @@ The frontend package publishes `/conversation` separately but shares one package
 - **Completed Hey API types slice:** Pinned `@hey-api/openapi-ts` generates checked-in OpenAPI and TypeScript types from `app.openapi()`. The conversation entry point exports the generated response names directly; `ApiMessage` remains a derived union because the generator does not name the message union. A generation command and drift check are available; the package release workflow runs the check.
 - **Completed Zod success-response slice:** The same generator emits regular Zod schemas, and the transport uses them for all four successful HTTP responses. Invalid success bodies remain `ConversationNetworkError`; error bodies retain their existing classification. The drift check covers generated validators. A transport test confirms additive envelope fields are stripped while artifact payload fields are preserved.
 - **Completed Zod error-response slice:** The transport validates failed JSON bodies against generated `ErrorResponse` and `InvalidInputResponse` schemas. Valid bodies remain `ConversationApiError`; malformed bodies become `ConversationNetworkError` so uncertain operations can be reconciled. Status-to-kind precision is deferred because the shared backend error schema does not encode it.
+- **Completed generic request-contract slice:** Pydantic models validate creation, message, and optional empty turn request envelopes. Their validation schemas are published as OpenAPI request bodies while preserving agent-availability precedence and existing 422 error kinds. The generated operation types now describe the actual request bodies, and the transport checks its outgoing creation and message objects against them. Configuration-specific `input` remains open.
 
 ## Open Questions
 
