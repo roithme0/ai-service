@@ -63,7 +63,11 @@ def test_registry_and_creation_envelopes(client: TestClient) -> None:
 
 def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     base = "/api/v1/agents/demo/sessions"
-    created = client.post(base, json={}).json()
+    creation = client.post(base, json={})
+    assert creation.status_code == 201
+    created = creation.json()
+    assert set(created) == {"session_id", "expires_at"}
+    assert created["expires_at"].endswith("+00:00")
     session = f"{base}/{created['session_id']}"
     assert client.post(f"{session}/turns").json() == {"kind": "not_ready"}
     texts: list[str] = []
@@ -84,6 +88,8 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
             continue
         assert turn.status_code == 201
         assert body["kind"] == "completed"
+        assert body["message"]["role"] == "assistant"
+        assert body["message"]["turn_id"] == body["turn_id"]
         assert "script" in body["message"]["text"].lower() or "skript" in body["message"]["text"].lower()
         texts.append(body["message"]["text"])
         if index == 1:
@@ -111,24 +117,40 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     assert client.post(f"{fresh_session}/turns").json()["message"]["text"] == texts[0]
 
 
-def test_read_and_append_success_schemas_are_published(client: TestClient) -> None:
+def test_success_schemas_are_published(client: TestClient) -> None:
     document = client.get("/openapi.json").json()
+    creation_path = document["paths"]["/api/v1/agents/{configuration}/sessions"]
     path = document["paths"]["/api/v1/agents/{configuration}/sessions/{session_id}"]
     append_path = document["paths"]["/api/v1/agents/{configuration}/sessions/{session_id}/messages"]
+    turn_path = document["paths"]["/api/v1/agents/{configuration}/sessions/{session_id}/turns"]
     schemas = document["components"]["schemas"]
 
+    assert creation_path["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/SessionCreationResponse"
+    )
     assert path["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] == (
         "#/components/schemas/SessionSnapshotResponse"
     )
     assert append_path["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"] == (
         "#/components/schemas/UserMessageResponse"
     )
+    assert turn_path["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/CompletedTurnResponse"
+    )
     assert "turn_id" in schemas["UserMessageResponse"]["required"]
     assert schemas["UserMessageResponse"]["properties"]["turn_id"]["type"] == "null"
     assert schemas["SessionSnapshotResponse"]["properties"]["messages"]["items"]["discriminator"]["propertyName"] == "role"
+    assert schemas["CompletedTurnResponse"]["properties"]["message"]["$ref"] == (
+        "#/components/schemas/AssistantMessageResponse"
+    )
+    assert schemas["CompletedTurnResponse"]["properties"]["kind"]["const"] == "completed"
 
 
-def test_read_and_append_success_bodies_are_validated(client: TestClient) -> None:
+def test_success_bodies_are_validated(client: TestClient) -> None:
+    with patch.object(AgentTransport, "create", return_value={"session_id": "session-1"}):
+        with pytest.raises(ResponseValidationError):
+            client.post("/api/v1/agents/demo/sessions", json={})
+
     with patch.object(AgentTransport, "read", return_value={"session_id": "session-1"}):
         with pytest.raises(ResponseValidationError):
             client.get("/api/v1/agents/demo/sessions/session-1")
@@ -136,6 +158,10 @@ def test_read_and_append_success_bodies_are_validated(client: TestClient) -> Non
     with patch.object(AgentTransport, "append", return_value={"role": "user", "text": "Hello"}):
         with pytest.raises(ResponseValidationError):
             client.post("/api/v1/agents/demo/sessions/session-1/messages", json={"text": "Hello"})
+
+    with patch.object(AgentTransport, "turn", return_value={"kind": "completed", "turn_id": "turn-1"}):
+        with pytest.raises(ResponseValidationError):
+            client.post("/api/v1/agents/demo/sessions/session-1/turns")
 
 
 def test_unavailable_agent_precedes_malformed_body() -> None:

@@ -2,13 +2,13 @@
 
 ## Status
 
-Draft. The contract source, validation boundaries, and user-message wire shape are agreed. Generator selection and delivery details remain open. The first implementation slice models and validates session reads and user-message appends while retaining the current frontend transport.
+Draft. The contract source, validation boundaries, and user-message wire shape are agreed. Generator selection and delivery details remain open. All four generic conversation success endpoints now publish and validate typed response models while retaining the current frontend transport.
 
 ## Context
 
 The generic conversation HTTP API is implemented in `backend/app/sessions/http.py`. The published `@roithme0/chat-ui/conversation` entry point contains a handwritten transport, response interfaces, and five success-response parsers in `frontend/projects/chat-ui/conversation/src/conversation-api.ts`. The parsers validate session creation, messages, session snapshots, completed turns, and artifact envelopes at runtime. The controller relies on their validated output when reconciling failed requests.
 
-Session reads and user-message appends now declare Pydantic success response models and pass through FastAPI's response validation. Session creation and completed turns still return constructed dictionaries through `JSONResponse`, so OpenAPI does not yet expose the complete success contract for client generation. The frontend interfaces and backend response shapes can still change independently. Maintaining the remaining parsers adds a second handwritten representation of the contract.
+Session creation, session reads, user-message appends, and completed turns now declare Pydantic success response models and pass through FastAPI's response validation. OpenAPI exposes their success schemas. The frontend interfaces and backend response shapes can still change independently. Maintaining the parsers adds a second handwritten representation of the contract.
 
 ## Problem
 
@@ -49,8 +49,9 @@ The frontend package publishes `/conversation` separately but shares one package
 
 ## Delivery Progress
 
-- **Completed first slice:** Session snapshot and user-message append success paths return Pydantic model instances and use FastAPI's validating response path. Their error responses remain direct `JSONResponse` objects. The session schema includes a discriminated user/assistant message union and an open artifact payload. Successful user messages send `turn_id: null`, and the frontend parser rejects omission. Focused backend and frontend tests cover the wire shape and published OpenAPI references.
-- **Next slice:** Model the remaining session creation and completed-turn success responses, then evaluate generator output against all success shapes. Keep the existing frontend parsers until generated validators can replace them with equivalent error classification.
+- **Completed first slice:** Session snapshot and user-message append success paths return Pydantic model instances and use FastAPI's validating response path. The session schema includes a discriminated user/assistant message union and an open artifact payload. Successful user messages send `turn_id: null`, and the frontend parser rejects omission.
+- **Completed second slice:** Session creation and completed-turn success paths also return Pydantic model instances and publish response schemas. The completed-turn message is specifically assistant-authored. All four success paths use FastAPI's validating response path; errors remain direct `JSONResponse` objects. Focused backend tests cover wire shapes, OpenAPI references, and invalid success bodies.
+- **Next slice:** Evaluate generator output against all success shapes, then replace handwritten frontend success parsers with generated validators while preserving error classification.
 
 ## Open Questions
 
@@ -68,4 +69,4 @@ The frontend package publishes `/conversation` separately but shares one package
 
 ## Summary
 
-Make the backend's typed conversation responses the contract source and derive both frontend types and runtime validators from OpenAPI. Send explicit `turn_id: null` for user messages. Retain the existing transport and recovery behavior. The first backend response models and wire-shape change are in place; settle generator choice and generation checks before introducing generated frontend code.
+Make the backend's typed conversation responses the contract source and derive both frontend types and runtime validators from OpenAPI. Send explicit `turn_id: null` for user messages. Retain the existing transport and recovery behavior. The success response models are in place; settle generator choice and generation checks before introducing generated frontend code.

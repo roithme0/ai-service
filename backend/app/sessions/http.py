@@ -19,7 +19,7 @@ from app.sessions.conversation import ConversationMessageBusy, ConversationReadA
 from app.sessions.text_sessions import (
     TextMessage, TextSessionAppendAccepted, TextSessionAppendExpired,
     TextSessionAppendInvalidMessage, TextSessionAppendLimitReached,
-    TextSessionCreation, TextSessionReadExpired,
+    TextSessionReadExpired,
 )
 
 
@@ -68,6 +68,15 @@ class ArtifactResponse(BaseModel):
         return value.isoformat()
 
 
+class SessionCreationResponse(BaseModel):
+    session_id: str
+    expires_at: datetime
+
+    @field_serializer("expires_at")
+    def serialize_expires_at(self, value: datetime) -> str:
+        return value.isoformat()
+
+
 class SessionSnapshotResponse(BaseModel):
     session_id: str
     expires_at: datetime
@@ -81,11 +90,18 @@ class SessionSnapshotResponse(BaseModel):
         return value.isoformat()
 
 
+class CompletedTurnResponse(BaseModel):
+    kind: Literal["completed"]
+    turn_id: str
+    message: AssistantMessageResponse
+    artifacts: list[ArtifactResponse]
+
+
 class ConversationTransport(Protocol):
-    def create(self, value: object) -> JSONResponse: ...
+    def create(self, value: object) -> SessionCreationResponse | JSONResponse: ...
     def read(self, session_id: str) -> SessionSnapshotResponse | JSONResponse: ...
     def append(self, session_id: str, text: str) -> UserMessageResponse | JSONResponse: ...
-    async def turn(self, session_id: str) -> JSONResponse: ...
+    async def turn(self, session_id: str) -> CompletedTurnResponse | JSONResponse: ...
 
 
 @dataclass(frozen=True)
@@ -94,13 +110,13 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
     input_from_json: Callable[[object], InputT]
     issue_from_domain: Callable[[IssueT], InputIssue]
 
-    def create(self, value: object) -> JSONResponse:
+    def create(self, value: object) -> SessionCreationResponse | JSONResponse:
         outcome = self.agent.create(self.input_from_json(value))
         if isinstance(outcome, AgentInputRejected):
             return _json(422, {"kind": "invalid_input", "issues": [
                 issue.model_dump(mode="json") for issue in map(self.issue_from_domain, outcome.issues)
             ]})
-        return _json(201, _creation(outcome))
+        return SessionCreationResponse(session_id=outcome.session_id, expires_at=outcome.expires_at)
 
     def read(self, session_id: str) -> SessionSnapshotResponse | JSONResponse:
         outcome = self.agent.read(session_id)
@@ -110,7 +126,7 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
                 session_id=snapshot.session.session_id,
                 expires_at=snapshot.session.expires_at,
                 messages=[_message(message) for message in snapshot.session.messages],
-                artifacts=[ArtifactResponse.model_validate(_artifact(artifact)) for artifact in snapshot.artifacts],
+                artifacts=[_artifact(artifact) for artifact in snapshot.artifacts],
                 terminal_turn_id=snapshot.terminal_turn_id,
                 terminal_turn_kind=snapshot.terminal_turn_kind,
             )
@@ -130,15 +146,15 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
             return _error("busy")
         return _error("unknown")
 
-    async def turn(self, session_id: str) -> JSONResponse:
+    async def turn(self, session_id: str) -> CompletedTurnResponse | JSONResponse:
         outcome = await self.agent.execute_turn(session_id)
         if outcome.kind == "completed":
             assert outcome.text is not None
-            return _json(201, {
-                "kind": "completed", "turn_id": outcome.turn_id,
-                "message": {"role": "assistant", "text": outcome.text, "turn_id": outcome.turn_id},
-                "artifacts": [_artifact(artifact) for artifact in outcome.artifacts],
-            })
+            return CompletedTurnResponse(
+                kind="completed", turn_id=outcome.turn_id,
+                message=AssistantMessageResponse(role="assistant", text=outcome.text, turn_id=outcome.turn_id),
+                artifacts=[_artifact(artifact) for artifact in outcome.artifacts],
+            )
         return _error(outcome.kind, outcome.turn_id)
 
 
@@ -178,11 +194,11 @@ async def _body(request: Request) -> object:
         return None
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=SessionCreationResponse)
 async def create_session(
     configuration: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
-) -> JSONResponse:
+) -> SessionCreationResponse | JSONResponse:
     agent = _agent(configuration, registry)
     if isinstance(agent, JSONResponse):
         return agent
@@ -219,11 +235,11 @@ async def append_message(
     return agent.append(session_id, message.text)
 
 
-@router.post("/{session_id}/turns", status_code=201)
+@router.post("/{session_id}/turns", status_code=201, response_model=CompletedTurnResponse)
 async def execute_turn(
     configuration: str, session_id: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
-) -> JSONResponse:
+) -> CompletedTurnResponse | JSONResponse:
     agent = _agent(configuration, registry)
     if isinstance(agent, JSONResponse):
         return agent
@@ -233,10 +249,6 @@ async def execute_turn(
         if body != {}:
             return _input_error((InputIssue(location=(), message="turn request must be empty"),))
     return await agent.turn(session_id)
-
-
-def _creation(value: TextSessionCreation) -> dict[str, str]:
-    return {"session_id": value.session_id, "expires_at": value.expires_at.isoformat()}
 
 
 def _user_message(value: TextMessage) -> UserMessageResponse:
@@ -249,12 +261,12 @@ def _message(value: TextMessage) -> UserMessageResponse | AssistantMessageRespon
     return AssistantMessageResponse.model_validate({"role": value.role, "text": value.text, "turn_id": value.turn_id})
 
 
-def _artifact(value: StagedArtifact[PayloadT]) -> dict[str, object]:
-    return {
-        "artifact_id": value.artifact_id, "type": value.type,
-        "created_at": value.created_at.isoformat(), "order": value.order,
-        "turn_id": value.turn_id, "payload": value.payload.model_dump(mode="json"),
-    }
+def _artifact(value: StagedArtifact[PayloadT]) -> ArtifactResponse:
+    return ArtifactResponse(
+        artifact_id=value.artifact_id, type=value.type,
+        created_at=value.created_at, order=value.order,
+        turn_id=value.turn_id, payload=value.payload.model_dump(mode="json"),
+    )
 
 
 def _input_error(issues: tuple[InputIssue, ...]) -> JSONResponse:
