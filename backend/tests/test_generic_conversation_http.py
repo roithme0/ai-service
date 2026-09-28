@@ -1,15 +1,18 @@
 import asyncio
 from collections.abc import Iterator
+from unittest.mock import patch
 
 import pytest
+from fastapi.exceptions import ResponseValidationError
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.agents.demo import create_demo_agent
 from app.agents.recipe import create_recipe_agent
 from app.main import app
 from app.sessions.http import (
-    AgentTransport, ConversationTransport, _demo_issue, _recipe_input,
-    _recipe_issue, get_agent_registry,
+    AgentConfiguration, AgentTransport, ConversationTransport, ErrorResponse, InvalidInputResponse,
+    _demo_issue, _recipe_input, _recipe_issue, get_agent_registry,
 )
 from test_recipe_improvement_session_http import FakeGenerator, FakeResolver, valid_request
 
@@ -27,6 +30,10 @@ def client() -> Iterator[TestClient]:
         app.dependency_overrides.clear()
 
 
+def test_configuration_registry_matches_published_names() -> None:
+    assert set(get_agent_registry()) == set(AgentConfiguration)
+
+
 def test_registry_and_creation_envelopes(client: TestClient) -> None:
     base = "/api/v1/agents"
     unknown = client.post(f"{base}/missing/sessions", json={})
@@ -35,6 +42,10 @@ def test_registry_and_creation_envelopes(client: TestClient) -> None:
 
     for value in ({}, {"input": None}, {"input": {}}):
         assert client.post(f"{base}/demo/sessions", json=value).status_code == 201
+    assert client.post(f"{base}/demo/sessions", json=[]).json() == {
+        "kind": "invalid_input",
+        "issues": [{"location": [], "message": "request must be an object"}],
+    }
     for value, location in (
         ({"input": {"tools": []}}, ["input"]),
         ({"input": []}, ["input"]),
@@ -61,7 +72,11 @@ def test_registry_and_creation_envelopes(client: TestClient) -> None:
 
 def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     base = "/api/v1/agents/demo/sessions"
-    created = client.post(base, json={}).json()
+    creation = client.post(base, json={})
+    assert creation.status_code == 201
+    created = creation.json()
+    assert set(created) == {"session_id", "expires_at"}
+    assert created["expires_at"].endswith("+00:00")
     session = f"{base}/{created['session_id']}"
     assert client.post(f"{session}/turns").json() == {"kind": "not_ready"}
     texts: list[str] = []
@@ -69,6 +84,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     for index in range(5):
         message = client.post(f"{session}/messages", json={"text": f"user {index}"})
         assert message.status_code == 201
+        assert message.json() == {"role": "user", "text": f"user {index}", "turn_id": None}
         turn = client.post(f"{session}/turns")
         body = turn.json()
         if index == 2:
@@ -81,6 +97,8 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
             continue
         assert turn.status_code == 201
         assert body["kind"] == "completed"
+        assert body["message"]["role"] == "assistant"
+        assert body["message"]["turn_id"] == body["turn_id"]
         assert "script" in body["message"]["text"].lower() or "skript" in body["message"]["text"].lower()
         texts.append(body["message"]["text"])
         if index == 1:
@@ -99,12 +117,132 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
             assert body["artifacts"] == []
     history = client.get(session).json()
     assert len(history["messages"]) == 9
+    assert history["messages"][0] == {"role": "user", "text": "user 0", "turn_id": None}
     assert history["artifacts"] == artifacts
     assert "source" not in history
     fresh = client.post(base, json={}).json()
     fresh_session = f"{base}/{fresh['session_id']}"
     client.post(f"{fresh_session}/messages", json={"text": "again"})
     assert client.post(f"{fresh_session}/turns").json()["message"]["text"] == texts[0]
+
+
+def test_success_schemas_are_published(client: TestClient) -> None:
+    document = client.get("/api/openapi.json").json()
+    creation_path = document["paths"]["/api/v1/agents/{configuration}/sessions"]
+    path = document["paths"]["/api/v1/agents/{configuration}/sessions/{session_id}"]
+    append_path = document["paths"]["/api/v1/agents/{configuration}/sessions/{session_id}/messages"]
+    turn_path = document["paths"]["/api/v1/agents/{configuration}/sessions/{session_id}/turns"]
+    schemas = document["components"]["schemas"]
+
+    assert creation_path["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/SessionCreationResponse"
+    )
+    assert path["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/SessionSnapshotResponse"
+    )
+    assert append_path["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/UserMessageResponse"
+    )
+    assert turn_path["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/CompletedTurnResponse"
+    )
+    assert "turn_id" in schemas["UserMessageResponse"]["required"]
+    assert schemas["UserMessageResponse"]["properties"]["turn_id"]["type"] == "null"
+    assert schemas["SessionSnapshotResponse"]["properties"]["messages"]["items"]["discriminator"]["propertyName"] == "role"
+    assert schemas["CompletedTurnResponse"]["properties"]["message"]["$ref"] == (
+        "#/components/schemas/AssistantMessageResponse"
+    )
+    assert schemas["CompletedTurnResponse"]["properties"]["kind"]["const"] == "completed"
+
+
+def test_request_bodies_are_published_and_enforced(client: TestClient) -> None:
+    paths = client.get("/api/openapi.json").json()["paths"]
+    base = "/api/v1/agents/{configuration}/sessions"
+    creation = paths[base]["post"]["requestBody"]
+    message = paths[f"{base}/{{session_id}}/messages"]["post"]["requestBody"]
+    turn = paths[f"{base}/{{session_id}}/turns"]["post"]["requestBody"]
+
+    for path, method in (
+        (base, "post"),
+        (f"{base}/{{session_id}}", "get"),
+        (f"{base}/{{session_id}}/messages", "post"),
+        (f"{base}/{{session_id}}/turns", "post"),
+    ):
+        configuration = next(
+            parameter for parameter in paths[path][method]["parameters"]
+            if parameter["name"] == "configuration"
+        )
+        assert configuration["schema"]["enum"] == ["demo", "kochwiki"]
+
+    creation_schema = creation["content"]["application/json"]["schema"]
+    message_schema = message["content"]["application/json"]["schema"]
+    turn_schema = turn["content"]["application/json"]["schema"]
+    assert creation["required"] is True
+    assert creation_schema["additionalProperties"] is False
+    assert set(creation_schema["properties"]) == {"input"}
+    assert message["required"] is True
+    assert message_schema["required"] == ["text"]
+    assert message_schema["additionalProperties"] is False
+    assert turn["required"] is False
+    assert turn_schema["properties"] == {}
+    assert turn_schema["additionalProperties"] is False
+
+    session_id = client.post("/api/v1/agents/demo/sessions", json={}).json()["session_id"]
+    session = f"/api/v1/agents/demo/sessions/{session_id}"
+    assert client.post(f"{session}/messages", json={"text": "Hello", "extra": True}).json() == {
+        "kind": "invalid_message"
+    }
+    assert client.post(f"{session}/turns", content="null", headers={"content-type": "application/json"}).status_code == 422
+    assert client.post(f"{session}/turns", json={}).json() == {"kind": "not_ready"}
+
+
+def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClient) -> None:
+    document = client.get("/api/openapi.json").json()
+    paths = document["paths"]
+    base = "/api/v1/agents/{configuration}/sessions"
+    for path in (base, f"{base}/{{session_id}}/messages", f"{base}/{{session_id}}/turns"):
+        assert paths[path]["post"]["responses"]["422"]["description"] == "Unprocessable Content"
+    expected = {
+        base: {404: "ErrorResponse", 422: "InvalidInputResponse", 503: "ErrorResponse"},
+        f"{base}/{{session_id}}": {404: "ErrorResponse", 410: "ErrorResponse", 503: "ErrorResponse"},
+        f"{base}/{{session_id}}/messages": {
+            404: "ErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
+            422: "ErrorResponse", 503: "ErrorResponse",
+        },
+        f"{base}/{{session_id}}/turns": {
+            404: "ErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
+            422: "InvalidInputResponse", 502: "ErrorResponse", 503: "ErrorResponse",
+        },
+    }
+    for path, responses in expected.items():
+        operation = paths[path]["get" if path.endswith("{session_id}") else "post"]
+        for status, model in responses.items():
+            assert operation["responses"][str(status)]["content"]["application/json"]["schema"]["$ref"] == (
+                f"#/components/schemas/{model}"
+            )
+
+    with pytest.raises(ValidationError):
+        ErrorResponse.model_validate({"kind": "unexpected"})
+    with pytest.raises(ValidationError):
+        InvalidInputResponse.model_validate({"kind": "invalid_input", "issues": [{"location": (), "message": 7}]})
+
+
+def test_success_bodies_are_validated(client: TestClient) -> None:
+    with patch.object(AgentTransport, "create", return_value={"session_id": "session-1"}):
+        with pytest.raises(ResponseValidationError):
+            client.post("/api/v1/agents/demo/sessions", json={})
+
+    with patch.object(AgentTransport, "read", return_value={"session_id": "session-1"}):
+        with pytest.raises(ResponseValidationError):
+            client.get("/api/v1/agents/demo/sessions/session-1")
+
+    with patch.object(AgentTransport, "append", return_value={"role": "user", "text": "Hello"}):
+        with pytest.raises(ResponseValidationError):
+            client.post("/api/v1/agents/demo/sessions/session-1/messages", json={"text": "Hello"})
+
+    with patch.object(AgentTransport, "turn", return_value={"kind": "completed", "turn_id": "turn-1"}):
+        with pytest.raises(ResponseValidationError):
+            client.post("/api/v1/agents/demo/sessions/session-1/turns")
 
 
 def test_unavailable_agent_precedes_malformed_body() -> None:

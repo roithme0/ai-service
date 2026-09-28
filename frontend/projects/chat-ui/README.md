@@ -58,7 +58,7 @@ export class ChatHost implements OnInit {
     content: [], composerDisabled: true, status: null,
   });
   private readonly controller = new ConversationController(
-    new HttpConversationTransport('/api/v1', AgentConfiguration.Demo),
+    new HttpConversationTransport('/api/v1', AgentConfiguration.demo),
     (state) => this.chat.set(state),
   );
 
@@ -72,11 +72,11 @@ export class ChatHost implements OnInit {
 
 The required base URL is the prefix immediately before `/agents`: `/api/v1` yields `/api/v1/agents/demo/sessions`; `/ai/api/v1/` yields `/ai/api/v1/agents/demo/sessions`. Trailing joining slashes are normalized; another `/api/v1` is never appended. Absolute URLs use the same joining behavior. Normal deployment uses a same-origin relative prefix.
 
-`AgentConfiguration` exports `Demo: 'demo'` and `Kochwiki: 'kochwiki'`, plus the derived union type of the same name. Arbitrary string keys are rejected by the TypeScript contract. Known keys do not guarantee runtime availability; the server can return `agent_unavailable`.
+`AgentConfiguration` exports the backend-derived `demo` and `kochwiki` values, plus the derived union type of the same name. Arbitrary string keys are rejected by the TypeScript contract. Known keys do not guarantee runtime availability; the server can return `agent_unavailable`.
 
 The transport binds the URL, agent key, and optional third constructor argument for initialization input. Omitted input sends `{ input: {} }`; supplied input uses `{ input: suppliedInput }`. Replacement sessions use the same transport settings. Server validation is authoritative, and configurations requiring domain input can reject an empty input. No recipe types or fixtures are packaged.
 
-The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ApiArtifact` envelope and returns a `ChatArtifact` or `null` to omit it. `presentJsonArtifact` is exported for explicit use and is the default when no mapper is supplied. It preserves identity, type and JSON payload; the controller sorts artifacts by backend order and associates history artifacts with their turns. The host owns view-state binding, introductory text and custom renderer registration.
+The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentJsonArtifact` is exported for explicit use and is the default when no mapper is supplied. It preserves identity, type and JSON payload; the controller sorts artifacts by backend order and associates history artifacts with their turns. The host owns view-state binding, introductory text and custom renderer registration.
 
 The supported HTTP contract is this repository's AI Service conversation API. `ConversationTransport` remains available for isolated tests. The controller retains acceptance acknowledgement, ambiguous-request reconciliation, turn execution, failure classification and existing recovery actions. It adds no polling, automatic retries, persistence, streaming or cancellation.
 

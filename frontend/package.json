@@ -6,6 +6,8 @@
     "start:app": "ng serve ai-service-frontend --port 4204",
     "build:app": "ng build ai-service-frontend",
     "build:chat-ui": "ng build chat-ui",
+    "generate:conversation-contract": "node scripts/conversation-contract.mjs",
+    "check:conversation-contract": "node scripts/conversation-contract.mjs --check",
     "test:app": "ng test ai-service-frontend --watch=false",
     "test:chat-ui": "ng test chat-ui --watch=false",
     "watch:app": "ng build ai-service-frontend --watch --configuration development",
@@ -24,12 +26,14 @@
     "@angular/platform-browser": "^22.0.0",
     "@angular/router": "^22.0.0",
     "rxjs": "~7.8.0",
-    "tslib": "^2.3.0"
+    "tslib": "^2.3.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@angular/build": "^22.0.0",
     "@angular/cli": "^22.0.0",
     "@angular/compiler-cli": "^22.0.0",
+    "@hey-api/openapi-ts": "0.99.0",
     "jsdom": "27.0.0",
     "ng-packagr": "^22.0.0",
     "prettier": "^3.8.1",
