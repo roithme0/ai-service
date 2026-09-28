@@ -31,8 +31,27 @@ IssueT = TypeVar("IssueT")
 
 
 class InputIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
     location: tuple[str | int, ...]
     message: str
+
+
+ErrorKind = Literal[
+    "unknown_configuration", "agent_unavailable", "unknown", "expired",
+    "invalid_message", "busy", "not_ready", "conflict", "limit_reached", "generation_failed",
+]
+
+
+class ErrorResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: ErrorKind
+    turn_id: str | None = None
+
+
+class InvalidInputResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    kind: Literal["invalid_input"]
+    issues: list[InputIssue]
 
 
 class UserMessageRequest(BaseModel):
@@ -113,9 +132,7 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
     def create(self, value: object) -> SessionCreationResponse | JSONResponse:
         outcome = self.agent.create(self.input_from_json(value))
         if isinstance(outcome, AgentInputRejected):
-            return _json(422, {"kind": "invalid_input", "issues": [
-                issue.model_dump(mode="json") for issue in map(self.issue_from_domain, outcome.issues)
-            ]})
+            return _input_error(tuple(map(self.issue_from_domain, outcome.issues)))
         return SessionCreationResponse(session_id=outcome.session_id, expires_at=outcome.expires_at)
 
     def read(self, session_id: str) -> SessionSnapshotResponse | JSONResponse:
@@ -194,7 +211,11 @@ async def _body(request: Request) -> object:
         return None
 
 
-@router.post("", status_code=201, response_model=SessionCreationResponse)
+@router.post("", status_code=201, response_model=SessionCreationResponse, responses={
+    404: {"model": ErrorResponse},
+    422: {"model": InvalidInputResponse},
+    503: {"model": ErrorResponse},
+})
 async def create_session(
     configuration: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
@@ -211,7 +232,11 @@ async def create_session(
     return agent.create(body.get("input"))
 
 
-@router.get("/{session_id}", response_model=SessionSnapshotResponse)
+@router.get("/{session_id}", response_model=SessionSnapshotResponse, responses={
+    404: {"model": ErrorResponse},
+    410: {"model": ErrorResponse},
+    503: {"model": ErrorResponse},
+})
 def read_session(
     configuration: str, session_id: str,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
@@ -220,7 +245,13 @@ def read_session(
     return agent if isinstance(agent, JSONResponse) else agent.read(session_id)
 
 
-@router.post("/{session_id}/messages", status_code=201, response_model=UserMessageResponse)
+@router.post("/{session_id}/messages", status_code=201, response_model=UserMessageResponse, responses={
+    404: {"model": ErrorResponse},
+    409: {"model": ErrorResponse},
+    410: {"model": ErrorResponse},
+    422: {"model": ErrorResponse},
+    503: {"model": ErrorResponse},
+})
 async def append_message(
     configuration: str, session_id: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
@@ -235,7 +266,14 @@ async def append_message(
     return agent.append(session_id, message.text)
 
 
-@router.post("/{session_id}/turns", status_code=201, response_model=CompletedTurnResponse)
+@router.post("/{session_id}/turns", status_code=201, response_model=CompletedTurnResponse, responses={
+    404: {"model": ErrorResponse},
+    409: {"model": ErrorResponse},
+    410: {"model": ErrorResponse},
+    422: {"model": InvalidInputResponse},
+    502: {"model": ErrorResponse},
+    503: {"model": ErrorResponse},
+})
 async def execute_turn(
     configuration: str, session_id: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
@@ -270,21 +308,18 @@ def _artifact(value: StagedArtifact[PayloadT]) -> ArtifactResponse:
 
 
 def _input_error(issues: tuple[InputIssue, ...]) -> JSONResponse:
-    return _json(422, {"kind": "invalid_input", "issues": [issue.model_dump(mode="json") for issue in issues]})
+    return _json(422, InvalidInputResponse(kind="invalid_input", issues=list(issues)))
 
 
-def _error(kind: str, turn_id: str | None = None) -> JSONResponse:
-    status = {
+def _error(kind: ErrorKind, turn_id: str | None = None) -> JSONResponse:
+    statuses: dict[ErrorKind, int] = {
         "unknown_configuration": 404, "agent_unavailable": 503,
         "unknown": 404, "expired": 410, "invalid_message": 422,
         "busy": 409, "not_ready": 409, "conflict": 409,
         "limit_reached": 409, "generation_failed": 502,
-    }[kind]
-    content: dict[str, object] = {"kind": kind}
-    if turn_id:
-        content["turn_id"] = turn_id
-    return _json(status, content)
+    }
+    return _json(statuses[kind], ErrorResponse(kind=kind, turn_id=turn_id or None))
 
 
-def _json(status: int, content: object) -> JSONResponse:
-    return JSONResponse(status_code=status, content=content)
+def _json(status: int, content: ErrorResponse | InvalidInputResponse) -> JSONResponse:
+    return JSONResponse(status_code=status, content=content.model_dump(mode="json", exclude_none=True))

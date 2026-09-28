@@ -2,13 +2,13 @@
 
 ## Status
 
-Draft. The contract source, validation boundaries, and user-message wire shape are agreed. Generator selection and delivery details remain open. All four generic conversation success endpoints now publish and validate typed response models while retaining the current frontend transport.
+Draft. The contract source, validation boundaries, and user-message wire shape are agreed. Generator selection and delivery details remain open. All four generic conversation success endpoints publish and validate typed response models. Error bodies are constructed from typed models and documented in OpenAPI. The current frontend transport remains in place.
 
 ## Context
 
 The generic conversation HTTP API is implemented in `backend/app/sessions/http.py`. The published `@roithme0/chat-ui/conversation` entry point contains a handwritten transport, response interfaces, and five success-response parsers in `frontend/projects/chat-ui/conversation/src/conversation-api.ts`. The parsers validate session creation, messages, session snapshots, completed turns, and artifact envelopes at runtime. The controller relies on their validated output when reconciling failed requests.
 
-Session creation, session reads, user-message appends, and completed turns now declare Pydantic success response models and pass through FastAPI's response validation. OpenAPI exposes their success schemas. The frontend interfaces and backend response shapes can still change independently. Maintaining the parsers adds a second handwritten representation of the contract.
+Session creation, session reads, user-message appends, and completed turns declare Pydantic success response models and pass through FastAPI's response validation. Error responses use validated Pydantic models before direct `JSONResponse` serialization, and OpenAPI exposes their schemas. The frontend interfaces and backend response shapes can still change independently. Maintaining the parsers adds a second handwritten representation of the contract.
 
 ## Problem
 
@@ -50,13 +50,14 @@ The frontend package publishes `/conversation` separately but shares one package
 ## Delivery Progress
 
 - **Completed first slice:** Session snapshot and user-message append success paths return Pydantic model instances and use FastAPI's validating response path. The session schema includes a discriminated user/assistant message union and an open artifact payload. Successful user messages send `turn_id: null`, and the frontend parser rejects omission.
-- **Completed second slice:** Session creation and completed-turn success paths also return Pydantic model instances and publish response schemas. The completed-turn message is specifically assistant-authored. All four success paths use FastAPI's validating response path; errors remain direct `JSONResponse` objects. Focused backend tests cover wire shapes, OpenAPI references, and invalid success bodies.
+- **Completed second slice:** Session creation and completed-turn success paths also return Pydantic model instances and publish response schemas. The completed-turn message is specifically assistant-authored. All four success paths use FastAPI's validating response path. Focused backend tests cover wire shapes, OpenAPI references, and invalid success bodies.
+- **Completed error-contract slice:** Common error kinds and `invalid_input` issues use typed Pydantic models. Error helpers serialize only validated model instances to `JSONResponse`, preserving status codes and omitted `turn_id` fields. OpenAPI documents error schemas per endpoint. Direct `JSONResponse` still bypasses FastAPI response-model validation; the model construction is the error validation boundary.
 - **Next slice:** Evaluate generator output against all success shapes, then replace handwritten frontend success parsers with generated validators while preserving error classification.
 
 ## Open Questions
 
 - Which generator produces maintainable TypeScript types and runtime validators for this FastAPI OpenAPI output, and how does it handle unions, nullable values, dates, and arbitrary JSON payloads?
-- Should response validation cover only success bodies initially, or should typed error bodies and configuration-specific requests enter the same generation workflow at once?
+- Should generated frontend validators cover error bodies and configuration-specific requests in the initial generation workflow, or start with success bodies while preserving the current error classification?
 - How should the generated-contract check run in the package and application release workflows without adding unnecessary build coupling?
 - Do any consumers require a staged release for a revised message wire shape or a new package runtime dependency?
 

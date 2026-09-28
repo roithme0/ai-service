@@ -5,13 +5,14 @@ from unittest.mock import patch
 import pytest
 from fastapi.exceptions import ResponseValidationError
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.agents.demo import create_demo_agent
 from app.agents.recipe import create_recipe_agent
 from app.main import app
 from app.sessions.http import (
-    AgentTransport, ConversationTransport, _demo_issue, _recipe_input,
-    _recipe_issue, get_agent_registry,
+    AgentTransport, ConversationTransport, ErrorResponse, InvalidInputResponse,
+    _demo_issue, _recipe_input, _recipe_issue, get_agent_registry,
 )
 from test_recipe_improvement_session_http import FakeGenerator, FakeResolver, valid_request
 
@@ -144,6 +145,35 @@ def test_success_schemas_are_published(client: TestClient) -> None:
         "#/components/schemas/AssistantMessageResponse"
     )
     assert schemas["CompletedTurnResponse"]["properties"]["kind"]["const"] == "completed"
+
+
+def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClient) -> None:
+    document = client.get("/openapi.json").json()
+    paths = document["paths"]
+    base = "/api/v1/agents/{configuration}/sessions"
+    expected = {
+        base: {404: "ErrorResponse", 422: "InvalidInputResponse", 503: "ErrorResponse"},
+        f"{base}/{{session_id}}": {404: "ErrorResponse", 410: "ErrorResponse", 503: "ErrorResponse"},
+        f"{base}/{{session_id}}/messages": {
+            404: "ErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
+            422: "ErrorResponse", 503: "ErrorResponse",
+        },
+        f"{base}/{{session_id}}/turns": {
+            404: "ErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
+            422: "InvalidInputResponse", 502: "ErrorResponse", 503: "ErrorResponse",
+        },
+    }
+    for path, responses in expected.items():
+        operation = paths[path]["get" if path.endswith("{session_id}") else "post"]
+        for status, model in responses.items():
+            assert operation["responses"][str(status)]["content"]["application/json"]["schema"]["$ref"] == (
+                f"#/components/schemas/{model}"
+            )
+
+    with pytest.raises(ValidationError):
+        ErrorResponse.model_validate({"kind": "unexpected"})
+    with pytest.raises(ValidationError):
+        InvalidInputResponse.model_validate({"kind": "invalid_input", "issues": [{"location": (), "message": 7}]})
 
 
 def test_success_bodies_are_validated(client: TestClient) -> None:
