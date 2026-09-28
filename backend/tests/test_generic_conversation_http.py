@@ -119,7 +119,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
 
 
 def test_success_schemas_are_published(client: TestClient) -> None:
-    document = client.get("/openapi.json").json()
+    document = client.get("/api/openapi.json").json()
     creation_path = document["paths"]["/api/v1/agents/{configuration}/sessions"]
     path = document["paths"]["/api/v1/agents/{configuration}/sessions/{session_id}"]
     append_path = document["paths"]["/api/v1/agents/{configuration}/sessions/{session_id}/messages"]
@@ -148,7 +148,7 @@ def test_success_schemas_are_published(client: TestClient) -> None:
 
 
 def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClient) -> None:
-    document = client.get("/openapi.json").json()
+    document = client.get("/api/openapi.json").json()
     paths = document["paths"]
     base = "/api/v1/agents/{configuration}/sessions"
     expected = {
