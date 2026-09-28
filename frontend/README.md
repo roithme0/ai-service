@@ -26,7 +26,7 @@ npm run build:chat-ui
 
 ## Conversation contract
 
-The backend's FastAPI OpenAPI document is the source for the conversation entry point's generated TypeScript types and Zod validators. With the backend Python environment active, run `npm run generate:conversation-contract` from `frontend` after changing the API models, then commit the updated `projects/chat-ui/conversation/generated` files. Run `npm run check:conversation-contract` to compare them with the current backend document; the chat UI package release workflow runs this check. Set `PYTHON` to the backend Python executable if it is not on the active path. The HTTP transport validates successful and failed response bodies with the generated schemas and checks outgoing request envelopes against generated types.
+The backend's FastAPI OpenAPI document is the source for the conversation entry point's generated TypeScript types and Zod validators. With the backend Python environment active, run `npm run generate:conversation-contract` from `frontend` after changing the API models, then commit the updated `projects/chat-ui/conversation/generated` files. Run `npm run check:conversation-contract` to compare them with the current backend document; the chat UI package and application image workflows run this check before publishing. Set `PYTHON` to the backend Python executable if it is not on the active path. The HTTP transport validates successful and failed response bodies with the generated schemas and checks outgoing request envelopes against generated types.
 
 ## Running unit tests
 

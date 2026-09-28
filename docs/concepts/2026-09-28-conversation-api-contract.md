@@ -61,11 +61,11 @@ The frontend package publishes `/conversation` separately but shares one package
 - **Completed Zod success-response slice:** The same generator emits regular Zod schemas, and the transport uses them for all four successful HTTP responses. Invalid success bodies remain `ConversationNetworkError`; error bodies retain their existing classification. The drift check covers generated validators. A transport test confirms additive envelope fields are stripped while artifact payload fields are preserved.
 - **Completed Zod error-response slice:** The transport validates failed JSON bodies against generated `ErrorResponse` and `InvalidInputResponse` schemas. Valid bodies remain `ConversationApiError`; malformed bodies become `ConversationNetworkError` so uncertain operations can be reconciled. Status-to-kind precision is deferred because the shared backend error schema does not encode it.
 - **Completed generic request-contract slice:** Pydantic models validate creation, message, and optional empty turn request envelopes. Their validation schemas are published as OpenAPI request bodies while preserving agent-availability precedence and existing 422 error kinds. The generated operation types now describe the actual request bodies, and the transport checks its outgoing creation and message objects against them. Configuration-specific `input` remains open.
+- **Completed application release gate:** The application image workflow runs the existing contract drift check once for pull requests and app release tags. Both image builds wait for that check, so stale generated output prevents publication.
 
 ## Open Questions
 
 - Should configuration-specific requests receive generated frontend validation?
-- Should the application image release workflow also run the contract drift check, in addition to the package release workflow?
 - Do any consumers require a staged release for a revised message wire shape or a new package runtime dependency?
 
 ## Risks
