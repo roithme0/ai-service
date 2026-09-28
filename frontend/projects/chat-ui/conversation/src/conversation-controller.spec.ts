@@ -3,21 +3,25 @@ import {
   ConversationApiError,
   ConversationNetworkError,
   type ApiMessage,
-  type ApiArtifact,
   type ConversationTransport,
-  type SessionCreation,
-  type SessionSnapshot,
-  type TurnResult,
 } from './conversation-api';
+import type {
+  ArtifactResponse,
+  AssistantMessageResponse,
+  CompletedTurnResponse,
+  SessionCreationResponse,
+  SessionSnapshotResponse,
+  UserMessageResponse,
+} from '../generated/types.gen';
 import { ConversationController, type ConversationViewState } from './conversation-controller';
 
-const CREATED: SessionCreation = { session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z' };
+const CREATED: SessionCreationResponse = { session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z' };
 
 class FakeTransport implements ConversationTransport {
-  createSession = vi.fn<() => Promise<SessionCreation>>().mockResolvedValue(CREATED);
-  readSession = vi.fn<(sessionId: string) => Promise<SessionSnapshot>>();
-  appendMessage = vi.fn<(sessionId: string, text: string) => Promise<ApiMessage>>();
-  generateTurn = vi.fn<(sessionId: string) => Promise<TurnResult>>();
+  createSession = vi.fn<() => Promise<SessionCreationResponse>>().mockResolvedValue(CREATED);
+  readSession = vi.fn<(sessionId: string) => Promise<SessionSnapshotResponse>>();
+  appendMessage = vi.fn<(sessionId: string, text: string) => Promise<UserMessageResponse>>();
+  generateTurn = vi.fn<(sessionId: string) => Promise<CompletedTurnResponse>>();
 }
 
 describe('ConversationController', () => {
@@ -51,10 +55,10 @@ describe('ConversationController', () => {
 
   it('supplies complete envelopes to a custom mapper and applies filtering to turns and reconciled history', async () => {
     const transport = new FakeTransport();
-    const artifact: ApiArtifact = { artifact_id: 'custom', type: 'custom.result',
+    const artifact: ArtifactResponse = { artifact_id: 'custom', type: 'custom.result',
       created_at: '2026-09-26T12:00:00Z', order: 1, turn_id: 'turn-1', payload: { value: 1 } };
     const hidden = { ...artifact, artifact_id: 'hidden', order: 2 };
-    const mapper = vi.fn((envelope: ApiArtifact) => envelope.artifact_id === 'hidden' ? null : ({
+    const mapper = vi.fn((envelope: ArtifactResponse) => envelope.artifact_id === 'hidden' ? null : ({
       kind: 'artifact' as const, id: envelope.artifact_id, type: envelope.type,
       headline: 'Custom headline', payload: { mapped: true },
     }));
@@ -140,8 +144,8 @@ describe('ConversationController', () => {
 
   it('starts empty and publishes an accepted turn without optimistic messages', async () => {
     const transport = new FakeTransport();
-    const append = deferred<ApiMessage>();
-    const turn = deferred<TurnResult>();
+    const append = deferred<UserMessageResponse>();
+    const turn = deferred<CompletedTurnResponse>();
     transport.appendMessage.mockReturnValue(append.promise);
     transport.generateTurn.mockReturnValue(turn.promise);
     const states: ConversationViewState[] = [];
@@ -329,7 +333,7 @@ describe('ConversationController', () => {
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Hallo', () => undefined);
-    const replacement = deferred<SessionCreation>();
+    const replacement = deferred<SessionCreationResponse>();
     transport.createSession.mockReturnValueOnce(replacement.promise);
 
     const restarting = controller.performAction('new-session');
@@ -361,7 +365,7 @@ describe('ConversationController', () => {
   });
 });
 
-function snapshot(messages: readonly ApiMessage[]): SessionSnapshot {
+function snapshot(messages: ApiMessage[]): SessionSnapshotResponse {
   return {
     session_id: 'session-1',
     expires_at: CREATED.expires_at,
@@ -372,7 +376,7 @@ function snapshot(messages: readonly ApiMessage[]): SessionSnapshot {
   };
 }
 
-function artifact(artifactId: string, turnId: string): ApiArtifact {
+function artifact(artifactId: string, turnId: string): ArtifactResponse {
   return {
     artifact_id: artifactId,
     type: 'example.result',
@@ -383,11 +387,11 @@ function artifact(artifactId: string, turnId: string): ApiArtifact {
   };
 }
 
-function user(text: string): ApiMessage {
+function user(text: string): UserMessageResponse {
   return { role: 'user', text, turn_id: null };
 }
 
-function assistant(text: string, turnId: string): ApiMessage {
+function assistant(text: string, turnId: string): AssistantMessageResponse {
   return { role: 'assistant', text, turn_id: turnId };
 }
 

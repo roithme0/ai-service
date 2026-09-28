@@ -51,8 +51,7 @@ import { ChatUiComponent, artifactRenderer, type ChatSubmission, type ChatConten
 import { AgentConfiguration, ConversationController, HttpConversationTransport, presentJsonArtifact,
   ConversationApiError, ConversationNetworkError,
   type AgentConfiguration as Configuration, type ArtifactMapper, type ConversationViewState,
-  type ConversationTransport, type ApiArtifact, type ApiMessage, type ApiUserMessage,
-  type ApiAssistantMessage, type SessionCreation, type SessionSnapshot, type TurnResult
+  type ConversationTransport
 } from '@roithme0/chat-ui/conversation';
 import * as Root from '@roithme0/chat-ui';
 const emptyRoot: keyof typeof Root extends never ? true : false = true;
@@ -60,7 +59,7 @@ const config: Configuration = AgentConfiguration.Demo;
 const publish = (state: ConversationViewState): void => { const content: readonly ChatContent[] = state.content; };
 const transport: ConversationTransport = new HttpConversationTransport('/api/v1', config);
 const controller = new ConversationController(transport, publish);
-const mapper: ArtifactMapper = (artifact: ApiArtifact) => presentJsonArtifact(artifact);
+const mapper: ArtifactMapper = (artifact) => presentJsonArtifact(artifact);
 new ConversationController(new HttpConversationTransport('/ai/api/v1/', AgentConfiguration.Kochwiki, { source: {} }), publish, mapper);
 // @ts-expect-error Arbitrary agent keys are not public configuration.
 new HttpConversationTransport('/api/v1', 'arbitrary');

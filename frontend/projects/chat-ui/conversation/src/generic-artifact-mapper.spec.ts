@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ConversationNetworkError, type ApiArtifact } from './conversation-api';
+import { ConversationNetworkError } from './conversation-api';
+import type { ArtifactResponse } from '../generated/types.gen';
 import { presentJsonArtifact } from './generic-artifact-mapper';
 
-const artifact: ApiArtifact = {
+const artifact: ArtifactResponse = {
   artifact_id: 'artifact-1', type: 'other.result', created_at: '2026-09-25T12:00:00Z',
   order: 1, turn_id: 'turn-1', payload: { nested: [null, true, 2] },
 };
@@ -19,7 +20,7 @@ describe('generic artifact mapping', () => {
     const cycle: Record<string, unknown> = {};
     cycle['self'] = cycle;
     for (const payload of [undefined, new Date(), { missing: undefined }, cycle]) {
-      expect(() => presentJsonArtifact({ ...artifact, payload })).toThrow(ConversationNetworkError);
+      expect(() => presentJsonArtifact({ ...artifact, payload } as ArtifactResponse)).toThrow(ConversationNetworkError);
     }
   });
 });

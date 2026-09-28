@@ -1,49 +1,16 @@
+import type {
+  ArtifactResponse,
+  AssistantMessageResponse,
+  CompletedTurnResponse,
+  SessionCreationResponse,
+  SessionSnapshotResponse,
+  UserMessageResponse,
+} from '../generated/types.gen';
+
 export const AgentConfiguration = { Demo: 'demo', Kochwiki: 'kochwiki' } as const;
 export type AgentConfiguration = (typeof AgentConfiguration)[keyof typeof AgentConfiguration];
 
-export interface ApiUserMessage {
-  readonly role: 'user';
-  readonly text: string;
-  readonly turn_id: null;
-}
-
-export interface ApiAssistantMessage {
-  readonly role: 'assistant';
-  readonly text: string;
-  readonly turn_id: string;
-}
-
-export type ApiMessage = ApiUserMessage | ApiAssistantMessage;
-
-export interface SessionCreation {
-  readonly session_id: string;
-  readonly expires_at: string;
-}
-
-export interface SessionSnapshot {
-  readonly session_id: string;
-  readonly expires_at: string;
-  readonly messages: ReadonlyArray<ApiMessage>;
-  readonly artifacts: ReadonlyArray<ApiArtifact>;
-  readonly terminal_turn_id: string | null;
-  readonly terminal_turn_kind: string | null;
-}
-
-export interface TurnResult {
-  readonly kind: 'completed';
-  readonly turn_id: string;
-  readonly message: ApiMessage;
-  readonly artifacts: ReadonlyArray<ApiArtifact>;
-}
-
-export interface ApiArtifact {
-  readonly artifact_id: string;
-  readonly type: string;
-  readonly created_at: string;
-  readonly order: number;
-  readonly turn_id: string;
-  readonly payload: unknown;
-}
+export type ApiMessage = SessionSnapshotResponse['messages'][number];
 
 export class ConversationApiError extends Error {
   constructor(
@@ -57,10 +24,10 @@ export class ConversationApiError extends Error {
 export class ConversationNetworkError extends Error {}
 
 export interface ConversationTransport {
-  createSession(): Promise<SessionCreation>;
-  readSession(sessionId: string): Promise<SessionSnapshot>;
-  appendMessage(sessionId: string, text: string): Promise<ApiMessage>;
-  generateTurn(sessionId: string): Promise<TurnResult>;
+  createSession(): Promise<SessionCreationResponse>;
+  readSession(sessionId: string): Promise<SessionSnapshotResponse>;
+  appendMessage(sessionId: string, text: string): Promise<UserMessageResponse>;
+  generateTurn(sessionId: string): Promise<CompletedTurnResponse>;
 }
 
 export class HttpConversationTransport implements ConversationTransport {
@@ -70,19 +37,21 @@ export class HttpConversationTransport implements ConversationTransport {
     this.baseUrl = `${apiBaseUrl.replace(/\/+$/, '')}/agents/${encodeURIComponent(configuration)}/sessions`;
   }
 
-  async createSession(): Promise<SessionCreation> {
+  async createSession(): Promise<SessionCreationResponse> {
     return parseSessionCreation(await this.request('', 'POST', { input: this.input }));
   }
 
-  async readSession(sessionId: string): Promise<SessionSnapshot> {
+  async readSession(sessionId: string): Promise<SessionSnapshotResponse> {
     return parseSessionSnapshot(await this.request(`/${sessionId}`, 'GET'));
   }
 
-  async appendMessage(sessionId: string, text: string): Promise<ApiMessage> {
-    return parseMessage(await this.request(`/${sessionId}/messages`, 'POST', { text }));
+  async appendMessage(sessionId: string, text: string): Promise<UserMessageResponse> {
+    const message = parseMessage(await this.request(`/${sessionId}/messages`, 'POST', { text }));
+    if (message.role !== 'user') throw invalidResponse();
+    return message;
   }
 
-  async generateTurn(sessionId: string): Promise<TurnResult> {
+  async generateTurn(sessionId: string): Promise<CompletedTurnResponse> {
     return parseTurnResult(await this.request(`/${sessionId}/turns`, 'POST'));
   }
 
@@ -115,7 +84,7 @@ export class HttpConversationTransport implements ConversationTransport {
   }
 }
 
-function parseSessionCreation(value: unknown): SessionCreation {
+function parseSessionCreation(value: unknown): SessionCreationResponse {
   const sessionId = readString(value, 'session_id');
   const expiresAt = readString(value, 'expires_at');
   if (sessionId === null || expiresAt === null) throw invalidResponse();
@@ -136,42 +105,46 @@ function parseMessage(value: unknown): ApiMessage {
   return { role, text, turn_id: turnId };
 }
 
-function parseSessionSnapshot(value: unknown): SessionSnapshot {
+function parseSessionSnapshot(value: unknown): SessionSnapshotResponse {
   if (!isRecord(value) || !Array.isArray(value['messages']) || !Array.isArray(value['artifacts'])) {
     throw invalidResponse();
   }
   const sessionId = readString(value, 'session_id');
   const expiresAt = readString(value, 'expires_at');
   if (sessionId === null || expiresAt === null) throw invalidResponse();
+  const terminalTurnKind = readNullableString(value, 'terminal_turn_kind');
+  if (!isTerminalTurnKind(terminalTurnKind)) throw invalidResponse();
   return {
     session_id: sessionId,
     expires_at: expiresAt,
     messages: value['messages'].map(parseMessage),
     artifacts: value['artifacts'].map(parseArtifact),
     terminal_turn_id: readNullableString(value, 'terminal_turn_id'),
-    terminal_turn_kind: readNullableString(value, 'terminal_turn_kind'),
+    terminal_turn_kind: terminalTurnKind,
   };
 }
 
-function parseTurnResult(value: unknown): TurnResult {
+function parseTurnResult(value: unknown): CompletedTurnResponse {
   if (!isRecord(value) || value['kind'] !== 'completed' || !Array.isArray(value['artifacts'])) throw invalidResponse();
   const turnId = readString(value, 'turn_id');
   if (turnId === null) throw invalidResponse();
+  const message = parseMessage(value['message']);
+  if (message.role !== 'assistant') throw invalidResponse();
   return {
     kind: 'completed',
     turn_id: turnId,
-    message: parseMessage(value['message']),
+    message,
     artifacts: value['artifacts'].map(parseArtifact),
   };
 }
 
-function parseArtifact(value: unknown): ApiArtifact {
+function parseArtifact(value: unknown): ArtifactResponse {
   if (!isRecord(value)) throw invalidResponse();
   const artifactId = readString(value, 'artifact_id');
   const turnId = readString(value, 'turn_id');
   const type = readString(value, 'type');
   const createdAt = readString(value, 'created_at');
-  if (artifactId === null || turnId === null || type === null || createdAt === null || !('payload' in value)) throw invalidResponse();
+  if (artifactId === null || turnId === null || type === null || createdAt === null || !isRecord(value['payload'])) throw invalidResponse();
   return {
     artifact_id: artifactId,
     type,
@@ -180,6 +153,11 @@ function parseArtifact(value: unknown): ApiArtifact {
     turn_id: turnId,
     payload: value['payload'],
   };
+}
+
+function isTerminalTurnKind(value: string | null): value is SessionSnapshotResponse['terminal_turn_kind'] {
+  return value === null || value === 'completed' || value === 'generation_failed' || value === 'unknown'
+    || value === 'expired' || value === 'not_ready' || value === 'limit_reached' || value === 'conflict' || value === 'busy';
 }
 
 function readNumber(value: Record<string, unknown>, key: string): number {

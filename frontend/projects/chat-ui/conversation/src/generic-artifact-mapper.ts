@@ -1,7 +1,8 @@
 import type { ChatArtifact, JsonValue } from '@roithme0/chat-ui/ui';
-import { ConversationNetworkError, type ApiArtifact } from './conversation-api';
+import { ConversationNetworkError } from './conversation-api';
+import type { ArtifactResponse } from '../generated/types.gen';
 
-export function presentJsonArtifact(artifact: ApiArtifact): ChatArtifact {
+export function presentJsonArtifact(artifact: ArtifactResponse): ChatArtifact {
   if (!isJsonValue(artifact.payload)) {
     throw new ConversationNetworkError('Der Backend-Dienst hat eine ungültige Antwort gesendet.');
   }

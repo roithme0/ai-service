@@ -146,6 +146,34 @@ describe('HttpConversationTransport', () => {
     await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
+
+  it('rejects a completed turn with a user message', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(201, {
+      kind: 'completed', turn_id: 'turn-1', message: { role: 'user', text: 'Hello', turn_id: null }, artifacts: [],
+    })));
+    await expect(new HttpConversationTransport('/api/v1', 'demo').generateTurn('session-1'))
+      .rejects.toBeInstanceOf(ConversationNetworkError);
+  });
+
+  it('rejects an artifact payload that is not an object', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, {
+      session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z', messages: [],
+      artifacts: [{ artifact_id: 'artifact-1', type: 'demo', created_at: '2026-09-17T12:00:00Z',
+        order: 0, turn_id: 'turn-1', payload: [] }],
+      terminal_turn_id: null, terminal_turn_kind: null,
+    })));
+    await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
+      .rejects.toBeInstanceOf(ConversationNetworkError);
+  });
+
+  it('rejects a terminal turn kind outside the backend contract', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, {
+      session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z', messages: [], artifacts: [],
+      terminal_turn_id: 'turn-1', terminal_turn_kind: 'future_kind',
+    })));
+    await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
+      .rejects.toBeInstanceOf(ConversationNetworkError);
+  });
 });
 
 function response(status: number, payload: unknown): Response {
