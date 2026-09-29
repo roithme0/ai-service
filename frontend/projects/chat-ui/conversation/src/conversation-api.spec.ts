@@ -80,6 +80,17 @@ describe('HttpConversationTransport', () => {
       .rejects.toEqual(expect.objectContaining<Partial<ConversationApiError>>({ status: 404, kind }));
   });
 
+  it.each([
+    { status: 405, kind: 'method_not_allowed', detail: 'Method Not Allowed' },
+    { status: 500, kind: 'internal_error', detail: 'Internal Server Error' },
+    { status: 401, kind: 'http_error', detail: 'Authentication required' },
+  ] as const)('accepts the shared $status error envelope', async ({ status, kind, detail }) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(status, { detail, kind })));
+
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession())
+      .rejects.toEqual(expect.objectContaining<Partial<ConversationApiError>>({ status, kind }));
+  });
+
   it('preserves an unrelated artifact envelope in history and turn results', async () => {
     const artifact = {
       artifact_id: 'artifact-1', type: 'other.result', created_at: '2026-09-25T12:00:00Z',

@@ -52,6 +52,7 @@ class InputIssue(BaseModel):
 ErrorKind = Literal[
     "not_found", "unknown_configuration", "agent_unavailable", "unknown", "expired",
     "busy", "not_ready", "conflict", "limit_reached", "generation_failed",
+    "method_not_allowed", "http_error", "internal_error",
 ]
 
 

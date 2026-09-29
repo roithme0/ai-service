@@ -84,7 +84,7 @@ export type ErrorResponse = {
     /**
      * Kind
      */
-    kind: 'not_found' | 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed';
+    kind: 'not_found' | 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed' | 'method_not_allowed' | 'http_error' | 'internal_error';
     /**
      * Turn Id
      */
@@ -192,6 +192,19 @@ export type HelloWorldGetData = {
     url: '/';
 };
 
+export type HelloWorldGetErrors = {
+    /**
+     * Method Not Allowed
+     */
+    405: ErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorResponse;
+};
+
+export type HelloWorldGetError = HelloWorldGetErrors[keyof HelloWorldGetErrors];
+
 export type HelloWorldGetResponses = {
     /**
      * Response Hello World  Get
@@ -231,9 +244,17 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostErrors = {
      */
     404: ErrorResponse;
     /**
+     * Method Not Allowed
+     */
+    405: ErrorResponse;
+    /**
      * Unprocessable Content
      */
     422: ValidationErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorResponse;
     /**
      * Service Unavailable
      */
@@ -273,6 +294,10 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors = {
      */
     404: ErrorResponse;
     /**
+     * Method Not Allowed
+     */
+    405: ErrorResponse;
+    /**
      * Gone
      */
     410: ErrorResponse;
@@ -280,6 +305,10 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors = {
      * Unprocessable Content
      */
     422: ValidationErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorResponse;
     /**
      * Service Unavailable
      */
@@ -327,6 +356,10 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostEr
      */
     404: ErrorResponse;
     /**
+     * Method Not Allowed
+     */
+    405: ErrorResponse;
+    /**
      * Conflict
      */
     409: ErrorResponse;
@@ -338,6 +371,10 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostEr
      * Unprocessable Content
      */
     422: ValidationErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorResponse;
     /**
      * Service Unavailable
      */
@@ -382,6 +419,10 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors 
      */
     404: ErrorResponse;
     /**
+     * Method Not Allowed
+     */
+    405: ErrorResponse;
+    /**
      * Conflict
      */
     409: ErrorResponse;
@@ -393,6 +434,10 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors 
      * Unprocessable Content
      */
     422: ValidationErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorResponse;
     /**
      * Bad Gateway
      */

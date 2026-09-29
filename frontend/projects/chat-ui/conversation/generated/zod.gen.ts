@@ -48,7 +48,10 @@ export const zErrorResponse = z.object({
         'not_ready',
         'conflict',
         'limit_reached',
-        'generation_failed'
+        'generation_failed',
+        'method_not_allowed',
+        'http_error',
+        'internal_error'
     ]),
     turn_id: z.string().nullish()
 });

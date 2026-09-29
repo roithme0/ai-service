@@ -2,7 +2,7 @@
 
 ## Status
 
-Partially implemented. Session errors and framework-level 404s use the shared string-`detail` envelope. Application and framework validation errors now use structured `detail` items with `loc`, `msg`, and `type`. Unsupported methods and unhandled server failures remain for the final slice.
+Implemented. Session and framework HTTP errors use the shared string-`detail` envelope. Application and framework validation errors use structured `detail` items with `loc`, `msg`, and `type`. Unsupported methods retain their `Allow` header, other framework HTTP exceptions retain their headers, and unexpected failures return a generic 500 body while the underlying exception propagates for server logging.
 
 ## Context
 
@@ -50,7 +50,7 @@ The work is divided into end-to-end contract slices:
 
 1. **Completed:** Add string `detail` to the shared session `ErrorResponse`, normalize unmatched-route 404s, regenerate the frontend contract, and keep route `not_found` separate from terminal session `unknown` in the controller. Representative runtime, schema, and frontend recovery tests cover both 404 paths.
 2. **Completed:** Application and framework validation errors use structured `detail` items containing only `loc`, `msg`, and `type`. The `issues` wire shape is removed. Generated frontend types and validators are updated, and the transport applies strict object checks because generated Zod objects otherwise strip extra fields.
-3. **Remaining:** Normalize other framework-generated errors, including unsupported methods and unhandled server failures, and verify their public bodies and logging behavior.
+3. **Completed:** Normalize unsupported methods and other framework HTTP exceptions, with a general `http_error` fallback and preserved headers. Unexpected failures return a generic `internal_error` body. The 405 and 500 responses are published for the application routes, and tests cover runtime bodies and exception propagation for server logging.
 
 Each wire-format slice includes its backend and frontend changes before release. No legacy response parsing is retained.
 
