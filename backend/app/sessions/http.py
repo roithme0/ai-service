@@ -50,13 +50,14 @@ class InputIssue(BaseModel):
 
 
 ErrorKind = Literal[
-    "unknown_configuration", "agent_unavailable", "unknown", "expired",
+    "not_found", "unknown_configuration", "agent_unavailable", "unknown", "expired",
     "invalid_message", "busy", "not_ready", "conflict", "limit_reached", "generation_failed",
 ]
 
 
 class ErrorResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    detail: str = Field(min_length=1)
     kind: ErrorKind
     turn_id: str | None = None
 
@@ -351,13 +352,21 @@ def _input_error(issues: tuple[InputIssue, ...]) -> JSONResponse:
 
 
 def _error(kind: ErrorKind, turn_id: str | None = None) -> JSONResponse:
-    statuses: dict[ErrorKind, int] = {
-        "unknown_configuration": 404, "agent_unavailable": 503,
-        "unknown": 404, "expired": 410, "invalid_message": 422,
-        "busy": 409, "not_ready": 409, "conflict": 409,
-        "limit_reached": 409, "generation_failed": 502,
+    responses: dict[ErrorKind, tuple[int, str]] = {
+        "not_found": (404, "Not Found"),
+        "unknown_configuration": (404, "Agent configuration not found"),
+        "agent_unavailable": (503, "Agent unavailable"),
+        "unknown": (404, "Session not found"),
+        "expired": (410, "Session expired"),
+        "invalid_message": (422, "Invalid message"),
+        "busy": (409, "Session is busy"),
+        "not_ready": (409, "Session is not ready for a turn"),
+        "conflict": (409, "Session state changed during the turn"),
+        "limit_reached": (409, "Session limit reached"),
+        "generation_failed": (502, "Turn generation failed"),
     }
-    return _json(statuses[kind], ErrorResponse(kind=kind, turn_id=turn_id or None))
+    status, detail = responses[kind]
+    return _json(status, ErrorResponse(detail=detail, kind=kind, turn_id=turn_id or None))
 
 
 def _json(status: int, content: ErrorResponse | InvalidInputResponse) -> JSONResponse:

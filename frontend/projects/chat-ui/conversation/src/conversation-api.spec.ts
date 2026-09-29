@@ -59,7 +59,7 @@ describe('HttpConversationTransport', () => {
   it('maps typed backend errors without accepting their payload as success', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(response(503, { kind: 'agent_unavailable' })),
+      vi.fn().mockResolvedValue(response(503, { detail: 'Agent unavailable', kind: 'agent_unavailable' })),
     );
 
     await expect(new HttpConversationTransport('/api/v1', 'kochwiki', { source: {} }).generateTurn('session-1')).rejects.toEqual(
@@ -68,6 +68,16 @@ describe('HttpConversationTransport', () => {
         kind: 'agent_unavailable',
       }),
     );
+  });
+
+  it.each([
+    { kind: 'unknown', detail: 'Session not found' },
+    { kind: 'not_found', detail: 'Not Found' },
+  ])('accepts the shared 404 envelope for $kind', async ({ kind, detail }) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(404, { detail, kind })));
+
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).readSession('session-1'))
+      .rejects.toEqual(expect.objectContaining<Partial<ConversationApiError>>({ status: 404, kind }));
   });
 
   it('preserves an unrelated artifact envelope in history and turn results', async () => {
@@ -147,6 +157,7 @@ describe('HttpConversationTransport', () => {
     { kind: 'future_kind' },
     { kind: 'invalid_input', issues: 'invalid' },
     { issues: [] },
+    { kind: 'unknown', detail: '' },
   ])('classifies malformed error bodies as uncertain responses: %j', async (payload) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, payload)));
 

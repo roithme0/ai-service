@@ -98,8 +98,14 @@
       "ErrorResponse": {
         "additionalProperties": false,
         "properties": {
+          "detail": {
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
           "kind": {
             "enum": [
+              "not_found",
               "unknown_configuration",
               "agent_unavailable",
               "unknown",
@@ -127,6 +133,7 @@
           }
         },
         "required": [
+          "detail",
           "kind"
         ],
         "title": "ErrorResponse",

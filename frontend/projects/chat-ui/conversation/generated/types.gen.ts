@@ -78,9 +78,13 @@ export type CompletedTurnResponse = {
  */
 export type ErrorResponse = {
     /**
+     * Detail
+     */
+    detail: string;
+    /**
      * Kind
      */
-    kind: 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'invalid_message' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed';
+    kind: 'not_found' | 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'invalid_message' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed';
     /**
      * Turn Id
      */

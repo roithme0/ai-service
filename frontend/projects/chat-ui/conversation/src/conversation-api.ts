@@ -2,6 +2,8 @@ import type {
   AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostData,
   CompletedTurnResponse,
   CreateSessionApiV1AgentsConfigurationSessionsPostData,
+  ErrorResponse,
+  InvalidInputResponse,
   SessionCreationResponse,
   SessionSnapshotResponse,
   UserMessageResponse,
@@ -23,11 +25,12 @@ export const AgentConfiguration = zCreateSessionApiV1AgentsConfigurationSessions
 export type AgentConfiguration = CreateSessionApiV1AgentsConfigurationSessionsPostData['path']['configuration'];
 
 export type ApiMessage = SessionSnapshotResponse['messages'][number];
+export type ApiErrorKind = ErrorResponse['kind'] | InvalidInputResponse['kind'];
 
 export class ConversationApiError extends Error {
   constructor(
     readonly status: number,
-    readonly kind: string,
+    readonly kind: ApiErrorKind,
   ) {
     super(`Conversation request failed: ${status} ${kind}`);
   }

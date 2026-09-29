@@ -189,7 +189,7 @@ def test_unknown_session_returns_not_found(client: TestClient) -> None:
     response = client.get("/api/v1/agents/kochwiki/sessions/missing")
 
     assert response.status_code == 404
-    assert response.json() == {"kind": "unknown"}
+    assert response.json() == {"detail": "Session not found", "kind": "unknown"}
 
 
 def test_retained_expired_session_returns_gone_without_snapshot() -> None:
@@ -212,7 +212,7 @@ def test_retained_expired_session_returns_gone_without_snapshot() -> None:
         response = client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}")
 
         assert response.status_code == 410
-        assert response.json() == {"kind": "expired"}
+        assert response.json() == {"detail": "Session expired", "kind": "expired"}
         assert "source" not in response.json()
         assert client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}").status_code == 404
     finally:
@@ -298,9 +298,9 @@ def test_unknown_and_expired_user_message_appends_do_not_expose_session_content(
         read = client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}")
 
         assert unknown.status_code == 404
-        assert unknown.json() == {"kind": "unknown"}
+        assert unknown.json() == {"detail": "Session not found", "kind": "unknown"}
         assert expired.status_code == 410
-        assert expired.json() == {"kind": "expired"}
+        assert expired.json() == {"detail": "Session expired", "kind": "expired"}
         assert "messages" not in expired.json()
         assert read.status_code == 404
     finally:
@@ -409,7 +409,7 @@ def test_all_recipe_endpoints_report_unavailable() -> None:
             client.post(f"{prefix}/missing/turns"),
         ]
         assert all(response.status_code == 503 for response in responses)
-        assert all(response.json() == {"kind": "agent_unavailable"} for response in responses)
+        assert all(response.json() == {"detail": "Agent unavailable", "kind": "agent_unavailable"} for response in responses)
     finally:
         app.dependency_overrides.clear()
 
@@ -423,9 +423,9 @@ def test_turn_endpoint_reports_unknown_and_not_ready(
     not_ready = client.post(f"{session_url}/turns")
 
     assert unknown.status_code == 404
-    assert unknown.json() == {"kind": "unknown"}
+    assert unknown.json() == {"detail": "Session not found", "kind": "unknown"}
     assert not_ready.status_code == 409
-    assert not_ready.json() == {"kind": "not_ready"}
+    assert not_ready.json() == {"detail": "Session is not ready for a turn", "kind": "not_ready"}
     assert fake_generator.calls == []
 
 
@@ -455,7 +455,7 @@ def test_turn_endpoint_rejects_reply_after_new_message(
     def append_another_message() -> None:
         blocked = client.post(f"{session_url}/messages", json={"text": "second"})
         assert blocked.status_code == 409
-        assert blocked.json() == {"kind": "busy"}
+        assert blocked.json() == {"detail": "Session is busy", "kind": "busy"}
 
     fake_generator.before_return = append_another_message
 
@@ -546,7 +546,9 @@ def test_partial_failure_drops_accepted_proposals_and_retry_is_stable(
 
     assert first.status_code == retry.status_code == 502
     assert first.json() == retry.json()
-    assert first.json() == {"kind": "generation_failed", "turn_id": first.json()["turn_id"]}
+    assert first.json() == {
+        "detail": "Turn generation failed", "kind": "generation_failed", "turn_id": first.json()["turn_id"]
+    }
     assert len(fake_generator.calls) == 2
     assert read.json()["artifacts"] == []
     assert read.json()["terminal_turn_id"] == first.json()["turn_id"]
@@ -609,8 +611,8 @@ def test_session_history_reports_expiry_then_unknown() -> None:
         unknown = client.get(session_url)
 
         assert expired.status_code == 410
-        assert expired.json() == {"kind": "expired"}
+        assert expired.json() == {"detail": "Session expired", "kind": "expired"}
         assert unknown.status_code == 404
-        assert unknown.json() == {"kind": "unknown"}
+        assert unknown.json() == {"detail": "Session not found", "kind": "unknown"}
     finally:
         app.dependency_overrides.clear()

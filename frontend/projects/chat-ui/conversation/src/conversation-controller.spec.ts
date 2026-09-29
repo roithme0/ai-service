@@ -114,6 +114,37 @@ describe('ConversationController', () => {
     expect(controller.state.status?.action?.id).toBe('new-session');
   });
 
+  it.each(['create', 'append', 'turn'] as const)('reports an unmatched route during %s without session recovery', async (operation) => {
+    const transport = new FakeTransport();
+    const error = new ConversationApiError(404, 'not_found');
+    if (operation === 'create') transport.createSession.mockRejectedValue(error);
+    if (operation === 'append') transport.appendMessage.mockRejectedValue(error);
+    if (operation === 'turn') {
+      transport.appendMessage.mockResolvedValue(user('Hallo'));
+      transport.generateTurn.mockRejectedValue(error);
+    }
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    if (operation !== 'create') await controller.submit('Hallo', () => undefined);
+
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status?.message).toBe('Der API-Endpunkt ist nicht verfügbar.');
+    expect(controller.state.status?.action).toBeUndefined();
+  });
+
+  it('preserves an unmatched route found during turn reconciliation', async () => {
+    const transport = new FakeTransport();
+    transport.appendMessage.mockResolvedValue(user('Hallo'));
+    transport.generateTurn.mockRejectedValue(new ConversationNetworkError('Timeout'));
+    transport.readSession.mockRejectedValue(new ConversationApiError(404, 'not_found'));
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    await controller.submit('Hallo', () => undefined);
+
+    expect(controller.state.status?.message).toBe('Der API-Endpunkt ist nicht verfügbar.');
+    expect(controller.state.status?.action).toBeUndefined();
+  });
+
   it('reports agent unavailability during message append', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
@@ -349,7 +380,7 @@ describe('ConversationController', () => {
     ['expired', 410],
     ['unknown', 404],
     ['limit_reached', 409],
-  ])('offers a new session after the terminal %s outcome', async (kind, status) => {
+  ] as const)('offers a new session after the terminal %s outcome', async (kind, status) => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(status, kind));
     const controller = new ConversationController(transport, () => undefined);

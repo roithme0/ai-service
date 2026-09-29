@@ -1,9 +1,13 @@
 from types import TracebackType
 
 from fastapi import FastAPI
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import JSONResponse, Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.requests import Request
 
 from app.agents.wiring import get_configured_agents
-from app.sessions.http import router as conversation_router
+from app.sessions.http import ErrorResponse, router as conversation_router
 
 
 class AgentLifespan:
@@ -32,6 +36,14 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 app.include_router(conversation_router)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def handle_http_exception(request: Request, error: StarletteHTTPException) -> Response:
+    if error.status_code == 404:
+        body = ErrorResponse(detail="Not Found", kind="not_found")
+        return JSONResponse(status_code=404, content=body.model_dump(mode="json", exclude_none=True), headers=error.headers)
+    return await http_exception_handler(request, error)
 
 
 @app.get("/")

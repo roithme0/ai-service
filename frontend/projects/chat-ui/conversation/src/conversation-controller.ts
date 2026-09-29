@@ -2,6 +2,7 @@ import type { ChatArtifact, ChatContent, ChatConversationStatus, ChatTextMessage
 import {
   ConversationApiError,
   ConversationNetworkError,
+  type ApiErrorKind,
   type ApiMessage,
   type ConversationTransport,
 } from './conversation-api';
@@ -48,6 +49,10 @@ export class ConversationController {
       this.sessionId = created.session_id;
       this.setState({ content: [], composerDisabled: false, status: null });
     } catch (error: unknown) {
+      if (isKind(error, 'not_found')) {
+        this.setRouteUnavailable();
+        return;
+      }
       this.setState({
         ...this.stateValue,
         composerDisabled: true,
@@ -172,7 +177,7 @@ export class ConversationController {
       this.applyTurnSnapshot(snapshot);
     } catch (error: unknown) {
       this.handleTurnFailure(
-        error instanceof ConversationNetworkError || isKind(error, 'agent_unavailable')
+        error instanceof ConversationNetworkError || isKind(error, 'agent_unavailable') || isKind(error, 'not_found')
           ? error
           : new ConversationNetworkError('Abgleich fehlgeschlagen.', { cause: error }),
       );
@@ -210,7 +215,10 @@ export class ConversationController {
   }
 
   private handleAppendFailure(error: unknown): void {
-    if (isKind(error, 'agent_unavailable')) {
+    if (isKind(error, 'not_found')) {
+      this.setRouteUnavailable();
+      return;
+    } else if (isKind(error, 'agent_unavailable')) {
       this.setAgentUnavailable();
       return;
     } else if (isTerminal(error)) {
@@ -228,7 +236,9 @@ export class ConversationController {
   }
 
   private handleTurnFailure(error: unknown): void {
-    if (isTerminal(error)) {
+    if (isKind(error, 'not_found')) {
+      this.setRouteUnavailable();
+    } else if (isTerminal(error)) {
       this.setTerminal(error);
     } else if (isKind(error, 'agent_unavailable')) {
       this.setAgentUnavailable();
@@ -260,6 +270,14 @@ export class ConversationController {
       ...this.stateValue,
       composerDisabled: true,
       status: failure('Der KI-Agent ist derzeit nicht verfügbar.', 'conversation', 'new-session', 'Erneut versuchen'),
+    });
+  }
+
+  private setRouteUnavailable(): void {
+    this.setState({
+      ...this.stateValue,
+      composerDisabled: true,
+      status: failure('Der API-Endpunkt ist nicht verfügbar.', 'conversation'),
     });
   }
 
@@ -346,7 +364,7 @@ function failure(
     : { kind: 'error', message, placement, action: { id, label } };
 }
 
-function isKind(error: unknown, kind: string): boolean {
+function isKind(error: unknown, kind: ApiErrorKind): boolean {
   return error instanceof ConversationApiError && error.kind === kind;
 }
 

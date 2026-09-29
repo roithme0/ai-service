@@ -37,7 +37,9 @@ export const zCompletedTurnResponse = z.object({
  * ErrorResponse
  */
 export const zErrorResponse = z.object({
+    detail: z.string().min(1),
     kind: z.enum([
+        'not_found',
         'unknown_configuration',
         'agent_unavailable',
         'unknown',

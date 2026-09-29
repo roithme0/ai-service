@@ -38,7 +38,7 @@ def test_registry_and_creation_envelopes(client: TestClient) -> None:
     base = "/api/v1/agents"
     unknown = client.post(f"{base}/missing/sessions", json={})
     assert unknown.status_code == 404
-    assert unknown.json() == {"kind": "unknown_configuration"}
+    assert unknown.json() == {"detail": "Agent configuration not found", "kind": "unknown_configuration"}
 
     for value in ({}, {"input": None}, {"input": {}}):
         assert client.post(f"{base}/demo/sessions", json=value).status_code == 201
@@ -62,12 +62,15 @@ def test_registry_and_creation_envelopes(client: TestClient) -> None:
     session_id = recipe.json()["session_id"]
     wrong_agent = client.get(f"{base}/demo/sessions/{session_id}")
     assert wrong_agent.status_code == 404
-    assert wrong_agent.json() == {"kind": "unknown"}
+    assert wrong_agent.json() == {"detail": "Session not found", "kind": "unknown"}
     assert client.get(f"{base}/kochwiki/sessions/{session_id}").status_code == 200
     assert client.post(f"{base}/kochwiki/sessions/{session_id}/turns", json={"model": "override"}).status_code == 422
     assert client.get(f"{base}/kochwiki/sessions/{session_id}").json()["messages"] == []
-    assert client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).status_code == 404
-    assert client.get(f"{base}/kochwiki/sessions/{session_id}/proposals/missing").status_code == 404
+    unmatched = client.post("/api/v1/recipe-improvement/sessions", json=valid_request())
+    assert unmatched.status_code == 404
+    assert unmatched.json() == {"detail": "Not Found", "kind": "not_found"}
+    assert set(unmatched.json()) == set(wrong_agent.json())
+    assert client.get(f"{base}/kochwiki/sessions/{session_id}/proposals/missing").json() == unmatched.json()
 
 
 def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
@@ -78,7 +81,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     assert set(created) == {"session_id", "expires_at"}
     assert created["expires_at"].endswith("+00:00")
     session = f"{base}/{created['session_id']}"
-    assert client.post(f"{session}/turns").json() == {"kind": "not_ready"}
+    assert client.post(f"{session}/turns").json() == {"detail": "Session is not ready for a turn", "kind": "not_ready"}
     texts: list[str] = []
     artifacts: list[dict[str, object]] = []
     for index in range(5):
@@ -190,10 +193,12 @@ def test_request_bodies_are_published_and_enforced(client: TestClient) -> None:
     session_id = client.post("/api/v1/agents/demo/sessions", json={}).json()["session_id"]
     session = f"/api/v1/agents/demo/sessions/{session_id}"
     assert client.post(f"{session}/messages", json={"text": "Hello", "extra": True}).json() == {
-        "kind": "invalid_message"
+        "detail": "Invalid message", "kind": "invalid_message"
     }
     assert client.post(f"{session}/turns", content="null", headers={"content-type": "application/json"}).status_code == 422
-    assert client.post(f"{session}/turns", json={}).json() == {"kind": "not_ready"}
+    assert client.post(f"{session}/turns", json={}).json() == {
+        "detail": "Session is not ready for a turn", "kind": "not_ready"
+    }
 
 
 def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClient) -> None:
@@ -221,8 +226,14 @@ def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClien
                 f"#/components/schemas/{model}"
             )
 
+    error_schema = document["components"]["schemas"]["ErrorResponse"]
+    assert set(error_schema["required"]) == {"detail", "kind"}
+    assert error_schema["properties"]["detail"]["minLength"] == 1
+
     with pytest.raises(ValidationError):
-        ErrorResponse.model_validate({"kind": "unexpected"})
+        ErrorResponse.model_validate({"detail": "Missing", "kind": "unexpected"})
+    with pytest.raises(ValidationError):
+        ErrorResponse.model_validate({"kind": "unknown"})
     with pytest.raises(ValidationError):
         InvalidInputResponse.model_validate({"kind": "invalid_input", "issues": [{"location": (), "message": 7}]})
 
@@ -257,7 +268,7 @@ def test_unavailable_agent_precedes_malformed_body() -> None:
             client.post(f"{base}/missing/turns"),
         )
         assert all(response.status_code == 503 for response in responses)
-        assert all(response.json() == {"kind": "agent_unavailable"} for response in responses)
+        assert all(response.json() == {"detail": "Agent unavailable", "kind": "agent_unavailable"} for response in responses)
     finally:
         app.dependency_overrides.clear()
 
