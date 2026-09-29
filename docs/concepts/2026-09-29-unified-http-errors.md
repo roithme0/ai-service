@@ -2,11 +2,11 @@
 
 ## Status
 
-Partially implemented. Session errors using `ErrorResponse` and framework-level 404s now have the shared string-`detail` envelope. Validation errors and other framework-generated errors remain for later slices. The error shape, validation-detail normalization, and framework-level `not_found` recovery behavior are decided.
+Partially implemented. Session errors and framework-level 404s use the shared string-`detail` envelope. Application and framework validation errors now use structured `detail` items with `loc`, `msg`, and `type`. Unsupported methods and unhandled server failures remain for the final slice.
 
 ## Context
 
-The conversation API uses typed Pydantic responses as the source for generated TypeScript types and Zod validators. Its session routes currently return `ErrorResponse` with `kind` and an optional `turn_id`, or `InvalidInputResponse` with `kind` and `issues`. FastAPI supplies a separate `detail` body for unmatched routes, unsupported methods, and framework validation failures. The frontend transport accepts only the two application-specific error schemas; another valid HTTP error body is classified as an uncertain network response.
+The conversation API uses typed Pydantic responses as the source for generated TypeScript types and Zod validators. Its session routes originally returned `ErrorResponse` with `kind` and an optional `turn_id`, or `InvalidInputResponse` with `kind` and `issues`. FastAPI supplied a separate `detail` body for unmatched routes, unsupported methods, and framework validation failures. The frontend transport classified another valid HTTP error body as an uncertain network response.
 
 The [conversation API contract concept](2026-09-28-conversation-api-contract.md) establishes backend models and OpenAPI as the source for the frontend contract. This concept revises its error portion without changing successful responses or session behavior.
 
@@ -49,7 +49,7 @@ The conversation controller currently tests `kind` values such as `unknown`, `ex
 The work is divided into end-to-end contract slices:
 
 1. **Completed:** Add string `detail` to the shared session `ErrorResponse`, normalize unmatched-route 404s, regenerate the frontend contract, and keep route `not_found` separate from terminal session `unknown` in the controller. Representative runtime, schema, and frontend recovery tests cover both 404 paths.
-2. **Remaining:** Move application and framework validation errors to structured `detail` items containing only `loc`, `msg`, and `type`; remove the `issues` wire shape and regenerate frontend validators.
+2. **Completed:** Application and framework validation errors use structured `detail` items containing only `loc`, `msg`, and `type`. The `issues` wire shape is removed. Generated frontend types and validators are updated, and the transport applies strict object checks because generated Zod objects otherwise strip extra fields.
 3. **Remaining:** Normalize other framework-generated errors, including unsupported methods and unhandled server failures, and verify their public bodies and logging behavior.
 
 Each wire-format slice includes its backend and frontend changes before release. No legacy response parsing is retained.

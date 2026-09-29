@@ -84,49 +84,11 @@ export type ErrorResponse = {
     /**
      * Kind
      */
-    kind: 'not_found' | 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'invalid_message' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed';
+    kind: 'not_found' | 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed';
     /**
      * Turn Id
      */
     turn_id?: string | null;
-};
-
-/**
- * HTTPValidationError
- */
-export type HttpValidationError = {
-    /**
-     * Detail
-     */
-    detail?: Array<ValidationError>;
-};
-
-/**
- * InputIssue
- */
-export type InputIssue = {
-    /**
-     * Location
-     */
-    location: Array<string | number>;
-    /**
-     * Message
-     */
-    message: string;
-};
-
-/**
- * InvalidInputResponse
- */
-export type InvalidInputResponse = {
-    /**
-     * Issues
-     */
-    issues: Array<InputIssue>;
-    /**
-     * Kind
-     */
-    kind: 'invalid_input';
 };
 
 /**
@@ -192,31 +154,35 @@ export type UserMessageResponse = {
 };
 
 /**
- * ValidationError
+ * ValidationDetail
  */
-export type ValidationError = {
+export type ValidationDetail = {
     /**
-     * Context
-     */
-    ctx?: {
-        [key: string]: unknown;
-    };
-    /**
-     * Input
-     */
-    input?: unknown;
-    /**
-     * Location
+     * Loc
      */
     loc: Array<string | number>;
     /**
-     * Message
+     * Msg
      */
     msg: string;
     /**
-     * Error Type
+     * Type
      */
     type: string;
+};
+
+/**
+ * ValidationErrorResponse
+ */
+export type ValidationErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: Array<ValidationDetail>;
+    /**
+     * Kind
+     */
+    kind: 'invalid_input' | 'invalid_message' | 'request_validation';
 };
 
 export type HelloWorldGetData = {
@@ -267,7 +233,7 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostErrors = {
     /**
      * Unprocessable Content
      */
-    422: InvalidInputResponse;
+    422: ValidationErrorResponse;
     /**
      * Service Unavailable
      */
@@ -311,9 +277,9 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors = {
      */
     410: ErrorResponse;
     /**
-     * Validation Error
+     * Unprocessable Content
      */
-    422: HttpValidationError;
+    422: ValidationErrorResponse;
     /**
      * Service Unavailable
      */
@@ -371,7 +337,7 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostEr
     /**
      * Unprocessable Content
      */
-    422: ErrorResponse;
+    422: ValidationErrorResponse;
     /**
      * Service Unavailable
      */
@@ -426,7 +392,7 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors 
     /**
      * Unprocessable Content
      */
-    422: InvalidInputResponse;
+    422: ValidationErrorResponse;
     /**
      * Bad Gateway
      */

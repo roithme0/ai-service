@@ -143,20 +143,22 @@ describe('HttpConversationTransport', () => {
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
-  it('maps a validated invalid-input response to an API error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, {
-      kind: 'invalid_input', issues: [{ location: ['input', 0], message: 'Invalid value' }],
-    })));
+  it.each(['invalid_input', 'invalid_message', 'request_validation'] as const)(
+    'maps a validated %s response to an API error', async (kind) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, {
+        kind, detail: [{ loc: ['body', 'input', 0], msg: 'Invalid value', type: 'value_error' }],
+      })));
 
-    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession()).rejects.toEqual(
-      expect.objectContaining<Partial<ConversationApiError>>({ status: 422, kind: 'invalid_input' }),
-    );
-  });
+      await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession()).rejects.toEqual(
+        expect.objectContaining<Partial<ConversationApiError>>({ status: 422, kind }),
+      );
+    });
 
   it.each([
     { kind: 'future_kind' },
-    { kind: 'invalid_input', issues: 'invalid' },
-    { issues: [] },
+    { kind: 'invalid_input', detail: [] },
+    { kind: 'invalid_input', detail: [{ loc: ['body'], msg: 'Invalid', type: 'value_error', input: 'secret' }] },
+    { detail: [{ loc: ['body'], msg: 'Invalid', type: 'value_error' }] },
     { kind: 'unknown', detail: '' },
   ])('classifies malformed error bodies as uncertain responses: %j', async (payload) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, payload)));

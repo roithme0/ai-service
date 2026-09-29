@@ -110,7 +110,6 @@
               "agent_unavailable",
               "unknown",
               "expired",
-              "invalid_message",
               "busy",
               "not_ready",
               "conflict",
@@ -137,71 +136,6 @@
           "kind"
         ],
         "title": "ErrorResponse",
-        "type": "object"
-      },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
-      "InputIssue": {
-        "additionalProperties": false,
-        "properties": {
-          "location": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "location",
-          "message"
-        ],
-        "title": "InputIssue",
-        "type": "object"
-      },
-      "InvalidInputResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "issues": {
-            "items": {
-              "$ref": "#/components/schemas/InputIssue"
-            },
-            "title": "Issues",
-            "type": "array"
-          },
-          "kind": {
-            "const": "invalid_input",
-            "title": "Kind",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "issues"
-        ],
-        "title": "InvalidInputResponse",
         "type": "object"
       },
       "SessionCreationResponse": {
@@ -328,15 +262,9 @@
         "title": "UserMessageResponse",
         "type": "object"
       },
-      "ValidationError": {
+      "ValidationDetail": {
+        "additionalProperties": false,
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
           "loc": {
             "items": {
               "anyOf": [
@@ -348,15 +276,18 @@
                 }
               ]
             },
-            "title": "Location",
+            "minItems": 1,
+            "title": "Loc",
             "type": "array"
           },
           "msg": {
-            "title": "Message",
+            "minLength": 1,
+            "title": "Msg",
             "type": "string"
           },
           "type": {
-            "title": "Error Type",
+            "minLength": 1,
+            "title": "Type",
             "type": "string"
           }
         },
@@ -365,7 +296,35 @@
           "msg",
           "type"
         ],
-        "title": "ValidationError",
+        "title": "ValidationDetail",
+        "type": "object"
+      },
+      "ValidationErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationDetail"
+            },
+            "minItems": 1,
+            "title": "Detail",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "invalid_input",
+              "invalid_message",
+              "request_validation"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "kind"
+        ],
+        "title": "ValidationErrorResponse",
         "type": "object"
       }
     }
@@ -458,7 +417,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvalidInputResponse"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             },
@@ -543,11 +502,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
           },
           "503": {
             "content": {
@@ -659,7 +618,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             },
@@ -767,7 +726,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvalidInputResponse"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             },

@@ -161,8 +161,9 @@ def test_oversized_initial_snapshot_context_is_rejected_at_creation(client: Test
 
     assert response.status_code == 422
     assert response.json()["kind"] == "invalid_input"
-    assert response.json()["issues"] == [
-        {"location": ["input"], "message": "initial source recipe and foodstuffs context exceeds 16000 characters"}
+    assert response.json()["detail"] == [
+        {"loc": ["body", "input"], "msg": "initial source recipe and foodstuffs context exceeds 16000 characters",
+         "type": "value_error"}
     ]
 
 
@@ -173,7 +174,7 @@ def test_oversized_initial_snapshot_context_is_rejected_at_creation(client: Test
         ({**valid_request(), "foodstuffs": []}, ["source", "recipe", "ingredients", 0, "foodstuff_reference"]),
     ],
 )
-def test_invalid_input_returns_domain_issues_and_does_not_create_session(
+def test_invalid_input_returns_domain_details_and_does_not_create_session(
     client: TestClient, payload: dict[str, object], location: list[str | int]
 ) -> None:
     response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": payload})
@@ -181,7 +182,8 @@ def test_invalid_input_returns_domain_issues_and_does_not_create_session(
     assert response.status_code == 422
     body = response.json()
     assert body["kind"] == "invalid_input"
-    assert body["issues"][0]["location"] == ["input", *location]
+    assert body["detail"][0]["loc"] == ["body", "input", *location]
+    assert set(body["detail"][0]) == {"loc", "msg", "type"}
     assert client.get("/api/v1/agents/kochwiki/sessions/not-created").status_code == 404
 
 
