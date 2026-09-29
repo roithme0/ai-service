@@ -98,18 +98,26 @@
       "ErrorResponse": {
         "additionalProperties": false,
         "properties": {
+          "detail": {
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
           "kind": {
             "enum": [
+              "not_found",
               "unknown_configuration",
               "agent_unavailable",
               "unknown",
               "expired",
-              "invalid_message",
               "busy",
               "not_ready",
               "conflict",
               "limit_reached",
-              "generation_failed"
+              "generation_failed",
+              "method_not_allowed",
+              "http_error",
+              "internal_error"
             ],
             "title": "Kind",
             "type": "string"
@@ -127,74 +135,10 @@
           }
         },
         "required": [
+          "detail",
           "kind"
         ],
         "title": "ErrorResponse",
-        "type": "object"
-      },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
-      "InputIssue": {
-        "additionalProperties": false,
-        "properties": {
-          "location": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          }
-        },
-        "required": [
-          "location",
-          "message"
-        ],
-        "title": "InputIssue",
-        "type": "object"
-      },
-      "InvalidInputResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "issues": {
-            "items": {
-              "$ref": "#/components/schemas/InputIssue"
-            },
-            "title": "Issues",
-            "type": "array"
-          },
-          "kind": {
-            "const": "invalid_input",
-            "title": "Kind",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "issues"
-        ],
-        "title": "InvalidInputResponse",
         "type": "object"
       },
       "SessionCreationResponse": {
@@ -321,15 +265,9 @@
         "title": "UserMessageResponse",
         "type": "object"
       },
-      "ValidationError": {
+      "ValidationDetail": {
+        "additionalProperties": false,
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
           "loc": {
             "items": {
               "anyOf": [
@@ -341,15 +279,18 @@
                 }
               ]
             },
-            "title": "Location",
+            "minItems": 1,
+            "title": "Loc",
             "type": "array"
           },
           "msg": {
-            "title": "Message",
+            "minLength": 1,
+            "title": "Msg",
             "type": "string"
           },
           "type": {
-            "title": "Error Type",
+            "minLength": 1,
+            "title": "Type",
             "type": "string"
           }
         },
@@ -358,7 +299,35 @@
           "msg",
           "type"
         ],
-        "title": "ValidationError",
+        "title": "ValidationDetail",
+        "type": "object"
+      },
+      "ValidationErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationDetail"
+            },
+            "minItems": 1,
+            "title": "Detail",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "invalid_input",
+              "invalid_message",
+              "request_validation"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "kind"
+        ],
+        "title": "ValidationErrorResponse",
         "type": "object"
       }
     }
@@ -386,6 +355,26 @@
               }
             },
             "description": "Successful Response"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Hello World"
@@ -447,15 +436,35 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvalidInputResponse"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "503": {
             "content": {
@@ -522,6 +531,16 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "410": {
             "content": {
               "application/json": {
@@ -536,11 +555,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "503": {
             "content": {
@@ -628,6 +657,16 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -652,11 +691,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "503": {
             "content": {
@@ -736,6 +785,16 @@
             },
             "description": "Not Found"
           },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
           "409": {
             "content": {
               "application/json": {
@@ -760,11 +819,21 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvalidInputResponse"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             },
             "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           },
           "502": {
             "content": {

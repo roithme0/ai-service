@@ -1,18 +1,21 @@
 import asyncio
 from collections.abc import Iterator
+from typing import cast, get_args
 from unittest.mock import patch
 
 import pytest
-from fastapi.exceptions import ResponseValidationError
+from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.agents.demo import create_demo_agent
 from app.agents.recipe import create_recipe_agent
-from app.main import app
+from app.main import app, handle_http_exception, handle_request_validation
 from app.sessions.http import (
-    AgentConfiguration, AgentTransport, ConversationTransport, ErrorResponse, InvalidInputResponse,
-    _demo_issue, _recipe_input, _recipe_issue, get_agent_registry,
+    AgentConfiguration, AgentTransport, ConversationTransport, ErrorResponse, SessionErrorKind,
+    ValidationErrorResponse, _demo_issue, _error, _recipe_input, _recipe_issue, get_agent_registry,
 )
 from test_recipe_improvement_session_http import FakeGenerator, FakeResolver, valid_request
 
@@ -34,17 +37,26 @@ def test_configuration_registry_matches_published_names() -> None:
     assert set(get_agent_registry()) == set(AgentConfiguration)
 
 
+def test_every_session_error_kind_has_a_valid_response() -> None:
+    for kind in cast(tuple[SessionErrorKind, ...], get_args(SessionErrorKind)):
+        response = _error(kind)
+        body = ErrorResponse.model_validate_json(response.body)
+        assert response.status_code >= 400
+        assert body.kind == kind
+        assert body.detail
+
+
 def test_registry_and_creation_envelopes(client: TestClient) -> None:
     base = "/api/v1/agents"
     unknown = client.post(f"{base}/missing/sessions", json={})
     assert unknown.status_code == 404
-    assert unknown.json() == {"kind": "unknown_configuration"}
+    assert unknown.json() == {"detail": "Agent configuration not found", "kind": "unknown_configuration"}
 
     for value in ({}, {"input": None}, {"input": {}}):
         assert client.post(f"{base}/demo/sessions", json=value).status_code == 201
     assert client.post(f"{base}/demo/sessions", json=[]).json() == {
         "kind": "invalid_input",
-        "issues": [{"location": [], "message": "request must be an object"}],
+        "detail": [{"loc": ["body"], "msg": "request must be an object", "type": "model_type"}],
     }
     for value, location in (
         ({"input": {"tools": []}}, ["input"]),
@@ -53,21 +65,52 @@ def test_registry_and_creation_envelopes(client: TestClient) -> None:
     ):
         rejected = client.post(f"{base}/demo/sessions", json=value)
         assert rejected.status_code == 422
-        assert rejected.json()["issues"][0]["location"] == location
+        assert rejected.json()["detail"][0]["loc"] == ["body", *location]
     missing_recipe = client.post(f"{base}/kochwiki/sessions", json={})
     assert missing_recipe.status_code == 422
-    assert missing_recipe.json()["issues"][0]["location"][0] == "input"
+    assert missing_recipe.json()["detail"][0]["loc"][:2] == ["body", "input"]
     recipe = client.post(f"{base}/kochwiki/sessions", json={"input": valid_request()})
     assert recipe.status_code == 201
     session_id = recipe.json()["session_id"]
     wrong_agent = client.get(f"{base}/demo/sessions/{session_id}")
     assert wrong_agent.status_code == 404
-    assert wrong_agent.json() == {"kind": "unknown"}
+    assert wrong_agent.json() == {"detail": "Session not found", "kind": "unknown"}
     assert client.get(f"{base}/kochwiki/sessions/{session_id}").status_code == 200
     assert client.post(f"{base}/kochwiki/sessions/{session_id}/turns", json={"model": "override"}).status_code == 422
     assert client.get(f"{base}/kochwiki/sessions/{session_id}").json()["messages"] == []
-    assert client.post("/api/v1/recipe-improvement/sessions", json=valid_request()).status_code == 404
-    assert client.get(f"{base}/kochwiki/sessions/{session_id}/proposals/missing").status_code == 404
+    unmatched = client.post("/api/v1/recipe-improvement/sessions", json=valid_request())
+    assert unmatched.status_code == 404
+    assert unmatched.json() == {"detail": "Not Found", "kind": "not_found"}
+    assert set(unmatched.json()) == set(wrong_agent.json())
+    assert client.get(f"{base}/kochwiki/sessions/{session_id}/proposals/missing").json() == unmatched.json()
+
+
+def test_framework_http_errors_use_shared_envelope_and_preserve_headers(client: TestClient) -> None:
+    response = client.put("/api/v1/agents/demo/sessions")
+    assert response.status_code == 405
+    assert response.json() == {"detail": "Method Not Allowed", "kind": "method_not_allowed"}
+    assert "POST" in response.headers["allow"]
+
+    http_app = FastAPI()
+    http_app.add_exception_handler(StarletteHTTPException, handle_http_exception)
+
+    @http_app.get("/protected")
+    def protected() -> None:
+        raise StarletteHTTPException(401, detail="Authentication required", headers={"WWW-Authenticate": "Bearer"})
+
+    unauthorized = TestClient(http_app).get("/protected")
+    assert unauthorized.json() == {"detail": "Authentication required", "kind": "http_error"}
+    assert unauthorized.headers["www-authenticate"] == "Bearer"
+
+
+def test_unexpected_failure_has_generic_body_and_propagates_for_logging(client: TestClient) -> None:
+    with patch.object(AgentTransport, "create", side_effect=RuntimeError("private failure detail")):
+        response = TestClient(app, raise_server_exceptions=False).post("/api/v1/agents/demo/sessions", json={})
+        assert response.status_code == 500
+        assert response.json() == {"detail": "Internal Server Error", "kind": "internal_error"}
+        assert "private failure detail" not in response.text
+        with pytest.raises(RuntimeError, match="private failure detail"):
+            client.post("/api/v1/agents/demo/sessions", json={})
 
 
 def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
@@ -78,7 +121,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     assert set(created) == {"session_id", "expires_at"}
     assert created["expires_at"].endswith("+00:00")
     session = f"{base}/{created['session_id']}"
-    assert client.post(f"{session}/turns").json() == {"kind": "not_ready"}
+    assert client.post(f"{session}/turns").json() == {"detail": "Session is not ready for a turn", "kind": "not_ready"}
     texts: list[str] = []
     artifacts: list[dict[str, object]] = []
     for index in range(5):
@@ -190,10 +233,16 @@ def test_request_bodies_are_published_and_enforced(client: TestClient) -> None:
     session_id = client.post("/api/v1/agents/demo/sessions", json={}).json()["session_id"]
     session = f"/api/v1/agents/demo/sessions/{session_id}"
     assert client.post(f"{session}/messages", json={"text": "Hello", "extra": True}).json() == {
-        "kind": "invalid_message"
+        "detail": [{"loc": ["body", "extra"], "msg": "extra field not permitted", "type": "extra_forbidden"}],
+        "kind": "invalid_message",
     }
-    assert client.post(f"{session}/turns", content="null", headers={"content-type": "application/json"}).status_code == 422
-    assert client.post(f"{session}/turns", json={}).json() == {"kind": "not_ready"}
+    assert client.post(f"{session}/turns", content="null", headers={"content-type": "application/json"}).json() == {
+        "detail": [{"loc": ["body"], "msg": "request must be an object", "type": "model_type"}],
+        "kind": "invalid_input",
+    }
+    assert client.post(f"{session}/turns", json={}).json() == {
+        "detail": "Session is not ready for a turn", "kind": "not_ready"
+    }
 
 
 def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClient) -> None:
@@ -203,15 +252,18 @@ def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClien
     for path in (base, f"{base}/{{session_id}}/messages", f"{base}/{{session_id}}/turns"):
         assert paths[path]["post"]["responses"]["422"]["description"] == "Unprocessable Content"
     expected = {
-        base: {404: "ErrorResponse", 422: "InvalidInputResponse", 503: "ErrorResponse"},
-        f"{base}/{{session_id}}": {404: "ErrorResponse", 410: "ErrorResponse", 503: "ErrorResponse"},
+        base: {404: "ErrorResponse", 405: "ErrorResponse", 422: "ValidationErrorResponse", 500: "ErrorResponse", 503: "ErrorResponse"},
+        f"{base}/{{session_id}}": {
+            404: "ErrorResponse", 405: "ErrorResponse", 410: "ErrorResponse", 422: "ValidationErrorResponse",
+            500: "ErrorResponse", 503: "ErrorResponse",
+        },
         f"{base}/{{session_id}}/messages": {
-            404: "ErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
-            422: "ErrorResponse", 503: "ErrorResponse",
+            404: "ErrorResponse", 405: "ErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
+            422: "ValidationErrorResponse", 500: "ErrorResponse", 503: "ErrorResponse",
         },
         f"{base}/{{session_id}}/turns": {
-            404: "ErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
-            422: "InvalidInputResponse", 502: "ErrorResponse", 503: "ErrorResponse",
+            404: "ErrorResponse", 405: "ErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
+            422: "ValidationErrorResponse", 500: "ErrorResponse", 502: "ErrorResponse", 503: "ErrorResponse",
         },
     }
     for path, responses in expected.items():
@@ -221,10 +273,47 @@ def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClien
                 f"#/components/schemas/{model}"
             )
 
+    error_schema = document["components"]["schemas"]["ErrorResponse"]
+    assert set(error_schema["required"]) == {"detail", "kind"}
+    assert error_schema["properties"]["detail"]["minLength"] == 1
+    assert {"method_not_allowed", "http_error", "internal_error"} <= set(error_schema["properties"]["kind"]["enum"])
+    for status in (405, 500):
+        assert paths["/"]["get"]["responses"][str(status)]["content"]["application/json"]["schema"]["$ref"] == (
+            "#/components/schemas/ErrorResponse"
+        )
+    validation_schema = document["components"]["schemas"]["ValidationErrorResponse"]
+    item_schema = document["components"]["schemas"]["ValidationDetail"]
+    assert set(validation_schema["required"]) == {"detail", "kind"}
+    assert validation_schema["properties"]["detail"]["minItems"] == 1
+    assert set(item_schema["required"]) == {"loc", "msg", "type"}
+    assert item_schema["additionalProperties"] is False
+
     with pytest.raises(ValidationError):
-        ErrorResponse.model_validate({"kind": "unexpected"})
+        ErrorResponse.model_validate({"detail": "Missing", "kind": "unexpected"})
     with pytest.raises(ValidationError):
-        InvalidInputResponse.model_validate({"kind": "invalid_input", "issues": [{"location": (), "message": 7}]})
+        ErrorResponse.model_validate({"kind": "unknown"})
+    with pytest.raises(ValidationError):
+        ValidationErrorResponse.model_validate({"kind": "invalid_input", "detail": []})
+    with pytest.raises(ValidationError):
+        ValidationErrorResponse.model_validate({
+            "kind": "invalid_input", "detail": [{"loc": ("body",), "msg": "Invalid", "type": "value_error", "input": "secret"}],
+        })
+
+
+def test_framework_request_validation_uses_public_detail_shape() -> None:
+    validation_app = FastAPI()
+    validation_app.add_exception_handler(RequestValidationError, handle_request_validation)
+
+    @validation_app.get("/items/{item_id}")
+    def read_item(item_id: int) -> dict[str, int]:
+        return {"item_id": item_id}
+
+    response = TestClient(validation_app).get("/items/not-an-int")
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": [{"loc": ["path", "item_id"], "msg": "Input should be a valid integer, unable to parse string as an integer", "type": "int_parsing"}],
+        "kind": "request_validation",
+    }
 
 
 def test_success_bodies_are_validated(client: TestClient) -> None:
@@ -257,7 +346,7 @@ def test_unavailable_agent_precedes_malformed_body() -> None:
             client.post(f"{base}/missing/turns"),
         )
         assert all(response.status_code == 503 for response in responses)
-        assert all(response.json() == {"kind": "agent_unavailable"} for response in responses)
+        assert all(response.json() == {"detail": "Agent unavailable", "kind": "agent_unavailable"} for response in responses)
     finally:
         app.dependency_overrides.clear()
 

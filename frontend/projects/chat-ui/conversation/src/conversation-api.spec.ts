@@ -59,7 +59,7 @@ describe('HttpConversationTransport', () => {
   it('maps typed backend errors without accepting their payload as success', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(response(503, { kind: 'agent_unavailable' })),
+      vi.fn().mockResolvedValue(response(503, { detail: 'Agent unavailable', kind: 'agent_unavailable' })),
     );
 
     await expect(new HttpConversationTransport('/api/v1', 'kochwiki', { source: {} }).generateTurn('session-1')).rejects.toEqual(
@@ -68,6 +68,27 @@ describe('HttpConversationTransport', () => {
         kind: 'agent_unavailable',
       }),
     );
+  });
+
+  it.each([
+    { kind: 'unknown', detail: 'Session not found' },
+    { kind: 'not_found', detail: 'Not Found' },
+  ])('accepts the shared 404 envelope for $kind', async ({ kind, detail }) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(404, { detail, kind })));
+
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).readSession('session-1'))
+      .rejects.toEqual(expect.objectContaining<Partial<ConversationApiError>>({ status: 404, kind }));
+  });
+
+  it.each([
+    { status: 405, kind: 'method_not_allowed', detail: 'Method Not Allowed' },
+    { status: 500, kind: 'internal_error', detail: 'Internal Server Error' },
+    { status: 401, kind: 'http_error', detail: 'Authentication required' },
+  ] as const)('accepts the shared $status error envelope', async ({ status, kind, detail }) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(status, { detail, kind })));
+
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession())
+      .rejects.toEqual(expect.objectContaining<Partial<ConversationApiError>>({ status, kind }));
   });
 
   it('preserves an unrelated artifact envelope in history and turn results', async () => {
@@ -133,20 +154,23 @@ describe('HttpConversationTransport', () => {
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
-  it('maps a validated invalid-input response to an API error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, {
-      kind: 'invalid_input', issues: [{ location: ['input', 0], message: 'Invalid value' }],
-    })));
+  it.each(['invalid_input', 'invalid_message', 'request_validation'] as const)(
+    'maps a validated %s response to an API error', async (kind) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, {
+        kind, detail: [{ loc: ['body', 'input', 0], msg: 'Invalid value', type: 'value_error' }],
+      })));
 
-    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession()).rejects.toEqual(
-      expect.objectContaining<Partial<ConversationApiError>>({ status: 422, kind: 'invalid_input' }),
-    );
-  });
+      await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession()).rejects.toEqual(
+        expect.objectContaining<Partial<ConversationApiError>>({ status: 422, kind }),
+      );
+    });
 
   it.each([
     { kind: 'future_kind' },
-    { kind: 'invalid_input', issues: 'invalid' },
-    { issues: [] },
+    { kind: 'invalid_input', detail: [] },
+    { kind: 'invalid_input', detail: [{ loc: ['body'], msg: 'Invalid', type: 'value_error', input: 'secret' }] },
+    { detail: [{ loc: ['body'], msg: 'Invalid', type: 'value_error' }] },
+    { kind: 'unknown', detail: '' },
   ])('classifies malformed error bodies as uncertain responses: %j', async (payload) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, payload)));
 

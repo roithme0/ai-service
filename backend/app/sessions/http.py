@@ -49,22 +49,34 @@ class InputIssue(BaseModel):
     message: str
 
 
+SessionErrorKind = Literal[
+    "unknown_configuration", "agent_unavailable", "unknown", "expired", "busy",
+    "not_ready", "conflict", "limit_reached", "generation_failed",
+]
+
 ErrorKind = Literal[
-    "unknown_configuration", "agent_unavailable", "unknown", "expired",
-    "invalid_message", "busy", "not_ready", "conflict", "limit_reached", "generation_failed",
+    "not_found", SessionErrorKind, "method_not_allowed", "http_error", "internal_error",
 ]
 
 
 class ErrorResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    detail: str = Field(min_length=1)
     kind: ErrorKind
     turn_id: str | None = None
 
 
-class InvalidInputResponse(BaseModel):
+class ValidationDetail(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    kind: Literal["invalid_input"]
-    issues: list[InputIssue]
+    loc: tuple[str | int, ...] = Field(min_length=1)
+    msg: str = Field(min_length=1)
+    type: str = Field(min_length=1)
+
+
+class ValidationErrorResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    detail: list[ValidationDetail] = Field(min_length=1)
+    kind: Literal["invalid_input", "invalid_message", "request_validation"]
 
 
 class SessionCreationRequest(BaseModel):
@@ -180,7 +192,7 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
         if isinstance(outcome, TextSessionAppendLimitReached):
             return _error("limit_reached")
         if isinstance(outcome, TextSessionAppendInvalidMessage):
-            return _error("invalid_message")
+            return _input_error((InputIssue(location=("text",), message="Invalid message"),), "invalid_message")
         if isinstance(outcome, ConversationMessageBusy):
             return _error("busy")
         return _error("unknown")
@@ -242,7 +254,7 @@ def _request_body(model: type[BaseModel], *, required: bool = True) -> dict[str,
 
 @router.post("", status_code=201, response_model=SessionCreationResponse, responses={
     404: {"model": ErrorResponse},
-    422: {"model": InvalidInputResponse, "description": "Unprocessable Content"},
+    422: {"model": ValidationErrorResponse, "description": "Unprocessable Content"},
     503: {"model": ErrorResponse},
 }, openapi_extra=_request_body(SessionCreationRequest))
 async def create_session(
@@ -255,24 +267,14 @@ async def create_session(
     try:
         body = SessionCreationRequest.model_validate(await _body(request))
     except ValidationError as error:
-        issues = tuple(
-            InputIssue(
-                location=tuple(issue["loc"]),
-                message=(
-                    "request must be an object" if issue["type"] == "model_type"
-                    else "extra field not permitted" if issue["type"] == "extra_forbidden"
-                    else issue["msg"]
-                ),
-            )
-            for issue in error.errors()
-        )
-        return _input_error(issues)
+        return _validation_error("invalid_input", _model_validation_details(error))
     return agent.create(body.input)
 
 
 @router.get("/{session_id}", response_model=SessionSnapshotResponse, responses={
     404: {"model": ErrorResponse},
     410: {"model": ErrorResponse},
+    422: {"model": ValidationErrorResponse, "description": "Unprocessable Content"},
     503: {"model": ErrorResponse},
 })
 def read_session(
@@ -287,7 +289,7 @@ def read_session(
     404: {"model": ErrorResponse},
     409: {"model": ErrorResponse},
     410: {"model": ErrorResponse},
-    422: {"model": ErrorResponse, "description": "Unprocessable Content"},
+    422: {"model": ValidationErrorResponse, "description": "Unprocessable Content"},
     503: {"model": ErrorResponse},
 }, openapi_extra=_request_body(UserMessageRequest))
 async def append_message(
@@ -299,8 +301,8 @@ async def append_message(
         return agent
     try:
         message = UserMessageRequest.model_validate(await _body(request))
-    except ValidationError:
-        return _error("invalid_message")
+    except ValidationError as error:
+        return _validation_error("invalid_message", _model_validation_details(error))
     return agent.append(session_id, message.text)
 
 
@@ -308,7 +310,7 @@ async def append_message(
     404: {"model": ErrorResponse},
     409: {"model": ErrorResponse},
     410: {"model": ErrorResponse},
-    422: {"model": InvalidInputResponse, "description": "Unprocessable Content"},
+    422: {"model": ValidationErrorResponse, "description": "Unprocessable Content"},
     502: {"model": ErrorResponse},
     503: {"model": ErrorResponse},
 }, openapi_extra=_request_body(EmptyTurnRequest, required=False))
@@ -323,8 +325,8 @@ async def execute_turn(
     if raw_body:
         try:
             EmptyTurnRequest.model_validate(await _body(request))
-        except ValidationError:
-            return _input_error((InputIssue(location=(), message="turn request must be empty"),))
+        except ValidationError as error:
+            return _validation_error("invalid_input", _model_validation_details(error))
     return await agent.turn(session_id)
 
 
@@ -346,19 +348,49 @@ def _artifact(value: StagedArtifact[PayloadT]) -> ArtifactResponse:
     )
 
 
-def _input_error(issues: tuple[InputIssue, ...]) -> JSONResponse:
-    return _json(422, InvalidInputResponse(kind="invalid_input", issues=list(issues)))
+def _model_validation_details(error: ValidationError) -> list[ValidationDetail]:
+    return [ValidationDetail(
+        loc=("body", *issue["loc"]),
+        msg=(
+            "request must be an object" if issue["type"] == "model_type"
+            else "extra field not permitted" if issue["type"] == "extra_forbidden"
+            else issue["msg"]
+        ),
+        type=issue["type"],
+    ) for issue in error.errors()]
 
 
-def _error(kind: ErrorKind, turn_id: str | None = None) -> JSONResponse:
-    statuses: dict[ErrorKind, int] = {
-        "unknown_configuration": 404, "agent_unavailable": 503,
-        "unknown": 404, "expired": 410, "invalid_message": 422,
-        "busy": 409, "not_ready": 409, "conflict": 409,
-        "limit_reached": 409, "generation_failed": 502,
+def _validation_error(
+    kind: Literal["invalid_input", "invalid_message", "request_validation"],
+    detail: list[ValidationDetail],
+) -> JSONResponse:
+    return _json(422, ValidationErrorResponse(detail=detail, kind=kind))
+
+
+def _input_error(
+    issues: tuple[InputIssue, ...], kind: Literal["invalid_input", "invalid_message"] = "invalid_input"
+) -> JSONResponse:
+    return _validation_error(kind, [
+        ValidationDetail(loc=("body", *issue.location), msg=issue.message, type="value_error")
+        for issue in issues
+    ])
+
+
+def _error(kind: SessionErrorKind, turn_id: str | None = None) -> JSONResponse:
+    responses: dict[SessionErrorKind, tuple[int, str]] = {
+        "unknown_configuration": (404, "Agent configuration not found"),
+        "agent_unavailable": (503, "Agent unavailable"),
+        "unknown": (404, "Session not found"),
+        "expired": (410, "Session expired"),
+        "busy": (409, "Session is busy"),
+        "not_ready": (409, "Session is not ready for a turn"),
+        "conflict": (409, "Session state changed during the turn"),
+        "limit_reached": (409, "Session limit reached"),
+        "generation_failed": (502, "Turn generation failed"),
     }
-    return _json(statuses[kind], ErrorResponse(kind=kind, turn_id=turn_id or None))
+    status, detail = responses[kind]
+    return _json(status, ErrorResponse(detail=detail, kind=kind, turn_id=turn_id or None))
 
 
-def _json(status: int, content: ErrorResponse | InvalidInputResponse) -> JSONResponse:
+def _json(status: int, content: ErrorResponse | ValidationErrorResponse) -> JSONResponse:
     return JSONResponse(status_code=status, content=content.model_dump(mode="json", exclude_none=True))

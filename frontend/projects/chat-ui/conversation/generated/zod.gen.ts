@@ -37,35 +37,23 @@ export const zCompletedTurnResponse = z.object({
  * ErrorResponse
  */
 export const zErrorResponse = z.object({
+    detail: z.string().min(1),
     kind: z.enum([
+        'not_found',
         'unknown_configuration',
         'agent_unavailable',
         'unknown',
         'expired',
-        'invalid_message',
         'busy',
         'not_ready',
         'conflict',
         'limit_reached',
-        'generation_failed'
+        'generation_failed',
+        'method_not_allowed',
+        'http_error',
+        'internal_error'
     ]),
     turn_id: z.string().nullish()
-});
-
-/**
- * InputIssue
- */
-export const zInputIssue = z.object({
-    location: z.array(z.union([z.string(), z.int()])),
-    message: z.string()
-});
-
-/**
- * InvalidInputResponse
- */
-export const zInvalidInputResponse = z.object({
-    issues: z.array(zInputIssue),
-    kind: z.literal('invalid_input')
 });
 
 /**
@@ -107,21 +95,24 @@ export const zSessionSnapshotResponse = z.object({
 });
 
 /**
- * ValidationError
+ * ValidationDetail
  */
-export const zValidationError = z.object({
-    ctx: z.record(z.string(), z.unknown()).optional(),
-    input: z.unknown().optional(),
-    loc: z.array(z.union([z.string(), z.int()])),
-    msg: z.string(),
-    type: z.string()
+export const zValidationDetail = z.object({
+    loc: z.array(z.union([z.string(), z.int()])).min(1),
+    msg: z.string().min(1),
+    type: z.string().min(1)
 });
 
 /**
- * HTTPValidationError
+ * ValidationErrorResponse
  */
-export const zHttpValidationError = z.object({
-    detail: z.array(zValidationError).optional()
+export const zValidationErrorResponse = z.object({
+    detail: z.array(zValidationDetail).min(1),
+    kind: z.enum([
+        'invalid_input',
+        'invalid_message',
+        'request_validation'
+    ])
 });
 
 /**

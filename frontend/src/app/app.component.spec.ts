@@ -70,6 +70,7 @@ describe('Demo application', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('pre')?.textContent).toContain(text);
     expect(element.textContent).toContain('festen Skript ohne KI-Modell');
+    expect(element.textContent).toContain('simulierten API-Fehler');
     expect(chat.composerDisabled()).toBe(false);
   });
 
@@ -77,7 +78,9 @@ describe('Demo application', () => {
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json({ session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z' }))
       .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Show error', turn_id: null }))
-      .mockResolvedValueOnce(Response.json({ kind: 'generation_failed', turn_id: 'turn-4' }, { status: 502 }));
+      .mockResolvedValueOnce(Response.json({
+        detail: 'Turn generation failed', kind: 'generation_failed', turn_id: 'turn-4',
+      }, { status: 502 }));
     vi.stubGlobal('fetch', fetchMock);
     TestBed.configureTestingModule({ imports: [App] });
     const fixture = TestBed.createComponent(App);

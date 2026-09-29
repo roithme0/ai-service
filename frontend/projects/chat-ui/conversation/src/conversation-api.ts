@@ -2,32 +2,40 @@ import type {
   AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostData,
   CompletedTurnResponse,
   CreateSessionApiV1AgentsConfigurationSessionsPostData,
+  ErrorResponse,
   SessionCreationResponse,
   SessionSnapshotResponse,
   UserMessageResponse,
+  ValidationErrorResponse,
 } from '../generated/types.gen';
 import {
   zCompletedTurnResponse,
   zCreateSessionApiV1AgentsConfigurationSessionsPostPath,
   zErrorResponse,
-  zInvalidInputResponse,
   zSessionCreationResponse,
   zSessionSnapshotResponse,
   zUserMessageResponse,
+  zValidationDetail,
+  zValidationErrorResponse,
 } from '../generated/zod.gen';
 import { z, type ZodType } from 'zod';
 
-const errorResponseSchema = z.union([zErrorResponse, zInvalidInputResponse]);
+const validationDetailSchema = z.strictObject(zValidationDetail.shape);
+const errorResponseSchema = z.union([
+  z.strictObject(zErrorResponse.shape),
+  z.strictObject({ ...zValidationErrorResponse.shape, detail: z.array(validationDetailSchema).min(1) }),
+]);
 
 export const AgentConfiguration = zCreateSessionApiV1AgentsConfigurationSessionsPostPath.shape.configuration.enum;
 export type AgentConfiguration = CreateSessionApiV1AgentsConfigurationSessionsPostData['path']['configuration'];
 
 export type ApiMessage = SessionSnapshotResponse['messages'][number];
+export type ApiErrorKind = ErrorResponse['kind'] | ValidationErrorResponse['kind'];
 
 export class ConversationApiError extends Error {
   constructor(
     readonly status: number,
-    readonly kind: string,
+    readonly kind: ApiErrorKind,
   ) {
     super(`Conversation request failed: ${status} ${kind}`);
   }
