@@ -28,7 +28,7 @@ local recipe configuration makes every Kochwiki session endpoint return
 `503 agent_unavailable`. The deterministic demo HTTP configuration remains available
 without model credentials or Kochwiki access. The frontend now uses this demo:
 any text advances its introduction, two greeting artifacts in one turn, one scripted failure, and completion sequence.
-Refresh the page to restart with a new session; further submissions remain accepted.
+The frontend simulates a 405 compatibility error on the next message after completion; the backend still accepts further submissions. Refresh the page to restart with a new session.
 The generator receives the conversation, recipe and available-foodstuff snapshots,
 and versioned recipe-specific instructions. It may register validated recipe
 proposals through the bounded tool-call flow before returning its reply.
