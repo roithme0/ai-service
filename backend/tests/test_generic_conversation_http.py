@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Iterator
+from typing import cast, get_args
 from unittest.mock import patch
 
 import pytest
@@ -13,8 +14,8 @@ from app.agents.demo import create_demo_agent
 from app.agents.recipe import create_recipe_agent
 from app.main import app, handle_http_exception, handle_request_validation
 from app.sessions.http import (
-    AgentConfiguration, AgentTransport, ConversationTransport, ErrorResponse, ValidationErrorResponse,
-    _demo_issue, _recipe_input, _recipe_issue, get_agent_registry,
+    AgentConfiguration, AgentTransport, ConversationTransport, ErrorResponse, SessionErrorKind,
+    ValidationErrorResponse, _demo_issue, _error, _recipe_input, _recipe_issue, get_agent_registry,
 )
 from test_recipe_improvement_session_http import FakeGenerator, FakeResolver, valid_request
 
@@ -34,6 +35,15 @@ def client() -> Iterator[TestClient]:
 
 def test_configuration_registry_matches_published_names() -> None:
     assert set(get_agent_registry()) == set(AgentConfiguration)
+
+
+def test_every_session_error_kind_has_a_valid_response() -> None:
+    for kind in cast(tuple[SessionErrorKind, ...], get_args(SessionErrorKind)):
+        response = _error(kind)
+        body = ErrorResponse.model_validate_json(response.body)
+        assert response.status_code >= 400
+        assert body.kind == kind
+        assert body.detail
 
 
 def test_registry_and_creation_envelopes(client: TestClient) -> None:

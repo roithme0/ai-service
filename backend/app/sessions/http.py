@@ -49,10 +49,13 @@ class InputIssue(BaseModel):
     message: str
 
 
+SessionErrorKind = Literal[
+    "unknown_configuration", "agent_unavailable", "unknown", "expired", "busy",
+    "not_ready", "conflict", "limit_reached", "generation_failed",
+]
+
 ErrorKind = Literal[
-    "not_found", "unknown_configuration", "agent_unavailable", "unknown", "expired",
-    "busy", "not_ready", "conflict", "limit_reached", "generation_failed",
-    "method_not_allowed", "http_error", "internal_error",
+    "not_found", SessionErrorKind, "method_not_allowed", "http_error", "internal_error",
 ]
 
 
@@ -373,9 +376,8 @@ def _input_error(
     ])
 
 
-def _error(kind: ErrorKind, turn_id: str | None = None) -> JSONResponse:
-    responses: dict[ErrorKind, tuple[int, str]] = {
-        "not_found": (404, "Not Found"),
+def _error(kind: SessionErrorKind, turn_id: str | None = None) -> JSONResponse:
+    responses: dict[SessionErrorKind, tuple[int, str]] = {
         "unknown_configuration": (404, "Agent configuration not found"),
         "agent_unavailable": (503, "Agent unavailable"),
         "unknown": (404, "Session not found"),
