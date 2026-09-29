@@ -114,34 +114,42 @@ describe('ConversationController', () => {
     expect(controller.state.status?.action?.id).toBe('new-session');
   });
 
-  it.each(['create', 'append', 'turn'] as const)('reports an unmatched route during %s without session recovery', async (operation) => {
-    const transport = new FakeTransport();
-    const error = new ConversationApiError(404, 'not_found');
-    if (operation === 'create') transport.createSession.mockRejectedValue(error);
-    if (operation === 'append') transport.appendMessage.mockRejectedValue(error);
-    if (operation === 'turn') {
-      transport.appendMessage.mockResolvedValue(user('Hallo'));
-      transport.generateTurn.mockRejectedValue(error);
-    }
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    if (operation !== 'create') await controller.submit('Hallo', () => undefined);
+  it.each([
+    { kind: 'not_found', status: 404, message: 'Der API-Endpunkt ist nicht verfügbar.' },
+    { kind: 'method_not_allowed', status: 405, message: 'App und Backend sind nicht kompatibel.' },
+  ] as const)('reports $kind during create, append, and turn without retry', async ({ kind, status, message }) => {
+    for (const operation of ['create', 'append', 'turn'] as const) {
+      const transport = new FakeTransport();
+      const error = new ConversationApiError(status, kind);
+      if (operation === 'create') transport.createSession.mockRejectedValue(error);
+      if (operation === 'append') transport.appendMessage.mockRejectedValue(error);
+      if (operation === 'turn') {
+        transport.appendMessage.mockResolvedValue(user('Hallo'));
+        transport.generateTurn.mockRejectedValue(error);
+      }
+      const controller = new ConversationController(transport, () => undefined);
+      await controller.start();
+      if (operation !== 'create') await controller.submit('Hallo', () => undefined);
 
-    expect(controller.state.composerDisabled).toBe(true);
-    expect(controller.state.status?.message).toBe('Der API-Endpunkt ist nicht verfügbar.');
-    expect(controller.state.status?.action).toBeUndefined();
+      expect(controller.state.composerDisabled).toBe(true);
+      expect(controller.state.status?.message).toBe(message);
+      expect(controller.state.status?.action).toBeUndefined();
+    }
   });
 
-  it('preserves an unmatched route found during turn reconciliation', async () => {
+  it.each([
+    { kind: 'not_found', status: 404, message: 'Der API-Endpunkt ist nicht verfügbar.' },
+    { kind: 'method_not_allowed', status: 405, message: 'App und Backend sind nicht kompatibel.' },
+  ] as const)('preserves $kind found during turn reconciliation', async ({ kind, status, message }) => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Hallo'));
     transport.generateTurn.mockRejectedValue(new ConversationNetworkError('Timeout'));
-    transport.readSession.mockRejectedValue(new ConversationApiError(404, 'not_found'));
+    transport.readSession.mockRejectedValue(new ConversationApiError(status, kind));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Hallo', () => undefined);
 
-    expect(controller.state.status?.message).toBe('Der API-Endpunkt ist nicht verfügbar.');
+    expect(controller.state.status?.message).toBe(message);
     expect(controller.state.status?.action).toBeUndefined();
   });
 

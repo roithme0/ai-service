@@ -49,8 +49,8 @@ export class ConversationController {
       this.sessionId = created.session_id;
       this.setState({ content: [], composerDisabled: false, status: null });
     } catch (error: unknown) {
-      if (isKind(error, 'not_found')) {
-        this.setRouteUnavailable();
+      if (isUnsupportedApiRequest(error)) {
+        this.setUnsupportedApiRequest(error);
         return;
       }
       this.setState({
@@ -177,7 +177,7 @@ export class ConversationController {
       this.applyTurnSnapshot(snapshot);
     } catch (error: unknown) {
       this.handleTurnFailure(
-        error instanceof ConversationNetworkError || isKind(error, 'agent_unavailable') || isKind(error, 'not_found')
+        error instanceof ConversationNetworkError || isKind(error, 'agent_unavailable') || isUnsupportedApiRequest(error)
           ? error
           : new ConversationNetworkError('Abgleich fehlgeschlagen.', { cause: error }),
       );
@@ -215,8 +215,8 @@ export class ConversationController {
   }
 
   private handleAppendFailure(error: unknown): void {
-    if (isKind(error, 'not_found')) {
-      this.setRouteUnavailable();
+    if (isUnsupportedApiRequest(error)) {
+      this.setUnsupportedApiRequest(error);
       return;
     } else if (isKind(error, 'agent_unavailable')) {
       this.setAgentUnavailable();
@@ -236,8 +236,8 @@ export class ConversationController {
   }
 
   private handleTurnFailure(error: unknown): void {
-    if (isKind(error, 'not_found')) {
-      this.setRouteUnavailable();
+    if (isUnsupportedApiRequest(error)) {
+      this.setUnsupportedApiRequest(error);
     } else if (isTerminal(error)) {
       this.setTerminal(error);
     } else if (isKind(error, 'agent_unavailable')) {
@@ -273,11 +273,16 @@ export class ConversationController {
     });
   }
 
-  private setRouteUnavailable(): void {
+  private setUnsupportedApiRequest(error: unknown): void {
     this.setState({
       ...this.stateValue,
       composerDisabled: true,
-      status: failure('Der API-Endpunkt ist nicht verfügbar.', 'conversation'),
+      status: failure(
+        isKind(error, 'method_not_allowed')
+          ? 'App und Backend sind nicht kompatibel.'
+          : 'Der API-Endpunkt ist nicht verfügbar.',
+        'conversation',
+      ),
     });
   }
 
@@ -366,6 +371,10 @@ function failure(
 
 function isKind(error: unknown, kind: ApiErrorKind): boolean {
   return error instanceof ConversationApiError && error.kind === kind;
+}
+
+function isUnsupportedApiRequest(error: unknown): boolean {
+  return isKind(error, 'not_found') || isKind(error, 'method_not_allowed');
 }
 
 function isTerminal(error: unknown): boolean {
