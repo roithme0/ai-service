@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Literal
 from uuid import UUID
 
+from kochwiki_contract import Unit
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.recipe_improvement.context import recipe_context
@@ -43,7 +44,7 @@ class AvailableFoodstuffSnapshot(BaseModel):
     external_reference: int = Field(gt=0)
     name: str = Field(min_length=1, max_length=50)
     brand: str | None = Field(max_length=100)
-    unit: Literal["G", "ML", "PIECE"]
+    unit: Unit = Field(strict=False)
     unit_verbose: str = Field(min_length=1, max_length=20)
     kcal: Decimal | None
     carbs: Decimal | None

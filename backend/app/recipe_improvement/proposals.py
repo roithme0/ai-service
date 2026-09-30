@@ -63,7 +63,8 @@ class ProposalRejected(BaseModel):
 
     kind: Literal["rejected"] = "rejected"
     reason: Literal[
-        "invalid_base", "invalid_candidate", "limit_reached", "resolver_unavailable"
+        "invalid_base", "invalid_candidate", "limit_reached", "resolver_unavailable",
+        "resolver_contract_error"
     ]
     issues: tuple[ValidationIssue, ...] = ()
     retryable: bool = False

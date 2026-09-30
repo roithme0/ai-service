@@ -4,55 +4,77 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Literal, Protocol
+from typing import Annotated, Literal, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from kochwiki_contract import (
+    FoodstuffSummaryOut,
+    RecipePresentationIngredientOut,
+    RecipePresentationIngredientResolve,
+    RecipePresentationOut,
+    RecipePresentationResolve,
+    RecipePresentationStepOut,
+    RecipePresentationStepResolve,
+)
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PlainSerializer, field_validator
 
 from app.recipe_improvement.recipe import RecipeProposalCandidate
 
 
-class FoodstuffSummary(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
-
-    id: int = Field(gt=0)
-    name: str
-    brand: str | None
-    unit: Literal["G", "ML", "PIECE"]
-    unitVerbose: str
-    kcal: float | None
-    carbs: float | None
-    protein: float | None
-    fat: float | None
+_MAX_JSON_NUMBER = Decimal.from_float(sys.float_info.max)
 
 
-class RecipePresentationIngredient(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+def _validate_json_number_range(value: Decimal) -> Decimal:
+    if value.copy_abs() > _MAX_JSON_NUMBER:
+        raise ValueError("presentation decimal exceeds the finite JSON serializer range")
+    return value
 
-    index: int = Field(ge=1, le=99)
-    amount: float = Field(gt=0, le=9999)
+
+PresentationDecimal = Annotated[
+    Decimal,
+    Field(allow_inf_nan=False),
+    AfterValidator(_validate_json_number_range),
+    PlainSerializer(float, return_type=float, when_used="json"),
+]
+
+
+class FoodstuffSummary(FoodstuffSummaryOut):
+    model_config = ConfigDict(frozen=True)
+
+    @field_validator("kcal", "carbs", "protein", "fat")
+    @classmethod
+    def validate_json_number_range(cls, value: Decimal | None) -> Decimal | None:
+        return _validate_json_number_range(value) if value is not None else None
+
+
+class RecipePresentationIngredient(RecipePresentationIngredientOut):
+    model_config = ConfigDict(frozen=True)
+
     foodstuff: FoodstuffSummary
 
+    @field_validator("amount")
+    @classmethod
+    def validate_json_number_range(cls, value: Decimal) -> Decimal:
+        return _validate_json_number_range(value)
 
-class RecipePresentationStep(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    index: int = Field(ge=1, le=99)
-    description: str = Field(min_length=1, max_length=200)
+class RecipePresentationStep(RecipePresentationStepOut):
+    model_config = ConfigDict(frozen=True)
 
 
 class RecipePresentation(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    servings: int = Field(ge=1, le=99)
-    preptime: int | None = Field(ge=1, le=999)
-    kcal: float | None
-    carbs: float | None
-    protein: float | None
-    fat: float | None
+    servings: int
+    preptime: int | None
+    kcal: PresentationDecimal | None
+    carbs: PresentationDecimal | None
+    protein: PresentationDecimal | None
+    fat: PresentationDecimal | None
     ingredients: tuple[RecipePresentationIngredient, ...]
     steps: tuple[RecipePresentationStep, ...]
 
@@ -66,8 +88,12 @@ class RecipePresentationResolver(Protocol):
     async def resolve(self, candidate: RecipeProposalCandidate) -> RecipePresentation: ...
 
 
+RecipeResolutionFailure = Literal["invalid_candidate", "resolver_unavailable", "resolver_contract_error"]
+
+
 @dataclass(frozen=True)
 class RecipeResolutionError(Exception):
+    reason: RecipeResolutionFailure
     retryable: bool
 
 
@@ -80,38 +106,68 @@ class KochwikiRecipePresentationResolver:
         return await asyncio.to_thread(self._resolve_sync, candidate)
 
     def _resolve_sync(self, candidate: RecipeProposalCandidate) -> RecipePresentation:
-        body = {
-            "servings": candidate.servings,
-            "preptime": candidate.preparation_time,
-            "ingredients": [
-                {
-                    "index": ingredient.index,
-                    "amount": _json_number(ingredient.amount),
-                    "foodstuffId": ingredient.foodstuff_reference,
-                }
-                for ingredient in candidate.ingredients
-            ],
-            "steps": [step.model_dump(mode="json") for step in candidate.steps],
-        }
+        try:
+            body = RecipePresentationResolve(
+                servings=candidate.servings,
+                preptime=candidate.preparation_time,
+                ingredients=[
+                    RecipePresentationIngredientResolve(
+                        index=ingredient.index,
+                        amount=ingredient.amount,
+                        foodstuffId=ingredient.foodstuff_reference,
+                    )
+                    for ingredient in candidate.ingredients
+                ],
+                steps=[
+                    RecipePresentationStepResolve(index=step.index, description=step.description)
+                    for step in candidate.steps
+                ],
+            ).model_dump_json().encode("utf-8")
+        except (ValueError, TypeError, OverflowError) as error:
+            raise RecipeResolutionError(reason="invalid_candidate", retryable=False) from error
         request = Request(
             self._url,
-            data=json.dumps(body, separators=(",", ":")).encode("utf-8"),
+            data=body,
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
         )
         try:
             with urlopen(request, timeout=self._timeout_seconds) as response:
-                payload = json.loads(response.read())
+                payload = response.read()
         except HTTPError as error:
-            raise RecipeResolutionError(retryable=error.code not in (404, 422)) from error
+            raise RecipeResolutionError(
+                reason="invalid_candidate" if error.code in (404, 422) else "resolver_unavailable",
+                retryable=error.code not in (404, 422),
+            ) from error
         except (URLError, TimeoutError, OSError, ValueError) as error:
-            raise RecipeResolutionError(retryable=True) from error
+            raise RecipeResolutionError(reason="resolver_unavailable", retryable=True) from error
         try:
-            return RecipePresentation.model_validate(payload)
-        except ValidationError as error:
-            raise RecipeResolutionError(retryable=True) from error
+            wire = RecipePresentationOut.model_validate(json.loads(payload, parse_float=Decimal))
+            return _map_presentation(wire)
+        except (ValueError, TypeError, OverflowError) as error:
+            raise RecipeResolutionError(reason="resolver_contract_error", retryable=False) from error
 
 
-def _json_number(value: Decimal) -> int | float:
-    integral = value.to_integral_value()
-    return int(integral) if value == integral else float(value)
+def _map_foodstuff(wire: FoodstuffSummaryOut) -> FoodstuffSummary:
+    return FoodstuffSummary.model_validate(wire)
+
+
+def _map_presentation(wire: RecipePresentationOut) -> RecipePresentation:
+    return RecipePresentation(
+        servings=wire.servings,
+        preptime=wire.preptime,
+        kcal=wire.kcal,
+        carbs=wire.carbs,
+        protein=wire.protein,
+        fat=wire.fat,
+        ingredients=tuple(
+            RecipePresentationIngredient.model_validate(
+                ingredient.model_dump() | {"foodstuff": _map_foodstuff(ingredient.foodstuff)}
+            )
+            for ingredient in wire.ingredients
+        ),
+        steps=tuple(
+            RecipePresentationStep.model_validate(step.model_dump())
+            for step in wire.steps
+        ),
+    )

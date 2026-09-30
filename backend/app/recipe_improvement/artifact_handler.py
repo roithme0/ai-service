@@ -56,7 +56,7 @@ class RecipeProposalHandler:
             presentation = await self._resolver.resolve(validation.candidate)
         except RecipeResolutionError as error:
             return ArtifactPreparationRejected(ProposalRejected(
-                reason="resolver_unavailable" if error.retryable else "invalid_candidate",
+                reason=error.reason,
                 retryable=error.retryable,
             ), stage="resolver")
         return ArtifactPrepared(

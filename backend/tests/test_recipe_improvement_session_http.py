@@ -2,9 +2,11 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 import asyncio
 import json
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from kochwiki_contract import Unit
 
 from app.agents.recipe import RecipeAgent, create_recipe_agent
 from app.agents.wiring import configure_agents
@@ -56,11 +58,11 @@ class FakeResolver:
     async def resolve(self, candidate: object) -> RecipePresentation:
         return RecipePresentation.model_validate({
             "servings": candidate.servings, "preptime": candidate.preparation_time,
-            "kcal": 10.0, "carbs": 2.0, "protein": 1.0, "fat": 0.5,
-            "ingredients": [{"index": item.index, "amount": float(item.amount), "foodstuff": {
+            "kcal": Decimal("10"), "carbs": Decimal("2"), "protein": Decimal("1"), "fat": Decimal("0.5"),
+            "ingredients": [{"index": item.index, "amount": item.amount, "foodstuff": {
                 "id": item.foodstuff_reference, "name": "Current oats", "brand": None,
-                "unit": "G", "unitVerbose": "g", "kcal": 370.0, "carbs": 60.0,
-                "protein": 13.0, "fat": 7.0,
+                "unit": Unit.G, "unitVerbose": "g", "kcal": Decimal("370"), "carbs": Decimal("60"),
+                "protein": Decimal("13"), "fat": Decimal("7"),
             }} for item in candidate.ingredients],
             "steps": [step.model_dump() for step in candidate.steps],
         })
@@ -597,6 +599,13 @@ def test_session_read_only_exposes_completed_turn_artifacts(
     assert artifact["turn_id"] == turn.json()["turn_id"]
     assert artifact["payload"]["name"] == "Overnight oats"
     assert artifact["payload"]["recipe"]["ingredients"][0]["foodstuff"]["name"] == "Current oats"
+    presentation = artifact["payload"]["recipe"]
+    assert presentation["ingredients"][0]["amount"] == 125.75
+    assert type(presentation["ingredients"][0]["amount"]) in (int, float)
+    assert presentation["ingredients"][0]["foodstuff"]["unit"] == "G"
+    assert presentation["kcal"] == 10
+    assert type(presentation["kcal"]) in (int, float)
+    assert type(presentation["ingredients"][0]["foodstuff"]["carbs"]) in (int, float)
 
 
 def test_session_history_reports_expiry_then_unknown() -> None:

@@ -12,6 +12,7 @@ dependencies = [
     "openai>=2,<3",
     "pydantic==2.13.5",
     "pydantic-settings>=2,<3",
+    "kochwiki-contract @ https://github.com/roithme0/kochwiki-v2/releases/download/v0.1.0-alpha/kochwiki_contract-0.1.0a0-py3-none-any.whl#sha256=8028ad6912426a08991630fb827928ecaa8cad579775baab581caa103a8cfbed",
 ]
 
 [project.optional-dependencies]
