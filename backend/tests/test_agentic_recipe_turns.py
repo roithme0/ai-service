@@ -3,8 +3,11 @@ import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import TracebackType
+from urllib.request import Request
 
 import pytest
+from kochwiki_contract import Unit
 
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.recipe_improvement.session_input import RecipeImprovementSessionInput, RecipeImprovementSessionInputSuccess, validate_recipe_improvement_session_input
@@ -12,7 +15,7 @@ from app.recipe_improvement.session_lifecycle import create_recipe_session, new_
 from app.recipe_improvement.proposals import RecipeProposal, RecipeProposalPayload, proposal_from_artifact
 from app.sessions.conversation import ConversationReadActive, ConversationTurnResult, StagedArtifact
 from app.recipe_improvement.turn_service import generate_recipe_turn as _generate_recipe_turn
-from app.recipe_improvement.resolver import RecipePresentation, RecipeResolutionError
+from app.recipe_improvement.resolver import KochwikiRecipePresentationResolver, RecipePresentation, RecipeResolutionError, RecipeResolutionFailure
 from app.recipe_improvement.tools.register_recipe_proposal import REGISTER_TOOL_SCHEMA
 
 
@@ -74,11 +77,11 @@ class FakeResolver:
         candidate_value = value
         return RecipePresentation.model_validate({
             "servings": candidate_value.servings, "preptime": candidate_value.preparation_time,
-            "kcal": 10.0, "carbs": 2.0, "protein": 1.0, "fat": 0.5,
-            "ingredients": [{"index": item.index, "amount": float(item.amount), "foodstuff": {
+            "kcal": Decimal("10"), "carbs": Decimal("2"), "protein": Decimal("1"), "fat": Decimal("0.5"),
+            "ingredients": [{"index": item.index, "amount": item.amount, "foodstuff": {
                 "id": item.foodstuff_reference, "name": "Current oats", "brand": None,
-                "unit": "G", "unitVerbose": "g", "kcal": 370.0, "carbs": 60.0,
-                "protein": 13.0, "fat": 7.0,
+                "unit": Unit.G, "unitVerbose": "g", "kcal": Decimal("370"), "carbs": Decimal("60"),
+                "protein": Decimal("13"), "fat": Decimal("7"),
             }} for item in candidate_value.ingredients],
             "steps": [step.model_dump() for step in candidate_value.steps],
         })
@@ -270,14 +273,17 @@ def test_unknown_tool_is_rejected_without_registration() -> None:
 
 
 @pytest.mark.parametrize(
-    ("retryable", "reason"), [(False, "invalid_candidate"), (True, "resolver_unavailable")]
+    ("retryable", "reason"), [
+        (False, "invalid_candidate"), (True, "resolver_unavailable"),
+        (False, "resolver_unavailable"), (False, "resolver_contract_error"),
+    ]
 )
 def test_resolver_failure_is_structured_and_does_not_store_proposal(
-    retryable: bool, reason: str, caplog: pytest.LogCaptureFixture,
+    retryable: bool, reason: RecipeResolutionFailure, caplog: pytest.LogCaptureFixture,
 ) -> None:
     class FailingResolver:
         async def resolve(self, value: object) -> RecipePresentation:
-            raise RecipeResolutionError(retryable=retryable)
+            raise RecipeResolutionError(reason=reason, retryable=retryable)
 
     store = new_recipe_session_store()
     created = create_recipe_session(store, session_input())
@@ -301,6 +307,59 @@ def test_resolver_failure_is_structured_and_does_not_store_proposal(
     assert "foodstuff_reference': 1" in caplog.text
     assert "stage=resolver" in caplog.text
     assert f"'reason': '{reason}'" in caplog.text
+
+
+@pytest.mark.parametrize("servings", [2, "2"])
+def test_shared_resolver_boundary_reaches_proposal_tool_and_store(
+    monkeypatch: pytest.MonkeyPatch, servings: int | str,
+) -> None:
+    class Response:
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(
+            self, exc_type: type[BaseException] | None,
+            exc_value: BaseException | None, traceback: TracebackType | None,
+        ) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return json.dumps({
+                "servings": servings, "preptime": None, "kcal": None, "carbs": None,
+                "protein": None, "fat": None, "ingredients": [], "steps": [],
+            }).encode()
+
+    requests: list[Request] = []
+
+    def respond(request: Request, timeout: float) -> Response:
+        requests.append(request)
+        assert timeout == 5.0
+        return Response()
+
+    monkeypatch.setattr("app.recipe_improvement.resolver.urlopen", respond)
+    store = new_recipe_session_store()
+    created = create_recipe_session(store, session_input())
+    store.append_user_message(created.session_id, "Improve it")
+
+    def inspect(request: AgenticGenerationRequest) -> AgenticGenerationResponse:
+        result = json.loads(request.input_items[-1]["output"])
+        if servings == 2:
+            assert result["kind"] == "registered"
+            assert result["proposal"]["recipe"]["ingredients"] == []
+        else:
+            assert result == {
+                "kind": "rejected", "reason": "resolver_contract_error", "issues": [], "retryable": False,
+            }
+        return final()
+
+    outcome = asyncio.run(_generate_recipe_turn(
+        store, created.session_id,
+        ScriptedGenerator([call("proposal", {"kind": "source"}, candidate()), inspect]),
+        KochwikiRecipePresentationResolver("http://kochwiki"),
+    ))
+    assert outcome.kind == "completed"
+    assert len(proposals(outcome)) == (1 if servings == 2 else 0)
+    assert len(requests) == 1
 
 
 def test_active_turn_is_busy_but_independent_session_can_complete() -> None:

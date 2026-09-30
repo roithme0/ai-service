@@ -6,12 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "ai-service-backend"
 version = "0.1.0"
 description = "Backend for the AI Service."
-requires-python = ">=3.12"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "fastapi[standard]==0.141.1",
     "openai>=2,<3",
     "pydantic==2.13.5",
     "pydantic-settings>=2,<3",
+    "kochwiki-contract @ https://github.com/roithme0/kochwiki-v2/releases/download/v0.1.1-alpha/kochwiki_contract-0.1.1a0-py3-none-any.whl#sha256=ad5a05c333e51c72fc7cb0b2e4e1d6f1d126c30434512008e118f3b3e1712c31",
 ]
 
 [project.optional-dependencies]

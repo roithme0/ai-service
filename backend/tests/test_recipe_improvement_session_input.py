@@ -1,4 +1,5 @@
 from decimal import Decimal
+from kochwiki_contract import Unit
 
 import pytest
 from pydantic import ValidationError
@@ -45,6 +46,8 @@ def test_accepts_source_and_unique_foodstuffs_with_derived_index() -> None:
     assert isinstance(outcome, RecipeImprovementSessionInputSuccess)
     assert outcome.session_input.availability_reference_index.foodstuff_references == (1, 2)
     assert outcome.session_input.foodstuffs[1].unit == "ML"
+    assert outcome.session_input.foodstuffs[1].unit is Unit.ML
+    assert outcome.session_input.foodstuffs[1].model_dump(mode="json")["unit"] == "ML"
 
 
 @pytest.mark.parametrize(

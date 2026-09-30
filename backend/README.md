@@ -4,13 +4,26 @@ Minimal FastAPI backend for the AI Service.
 
 ## Local development
 
+Use Python 3.13, matching CI and the Docker images. The repository's
+`.python-version` selects 3.13 for tools such as uv and pyenv.
 Create and activate a virtual environment, then install the project:
 
 ```powershell
-python -m venv .venv
+py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[test]"
 ```
+
+The backend installs Kochwiki's shared Pydantic contract package from a GitHub
+Release wheel, pinned by URL and SHA-256 in `pyproject.toml`. Development, CI,
+and Docker use the same dependency. To upgrade, select a release from
+[Kochwiki Releases](https://github.com/roithme0/kochwiki-v2/releases), update the
+URL and checksum using its `SHA256SUMS`, and run the resolver and proposal-flow
+checks. The pin verifies the artifact; compatibility with the deployed Kochwiki
+API still requires coordinated validation.
+
+Recipe presentations retain decimal values internally and emit JSON numbers.
+JSON serialization can round values to floating-point precision.
 
 Run the development server:
 

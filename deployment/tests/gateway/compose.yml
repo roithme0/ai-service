@@ -2,7 +2,7 @@ name: ai-service-gateway-timeout-test
 
 services:
   backend:
-    image: python:3.12-alpine
+    image: python:3.13-alpine
     command: ["python", "/tests/test_timeout.py", "serve"]
     volumes:
       - .:/tests:ro
@@ -24,7 +24,7 @@ services:
         condition: service_healthy
 
   gateway-tests:
-    image: python:3.12-alpine
+    image: python:3.13-alpine
     command: ["python", "/tests/test_timeout.py"]
     volumes:
       - .:/tests:ro

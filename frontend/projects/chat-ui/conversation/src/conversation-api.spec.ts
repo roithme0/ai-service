@@ -73,7 +73,7 @@ describe('HttpConversationTransport', () => {
   it.each([
     { kind: 'unknown', detail: 'Session not found' },
     { kind: 'not_found', detail: 'Not Found' },
-  ])('accepts the shared 404 envelope for $kind', async ({ kind, detail }) => {
+  ] as const)('accepts the shared 404 envelope for $kind', async ({ kind, detail }) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(404, { detail, kind })));
 
     await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).readSession('session-1'))
