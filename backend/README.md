@@ -4,10 +4,12 @@ Minimal FastAPI backend for the AI Service.
 
 ## Local development
 
+Use Python 3.13, matching CI and the Docker images. The repository's
+`.python-version` selects 3.13 for tools such as uv and pyenv.
 Create and activate a virtual environment, then install the project:
 
 ```powershell
-python -m venv .venv
+py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[test]"
 ```
