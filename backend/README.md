@@ -49,34 +49,3 @@ Run the tests:
 ```powershell
 pytest
 ```
-
-## Kochwiki OpenAPI snapshot
-
-The complete Kochwiki OpenAPI snapshot lives in
-`contracts/kochwiki/openapi.json`. Its adjacent `provenance.json` records the
-public GitHub repository, full source commit SHA, and export path.
-
-From this backend directory, update it explicitly from a published commit:
-
-```powershell
-python scripts/kochwiki_contract.py update --commit <full-40-character-commit-SHA>
-```
-
-Verify the checked-in snapshot against that same pinned GitHub revision:
-
-```powershell
-python scripts/kochwiki_contract.py check
-```
-
-Both commands use Python's standard library and public GitHub access, with no
-token or local Kochwiki checkout required. Branches, tags, abbreviated SHAs,
-invalid exports, and revisions without the completed strict resolver response
-schema are rejected. Downloads are validated before existing snapshot files are
-replaced. Verification allows LF/CRLF checkout conversion but reports other
-content differences without rewriting files. Network failures fail the command;
-there is no automatic fallback to a different revision.
-
-The check establishes provenance against the recorded commit, not freshness
-against the latest Kochwiki revision. Ordinary builds do not run these network
-commands. Python model generation, resolver migration, and CI integration are
-subsequent work; the resolver currently still uses its handwritten wire models.
