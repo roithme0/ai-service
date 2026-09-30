@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Annotated, Literal, Protocol
+from typing import Literal, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -20,46 +19,20 @@ from kochwiki_contract import (
     RecipePresentationStepOut,
     RecipePresentationStepResolve,
 )
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PlainSerializer, field_validator
+from kochwiki_contract.common import NonnegativeJsonDecimal
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.recipe_improvement.recipe import RecipeProposalCandidate
 
 
-_MAX_JSON_NUMBER = Decimal.from_float(sys.float_info.max)
-
-
-def _validate_json_number_range(value: Decimal) -> Decimal:
-    if value.copy_abs() > _MAX_JSON_NUMBER:
-        raise ValueError("presentation decimal exceeds the finite JSON serializer range")
-    return value
-
-
-PresentationDecimal = Annotated[
-    Decimal,
-    Field(allow_inf_nan=False),
-    AfterValidator(_validate_json_number_range),
-    PlainSerializer(float, return_type=float, when_used="json"),
-]
-
-
 class FoodstuffSummary(FoodstuffSummaryOut):
     model_config = ConfigDict(frozen=True)
-
-    @field_validator("kcal", "carbs", "protein", "fat")
-    @classmethod
-    def validate_json_number_range(cls, value: Decimal | None) -> Decimal | None:
-        return _validate_json_number_range(value) if value is not None else None
 
 
 class RecipePresentationIngredient(RecipePresentationIngredientOut):
     model_config = ConfigDict(frozen=True)
 
     foodstuff: FoodstuffSummary
-
-    @field_validator("amount")
-    @classmethod
-    def validate_json_number_range(cls, value: Decimal) -> Decimal:
-        return _validate_json_number_range(value)
 
 
 class RecipePresentationStep(RecipePresentationStepOut):
@@ -71,10 +44,10 @@ class RecipePresentation(BaseModel):
 
     servings: int
     preptime: int | None
-    kcal: PresentationDecimal | None
-    carbs: PresentationDecimal | None
-    protein: PresentationDecimal | None
-    fat: PresentationDecimal | None
+    kcal: NonnegativeJsonDecimal | None
+    carbs: NonnegativeJsonDecimal | None
+    protein: NonnegativeJsonDecimal | None
+    fat: NonnegativeJsonDecimal | None
     ingredients: tuple[RecipePresentationIngredient, ...]
     steps: tuple[RecipePresentationStep, ...]
 

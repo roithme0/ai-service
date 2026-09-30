@@ -221,13 +221,11 @@ def test_rejects_incorrect_wire_types(
 
 
 @pytest.mark.parametrize(("path", "field", "value"), [
-    ((), "servings", 0), ((), "servings", 100),
-    ((), "preptime", 0), ((), "preptime", 1000),
-    (("ingredients", 0), "index", 0), (("ingredients", 0), "index", 100),
-    (("ingredients", 0), "amount", 0), (("ingredients", 0), "amount", 10000),
-    (("ingredients", 0, "foodstuff"), "id", 0),
-    (("steps", 0), "index", 0), (("steps", 0), "index", 100),
-    (("steps", 0), "description", ""), (("steps", 0), "description", "x" * 201),
+    ((), "servings", 100),
+    ((), "preptime", 1000),
+    (("ingredients", 0), "index", 100),
+    (("ingredients", 0), "amount", 10000),
+    (("steps", 0), "index", 100),
     ((), "kcal", 1000000.125), (("ingredients", 0, "foodstuff"), "carbs", 10000.5),
 ])
 def test_snapshot_does_not_add_unjustified_output_bounds(
@@ -240,15 +238,18 @@ def test_snapshot_does_not_add_unjustified_output_bounds(
 
 
 @pytest.mark.parametrize("path", [(), ("ingredients", 0), ("ingredients", 0, "foodstuff")])
-def test_shared_decimals_outside_json_serializer_range_are_controlled(
-    monkeypatch: pytest.MonkeyPatch, path: tuple[str | int, ...],
+@pytest.mark.parametrize("value", ["1e999", "1e-400"])
+def test_shared_decimal_serialization_failures_are_controlled(
+    monkeypatch: pytest.MonkeyPatch, path: tuple[str | int, ...], value: str,
 ) -> None:
     body = presentation_body()
-    object_at(body, path)["amount" if path == ("ingredients", 0) else "kcal"] = Decimal("1e999")
-    RecipePresentationOut.model_validate(body)
+    object_at(body, path)["amount" if path == ("ingredients", 0) else "kcal"] = Decimal(value)
+    with pytest.raises(ValidationError):
+        RecipePresentationOut.model_validate(body)
 
     def respond(request: Request, timeout: float) -> Response:
-        return Response(json.dumps(body, default=str).replace('"1E+999"', '1e999').encode())
+        payload = json.dumps(body, default=str).replace(json.dumps(str(Decimal(value))), value)
+        return Response(payload.encode())
 
     monkeypatch.setattr("app.recipe_improvement.resolver.urlopen", respond)
     with pytest.raises(RecipeResolutionError) as raised:
@@ -256,7 +257,26 @@ def test_shared_decimals_outside_json_serializer_range_are_controlled(
     assert raised.value.retryable is False
     assert raised.value.reason == "resolver_contract_error"
     assert isinstance(raised.value.__cause__, ValidationError)
-    assert "finite JSON serializer range" in str(raised.value.__cause__)
+
+
+@pytest.mark.parametrize("value", ["0", "5e-324", "1.7976931348623157e308", "0.123456789012345678901234567"])
+def test_shared_decimal_limits_and_rounding_survive_proposal_serialization(
+    monkeypatch: pytest.MonkeyPatch, value: str,
+) -> None:
+    payload = json.dumps(presentation_body()).replace('"kcal": 120', '"kcal": ' + value).encode()
+
+    def respond(request: Request, timeout: float) -> Response:
+        return Response(payload)
+
+    monkeypatch.setattr("app.recipe_improvement.resolver.urlopen", respond)
+    resolved = asyncio.run(KochwikiRecipePresentationResolver("http://kochwiki").resolve(candidate()))
+    assert resolved.kcal == Decimal(value)
+    proposal = RecipeProposal(
+        proposal_id="proposal-1", created_at=datetime(2026, 9, 30, tzinfo=UTC),
+        order=1, base=SourceProposalBase(), name="Oats", recipe=resolved, turn_id="turn-1",
+    )
+    assert proposal.recipe.kcal == Decimal(value)
+    assert json.loads(proposal.model_dump_json())["recipe"]["kcal"] == float(value)
 
 
 @pytest.mark.parametrize("field", ["servings", "preparation_time"])
@@ -342,22 +362,13 @@ def test_presentation_and_proposal_serialization_schemas_use_numbers_and_shared_
     definitions = object_at(schema, ("$defs",))
     assert object_at(definitions, ("Unit",))["enum"] == ["G", "ML", "PIECE"]
     assert object_at(definitions, ("RecipePresentationIngredient", "properties", "amount")) == {
-        "title": "Amount", "type": "number",
+        "title": "Amount", "type": "number", "exclusiveMinimum": 0,
     }
     for name in ("RecipePresentation", "FoodstuffSummary"):
         for field in ("kcal", "carbs", "protein", "fat"):
             assert object_at(definitions, (name, "properties", field))["anyOf"] == [
-                {"type": "number"}, {"type": "null"},
+                {"type": "number", "minimum": 0}, {"type": "null"},
             ]
-    for name, fields in (
-        ("RecipePresentation", ("servings", "preptime")),
-        ("FoodstuffSummary", ("id",)),
-        ("RecipePresentationIngredient", ("index", "amount")),
-        ("RecipePresentationStep", ("index", "description")),
-    ):
-        for field in fields:
-            serialized = json.dumps(object_at(definitions, (name, "properties", field)))
-            assert not any(bound in serialized for bound in ("minimum", "maximum", "minLength", "maxLength"))
 
 
 @pytest.mark.parametrize("failure", [ValueError("mapping"), TypeError("mapping"), OverflowError("mapping")])
@@ -400,3 +411,23 @@ def test_resolved_proposal_is_deeply_immutable_and_preserves_serialization(
         "proposal_id": "proposal-1", "created_at": "2026-09-30T00:00:00Z", "order": 1,
         "base": {"kind": "source"}, "name": "Oats", "recipe": presentation_body(), "turn_id": "turn-1",
     }
+
+
+@pytest.mark.parametrize(("path", "field", "value"), [
+    ((), "servings", 0), ((), "preptime", 0), ((), "kcal", -1),
+    (("ingredients", 0), "index", 0), (("ingredients", 0), "amount", 0),
+    (("ingredients", 0, "foodstuff"), "id", 0),
+    (("ingredients", 0, "foodstuff"), "carbs", -1),
+    (("steps", 0), "index", 0), (("steps", 0), "description", ""),
+    (("steps", 0), "description", "x" * 201),
+])
+def test_shared_response_invariants_fail_as_controlled_resolver_errors(
+    monkeypatch: pytest.MonkeyPatch, path: tuple[str | int, ...], field: str, value: object,
+) -> None:
+    body = presentation_body()
+    object_at(body, path)[field] = value
+    with pytest.raises(RecipeResolutionError) as raised:
+        resolve_body(monkeypatch, body)
+    assert raised.value.reason == "resolver_contract_error"
+    assert raised.value.retryable is False
+    assert isinstance(raised.value.__cause__, ValidationError)
