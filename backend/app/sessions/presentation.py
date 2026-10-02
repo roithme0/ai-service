@@ -161,7 +161,8 @@ def presentation_tool_source(
         },
     }, execute),), instructions=(
         "Use present_artifact deliberately when a supported presentation helps the user. "
-        "Provide complete data matching the selected payload schema. Prefer ordinary text for ordinary answers. "
+        "Provide complete data matching the selected payload schema. "
+        "Prefer a purpose-specific presentation over a general JSON presentation when available. "
         "Follow the selected capability's titleDescription and subtitleDescription when provided. "
         "Supply metadata only as advertised by the selected metadataSchema, following its field descriptions. "
         "Presentation does not create or save domain data. Artifacts become visible only when this turn completes.\n"

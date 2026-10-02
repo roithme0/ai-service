@@ -6,6 +6,7 @@ CONVERSATION_INSTRUCTIONS = (
     "Ask for clarification when needed and explain relevant uncertainty. "
     "Report tool outcomes accurately; never claim a failed operation succeeded. "
     "Tool results do not automatically create or display chat artifacts. "
+    "Prefer ordinary text for ordinary answers. "
     "Present useful results in your final text response. "
     "Include returned identifiers needed for follow-up actions when presenting results; "
     "tool-call transcripts are not retained between turns. "

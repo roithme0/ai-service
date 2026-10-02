@@ -11,7 +11,7 @@ export interface ChatArtifactCapability {
 
 export const JSON_ARTIFACT_CAPABILITY: ChatArtifactCapability = {
   type: 'json',
-  description: 'Show structured JSON data when its structure is useful to the user. Prefer a purpose-specific presentation when available; use ordinary text for ordinary answers.',
+  description: 'Display structured JSON data for inspection.',
   titleDescription: 'Use a short, user-facing label describing the presented data.',
   subtitleDescription: 'Omit unless a short secondary label helps explain the presented data.',
   payloadSchema: {

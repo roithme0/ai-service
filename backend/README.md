@@ -31,6 +31,13 @@ The frontend simulates a 405 compatibility error on the next message after compl
 The generator receives the conversation and the retained caller-provided context. Kochwiki supplies all domain tools and workflow instructions through
 MCP; the AI Service supplies only generic conversational guidance.
 
+Guidance has separate owners: MCP server instructions describe domain workflows;
+tool descriptions and schemas describe individual operation contracts; frontend
+artifact capabilities describe presentation payloads, headers and metadata.
+The AI Service owns generic conversation, execution and presentation guidance.
+Keep multi-step domain policies in the MCP instructions rather than repeating
+them in tool descriptions or artifact capabilities.
+
 ## MCP connections and tool execution
 
 The Kochwiki agent's model setting is `KOCHWIKI_OPENAI_MODEL`, replacing

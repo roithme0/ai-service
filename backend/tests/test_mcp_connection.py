@@ -16,6 +16,7 @@ from app.agents.wiring import configure_agents, get_configured_agents
 from app.core.config import Settings
 from app.main import AgentLifespan
 from app.mcp_connection import MCPConnection
+from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.text_sessions import TextSessionCreation
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from test_model_session_http import valid_request
@@ -29,7 +30,10 @@ def configured_settings() -> Settings:
     )
 
 
-def test_http_discovery_agent_isolation_invocation_and_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("with_presentation", [False, True])
+def test_http_discovery_agent_isolation_invocation_and_shutdown(
+    monkeypatch: pytest.MonkeyPatch, with_presentation: bool,
+) -> None:
     async def exercise() -> None:
         requests: list[AgenticGenerationRequest] = []
 
@@ -81,6 +85,16 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(monkeypatch: pyt
                 assert not result.is_error
                 assert result.structured_content == {"message": "Hello World"}
                 payload = valid_request()
+                if with_presentation:
+                    payload["artifactCapabilities"] = [{
+                        "type": "test-card",
+                        "description": "Display a complete test result.",
+                        "titleDescription": "Use the result name as the title.",
+                        "payloadSchema": {
+                            "type": "object", "properties": {"name": {"type": "string"}},
+                            "required": ["name"], "additionalProperties": False,
+                        },
+                    }]
                 created = agents.kochwiki.agent.create(payload)
                 assert isinstance(created, TextSessionCreation)
                 agents.kochwiki.agent.append_user_message(created.session_id, "Call hello world")
@@ -90,9 +104,18 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(monkeypatch: pyt
                 assert turn.artifacts == ()
                 assert [tool["name"] for tool in requests[0].tools] == [
                     "kochwiki__hello_world",
-                ]
-                assert "Server-owned domain guidance" in requests[0].instructions
-                assert "hello_world -> kochwiki__hello_world" in requests[0].instructions
+                ] + (["present_artifact"] if with_presentation else [])
+                instructions = requests[0].instructions
+                assert instructions.count("Server-owned domain guidance") == 1
+                assert "hello_world -> kochwiki__hello_world" in instructions
+                assert instructions.endswith(CONVERSATION_INSTRUCTIONS)
+                if with_presentation:
+                    assert "test-card" in instructions
+                    assert "Use the result name as the title." in instructions
+                    assert "Presentation does not create or save domain data." in instructions
+                else:
+                    assert "Available presentation capabilities" not in instructions
+                assert requests[1].instructions == instructions
                 output = requests[1].input_items[-1]
                 assert output["call_id"] == "hello"
                 assert isinstance(output["output"], str)
