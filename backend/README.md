@@ -164,19 +164,23 @@ passed to the agent as guidance, not used to validate generated header values.
 ```
 
 The model receives capability descriptions and standalone schemas with a local
-`present_artifact` tool accepting `type`, `title`, an optional `subtitle`, and a complete `payload`.
+`present_artifact` tool accepting `type`, `title`, an optional `subtitle`, a complete
+`payload`, and optional object `metadata`.
 The subtitle is a short secondary label beneath the title, such as a brand.
 It may be omitted or null; provided text must be nonblank and at most 200 characters.
 The backend validates arguments and the selected payload schema before staging
 an artifact. Payload schemas can use local fragment references; external schema
 references are rejected and validation never fetches schemas over the network.
-Schema `format` annotations do not add format validation. Invalid arguments,
-unsupported types, invalid payloads, and exhausted artifact limits return tool
+Payload schema `format` annotations do not add format validation. Capabilities
+can also advertise `metadataSchema`; metadata is validated separately, including
+formats supported by the validator (such as UUID). Omission is validated as an
+empty object. Metadata is rejected when no schema is advertised. Invalid arguments,
+unsupported types, invalid payloads or metadata, and exhausted artifact limits return tool
 errors. A successful call returns its artifact ID without echoing the payload.
 Presentation shares the turn's tool-call budget and the session artifact limit.
 
 Artifacts use the existing HTTP envelope, whose `payload` contains
-`{"title": "...", "subtitle": <string or null>, "payload": <complete presentation data>}`. IDs, order,
+`{"title": "...", "subtitle": <string or null>, "payload": <complete presentation data>, "metadata": <object or null>}`. IDs, order,
 timestamps, and turn attribution are assigned by the conversation store. They
 are published on successful turn completion and discarded if the turn fails or
 is cancelled. Repeated turn reads return the same stored artifacts. Presentation

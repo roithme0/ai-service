@@ -19,7 +19,7 @@ const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
   { kind: 'text', id: 'assistant-1', role: 'assistant', text: '**formatted assistant text**' },
 ];
 
-@Component({ template: '<ng-template #template let-payload>Custom: {{ payload.label }}</ng-template>' })
+@Component({ template: '<ng-template #template let-payload let-artifact="artifact">Custom: {{ payload.label }} {{ artifact.metadata?.reference }}</ng-template>' })
 class RendererTemplateHost {
   readonly template = viewChild.required<
     TemplateRef<ChatArtifactRenderContext<{ readonly label: string }>>
@@ -67,7 +67,7 @@ describe('ChatUiComponent', () => {
     const templateFixture = TestBed.createComponent(RendererTemplateHost);
     templateFixture.detectChanges();
     const content: readonly ChatContent[] = [
-      { kind: 'artifact', id: 'custom', type: 'known', headline: 'Known', payload: { label: 'typed' } },
+      { kind: 'artifact', id: 'custom', type: 'known', headline: 'Known', payload: { label: 'typed' }, metadata: { reference: 'host-action-reference' } },
       { kind: 'artifact', id: 'fallback', type: 'json', headline: 'JSON', payload: { value: {
         nested: [true, null], empty: {}, text: '<script>unsafe()</script>',
       } } },
@@ -81,6 +81,7 @@ describe('ChatUiComponent', () => {
     const cards = fixture.nativeElement.querySelectorAll('.artifact') as NodeListOf<HTMLElement>;
     expect(cards).toHaveLength(2);
     expect(cards[0].textContent).toContain('Custom: typed');
+    expect(cards[0].textContent).toContain('host-action-reference');
     expect(cards[1].querySelector('script')).toBeNull();
     expect(cards[1].querySelector('pre')?.textContent).toContain('"nested"');
     expect(cards[1].textContent).toContain('<script>unsafe()</script>');

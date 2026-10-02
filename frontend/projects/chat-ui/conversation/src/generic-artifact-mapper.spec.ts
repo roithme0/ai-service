@@ -9,6 +9,17 @@ const artifact: ArtifactResponse = {
 };
 
 describe('generic artifact mapping', () => {
+  it('passes metadata to the host separately from the renderer payload', () => {
+    const mapped = presentArtifact({ ...artifact, payload: {
+      title: 'Data', payload: { value: 42 }, metadata: { reference: 'stored-object' },
+    } });
+    expect(mapped.metadata).toEqual({ reference: 'stored-object' });
+    expect(mapped.payload).toEqual({ value: 42 });
+    for (const metadata of [42, 'id', []]) {
+      expect(() => presentArtifact({ ...artifact, payload: { title: 'Data', payload: {}, metadata } }))
+        .toThrow(ConversationNetworkError);
+    }
+  });
   it('explicitly selects JSON presentation for arbitrary backend data', () => {
     expect(presentJsonArtifact(artifact)).toEqual({
       kind: 'artifact', id: 'artifact-1', type: 'json', headline: 'other.result',

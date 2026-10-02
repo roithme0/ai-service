@@ -3,6 +3,7 @@ import json
 from typing import Never
 
 import pytest
+from pydantic import JsonValue
 
 from app.sessions.agent_service import AgentInputAccepted
 from app.sessions.context import SessionContext, validate_context_input
@@ -22,11 +23,12 @@ CAPABILITY = {"type": "example", "description": "An arbitrary consumer presentat
                                 "required": ["name"], "additionalProperties": False}}
 
 
-def tool_for_session() -> tuple[
+def tool_for_session(metadata_schema: dict[str, JsonValue] | None = None) -> tuple[
     RegisteredTool[StagedArtifact[PresentationPayload]], ModelSessionStore, str,
     ConversationTurnReservation[SessionContext, PresentationPayload],
 ]:
-    accepted = validate_context_input({"context": {}, "artifactCapabilities": [CAPABILITY]})
+    capability = {**CAPABILITY, **({"metadataSchema": metadata_schema} if metadata_schema is not None else {})}
+    accepted = validate_context_input({"context": {}, "artifactCapabilities": [capability]})
     assert isinstance(accepted, AgentInputAccepted)
     store = new_model_session_store()
     session = store.create(accepted.context, ConversationSessionSettings(max_artifacts=1))
@@ -47,6 +49,46 @@ def test_invalid_arguments_do_not_stage_an_artifact(arguments: str) -> None:
         assert json.loads(result.output)["kind"] == "rejected"
         assert result.artifact is None
     asyncio.run(exercise())
+
+    completed = store.complete_turn(session_id, reservation, "completed", "Finished")
+    assert completed.artifacts == ()
+
+
+METADATA_SCHEMA: dict[str, JsonValue] = {
+    "type": "object", "properties": {"reference": {"type": "string", "format": "uuid"}},
+    "required": ["reference"], "additionalProperties": False,
+}
+
+
+@pytest.mark.parametrize("metadata", [None, {}, {"reference": "invalid"}, {"reference": 123},
+    {"reference": "00000000-0000-4000-8000-000000000001", "extra": True}])
+def test_invalid_metadata_is_rejected_without_staging(metadata: JsonValue) -> None:
+    tool, store, session_id, reservation = tool_for_session(METADATA_SCHEMA)
+    result = asyncio.run(ToolRegistry((tool,)).invoke(tool.name, json.dumps({
+        "type": "example", "title": "Data", "payload": {"name": "Oats"}, "metadata": metadata,
+    })))
+    assert json.loads(result.output)["reason"] in {"invalid_metadata", "invalid_arguments"}
+    assert store.complete_turn(session_id, reservation, "completed", "Finished").artifacts == ()
+
+
+def test_metadata_is_validated_and_retained_separately_from_display_data() -> None:
+    tool, store, session_id, reservation = tool_for_session(METADATA_SCHEMA)
+    metadata = {"reference": "00000000-0000-4000-8000-000000000001"}
+    result = asyncio.run(ToolRegistry((tool,)).invoke(tool.name, json.dumps({
+        "type": "example", "title": "Data", "payload": {"name": "Oats"}, "metadata": metadata,
+    })))
+    assert result.artifact is not None
+    completed = store.complete_turn(session_id, reservation, "completed", "Finished")
+    assert completed.artifacts[0].payload.metadata == metadata
+    assert completed.artifacts[0].payload.payload == {"name": "Oats"}
+
+
+def test_unadvertised_metadata_is_rejected() -> None:
+    tool, store, session_id, reservation = tool_for_session()
+    result = asyncio.run(ToolRegistry((tool,)).invoke(tool.name, json.dumps({
+        "type": "example", "title": "Data", "payload": {"name": "Oats"}, "metadata": {},
+    })))
+    assert json.loads(result.output)["reason"] == "invalid_metadata"
     completed = store.complete_turn(session_id, reservation, "completed", "Finished")
     assert completed.artifacts == ()
 

@@ -20,13 +20,15 @@ export function presentArtifact(artifact: ArtifactResponse): ChatArtifact {
   if (!isJsonValue(envelope) || envelope === null || Array.isArray(envelope)
     || typeof envelope !== 'object' || typeof envelope['title'] !== 'string'
     || !envelope['title'].trim() || !('payload' in envelope)
-    || (envelope['subtitle'] != null && (typeof envelope['subtitle'] !== 'string' || !envelope['subtitle'].trim()))) {
+    || (envelope['subtitle'] != null && (typeof envelope['subtitle'] !== 'string' || !envelope['subtitle'].trim()))
+    || (envelope['metadata'] != null && (typeof envelope['metadata'] !== 'object' || Array.isArray(envelope['metadata'])))) {
     throw new ConversationNetworkError('Der Backend-Dienst hat eine ung\u00fcltige Darstellung gesendet.');
   }
   return {
     kind: 'artifact', id: artifact.artifact_id, type: artifact.type,
     headline: envelope['title'], payload: envelope['payload'],
     ...(typeof envelope['subtitle'] === 'string' ? { subtitle: envelope['subtitle'] } : {}),
+    ...(envelope['metadata'] != null ? { metadata: envelope['metadata'] as { readonly [key: string]: JsonValue } } : {}),
   };
 }
 

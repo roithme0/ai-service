@@ -6,6 +6,7 @@ export interface ChatArtifactCapability {
   readonly titleDescription?: string;
   readonly subtitleDescription?: string;
   readonly payloadSchema: { readonly [key: string]: JsonValue };
+  readonly metadataSchema?: { readonly [key: string]: JsonValue };
 }
 
 export const JSON_ARTIFACT_CAPABILITY: ChatArtifactCapability = {

@@ -248,3 +248,13 @@ subtitle, omitted when absent. This is agent guidance rather than validation
 against the payload. Descriptions must be nonblank and at most 2,000 characters.
 The shared JSON capability includes guidance for a short descriptive title and
 an optional explanatory subtitle.
+
+Capabilities may also advertise an optional `metadataSchema`, a self-contained
+JSON Schema (draft 2020-12). The agent follows its field descriptions when
+supplying the optional `metadata` object to `present_artifact`. The service
+validates metadata separately from the presentation payload and rejects metadata
+for capabilities that do not advertise it. Omitted metadata is validated as an
+empty object, so schema-required fields remain required. The default mapper
+passes metadata to `ChatArtifact.metadata`; custom templates access it through
+`let-artifact="artifact"`. Metadata has no built-in rendering or action behavior;
+the consumer frontend interprets it and owns any domain actions.

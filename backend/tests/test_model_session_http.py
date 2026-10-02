@@ -81,8 +81,6 @@ def valid_request(foodstuff_reference: int = 1) -> dict[str, object]:
                 "name": "Overnight oats",
                 "servings": 2,
                 "preparation_time": 15,
-                "origin_name": "Kitchen",
-                "origin_url": "https://example.test/overnight-oats",
                 "ingredients": [
                     {"index": 1, "amount": 125.75, "foodstuff_reference": foodstuff_reference}
                 ],
@@ -600,8 +598,11 @@ def presentation_response(arguments: object) -> AgenticGenerationResponse:
 
 
 def test_advertised_presentation_is_validated_published_and_retained(client: TestClient, fake_generator: FakeGenerator) -> None:
+    capability = {**JSON_CAPABILITY, "metadataSchema": {"type": "object",
+        "properties": {"reference": {"type": "string"}}, "additionalProperties": False}}
+    metadata = {"reference": "stored-object"}
     created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
-        "context": {"selected": "Oats"}, "artifactCapabilities": [JSON_CAPABILITY],
+        "context": {"selected": "Oats"}, "artifactCapabilities": [capability],
     }})
     session_id = created.json()["session_id"]
     base = f"/api/v1/agents/kochwiki/sessions/{session_id}"
@@ -609,14 +610,14 @@ def test_advertised_presentation_is_validated_published_and_retained(client: Tes
     fake_generator.responses = [
         presentation_response({"type": "missing", "title": "Ingredient", "payload": {"value": {}}}),
         presentation_response({"type": "json", "title": "Ingredient", "payload": {"wrong": 1}}),
-        presentation_response({"type": "json", "title": "Ingredient", "subtitle": "Example brand", "payload": {"value": {"name": "Oats"}}}),
+        presentation_response({"type": "json", "title": "Ingredient", "subtitle": "Example brand", "payload": {"value": {"name": "Oats"}}, "metadata": metadata}),
     ]
     response = client.post(base + "/turns", json={})
     assert response.status_code == 201
     artifacts = response.json()["artifacts"]
     assert len(artifacts) == 1
     assert artifacts[0]["type"] == "json"
-    assert artifacts[0]["payload"] == {"title": "Ingredient", "subtitle": "Example brand", "payload": {"value": {"name": "Oats"}}}
+    assert artifacts[0]["payload"] == {"title": "Ingredient", "subtitle": "Example brand", "payload": {"value": {"name": "Oats"}}, "metadata": metadata}
     assert artifacts[0]["order"] == 1
     assert artifacts[0]["artifact_id"]
     assert artifacts[0]["turn_id"] == response.json()["turn_id"]
@@ -666,6 +667,8 @@ def test_no_capabilities_means_no_presentation_tool(client: TestClient, fake_gen
     [{**JSON_CAPABILITY, "payloadSchema": {"type": "not-a-type"}}],
     [{**JSON_CAPABILITY, "payloadSchema": {"$ref": "https://example.test/schema"}}],
     [{**JSON_CAPABILITY, "payloadSchema": {"$schema": "http://json-schema.org/draft-07/schema#"}}],
+    [{**JSON_CAPABILITY, "metadataSchema": {"type": "not-a-type"}}],
+    [{**JSON_CAPABILITY, "metadataSchema": {"$ref": "https://example.test/schema"}}],
 ])
 def test_invalid_capabilities_reject_session_creation(client: TestClient, capabilities: object) -> None:
     response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
