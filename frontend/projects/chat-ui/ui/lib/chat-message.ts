@@ -17,6 +17,7 @@ export interface ChatArtifact<TPayload extends JsonValue = JsonValue> {
   readonly id: string;
   readonly type: string;
   readonly headline: string;
+  readonly subtitle?: string;
   readonly payload: TPayload;
 }
 

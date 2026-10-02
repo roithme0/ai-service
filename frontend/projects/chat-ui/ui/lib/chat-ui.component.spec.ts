@@ -97,6 +97,20 @@ describe('ChatUiComponent', () => {
     expect(element.textContent).not.toContain('not presented');
   });
 
+  it('renders a subtitle literally beneath the artifact title, outside the collapsible body', () => {
+    const fixture = createFixture([
+      { kind: 'artifact', id: 'with-subtitle', type: 'json', headline: 'Oats',
+        subtitle: '<strong>Example brand</strong>', payload: { value: {} } },
+      { kind: 'artifact', id: 'without-subtitle', type: 'json', headline: 'Water', payload: { value: {} } },
+    ]);
+    const cards = (fixture.nativeElement as HTMLElement).querySelectorAll('.artifact');
+    expect(cards[0].querySelector('.artifact-header h3')?.textContent).toBe('Oats');
+    expect(cards[0].querySelector('.artifact-header .artifact-subtitle')?.textContent).toBe('<strong>Example brand</strong>');
+    expect(cards[0].querySelector('strong')).toBeNull();
+    expect(cards[0].querySelector('.artifact-body .artifact-subtitle')).toBeNull();
+    expect(cards[1].querySelector('.artifact-subtitle')).toBeNull();
+  });
+
   it('offers library-owned German expansion only for overflowing renderer bodies', async () => {
     class OverflowObserver {
       constructor(private readonly callback: ResizeObserverCallback) {}

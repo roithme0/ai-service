@@ -31,4 +31,18 @@ describe('generic artifact mapping', () => {
       expect(() => presentJsonArtifact({ ...artifact, payload } as ArtifactResponse)).toThrow(ConversationNetworkError);
     }
   });
+
+  it('maps an optional subtitle and accepts its absence or null', () => {
+    const presentation = { ...artifact, payload: { title: 'Oats', subtitle: 'Example brand', payload: {} } };
+    expect(presentArtifact(presentation).subtitle).toBe('Example brand');
+    expect(presentArtifact({ ...presentation, payload: { title: 'Oats', payload: {} } }).subtitle).toBeUndefined();
+    expect(presentArtifact({ ...presentation, payload: { title: 'Oats', subtitle: null, payload: {} } }).subtitle).toBeUndefined();
+  });
+
+  it('rejects malformed and blank subtitles', () => {
+    for (const subtitle of [12, {}, '', '   ']) {
+      expect(() => presentArtifact({ ...artifact, payload: { title: 'Oats', subtitle, payload: {} } }))
+        .toThrow(ConversationNetworkError);
+    }
+  });
 });

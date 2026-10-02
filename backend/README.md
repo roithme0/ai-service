@@ -158,7 +158,9 @@ or send an empty array for text-only sessions without the local presentation too
 ```
 
 The model receives capability descriptions and standalone schemas with a local
-`present_artifact` tool accepting `type`, `title`, and a complete `payload`.
+`present_artifact` tool accepting `type`, `title`, an optional `subtitle`, and a complete `payload`.
+The subtitle is a short secondary label beneath the title, such as a brand.
+It may be omitted or null; provided text must be nonblank and at most 200 characters.
 The backend validates arguments and the selected payload schema before staging
 an artifact. Payload schemas can use local fragment references; external schema
 references are rejected and validation never fetches schemas over the network.
@@ -168,7 +170,7 @@ errors. A successful call returns its artifact ID without echoing the payload.
 Presentation shares the turn's tool-call budget and the session artifact limit.
 
 Artifacts use the existing HTTP envelope, whose `payload` contains
-`{"title": "...", "payload": <complete presentation data>}`. IDs, order,
+`{"title": "...", "subtitle": <string or null>, "payload": <complete presentation data>}`. IDs, order,
 timestamps, and turn attribution are assigned by the conversation store. They
 are published on successful turn completion and discarded if the turn fails or
 is cancelled. Repeated turn reads return the same stored artifacts. Presentation

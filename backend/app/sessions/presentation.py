@@ -53,6 +53,7 @@ def _check_schema_references(resource: Resource[JsonValue]) -> None:
 class PresentationPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     title: str = Field(min_length=1, max_length=200)
+    subtitle: str | None = Field(default=None, min_length=1, max_length=200)
     payload: JsonValue
 
     @field_validator("title")
@@ -60,6 +61,13 @@ class PresentationPayload(BaseModel):
     def nonblank_title(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("title must not be blank")
+        return value
+
+    @field_validator("subtitle")
+    @classmethod
+    def nonblank_subtitle(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("subtitle must not be blank")
         return value
 
 
@@ -95,7 +103,7 @@ def presentation_tool_source(
             }))
         staged = store.stage_artifact(
             session_id, turn_id, request.type,
-            PresentationPayload(title=request.title, payload=request.payload),
+            PresentationPayload(title=request.title, subtitle=request.subtitle, payload=request.payload),
         )
         if not isinstance(staged, ConversationStageAccepted):
             return ToolExecution(json.dumps({"kind": staged.kind}))
@@ -109,6 +117,8 @@ def presentation_tool_source(
             "properties": {
                 "type": {"type": "string", "enum": [item.type for item in capabilities]},
                 "title": {"type": "string", "minLength": 1, "maxLength": 200},
+                "subtitle": {"type": ["string", "null"], "minLength": 1, "maxLength": 200,
+                             "description": "Optional short secondary label beneath the title. Omit when unnecessary."},
                 "payload": {},
             },
             "required": ["type", "title", "payload"],

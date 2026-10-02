@@ -607,14 +607,14 @@ def test_advertised_presentation_is_validated_published_and_retained(client: Tes
     fake_generator.responses = [
         presentation_response({"type": "missing", "title": "Ingredient", "payload": {"value": {}}}),
         presentation_response({"type": "json", "title": "Ingredient", "payload": {"wrong": 1}}),
-        presentation_response({"type": "json", "title": "Ingredient", "payload": {"value": {"name": "Oats"}}}),
+        presentation_response({"type": "json", "title": "Ingredient", "subtitle": "Example brand", "payload": {"value": {"name": "Oats"}}}),
     ]
     response = client.post(base + "/turns", json={})
     assert response.status_code == 201
     artifacts = response.json()["artifacts"]
     assert len(artifacts) == 1
     assert artifacts[0]["type"] == "json"
-    assert artifacts[0]["payload"] == {"title": "Ingredient", "payload": {"value": {"name": "Oats"}}}
+    assert artifacts[0]["payload"] == {"title": "Ingredient", "subtitle": "Example brand", "payload": {"value": {"name": "Oats"}}}
     assert artifacts[0]["order"] == 1
     assert artifacts[0]["artifact_id"]
     assert artifacts[0]["turn_id"] == response.json()["turn_id"]

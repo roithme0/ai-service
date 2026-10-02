@@ -17,7 +17,7 @@ The `/ui` entry point exports `ChatUiComponent` and the typed content, artifact 
 />
 ```
 
-Text content has readonly `kind`, `id`, `role` (`user` or `assistant`), and `text` fields. Artifacts have readonly `kind`, `id`, `type`, `headline`, and recursive `JsonValue` payload fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
+Text content has readonly `kind`, `id`, `role` (`user` or `assistant`), and `text` fields. Artifacts have readonly `kind`, `id`, `type`, `headline`, optional `subtitle`, and recursive `JsonValue` payload fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
 
 Map artifact type discriminators to typed Angular templates with `artifactRenderer(template)`. The built-in `json` type renders the escaped, formatted `payload.value`. An absent mapping for any other type shows an unsupported-presentation message; it does not silently select JSON. The library frames every artifact and clips renderer bodies above `--ai-chat-artifact-collapsed-height` (default `18rem`) with German expand/collapse controls and no nested scrolling area.
 
@@ -114,6 +114,7 @@ Set these CSS variables on an ancestor of `ai-chat-ui`:
 | `--ai-chat-code-background`       | Assistant code background      | `#251a1e`    |
 | `--ai-chat-artifact-background`   | Artifact card background       | `#21171b`    |
 | `--ai-chat-artifact-border`       | Artifact card border           | `#50363f`    |
+| `--ai-chat-artifact-subtitle`     | Artifact subtitle              | `#bda9b1`    |
 | `--ai-chat-artifact-heading`      | Artifact headline              | `#f8eef1`    |
 | `--ai-chat-artifact-text`         | JSON presentation text             | `#eadde2`    |
 | `--ai-chat-composer-background`   | Composer field background      | `#291c21`    |
@@ -233,7 +234,9 @@ The AI Service supplies the agent with a local `present_artifact` tool. The agen
 chooses when presentation helps and sends complete data; the renderer does not
 fetch missing details. JSON presentation uses type `json` and payload
 `{ value: <any JSON value> }`. With the default `presentArtifact` mapper, a backend
-presentation title becomes the card headline. Omitting capabilities keeps a
+presentation title becomes the card headline, and its optional `subtitle` appears
+as plain secondary text beneath it. The subtitle remains visible when the body
+is collapsed. Omitting capabilities keeps a
 model-backed session text-only. Custom renderer registration does not itself
 advertise a capability: the consumer must select its matching description and
 schema explicitly. Capability changes during a session are not supported.

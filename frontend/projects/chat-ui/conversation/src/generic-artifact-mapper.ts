@@ -19,12 +19,14 @@ export function presentArtifact(artifact: ArtifactResponse): ChatArtifact {
   const envelope = artifact.payload;
   if (!isJsonValue(envelope) || envelope === null || Array.isArray(envelope)
     || typeof envelope !== 'object' || typeof envelope['title'] !== 'string'
-    || !envelope['title'].trim() || !('payload' in envelope)) {
+    || !envelope['title'].trim() || !('payload' in envelope)
+    || (envelope['subtitle'] != null && (typeof envelope['subtitle'] !== 'string' || !envelope['subtitle'].trim()))) {
     throw new ConversationNetworkError('Der Backend-Dienst hat eine ung\u00fcltige Darstellung gesendet.');
   }
   return {
     kind: 'artifact', id: artifact.artifact_id, type: artifact.type,
     headline: envelope['title'], payload: envelope['payload'],
+    ...(typeof envelope['subtitle'] === 'string' ? { subtitle: envelope['subtitle'] } : {}),
   };
 }
 

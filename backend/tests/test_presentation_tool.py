@@ -65,6 +65,24 @@ def test_local_schema_references_and_session_artifact_limit() -> None:
     assert completed.artifacts[0].payload == PresentationPayload(title="Foodstuff", payload={"name": "Oats"})
 
 
+@pytest.mark.parametrize("subtitle", ["Example brand", None])
+def test_optional_subtitle_is_retained(subtitle: str | None) -> None:
+    tool, store, session_id, reservation = tool_for_session()
+    arguments = json.dumps({"type": "example", "title": "Oats", "subtitle": subtitle, "payload": {"name": "Oats"}})
+    asyncio.run(ToolRegistry((tool,)).invoke(tool.name, arguments))
+    completed = store.complete_turn(session_id, reservation, "completed", "Finished")
+    assert completed.artifacts[0].payload.subtitle == subtitle
+
+
+@pytest.mark.parametrize("subtitle", ["", "   ", "x" * 201, 42])
+def test_invalid_subtitle_does_not_stage_an_artifact(subtitle: str | int) -> None:
+    tool, store, session_id, reservation = tool_for_session()
+    arguments = json.dumps({"type": "example", "title": "Oats", "subtitle": subtitle, "payload": {"name": "Oats"}})
+    result = asyncio.run(ToolRegistry((tool,)).invoke(tool.name, arguments))
+    assert json.loads(result.output)["reason"] == "invalid_arguments"
+    assert store.complete_turn(session_id, reservation, "completed", "Finished").artifacts == ()
+
+
 def test_presentation_and_other_tool_sources_are_combined() -> None:
     async def exercise() -> None:
         def execute(call: ToolInvocation) -> ToolExecution[Never]:
