@@ -8,11 +8,11 @@ The current implementation includes configured KochWiki and deterministic demo a
 
 - **Configured agent services**: A shared typed service hosts independent server-configured KochWiki and demo instances through one generic conversation HTTP API.
 - **Supporting features**:
-  - **Bounded AI capabilities**: Offer reusable operations requested by other services, initially including structured recipe optimization and, later, image generation.
-  - **Conversation foundation**: Support ephemeral multi-turn recipe chat, multiple tool calls, explicit failures, and multiple proposal artifacts within one assistant turn. Responses are returned after turn completion; streaming and user-controlled cancellation are not implemented.
+  - **Bounded AI capabilities**: Offer reusable operations requested by other services, initially including MCP-backed recipe conversations and, later, image generation.
+  - **Conversation foundation**: Support ephemeral multi-turn chat, multiple tool calls, explicit failures, and shared artifact staging. Kochwiki turns currently present results in text; the demo exercises artifact publishing. Responses are returned after turn completion; streaming and user-controlled cancellation are not implemented.
   - **Provider abstraction**: Keep model- and provider-specific behavior behind stable service interfaces.
   - **Generic tool orchestration**: Establish a constrained tool interface that can serve live-data tools and later project connectors without broad database, filesystem, or network access.
-  - **Typed artifacts**: Validate recipe proposals at the service boundary and assign identifiers, ordering, timestamps, and validated base references in service code rather than through the model.
+  - **Typed artifacts**: Assign shared artifact identity, ordering and timestamps in service code. The demo uses this foundation; Kochwiki currently returns conversational text while proposals and drafts are owned by its MCP server.
   - **Reusable chat UI**: The `/ui` entry point renders host-supplied messages, artifacts, and status through a controlled Angular component with custom renderer support and a JSON fallback, without making backend requests. The optional `/conversation` entry point provides conversation control and HTTP transport for the AI Service API; the host configures the integration and binds its view state.
 
 Domain services such as Kochwiki and Home Assistant continue to own their data, authorization, validation, persistence, and domain rules. They must remain useful when the AI Service is unavailable, and integrations use explicit APIs rather than direct access to their storage.
@@ -21,7 +21,7 @@ Domain services such as Kochwiki and Home Assistant continue to own their data, 
 
 The frontend is an Angular 22 workspace containing the AI Service application and the independently packaged `@roithme0/chat-ui` library. The Python backend uses FastAPI and Pydantic, with an OpenAI Responses adapter behind a provider-neutral generation interface. Dockerfiles and Docker Compose configurations are provided for local development, testing, staging, and production.
 
-Sessions retain their initialization snapshots, messages, and proposals in process-local memory with a fixed 90-minute lifetime. Clients submit messages and request turns against a session identifier; the backend supplies retained history to the model. There is no database-backed conversation storage, and sessions do not survive a backend restart. Durable history, listing, and resumption are outside the current scope. See the [backend README](backend/README.md) for setup and model/resolver configuration.
+Sessions retain their initialization snapshots, messages, and any published artifacts in process-local memory with a fixed 90-minute lifetime. Clients submit messages and request turns against a session identifier; the backend supplies retained history to the model. There is no database-backed conversation storage, and sessions do not survive a backend restart. Durable history, listing, and resumption are outside the current scope. See the [backend README](backend/README.md) for setup and model/MCP configuration.
 
 The checked-in `.codex/config.toml` enables Angular CLI and OpenAI documentation integrations for development.
 

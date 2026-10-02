@@ -48,10 +48,10 @@ async def execute_tool_call(
     attempts: int,
     successes: int,
     max_attempts: int,
-    max_successes: int,
+    max_successes: int | None,
 ) -> tuple[ToolExecution[ArtifactT], int]:
     if registry.has_tool(call.name):
-        if attempts >= max_attempts or successes >= max_successes:
+        if attempts >= max_attempts or (max_successes is not None and successes >= max_successes):
             return ToolExecution(json.dumps({
                 "kind": "limit_reached", "attempts": attempts, "successes": successes,
             })), attempts
@@ -66,7 +66,7 @@ async def run_tool_turn(
     instructions: str,
     tool_sources: tuple[ToolSource[ArtifactT], ...],
     max_attempts: int,
-    max_successes: int,
+    max_successes: int | None,
     max_provider_responses: int,
 ) -> ToolTurnResult[ArtifactT]:
     combined_tools, instructions = combine_tool_inputs(tool_sources, instructions)

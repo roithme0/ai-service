@@ -6,6 +6,7 @@ import pytest
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ListToolsResult, Tool
 from pydantic import SecretStr
@@ -25,7 +26,6 @@ def configured_settings() -> Settings:
     return Settings.model_construct(
         openai_api_key=SecretStr("test-key"),
         kochwiki_openai_model="test-model",
-        kochwiki_base_url="http://localhost/api",
         kochwiki_mcp_url="http://localhost/mcp/",
     )
 
@@ -90,7 +90,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(monkeypatch: pyt
                 assert turn.text == "Hello World received"
                 assert turn.artifacts == ()
                 assert [tool["name"] for tool in requests[0].tools] == [
-                    "register_recipe_proposal", "kochwiki__hello_world",
+                    "kochwiki__hello_world",
                 ]
                 assert "Server-owned domain guidance" in requests[0].instructions
                 assert "hello_world -> kochwiki__hello_world" in requests[0].instructions
@@ -107,6 +107,118 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(monkeypatch: pyt
             with pytest.raises(RuntimeError, match="not started"):
                 await connection.call_tool("hello_world", {})
             await connection.close()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("save_fails", [False, True])
+def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
+    monkeypatch: pytest.MonkeyPatch, save_fails: bool,
+) -> None:
+    async def exercise() -> None:
+        proposal_id = "dd6a58a5-b9b8-41fc-b13b-10ab5cf471be"
+        version_id = "fa6a9a58-1bfa-4f4e-910a-9996c5f858b5"
+        requests: list[AgenticGenerationRequest] = []
+        created_proposals: list[dict[str, object]] = []
+        saved_ids: list[str] = []
+        payload = valid_request()
+        source = payload["source"]
+        assert isinstance(source, dict)
+        candidate = {"sourceRecipeVersionId": source["external_reference"],
+                     "recipe": {"name": "Adjusted oats"}}
+
+        class Generator:
+            async def generate(self, request: AgenticGenerationRequest) -> AgenticGenerationResponse:
+                requests.append(request)
+                if len(requests) in (1, 3):
+                    creating = len(requests) == 1
+                    if not creating:
+                        assert any(proposal_id in str(item.get("content", ""))
+                                   for item in request.input_items if item.get("role") == "assistant")
+                    call = AgenticToolCall(
+                        "create" if creating else "save",
+                        "kochwiki__create_recipe_proposal" if creating else "kochwiki__save_recipe_proposal",
+                        json.dumps({"proposal": candidate} if creating else {"proposal_id": proposal_id}),
+                    )
+                    return AgenticGenerationResponse(({
+                        "type": "function_call", "call_id": call.call_id,
+                        "name": call.name, "arguments": call.arguments,
+                    },), (call,), None)
+                output = request.input_items[-1]["output"]
+                assert isinstance(output, str)
+                result = json.loads(output)
+                if len(requests) == 2:
+                    assert result["structuredContent"]["proposalId"] == proposal_id
+                    return AgenticGenerationResponse((), (), f"Proposal {proposal_id}: Adjusted oats.")
+                if save_fails:
+                    assert result["isError"] is True
+                    return AgenticGenerationResponse((), (), "Saving failed; no draft was saved.")
+                assert result["structuredContent"]["id"] == version_id
+                return AgenticGenerationResponse((), (), f"Saved draft {version_id}.")
+
+        def generator_factory(*, model: str, client: object) -> Generator:
+            return Generator()
+
+        monkeypatch.setattr("app.agents.wiring.OpenAIAgenticGenerator", generator_factory)
+        server = MCPServer("Proposals", instructions="Use create_recipe_proposal for proposals; save only on request.")
+
+        @server.tool()
+        def create_recipe_proposal(proposal: dict[str, object]) -> dict[str, object]:
+            created_proposals.append(proposal)
+            return {"proposalId": proposal_id, **proposal}
+
+        @server.tool()
+        def save_recipe_proposal(proposal_id: str) -> dict[str, str]:
+            saved_ids.append(proposal_id)
+            if save_fails:
+                raise ToolError("Missing referenced foodstuff")
+            return {"id": version_id, "name": "Adjusted oats"}
+
+        app = server.streamable_http_app(
+            streamable_http_path="/mcp/", stateless_http=True, json_response=True,
+            transport_security=TransportSecuritySettings(allowed_hosts=["localhost"]),
+        )
+        async with app.router.lifespan_context(app), httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app), base_url="http://localhost",
+        ) as http:
+            def client_for_url(url: str, *, read_timeout_seconds: float) -> Client:
+                return Client(streamable_http_client(url, http_client=http), read_timeout_seconds=read_timeout_seconds)
+
+            monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+            agents = configure_agents(configured_settings())
+            await agents.start()
+            try:
+                agent = agents.kochwiki.agent
+                assert agent is not None
+                created = agent.create(KochwikiSessionInput(payload["source"], payload["foodstuffs"]))
+                assert isinstance(created, TextSessionCreation)
+                agent.append_user_message(created.session_id, "Propose a change")
+                proposal_turn = await agent.execute_turn(created.session_id)
+                assert proposal_turn.kind == "completed"
+                assert proposal_turn.artifacts == ()
+                assert saved_ids == []
+                agent.append_user_message(created.session_id, "Save that proposal")
+                save_turn = await agent.execute_turn(created.session_id)
+                assert save_turn.kind == "completed"
+                assert save_turn.artifacts == ()
+                assert save_turn.text == ("Saving failed; no draft was saved." if save_fails
+                                          else f"Saved draft {version_id}.")
+                assert created_proposals == [candidate]
+                assert saved_ids == [proposal_id]
+                assert {tool["name"] for tool in requests[0].tools} == {
+                    "kochwiki__create_recipe_proposal", "kochwiki__save_recipe_proposal",
+                }
+                assert "register_recipe_proposal" not in requests[0].instructions
+                assert "inline temporary definitions" not in requests[0].instructions
+                snapshot = json.loads(str(requests[0].input_items[0]["content"]).split("\n", 1)[1])
+                assert set(snapshot) == {"source", "foodstuffs"}
+                assert snapshot["source"]["external_reference"] == source["external_reference"]
+                assert snapshot["source"]["recipe"]["ingredients"][0]["amount"] == "125.75"
+                assert snapshot["foodstuffs"][0]["name"] == "Oats"
+                read = agent.read(created.session_id)
+                assert read.kind == "active"
+            finally:
+                await agents.close()
 
     asyncio.run(exercise())
 

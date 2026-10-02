@@ -5,7 +5,6 @@ services:
     image: roithme0/ai-service-backend:alpha
     restart: unless-stopped
     environment:
-      KOCHWIKI_BASE_URL: "${KOCHWIKI_BASE_URL:-}"
       KOCHWIKI_MCP_URL: "${KOCHWIKI_MCP_URL:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       KOCHWIKI_OPENAI_MODEL: "${KOCHWIKI_OPENAI_MODEL:-}"

@@ -4,26 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from typing import Never
 
 from app.models.agentic_generation import AgenticGenerator
-from app.recipe_improvement.agentic_turns import MAX_PROVIDER_RESPONSES, MAX_TOOL_ATTEMPTS, MAX_TOOL_SUCCESSES
-from app.recipe_improvement.instructions import RECIPE_IMPROVEMENT_INSTRUCTIONS
-from app.recipe_improvement.proposals import (
-    MAX_PROPOSALS_PER_SESSION, RecipeProposal, RecipeProposalPayload,
-)
-from app.recipe_improvement.resolver import RecipePresentationResolver
+from app.recipe_improvement.context import recipe_context
 from app.recipe_improvement.session_input import (
     RecipeImprovementSessionInput, RecipeImprovementSessionInputFailure,
     validate_recipe_improvement_session_input,
 )
-from app.recipe_improvement.session_lifecycle import RecipeImprovementSessionStore, new_recipe_session_store
-from app.recipe_improvement.tools.register_recipe_proposal import (
-    RecipeToolFactory, proposal_registration_tool,
+from app.recipe_improvement.session_lifecycle import (
+    MAX_ARTIFACTS_PER_SESSION, RecipeImprovementSessionStore, new_recipe_session_store,
 )
-from app.recipe_improvement.turn_service import RecipeTurnStrategy
 from app.recipe_improvement.validation import ValidationIssue
 from app.sessions.agent_service import AgentInputAccepted, AgentInputRejected, ConfiguredAgentService
 from app.sessions.conversation import ConversationSessionSettings
+from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
+from app.sessions.model_turns import MAX_PROVIDER_RESPONSES, MAX_TOOL_ATTEMPTS, ModelTurnStrategy
 from app.sessions.tools import ToolSource
 
 
@@ -34,7 +30,7 @@ class KochwikiSessionInput:
 
 
 KochwikiAgent = ConfiguredAgentService[
-    KochwikiSessionInput, RecipeImprovementSessionInput, RecipeProposalPayload, ValidationIssue
+    KochwikiSessionInput, RecipeImprovementSessionInput, Never, ValidationIssue
 ]
 
 
@@ -51,25 +47,21 @@ def validate_kochwiki_input(
 
 def create_kochwiki_agent(
     generator: AgenticGenerator,
-    resolver: RecipePresentationResolver,
     store: RecipeImprovementSessionStore | None = None,
     *,
-    instructions: str = RECIPE_IMPROVEMENT_INSTRUCTIONS,
-    max_artifacts: int = MAX_PROPOSALS_PER_SESSION,
+    instructions: str = CONVERSATION_INSTRUCTIONS,
+    max_artifacts: int = MAX_ARTIFACTS_PER_SESSION,
     max_tool_attempts: int = MAX_TOOL_ATTEMPTS,
-    max_tool_successes: int = MAX_TOOL_SUCCESSES,
     max_provider_responses: int = MAX_PROVIDER_RESPONSES,
-    tool_factory: RecipeToolFactory = proposal_registration_tool,
-    tool_sources: tuple[ToolSource[RecipeProposal], ...] = (),
+    tool_sources: tuple[ToolSource[Never], ...] = (),
 ) -> KochwikiAgent:
     owned_store = store if store is not None else new_recipe_session_store()
     return ConfiguredAgentService(
         owned_store, validate_kochwiki_input,
-        RecipeTurnStrategy(
-            owned_store, generator, resolver, instructions, tool_factory,
-            max_attempts=max_tool_attempts, max_successes=max_tool_successes,
+        ModelTurnStrategy(
+            owned_store, generator, recipe_context, tool_sources,
+            instructions=instructions, max_attempts=max_tool_attempts,
             max_provider_responses=max_provider_responses,
-            tool_sources=tool_sources,
         ),
         ConversationSessionSettings(max_artifacts=max_artifacts),
     )

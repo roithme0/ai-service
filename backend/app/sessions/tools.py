@@ -60,8 +60,6 @@ class ToolRegistry(Generic[ArtifactT]):
                 or tool.schema.get("type") != "function"):
                 raise ValueError("tools must have unique names matching their schemas")
             handlers[tool.name] = tool.execute
-        if not handlers:
-            raise ValueError("at least one tool is required")
         self._handlers = handlers
         self.schemas = tuple(tool.schema for tool in tools)
 

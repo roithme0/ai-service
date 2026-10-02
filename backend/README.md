@@ -18,12 +18,12 @@ The backend installs Kochwiki's shared Pydantic contract package from a GitHub
 Release wheel, pinned by URL and SHA-256 in `pyproject.toml`. Development, CI,
 and Docker use the same dependency. To upgrade, select a release from
 [Kochwiki Releases](https://github.com/roithme0/kochwiki-v2/releases), update the
-URL and checksum using its `SHA256SUMS`, and run the resolver and proposal-flow
+URL and checksum using its `SHA256SUMS`, and run the snapshot validation
 checks. The pin verifies the artifact; compatibility with the deployed Kochwiki
 API still requires coordinated validation.
 
-Recipe presentations retain decimal values internally and emit JSON numbers.
-JSON serialization can round values to floating-point precision.
+Initialization snapshots retain decimal values internally and serialize them
+for model context. Snapshot validation still uses Kochwiki's shared unit contract.
 
 Run the development server:
 
@@ -32,10 +32,9 @@ fastapi dev app/main.py
 ```
 
 To enable the Kochwiki agent, copy `.env.example` to `.env` and set
-`OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`, `KOCHWIKI_BASE_URL`, and
-`KOCHWIKI_MCP_URL`.
-The backend loads this ignored file automatically. The URL identifies Kochwiki's
-API base for resolving validated recipe candidates into authoritative presentations.
+`OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`, and `KOCHWIKI_MCP_URL`.
+The backend loads this ignored file automatically. The MCP URL identifies
+Kochwiki's Streamable HTTP endpoint. `KOCHWIKI_BASE_URL` is no longer used.
 In deployed environments, supply these values through the process environment or
 secret store; never put a real key in tracked configuration. Missing or invalid
 local Kochwiki configuration makes every Kochwiki session endpoint return
@@ -43,9 +42,9 @@ local Kochwiki configuration makes every Kochwiki session endpoint return
 without model credentials or Kochwiki access. The frontend now uses this demo:
 any text advances its introduction, two greeting artifacts in one turn, one scripted failure, and completion sequence.
 The frontend simulates a 405 compatibility error on the next message after completion; the backend still accepts further submissions. Refresh the page to restart with a new session.
-The generator receives the conversation, recipe and available-foodstuff snapshots,
-and versioned recipe-specific instructions. It may register validated recipe
-proposals through the bounded tool-call flow before returning its reply.
+The generator receives the conversation and the existing recipe and foodstuff
+snapshots. Kochwiki supplies all domain tools and workflow instructions through
+MCP; the AI Service supplies only generic conversational guidance.
 
 ## MCP connections and tool execution
 
@@ -92,9 +91,13 @@ multiple connections. All tools share the existing call limits. Collisions acros
 sources or with local tool names are rejected before model generation.
 Server instructions include explicit mappings to model-facing tool names.
 Source instructions appear once in configured source order, followed by local
-agent instructions, which take precedence where they conflict. During this
-migration Kochwiki's local proposal registration remains the default proposal
-workflow. Existing snapshots and resolver behavior remain in place.
+agent instructions, which take precedence where they conflict. The Kochwiki
+agent supplies only its MCP tool source: local `register_recipe_proposal`, recipe
+workflow instructions, presentation resolution and AI Service proposal ownership
+have been removed. Its generic model turn strategy preserves snapshot, history,
+turn reservation, failure, cancellation and expiration behavior. Turns allow six
+tool attempts and eight provider responses. Artifact-free sources have no separate
+artifact success limit; a successful MCP call does not count as a chat artifact.
 
 Tool arguments must be a JSON object. MCP results are returned to the model as
 JSON, preserving content blocks, structured content and the `isError` flag.
@@ -102,9 +105,17 @@ Transport/protocol failures return a generic tool failure so the model can respo
 the backend logs the connection, tool name and exception type. Cancellation
 propagates normally. No automatic retries are performed for tool calls.
 The generic adapter does not interpret domain payloads or create chat artifacts.
+Kochwiki owns proposals and saving drafts. This slice presents results in text;
+Kochwiki turns and session reads have empty artifact lists. Generic artifact
+handling remains a later slice. Only final replies are retained between turns,
+not tool transcripts, so generic guidance asks the model to include identifiers
+needed for follow-up actions. There is no automatic rollback of MCP writes if
+later model generation fails. Failed turns are retained by the session lifecycle
+and are not replayed on a repeated turn request.
 
 `tests/test_mcp_connection.py` exercises a complete configured-agent tool turn
-against a Streamable HTTP `hello_world` server with a scripted model.
+against Streamable HTTP servers with a scripted model, including proposal
+creation followed by saving in a later turn and a failed save.
 `tests/test_mcp_tools.py` covers multiple servers, routing, errors and limits.
 Startup discovers capabilities but never invokes domain tools.
 

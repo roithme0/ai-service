@@ -19,12 +19,12 @@ chat UI demo. It requires no OpenAI credentials, model configuration, or reachab
 Kochwiki service. Submit any text to advance through greeting, greeting-tool JSON
 artifact, and completion. Refresh the page to restart with a new empty session.
 
-Docker Compose reads `deployment/.env`. To enable recipe-improvement turns in
-the container, add `OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`, and the
-Kochwiki API base URL as `KOCHWIKI_BASE_URL`. That file is ignored by Git. The
-variables are forwarded only to the backend. When Kochwiki runs directly on the
-host, use `http://host.docker.internal:<port>/api`; `localhost` inside the backend
-container refers to that container itself.
+Docker Compose reads `deployment/.env`. To enable Kochwiki turns in the
+container, add `OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`, and `KOCHWIKI_MCP_URL`.
+That file is ignored by Git. The variables are forwarded only to the backend.
+When Kochwiki runs directly on the host, use
+`http://host.docker.internal:<port>/mcp/`; `localhost` inside the backend
+container refers to that container itself. `KOCHWIKI_BASE_URL` is no longer used.
 
 Run backend tests in a container:
 
@@ -43,8 +43,8 @@ session/message/turn requests are not automatically replayed by the gateway.
 
 Recipe turns return only after completion. The current backend allows eight
 provider responses at 60 seconds each, with provider retries disabled, and six
-tool attempts whose Kochwiki resolver has a 5-second timeout. The resulting
-nominal budget is 510 seconds; 600 seconds leaves 90 seconds for orchestration
+MCP tool attempts with a 10-second SDK read timeout. The resulting
+nominal budget is 540 seconds; 600 seconds leaves 60 seconds for orchestration
 and transport overhead. These are operation limits, not a hard wall-clock turn
 deadline. Nginx's [read timeout](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_read_timeout)
 measures inactivity between upstream reads, not total request duration.

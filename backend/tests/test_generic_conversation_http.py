@@ -17,13 +17,13 @@ from app.sessions.http import (
     AgentConfiguration, AgentTransport, ConversationTransport, ErrorResponse, SessionErrorKind,
     ValidationErrorResponse, _demo_issue, _error, _kochwiki_input, _kochwiki_issue, get_agent_registry,
 )
-from test_recipe_improvement_session_http import FakeGenerator, FakeResolver, valid_request
+from test_recipe_improvement_session_http import FakeGenerator, valid_request
 
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     registry: dict[str, ConversationTransport | None] = {
-        "kochwiki": AgentTransport(create_kochwiki_agent(FakeGenerator(), FakeResolver()), _kochwiki_input, _kochwiki_issue),
+        "kochwiki": AgentTransport(create_kochwiki_agent(FakeGenerator()), _kochwiki_input, _kochwiki_issue),
         "demo": AgentTransport(create_demo_agent(delay_seconds=0), lambda value: value, _demo_issue),
     }
     app.dependency_overrides[get_agent_registry] = lambda: registry

@@ -9,7 +9,7 @@ from app.recipe_improvement.session_lifecycle import new_recipe_session_store
 from app.sessions.agent_service import AgentInputRejected
 from app.sessions.conversation import ConversationReadActive
 
-from test_recipe_improvement_session_http import FakeResolver, valid_request
+from test_recipe_improvement_session_http import valid_request
 
 
 class ReplyGenerator:
@@ -23,7 +23,7 @@ class ReplyGenerator:
 
 def test_direct_kochwiki_session_creation_normalizes_json_and_rejects_invalid_input() -> None:
     store = new_recipe_session_store()
-    agent = create_kochwiki_agent(ReplyGenerator(), FakeResolver(), store)
+    agent = create_kochwiki_agent(ReplyGenerator(), store)
     request = valid_request()
     created = agent.create(KochwikiSessionInput(request["source"], request["foodstuffs"]))
     assert not isinstance(created, AgentInputRejected)
@@ -106,8 +106,8 @@ def test_instances_own_sessions_and_turns_are_isolated() -> None:
 def test_recipe_instances_bind_distinct_instructions_and_sessions() -> None:
     first_generator = ReplyGenerator()
     second_generator = ReplyGenerator()
-    first_agent = create_kochwiki_agent(first_generator, FakeResolver(), instructions="First instructions")
-    second_agent = create_kochwiki_agent(second_generator, FakeResolver(), instructions="Second instructions")
+    first_agent = create_kochwiki_agent(first_generator, instructions="First instructions")
+    second_agent = create_kochwiki_agent(second_generator, instructions="Second instructions")
     request = valid_request()
     first = first_agent.create(KochwikiSessionInput(request["source"], request["foodstuffs"]))
     second = second_agent.create(KochwikiSessionInput(request["source"], request["foodstuffs"]))
