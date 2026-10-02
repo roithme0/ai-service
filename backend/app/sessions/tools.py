@@ -6,10 +6,10 @@ import inspect
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, Protocol, TypeVar
 
 
-ArtifactT = TypeVar("ArtifactT")
+ArtifactT = TypeVar("ArtifactT", covariant=True)
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,22 @@ class RegisteredTool(Generic[ArtifactT]):
     ]
 
 
+class ToolSource(Protocol[ArtifactT]):
+    def registered_tools(self) -> tuple[RegisteredTool[ArtifactT], ...]: ...
+
+    @property
+    def instructions(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class LocalToolSource(Generic[ArtifactT]):
+    tools: tuple[RegisteredTool[ArtifactT], ...]
+    instructions: str = ""
+
+    def registered_tools(self) -> tuple[RegisteredTool[ArtifactT], ...]:
+        return self.tools
+
+
 class ToolRegistry(Generic[ArtifactT]):
     def __init__(self, tools: tuple[RegisteredTool[ArtifactT], ...]) -> None:
         handlers: dict[
@@ -44,8 +60,6 @@ class ToolRegistry(Generic[ArtifactT]):
                 or tool.schema.get("type") != "function"):
                 raise ValueError("tools must have unique names matching their schemas")
             handlers[tool.name] = tool.execute
-        if not handlers:
-            raise ValueError("at least one tool is required")
         self._handlers = handlers
         self.schemas = tuple(tool.schema for tool in tools)
 

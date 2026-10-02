@@ -2,14 +2,14 @@ import asyncio
 from datetime import UTC, datetime
 
 from app.agents.demo import create_demo_agent, validate_demo_input
-from app.agents.recipe import RecipeSessionInput, create_recipe_agent
+from app.sessions.model_sessions import create_model_agent
 from app.demo.session import GreetingPayload, GreetingsPayload, new_demo_session_store
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
-from app.recipe_improvement.session_lifecycle import new_recipe_session_store
+from app.sessions.model_sessions import new_model_session_store
 from app.sessions.agent_service import AgentInputRejected
 from app.sessions.conversation import ConversationReadActive
 
-from test_recipe_improvement_session_http import FakeResolver, valid_request
+from test_model_session_http import valid_request
 
 
 class ReplyGenerator:
@@ -21,19 +21,21 @@ class ReplyGenerator:
         return AgenticGenerationResponse((), (), "Configured reply")
 
 
-def test_direct_recipe_creation_normalizes_json_and_rejects_invalid_input() -> None:
-    store = new_recipe_session_store()
-    agent = create_recipe_agent(ReplyGenerator(), FakeResolver(), store)
+def test_direct_model_session_retains_detached_json_and_rejects_invalid_input() -> None:
+    store = new_model_session_store()
+    agent = create_model_agent(ReplyGenerator(), store)
     request = valid_request()
-    created = agent.create(RecipeSessionInput(request["source"], request["foodstuffs"]))
+    created = agent.create(request)
     assert not isinstance(created, AgentInputRejected)
     read = agent.read(created.session_id)
     assert isinstance(read, ConversationReadActive)
-    assert str(read.snapshot.session.payload.source.recipe.ingredients[0].amount) == "125.75"
+    assert '"amount":125.75' in read.snapshot.session.payload.model_context
+    request.clear()
+    assert '"amount":125.75' in read.snapshot.session.payload.model_context
 
-    invalid = agent.create(RecipeSessionInput({}, request["foodstuffs"]))
+    invalid = agent.create({"context": []})
     assert isinstance(invalid, AgentInputRejected)
-    assert invalid.issues[0].location[0] == "source"
+    assert invalid.issues[0].location[0] == "context"
     assert len(store._settings) == 1
 
 
@@ -106,11 +108,11 @@ def test_instances_own_sessions_and_turns_are_isolated() -> None:
 def test_recipe_instances_bind_distinct_instructions_and_sessions() -> None:
     first_generator = ReplyGenerator()
     second_generator = ReplyGenerator()
-    first_agent = create_recipe_agent(first_generator, FakeResolver(), instructions="First instructions")
-    second_agent = create_recipe_agent(second_generator, FakeResolver(), instructions="Second instructions")
+    first_agent = create_model_agent(first_generator, instructions="First instructions")
+    second_agent = create_model_agent(second_generator, instructions="Second instructions")
     request = valid_request()
-    first = first_agent.create(RecipeSessionInput(request["source"], request["foodstuffs"]))
-    second = second_agent.create(RecipeSessionInput(request["source"], request["foodstuffs"]))
+    first = first_agent.create(request)
+    second = second_agent.create(request)
     assert not isinstance(first, AgentInputRejected)
     assert not isinstance(second, AgentInputRejected)
     assert first_agent.read(second.session_id).kind == "unknown"

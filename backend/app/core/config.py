@@ -12,8 +12,8 @@ BACKEND_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
-    recipe_improvement_openai_model: str | None = None
-    kochwiki_base_url: str | None = None
+    kochwiki_openai_model: str | None = None
+    kochwiki_mcp_url: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=BACKEND_ENV_FILE,
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     )
 
     @field_validator(
-        "openai_api_key", "recipe_improvement_openai_model", "kochwiki_base_url", mode="before"
+        "openai_api_key", "kochwiki_openai_model", "kochwiki_mcp_url", mode="before"
     )
     @classmethod
     def empty_strings_are_unset(cls, value: object) -> object:

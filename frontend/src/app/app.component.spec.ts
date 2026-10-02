@@ -11,7 +11,7 @@ describe('Demo application', () => {
     { type: 'demo.greeting', payload: { message: 'Hello, World!' }, text: '"message": "Hello, World!"' },
     { type: 'demo.greetings', payload: { messages: Array.from({ length: 30 }, (_, index) => `Hello, Visitor ${index + 1}!`) },
       text: 'Hello, Visitor 30!' },
-  ])('creates an empty demo session and renders $type through JSON fallback', async ({ type, payload, text }) => {
+  ])('creates an empty demo session and renders $type through explicit JSON presentation', async ({ type, payload, text }) => {
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json({ session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z' }))
       .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Any text', turn_id: null }))
@@ -65,8 +65,8 @@ describe('Demo application', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/v1/agents/demo/sessions/demo-1/turns',
       expect.objectContaining({ method: 'POST' }));
     expect(chat.content().map((item) => item.id)).toEqual(['confirmed-0-user', 'greeting-1', 'assistant-turn-2']);
-    expect(chat.content()[1]).toEqual({ kind: 'artifact', id: 'greeting-1', type,
-      headline: type, payload });
+    expect(chat.content()[1]).toEqual({ kind: 'artifact', id: 'greeting-1', type: 'json',
+      headline: type, payload: { value: payload } });
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('pre')?.textContent).toContain(text);
     expect(element.textContent).toContain('festen Skript ohne KI-Modell');

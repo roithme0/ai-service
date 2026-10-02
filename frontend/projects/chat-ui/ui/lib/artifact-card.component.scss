@@ -11,11 +11,23 @@
   background: var(--ai-chat-artifact-background, #21171b);
 }
 
-h3 {
+.artifact-header {
   margin: 0 0 0.875rem;
+}
+
+h3 {
+  margin: 0;
   color: var(--ai-chat-artifact-heading, #f8eef1);
   font-size: 1rem;
   line-height: 1.35;
+}
+
+.artifact-subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--ai-chat-artifact-subtitle, #bda9b1);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .artifact-body {
@@ -31,7 +43,7 @@ h3 {
   mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent 100%);
 }
 
-.json-fallback {
+.json-artifact {
   min-width: 0;
   margin: 0;
   padding: 0.875rem;

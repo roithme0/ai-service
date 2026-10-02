@@ -10,9 +10,10 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     "fastapi[standard]==0.141.1",
     "openai>=2,<3",
+    "mcp==2.2.0",
+    "jsonschema>=4.26,<5",
     "pydantic==2.13.5",
     "pydantic-settings>=2,<3",
-    "kochwiki-contract @ https://github.com/roithme0/kochwiki-v2/releases/download/v0.1.1-alpha/kochwiki_contract-0.1.1a0-py3-none-any.whl#sha256=ad5a05c333e51c72fc7cb0b2e4e1d6f1d126c30434512008e118f3b3e1712c31",
 ]
 
 [project.optional-dependencies]

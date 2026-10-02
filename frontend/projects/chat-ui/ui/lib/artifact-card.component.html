@@ -1,13 +1,20 @@
 <article class="artifact" [attr.aria-label]="artifact().headline">
-  <h3>{{ artifact().headline }}</h3>
+  <header class="artifact-header">
+    <h3>{{ artifact().headline }}</h3>
+    @if (artifact().subtitle; as subtitle) {
+      <p class="artifact-subtitle">{{ subtitle }}</p>
+    }
+  </header>
   <div #body class="artifact-body" [class.artifact-body--expanded]="expanded()" [class.artifact-body--faded]="overflowing() && !expanded()">
     @if (renderer(); as selected) {
       <ng-container
         [ngTemplateOutlet]="selected.template"
         [ngTemplateOutletContext]="renderContext()"
       />
+    } @else if (formattedPayload(); as json) {
+      <pre class="json-artifact">{{ json }}</pre>
     } @else {
-      <pre class="json-fallback">{{ formattedPayload() }}</pre>
+      <p role="status">Diese Darstellung wird nicht unterstützt.</p>
     }
   </div>
   @if (overflowing()) {

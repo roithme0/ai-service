@@ -14,3 +14,5 @@ export type {
   JsonValue,
 } from './lib/chat-message';
 export { artifactRenderer } from './lib/chat-message';
+export { JSON_ARTIFACT_CAPABILITY } from './lib/artifact-capabilities';
+export type { ChatArtifactCapability } from './lib/artifact-capabilities';

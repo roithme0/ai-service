@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
-import type { ChatArtifact, ChatArtifactRenderer, JsonValue } from './chat-message';
+import type { ChatArtifact, ChatArtifactRenderer } from './chat-message';
 
 @Component({
   selector: 'ai-chat-artifact-card',
@@ -26,7 +26,12 @@ export class ArtifactCardComponent implements AfterViewInit, OnDestroy {
   readonly renderer = input<ChatArtifactRenderer | null>(null);
   protected readonly expanded = signal(false);
   protected readonly overflowing = signal(false);
-  protected readonly formattedPayload = computed(() => JSON.stringify(this.artifact().payload, null, 2));
+  protected readonly formattedPayload = computed(() => {
+    const payload = this.artifact().payload;
+    if (this.artifact().type !== 'json' || payload === null || typeof payload !== 'object'
+      || Array.isArray(payload) || !('value' in payload)) return null;
+    return JSON.stringify(payload['value'], null, 2);
+  });
   protected readonly renderContext = computed(() => ({
     $implicit: this.artifact().payload,
     artifact: this.artifact(),

@@ -8,7 +8,7 @@ import {
 } from './conversation-api';
 import type { ArtifactResponse, SessionSnapshotResponse } from '../generated/types.gen';
 
-import { presentJsonArtifact } from './generic-artifact-mapper';
+import { presentArtifact } from './generic-artifact-mapper';
 
 export type ArtifactMapper = (artifact: ArtifactResponse) => ChatArtifact | null;
 
@@ -31,7 +31,7 @@ export class ConversationController {
   constructor(
     private readonly transport: ConversationTransport,
     private readonly publish: (state: ConversationViewState) => void,
-    private readonly mapArtifact: ArtifactMapper = presentJsonArtifact,
+    private readonly mapArtifact: ArtifactMapper = presentArtifact,
   ) {}
 
   get state(): ConversationViewState {

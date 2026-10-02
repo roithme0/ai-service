@@ -17,9 +17,9 @@ The `/ui` entry point exports `ChatUiComponent` and the typed content, artifact 
 />
 ```
 
-Text content has readonly `kind`, `id`, `role` (`user` or `assistant`), and `text` fields. Artifacts have readonly `kind`, `id`, `type`, `headline`, and recursive `JsonValue` payload fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
+Text content has readonly `kind`, `id`, `role` (`user` or `assistant`), and `text` fields. Artifacts have readonly `kind`, `id`, `type`, `headline`, optional `subtitle`, and recursive `JsonValue` payload fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
 
-Map artifact type discriminators to typed Angular templates with `artifactRenderer(template)`. An absent mapping uses the built-in escaped, formatted JSON view. The library frames every artifact and clips renderer bodies above `--ai-chat-artifact-collapsed-height` (default `18rem`) with German expand/collapse controls and no nested scrolling area.
+Map artifact type discriminators to typed Angular templates with `artifactRenderer(template)`. The built-in `json` type renders the escaped, formatted `payload.value`. An absent mapping for any other type shows an unsupported-presentation message; it does not silently select JSON. The library frames every artifact and clips renderer bodies above `--ai-chat-artifact-collapsed-height` (default `18rem`) with German expand/collapse controls and no nested scrolling area.
 
 The component trims a valid submission and emits it once as a `ChatSubmission`. It retains the draft until the host calls `acknowledge`, so the visible composer can remain truthful to backend acceptance. It never adds that text to `content`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break. New content and status changes smoothly scroll the conversation history to the bottom, including when a delayed status becomes visible, even if the user had scrolled up.
 
@@ -35,7 +35,7 @@ A complete minimal standalone host (with the Material theme described below):
 import { Component, OnInit, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
 import {
-  AgentConfiguration, ConversationController, HttpConversationTransport,
+  AgentConfiguration, ConversationController, HttpConversationTransport, presentJsonArtifact,
   type ConversationViewState,
 } from '@roithme0/chat-ui/conversation';
 
@@ -60,6 +60,7 @@ export class ChatHost implements OnInit {
   private readonly controller = new ConversationController(
     new HttpConversationTransport('/api/v1', AgentConfiguration.demo),
     (state) => this.chat.set(state),
+    presentJsonArtifact,
   );
 
   ngOnInit(): void { void this.controller.start(); }
@@ -76,7 +77,7 @@ The required base URL is the prefix immediately before `/agents`: `/api/v1` yiel
 
 The transport binds the URL, agent key, and optional third constructor argument for initialization input. Omitted input sends `{ input: {} }`; supplied input uses `{ input: suppliedInput }`. Replacement sessions use the same transport settings. Server validation is authoritative, and configurations requiring domain input can reject an empty input. No recipe types or fixtures are packaged.
 
-The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentJsonArtifact` is exported for explicit use and is the default when no mapper is supplied. It preserves identity, type and JSON payload; the controller sorts artifacts by backend order and associates history artifacts with their turns. The host owns view-state binding, introductory text and custom renderer registration.
+The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentArtifact` is the default mapper: it preserves the advertised type and identity and unwraps the backend presentation payload `{ title, payload }`. `presentJsonArtifact` is an explicit adapter for hosts such as the deterministic demo that deliberately present arbitrary tool payloads using type `json` and `{ value: originalPayload }`; the controller sorts artifacts by backend order and associates history artifacts with their turns. The host owns view-state binding, introductory text and custom renderer registration.
 
 The supported HTTP contract is this repository's AI Service conversation API. `ConversationTransport` remains available for isolated tests. The controller retains acceptance acknowledgement, ambiguous-request reconciliation, turn execution, failure classification and existing recovery actions. It adds no polling, automatic retries, persistence, streaming or cancellation.
 
@@ -113,8 +114,9 @@ Set these CSS variables on an ancestor of `ai-chat-ui`:
 | `--ai-chat-code-background`       | Assistant code background      | `#251a1e`    |
 | `--ai-chat-artifact-background`   | Artifact card background       | `#21171b`    |
 | `--ai-chat-artifact-border`       | Artifact card border           | `#50363f`    |
+| `--ai-chat-artifact-subtitle`     | Artifact subtitle              | `#bda9b1`    |
 | `--ai-chat-artifact-heading`      | Artifact headline              | `#f8eef1`    |
-| `--ai-chat-artifact-text`         | JSON fallback text             | `#eadde2`    |
+| `--ai-chat-artifact-text`         | JSON presentation text             | `#eadde2`    |
 | `--ai-chat-composer-background`   | Composer field background      | `#291c21`    |
 | `--ai-chat-composer-border`       | Composer field border          | `#50363f`    |
 | `--ai-chat-composer-text`         | Composer field text            | `#f8eef1`    |
@@ -209,4 +211,50 @@ Rebuilding alone does not update the legacy Kochwiki tarball installation. Repea
 
 Run the backend on port 8004 and `npm run start:app` in `frontend`, then open `http://localhost:4204` at a portrait-phone viewport. The host creates an empty `demo` session and advances a scripted sequence through the real backend. No model credentials or Kochwiki access is required; see [frontend setup](../../README.md) for commands.
 
-Submit arbitrary text to check the loading state and introduction, then both the `demo.greeting` artifact and the `demo.greetings` list of 30 greetings in the same turn, then a scripted error and completion guidance on the following message. The error's “Demo-Aktion (ohne Funktion)” button leaves the state unchanged. Both artifacts use JSON fallback before the assistant reply. Check that the list starts collapsed and that “Mehr anzeigen” and “Weniger anzeigen” expand and collapse it. One more message triggers a frontend-only simulated 405 compatibility error without a retry action; the backend continues accepting messages. Refresh to restart with empty history; no dedicated restart button is provided. Generic error recovery actions remain available when failures occur. Also check that history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling.
+Submit arbitrary text to check the loading state and introduction, then both the `demo.greeting` artifact and the `demo.greetings` list of 30 greetings in the same turn, then a scripted error and completion guidance on the following message. The error's “Demo-Aktion (ohne Funktion)” button leaves the state unchanged. The demo host explicitly selects JSON presentation for both artifacts before the assistant reply. Check that the list starts collapsed and that “Mehr anzeigen” and “Weniger anzeigen” expand and collapse it. One more message triggers a frontend-only simulated 405 compatibility error without a retry action; the backend continues accepting messages. Refresh to restart with empty history; no dedicated restart button is provided. Generic error recovery actions remain available when failures occur. Also check that history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling.
+
+## Advertising presentation capabilities
+
+The UI entry point exports `ChatArtifactCapability` and
+`JSON_ARTIFACT_CAPABILITY`, including the shared JSON renderer's usage description
+and payload schema. Consumer frontends select the capabilities they support and
+supply them beside caller context when creating a model-backed session:
+
+```typescript
+import { JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
+
+const input = {
+  context: { selectedItem: item },
+  artifactCapabilities: [JSON_ARTIFACT_CAPABILITY],
+};
+const transport = new HttpConversationTransport('/ai/api/v1', AgentConfiguration.kochwiki, input);
+```
+
+The AI Service supplies the agent with a local `present_artifact` tool. The agent
+chooses when presentation helps and sends complete data; the renderer does not
+fetch missing details. JSON presentation uses type `json` and payload
+`{ value: <any JSON value> }`. With the default `presentArtifact` mapper, a backend
+presentation title becomes the card headline, and its optional `subtitle` appears
+as plain secondary text beneath it. The subtitle remains visible when the body
+is collapsed. Omitting capabilities keeps a
+model-backed session text-only. Custom renderer registration does not itself
+advertise a capability: the consumer must select its matching description and
+schema explicitly. Capability changes during a session are not supported.
+
+Capabilities can include optional `titleDescription` and `subtitleDescription`
+to tell the agent which values belong in the header. For example, a foodstuff
+capability can specify the foodstuff name as its title and its brand as the
+subtitle, omitted when absent. This is agent guidance rather than validation
+against the payload. Descriptions must be nonblank and at most 2,000 characters.
+The shared JSON capability includes guidance for a short descriptive title and
+an optional explanatory subtitle.
+
+Capabilities may also advertise an optional `metadataSchema`, a self-contained
+JSON Schema (draft 2020-12). The agent follows its field descriptions when
+supplying the optional `metadata` object to `present_artifact`. The service
+validates metadata separately from the presentation payload and rejects metadata
+for capabilities that do not advertise it. Omitted metadata is validated as an
+empty object, so schema-required fields remain required. The default mapper
+passes metadata to `ChatArtifact.metadata`; custom templates access it through
+`let-artifact="artifact"`. Metadata has no built-in rendering or action behavior;
+the consumer frontend interprets it and owns any domain actions.

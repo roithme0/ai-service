@@ -15,7 +15,7 @@ class AgentLifespan:
         self._agents = get_configured_agents()
 
     async def __aenter__(self) -> None:
-        return None
+        await self._agents.start()
 
     async def __aexit__(
         self,

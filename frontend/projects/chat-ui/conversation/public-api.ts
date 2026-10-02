@@ -3,4 +3,4 @@ export type { ApiErrorKind, ApiMessage, ConversationTransport } from './src/conv
 export type { UserMessageResponse, AssistantMessageResponse, SessionCreationResponse, SessionSnapshotResponse, CompletedTurnResponse, ArtifactResponse } from './generated/types.gen';
 export { ConversationController } from './src/conversation-controller';
 export type { ArtifactMapper, ConversationViewState } from './src/conversation-controller';
-export { presentJsonArtifact } from './src/generic-artifact-mapper';
+export { presentArtifact, presentJsonArtifact } from './src/generic-artifact-mapper';

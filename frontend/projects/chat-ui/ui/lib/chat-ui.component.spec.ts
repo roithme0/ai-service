@@ -19,7 +19,7 @@ const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
   { kind: 'text', id: 'assistant-1', role: 'assistant', text: '**formatted assistant text**' },
 ];
 
-@Component({ template: '<ng-template #template let-payload>Custom: {{ payload.label }}</ng-template>' })
+@Component({ template: '<ng-template #template let-payload let-artifact="artifact">Custom: {{ payload.label }} {{ artifact.metadata?.reference }}</ng-template>' })
 class RendererTemplateHost {
   readonly template = viewChild.required<
     TemplateRef<ChatArtifactRenderContext<{ readonly label: string }>>
@@ -63,14 +63,14 @@ describe('ChatUiComponent', () => {
     );
   });
 
-  it('uses a matching renderer and safely falls back to readable JSON', () => {
+  it('uses a matching renderer and renders explicit JSON safely', () => {
     const templateFixture = TestBed.createComponent(RendererTemplateHost);
     templateFixture.detectChanges();
     const content: readonly ChatContent[] = [
-      { kind: 'artifact', id: 'custom', type: 'known', headline: 'Known', payload: { label: 'typed' } },
-      { kind: 'artifact', id: 'fallback', type: 'unknown', headline: 'Unknown', payload: {
+      { kind: 'artifact', id: 'custom', type: 'known', headline: 'Known', payload: { label: 'typed' }, metadata: { reference: 'host-action-reference' } },
+      { kind: 'artifact', id: 'fallback', type: 'json', headline: 'JSON', payload: { value: {
         nested: [true, null], empty: {}, text: '<script>unsafe()</script>',
-      } },
+      } } },
     ];
     const fixture = createFixture(content);
     fixture.componentRef.setInput('artifactRenderers', {
@@ -81,9 +81,35 @@ describe('ChatUiComponent', () => {
     const cards = fixture.nativeElement.querySelectorAll('.artifact') as NodeListOf<HTMLElement>;
     expect(cards).toHaveLength(2);
     expect(cards[0].textContent).toContain('Custom: typed');
+    expect(cards[0].textContent).toContain('host-action-reference');
     expect(cards[1].querySelector('script')).toBeNull();
     expect(cards[1].querySelector('pre')?.textContent).toContain('"nested"');
     expect(cards[1].textContent).toContain('<script>unsafe()</script>');
+  });
+
+  it('does not silently render unsupported types as JSON', () => {
+    const fixture = createFixture([{
+      kind: 'artifact', id: 'unsupported', type: 'unknown', headline: 'Unknown',
+      payload: { secret: 'not presented' },
+    }]);
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('pre')).toBeNull();
+    expect(element.textContent).toContain('Diese Darstellung wird nicht unterst\u00fctzt.');
+    expect(element.textContent).not.toContain('not presented');
+  });
+
+  it('renders a subtitle literally beneath the artifact title, outside the collapsible body', () => {
+    const fixture = createFixture([
+      { kind: 'artifact', id: 'with-subtitle', type: 'json', headline: 'Oats',
+        subtitle: '<strong>Example brand</strong>', payload: { value: {} } },
+      { kind: 'artifact', id: 'without-subtitle', type: 'json', headline: 'Water', payload: { value: {} } },
+    ]);
+    const cards = (fixture.nativeElement as HTMLElement).querySelectorAll('.artifact');
+    expect(cards[0].querySelector('.artifact-header h3')?.textContent).toBe('Oats');
+    expect(cards[0].querySelector('.artifact-header .artifact-subtitle')?.textContent).toBe('<strong>Example brand</strong>');
+    expect(cards[0].querySelector('strong')).toBeNull();
+    expect(cards[0].querySelector('.artifact-body .artifact-subtitle')).toBeNull();
+    expect(cards[1].querySelector('.artifact-subtitle')).toBeNull();
   });
 
   it('offers library-owned German expansion only for overflowing renderer bodies', async () => {
@@ -103,7 +129,7 @@ describe('ChatUiComponent', () => {
     }
     vi.stubGlobal('ResizeObserver', OverflowObserver);
     const fixture = createFixture([{
-      kind: 'artifact', id: 'large', type: 'unknown', headline: 'Large', payload: { rows: [1, 2, 3] },
+      kind: 'artifact', id: 'large', type: 'json', headline: 'Large', payload: { value: { rows: [1, 2, 3] } },
     }]);
     fixture.detectChanges();
     await fixture.whenStable();

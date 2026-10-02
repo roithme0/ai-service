@@ -1,13 +1,14 @@
 import asyncio
 import json
 from collections.abc import Callable
+from typing import Never
 
 import pytest
 
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.text_sessions import TextMessage
 from app.sessions.tool_turns import run_tool_turn
-from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation
+from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
 
 
 class TwoToolGenerator:
@@ -45,8 +46,8 @@ def test_advertised_tools_dispatch_by_name_with_shared_limits() -> None:
     result = asyncio.run(run_tool_turn(
         generator, (TextMessage("user", "Help"),), "Context", "Instructions",
         (
-            RegisteredTool("first", {"type": "function", "name": "first"}, first),
-            RegisteredTool("second", {"type": "function", "name": "second"}, second),
+            LocalToolSource((RegisteredTool("first", {"type": "function", "name": "first"}, first),)),
+            LocalToolSource((RegisteredTool("second", {"type": "function", "name": "second"}, second),)),
         ),
         max_attempts=2, max_successes=1, max_provider_responses=2,
     ))
@@ -58,8 +59,11 @@ def test_advertised_tools_dispatch_by_name_with_shared_limits() -> None:
     outputs = generator.requests[1].input_items[-3:]
     assert outputs[0]["call_id"] == "call-a"
     assert outputs[0]["output"] == "accepted"
-    assert json.loads(outputs[1]["output"])["kind"] == "limit_reached"
-    assert json.loads(outputs[2]["output"])["reason"] == "unknown_tool"
+    limited_output = outputs[1]["output"]
+    unknown_output = outputs[2]["output"]
+    assert isinstance(limited_output, str) and isinstance(unknown_output, str)
+    assert json.loads(limited_output)["kind"] == "limit_reached"
+    assert json.loads(unknown_output)["reason"] == "unknown_tool"
 
 
 def test_each_advertised_name_dispatches_to_its_own_handler() -> None:
@@ -74,15 +78,17 @@ def test_each_advertised_name_dispatches_to_its_own_handler() -> None:
 
     result = asyncio.run(run_tool_turn(
         generator, (TextMessage("user", "Help"),), "Context", "Instructions",
-        (
+        (LocalToolSource((
             RegisteredTool("first", {"type": "function", "name": "first"}, handler("first")),
             RegisteredTool("second", {"type": "function", "name": "second"}, handler("second")),
-        ),
+        )),),
         max_attempts=2, max_successes=2, max_provider_responses=2,
     ))
     assert invoked == ["first", "second"]
     assert result.artifacts == ("first", "second")
-    assert json.loads(generator.requests[1].input_items[-1]["output"])["reason"] == "unknown_tool"
+    unknown_output = generator.requests[1].input_items[-1]["output"]
+    assert isinstance(unknown_output, str)
+    assert json.loads(unknown_output)["reason"] == "unknown_tool"
 
 
 def test_tool_registration_rejects_schema_dispatch_mismatch() -> None:
@@ -94,7 +100,55 @@ def test_tool_registration_rejects_schema_dispatch_mismatch() -> None:
     with pytest.raises(ValueError, match="matching their schemas"):
         asyncio.run(run_tool_turn(
             generator, (TextMessage("user", "Help"),), "Context", "Instructions",
-            (RegisteredTool("first", {"type": "function", "name": "second"}, execute),),
+            (LocalToolSource((RegisteredTool("first", {"type": "function", "name": "second"}, execute),)),),
             max_attempts=1, max_successes=1, max_provider_responses=2,
         ))
     assert generator.requests == []
+
+
+class IndependentToolSource:
+    def __init__(self, name: str, instructions: str, invoked: list[str]) -> None:
+        self.name = name
+        self.instructions = instructions
+        self.invoked = invoked
+
+    def registered_tools(self) -> tuple[RegisteredTool[Never], ...]:
+        def execute(call: ToolInvocation) -> ToolExecution[Never]:
+            self.invoked.append(self.name)
+            return ToolExecution(self.name)
+
+        return (RegisteredTool(self.name, {"type": "function", "name": self.name}, execute),)
+
+
+def test_independent_sources_combine_tools_and_instructions_in_configured_order() -> None:
+    generator = TwoToolGenerator()
+    invoked: list[str] = []
+    first = IndependentToolSource("first", "First source guidance", invoked)
+    second = IndependentToolSource("second", "Second source guidance", invoked)
+    result = asyncio.run(run_tool_turn(
+        generator, (), "Context", "Local instructions", (first, second),
+        max_attempts=2, max_successes=1, max_provider_responses=2,
+    ))
+    assert result.kind == "completed" and result.artifacts == ()
+    assert invoked == ["first", "second"]
+    assert [tool["name"] for tool in generator.requests[0].tools] == ["first", "second"]
+    instructions = generator.requests[0].instructions
+    assert instructions.index(first.instructions) < instructions.index(second.instructions)
+    assert instructions.count("Local agent instructions") == 1
+    assert instructions.endswith("Local instructions")
+    assert generator.requests[1].instructions == instructions
+    assert [item["output"] for item in generator.requests[1].input_items[-3:-1]] == ["first", "second"]
+
+
+def test_collision_between_independent_sources_is_rejected_before_generation() -> None:
+    generator = TwoToolGenerator()
+    invoked: list[str] = []
+    with pytest.raises(ValueError, match="unique names"):
+        asyncio.run(run_tool_turn(
+            generator, (), "Context", "Local instructions", (
+                IndependentToolSource("same", "First guidance", invoked),
+                IndependentToolSource("same", "Second guidance", invoked),
+            ), 2, 1, 2,
+        ))
+    assert generator.requests == []
+    assert invoked == []

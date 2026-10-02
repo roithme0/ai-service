@@ -29,9 +29,9 @@ describe('ConversationController', () => {
     const transport = new FakeTransport();
     const later = {
       artifact_id: 'later', type: 'other.result', created_at: '2026-09-25T12:00:00Z',
-      order: 2, turn_id: 'turn-1', payload: { value: 2 },
+      order: 2, turn_id: 'turn-1', payload: { title: "Later", payload: { value: 2 } },
     };
-    const earlier = { ...later, artifact_id: 'earlier', order: 1, payload: { value: 1 } };
+    const earlier = { ...later, artifact_id: 'earlier', order: 1, payload: { title: "Earlier", payload: { value: 1 } } };
     transport.appendMessage.mockResolvedValueOnce(user('Hello')).mockResolvedValueOnce(user('Again'));
     transport.generateTurn.mockResolvedValueOnce({
       kind: 'completed', turn_id: 'turn-1', message: assistant('Hi', 'turn-1'), artifacts: [later, earlier],
@@ -56,7 +56,7 @@ describe('ConversationController', () => {
   it('supplies complete envelopes to a custom mapper and applies filtering to turns and reconciled history', async () => {
     const transport = new FakeTransport();
     const artifact: ArtifactResponse = { artifact_id: 'custom', type: 'custom.result',
-      created_at: '2026-09-26T12:00:00Z', order: 1, turn_id: 'turn-1', payload: { value: 1 } };
+      created_at: '2026-09-26T12:00:00Z', order: 1, turn_id: 'turn-1', payload: { title: "Earlier", payload: { value: 1 } } };
     const hidden = { ...artifact, artifact_id: 'hidden', order: 2 };
     const mapper = vi.fn((envelope: ArtifactResponse) => envelope.artifact_id === 'hidden' ? null : ({
       kind: 'artifact' as const, id: envelope.artifact_id, type: envelope.type,
@@ -230,7 +230,7 @@ describe('ConversationController', () => {
       'text', 'artifact', 'text',
     ]);
     expect(controller.state.content[1]).toEqual(expect.objectContaining({
-      id: 'artifact-1', type: 'example.result', headline: 'example.result',
+      id: 'artifact-1', type: 'example.result', headline: 'Example',
     }));
   });
 
@@ -422,7 +422,7 @@ function artifact(artifactId: string, turnId: string): ArtifactResponse {
     created_at: '2026-09-25T12:00:00Z',
     order: 1,
     turn_id: turnId,
-    payload: { message: 'Example result' },
+    payload: { title: 'Example', payload: { message: 'Example result' } },
   };
 }
 
