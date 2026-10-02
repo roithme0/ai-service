@@ -12,9 +12,8 @@ from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_serializer
 
-from app.agents.kochwiki import KochwikiSessionInput
 from app.agents.wiring import get_configured_agents
-from app.recipe_improvement.validation import ValidationIssue
+from app.sessions.context import ContextIssue
 from app.sessions.agent_service import AgentInputRejected, ConfiguredAgentService
 from app.sessions.conversation import ConversationMessageBusy, ConversationReadActive, StagedArtifact, TurnKind
 from app.sessions.text_sessions import (
@@ -209,13 +208,7 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
         return _error(outcome.kind, outcome.turn_id)
 
 
-def _kochwiki_input(value: object) -> KochwikiSessionInput:
-    if isinstance(value, dict):
-        return KochwikiSessionInput(value.get("source"), value.get("foodstuffs"))
-    return KochwikiSessionInput(None, None)
-
-
-def _kochwiki_issue(issue: ValidationIssue) -> InputIssue:
+def _context_issue(issue: ContextIssue) -> InputIssue:
     return InputIssue(location=("input", *issue.location), message=issue.message)
 
 
@@ -228,7 +221,7 @@ def get_agent_registry() -> dict[str, ConversationTransport | None]:
     kochwiki_agent = agents.kochwiki.agent
     demo_agent = agents.demo.agent
     kochwiki: ConversationTransport | None = (
-        AgentTransport(kochwiki_agent, _kochwiki_input, _kochwiki_issue) if kochwiki_agent else None
+        AgentTransport(kochwiki_agent, lambda value: value, _context_issue) if kochwiki_agent else None
     )
     demo: ConversationTransport | None = (
         AgentTransport(demo_agent, lambda value: value, _demo_issue) if demo_agent else None

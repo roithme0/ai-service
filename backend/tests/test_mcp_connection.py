@@ -17,9 +17,8 @@ from app.core.config import Settings
 from app.main import AgentLifespan
 from app.mcp_connection import MCPConnection
 from app.sessions.text_sessions import TextSessionCreation
-from app.agents.kochwiki import KochwikiSessionInput
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from test_recipe_improvement_session_http import valid_request
+from test_model_session_http import valid_request
 
 
 def configured_settings() -> Settings:
@@ -82,7 +81,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(monkeypatch: pyt
                 assert not result.is_error
                 assert result.structured_content == {"message": "Hello World"}
                 payload = valid_request()
-                created = agents.kochwiki.agent.create(KochwikiSessionInput(payload["source"], payload["foodstuffs"]))
+                created = agents.kochwiki.agent.create(payload)
                 assert isinstance(created, TextSessionCreation)
                 agents.kochwiki.agent.append_user_message(created.session_id, "Call hello world")
                 turn = await agents.kochwiki.agent.execute_turn(created.session_id)
@@ -122,7 +121,7 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
         created_proposals: list[dict[str, object]] = []
         saved_ids: list[str] = []
         payload = valid_request()
-        source = payload["source"]
+        source = payload["context"]["source"]
         assert isinstance(source, dict)
         candidate = {"sourceRecipeVersionId": source["external_reference"],
                      "recipe": {"name": "Adjusted oats"}}
@@ -190,7 +189,7 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
             try:
                 agent = agents.kochwiki.agent
                 assert agent is not None
-                created = agent.create(KochwikiSessionInput(payload["source"], payload["foodstuffs"]))
+                created = agent.create(payload)
                 assert isinstance(created, TextSessionCreation)
                 agent.append_user_message(created.session_id, "Propose a change")
                 proposal_turn = await agent.execute_turn(created.session_id)
@@ -213,7 +212,7 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
                 snapshot = json.loads(str(requests[0].input_items[0]["content"]).split("\n", 1)[1])
                 assert set(snapshot) == {"source", "foodstuffs"}
                 assert snapshot["source"]["external_reference"] == source["external_reference"]
-                assert snapshot["source"]["recipe"]["ingredients"][0]["amount"] == "125.75"
+                assert snapshot["source"]["recipe"]["ingredients"][0]["amount"] == 125.75
                 assert snapshot["foodstuffs"][0]["name"] == "Oats"
                 read = agent.read(created.session_id)
                 assert read.kind == "active"

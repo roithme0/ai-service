@@ -14,22 +14,8 @@ py -3.13 -m venv .venv
 python -m pip install -e ".[test]"
 ```
 
-The backend installs Kochwiki's shared Pydantic contract package from a GitHub
-Release wheel, pinned by URL and SHA-256 in `pyproject.toml`. Development, CI,
-and Docker use the same dependency. To upgrade, select a release from
-[Kochwiki Releases](https://github.com/roithme0/kochwiki-v2/releases), update the
-URL and checksum using its `SHA256SUMS`, and run the snapshot validation
-checks. The pin verifies the artifact; compatibility with the deployed Kochwiki
-API still requires coordinated validation.
-
-Initialization snapshots retain decimal values internally and serialize them
-for model context. Snapshot validation still uses Kochwiki's shared unit contract.
-
-Run the development server:
-
-```powershell
-fastapi dev app/main.py
-```
+Session context is caller-provided JSON. The AI Service validates its structure
+and size without knowing recipes, foodstuffs or their relationships.
 
 To enable the Kochwiki agent, copy `.env.example` to `.env` and set
 `OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`, and `KOCHWIKI_MCP_URL`.
@@ -42,8 +28,7 @@ local Kochwiki configuration makes every Kochwiki session endpoint return
 without model credentials or Kochwiki access. The frontend now uses this demo:
 any text advances its introduction, two greeting artifacts in one turn, one scripted failure, and completion sequence.
 The frontend simulates a 405 compatibility error on the next message after completion; the backend still accepts further submissions. Refresh the page to restart with a new session.
-The generator receives the conversation and the existing recipe and foodstuff
-snapshots. Kochwiki supplies all domain tools and workflow instructions through
+The generator receives the conversation and the retained caller-provided context. Kochwiki supplies all domain tools and workflow instructions through
 MCP; the AI Service supplies only generic conversational guidance.
 
 ## MCP connections and tool execution
@@ -123,12 +108,20 @@ Startup discovers capabilities but never invokes domain tools.
 
 Use `/api/v1/agents/{configuration}/sessions` with the fixed configurations
 `kochwiki` and `demo`. Create with `POST` and an object envelope: Kochwiki uses
-`{"input":{"source":...,"foodstuffs":...}}`; demo accepts `{}` or an empty
+`{"input":{"context":{...}}}`; demo accepts `{}` or an empty
 `input`. Read with `GET /{session_id}`, append a user message with
 `POST /{session_id}/messages` and `{"text":"..."}`, then execute it with
 `POST /{session_id}/turns`. A turn does not append a message. Session reads and
 completed turns return published artifacts with shared identity and typed payloads.
 There is no individual artifact lookup route.
+
+Model-backed sessions require an `input` object containing only `context`, which
+must be a JSON object (an empty object is allowed). Nested JSON values retain
+their types; non-finite numbers and non-JSON values are rejected. The serialized
+model context, including its data-only prefix, is limited to 16,000 characters.
+It is captured at creation and reused for every turn without being included in
+session read responses. Domain validation and snapshot assembly belong to the
+caller. The former `source`/`foodstuffs` input envelope is no longer accepted.
 
 Run the tests:
 

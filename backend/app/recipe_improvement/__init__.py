@@ -1,2 +1,0 @@
-"""Recipe-improvement capability contracts."""
-

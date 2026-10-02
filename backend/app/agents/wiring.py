@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from openai import AsyncOpenAI
 
 from app.agents.demo import DemoAgent, create_demo_agent
-from app.agents.kochwiki import KochwikiAgent, create_kochwiki_agent
+from app.sessions.model_sessions import ModelAgent, create_model_agent
 from app.agents.runtime import AgentRuntime
 from app.core.config import Settings, get_settings
 from app.models.openai_agentic_generation import OpenAIAgenticGenerator
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ConfiguredAgents:
-    kochwiki: AgentRuntime[KochwikiAgent]
+    kochwiki: AgentRuntime[ModelAgent]
     demo: AgentRuntime[DemoAgent]
 
     async def start(self) -> None:
@@ -36,7 +36,7 @@ class ConfiguredAgents:
             resources.push_async_callback(self.demo.close)
 
 
-def configure_kochwiki_agent(settings: Settings) -> AgentRuntime[KochwikiAgent]:
+def configure_kochwiki_agent(settings: Settings) -> AgentRuntime[ModelAgent]:
     missing: list[str] = []
     key = settings.openai_api_key
     model = settings.kochwiki_openai_model
@@ -52,11 +52,11 @@ def configure_kochwiki_agent(settings: Settings) -> AgentRuntime[KochwikiAgent]:
         return AgentRuntime("kochwiki", None)
     assert key is not None and model is not None and mcp_url is not None
     client = AsyncOpenAI(api_key=key.get_secret_value(), max_retries=0)
-    runtime: AgentRuntime[KochwikiAgent] = AgentRuntime(
+    runtime: AgentRuntime[ModelAgent] = AgentRuntime(
         "kochwiki", None, model_client=client,
         mcp_connections=(MCPConnection("kochwiki", mcp_url),),
     )
-    runtime.agent = create_kochwiki_agent(
+    runtime.agent = create_model_agent(
         OpenAIAgenticGenerator(model=model, client=client),
         tool_sources=(runtime.mcp_tools,),
     )
