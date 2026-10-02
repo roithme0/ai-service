@@ -77,9 +77,10 @@ sources or with local tool names are rejected before model generation.
 Server instructions include explicit mappings to model-facing tool names.
 Source instructions appear once in configured source order, followed by local
 agent instructions, which take precedence where they conflict. The Kochwiki
-agent supplies only its MCP tool source: local `register_recipe_proposal`, recipe
-workflow instructions, presentation resolution and AI Service proposal ownership
-have been removed. Its generic model turn strategy preserves snapshot, history,
+agent supplies its MCP tool source plus a session-specific presentation tool when
+the caller advertises artifact capabilities. Local `register_recipe_proposal`,
+recipe workflow instructions, presentation resolution and AI Service proposal
+ownership have been removed. Its generic model turn strategy preserves snapshot, history,
 turn reservation, failure, cancellation and expiration behavior. Turns allow six
 tool attempts and eight provider responses. Artifact-free sources have no separate
 artifact success limit; a successful MCP call does not count as a chat artifact.
@@ -90,9 +91,10 @@ Transport/protocol failures return a generic tool failure so the model can respo
 the backend logs the connection, tool name and exception type. Cancellation
 propagates normally. No automatic retries are performed for tool calls.
 The generic adapter does not interpret domain payloads or create chat artifacts.
-Kochwiki owns proposals and saving drafts. This slice presents results in text;
-Kochwiki turns and session reads have empty artifact lists. Generic artifact
-handling remains a later slice. Only final replies are retained between turns,
+Kochwiki owns proposals and saving drafts. MCP results remain data for the model;
+they do not automatically appear as artifacts. Model-backed sessions may separately
+publish caller-advertised presentations through the local `present_artifact` tool.
+Only final replies are supplied as conversation history between turns,
 not tool transcripts, so generic guidance asks the model to include identifiers
 needed for follow-up actions. There is no automatic rollback of MCP writes if
 later model generation fails. Failed turns are retained by the session lifecycle
@@ -128,3 +130,47 @@ Run the tests:
 ```powershell
 pytest
 ```
+
+## Explicit presentation capabilities
+
+Model-backed session input accepts an optional `artifactCapabilities` array beside
+`context`. Each entry supplies a unique `type`, a usage `description`, and a
+`payloadSchema` JSON Schema object (draft 2020-12). These contracts are retained
+for the session; renderer implementations remain in the frontend. Omit the array
+or send an empty array for text-only sessions without the local presentation tool.
+
+```json
+{
+  "input": {
+    "context": {},
+    "artifactCapabilities": [{
+      "type": "json",
+      "description": "Show structured data when its structure helps the user.",
+      "payloadSchema": {
+        "type": "object",
+        "properties": {"value": {}},
+        "required": ["value"],
+        "additionalProperties": false
+      }
+    }]
+  }
+}
+```
+
+The model receives capability descriptions and standalone schemas with a local
+`present_artifact` tool accepting `type`, `title`, and a complete `payload`.
+The backend validates arguments and the selected payload schema before staging
+an artifact. Payload schemas can use local fragment references; external schema
+references are rejected and validation never fetches schemas over the network.
+Schema `format` annotations do not add format validation. Invalid arguments,
+unsupported types, invalid payloads, and exhausted artifact limits return tool
+errors. A successful call returns its artifact ID without echoing the payload.
+Presentation shares the turn's tool-call budget and the session artifact limit.
+
+Artifacts use the existing HTTP envelope, whose `payload` contains
+`{"title": "...", "payload": <complete presentation data>}`. IDs, order,
+timestamps, and turn attribution are assigned by the conversation store. They
+are published on successful turn completion and discarded if the turn fails or
+is cancelled. Repeated turn reads return the same stored artifacts. Presentation
+has no domain save effect. The AI Service does not know frontend renderers or
+Kochwiki models, and MCP tool results remain independent of presentation.

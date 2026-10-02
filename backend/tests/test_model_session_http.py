@@ -580,3 +580,92 @@ def test_session_history_reports_expiry_then_unknown() -> None:
         assert unknown.json() == {"detail": "Session not found", "kind": "unknown"}
     finally:
         app.dependency_overrides.clear()
+
+
+JSON_CAPABILITY = {
+    "type": "json", "description": "Show structured data deliberately",
+    "payloadSchema": {"type": "object", "properties": {"value": {}},
+                      "required": ["value"], "additionalProperties": False},
+}
+
+
+def presentation_response(arguments: object) -> AgenticGenerationResponse:
+    call = AgenticToolCall("presentation-call", "present_artifact", json.dumps(arguments))
+    return AgenticGenerationResponse(({
+        "type": "function_call", "call_id": call.call_id,
+        "name": call.name, "arguments": call.arguments,
+    },), (call,), None)
+
+
+def test_advertised_presentation_is_validated_published_and_retained(client: TestClient, fake_generator: FakeGenerator) -> None:
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
+        "context": {"selected": "Oats"}, "artifactCapabilities": [JSON_CAPABILITY],
+    }})
+    session_id = created.json()["session_id"]
+    base = f"/api/v1/agents/kochwiki/sessions/{session_id}"
+    client.post(base + "/messages", json={"text": "Show the ingredient"})
+    fake_generator.responses = [
+        presentation_response({"type": "missing", "title": "Ingredient", "payload": {"value": {}}}),
+        presentation_response({"type": "json", "title": "Ingredient", "payload": {"wrong": 1}}),
+        presentation_response({"type": "json", "title": "Ingredient", "payload": {"value": {"name": "Oats"}}}),
+    ]
+    response = client.post(base + "/turns", json={})
+    assert response.status_code == 201
+    artifacts = response.json()["artifacts"]
+    assert len(artifacts) == 1
+    assert artifacts[0]["type"] == "json"
+    assert artifacts[0]["payload"] == {"title": "Ingredient", "payload": {"value": {"name": "Oats"}}}
+    assert artifacts[0]["order"] == 1
+    assert artifacts[0]["artifact_id"]
+    assert artifacts[0]["turn_id"] == response.json()["turn_id"]
+    assert client.get(base).json()["artifacts"] == artifacts
+    request = fake_generator.calls[0]
+    assert [tool["name"] for tool in request.tools] == ["present_artifact"]
+    assert "Show structured data deliberately" in request.instructions
+    assert "payloadSchema" in request.instructions
+    outputs = [json.loads(str(item["output"])) for item in fake_generator.calls[-1].input_items
+               if item.get("type") == "function_call_output"]
+    assert [item.get("reason", item["kind"]) for item in outputs] == ["unsupported_type", "invalid_payload", "presented"]
+    assert "payload" not in outputs[-1]
+    # A later turn receives the same presentation capability.
+    client.post(base + "/messages", json={"text": "Continue"})
+    assert client.post(base + "/turns", json={}).status_code == 201
+    assert [tool["name"] for tool in fake_generator.calls[-1].tools] == ["present_artifact"]
+
+
+def test_failed_turn_discards_staged_presentations(client: TestClient, fake_generator: FakeGenerator) -> None:
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
+        "context": {}, "artifactCapabilities": [JSON_CAPABILITY],
+    }})
+    base = "/api/v1/agents/kochwiki/sessions/" + created.json()["session_id"]
+    client.post(base + "/messages", json={"text": "Show data"})
+    fake_generator.responses = [
+        presentation_response({"type": "json", "title": "Data", "payload": {"value": [1, None]}}),
+        AgenticGenerationResponse((), (), ""),
+    ]
+    assert client.post(base + "/turns", json={}).status_code == 502
+    assert client.get(base).json()["artifacts"] == []
+    assert client.post(base + "/turns", json={}).status_code == 502
+    assert len(fake_generator.calls) == 2
+
+
+def test_no_capabilities_means_no_presentation_tool(client: TestClient, fake_generator: FakeGenerator) -> None:
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {"context": {}}})
+    base = "/api/v1/agents/kochwiki/sessions/" + created.json()["session_id"]
+    client.post(base + "/messages", json={"text": "Hi"})
+    assert client.post(base + "/turns", json={}).status_code == 201
+    assert fake_generator.calls[0].tools == ()
+
+
+@pytest.mark.parametrize("capabilities", [
+    [JSON_CAPABILITY, JSON_CAPABILITY],
+    [{**JSON_CAPABILITY, "payloadSchema": {"type": "not-a-type"}}],
+    [{**JSON_CAPABILITY, "payloadSchema": {"$ref": "https://example.test/schema"}}],
+    [{**JSON_CAPABILITY, "payloadSchema": {"$schema": "http://json-schema.org/draft-07/schema#"}}],
+])
+def test_invalid_capabilities_reject_session_creation(client: TestClient, capabilities: object) -> None:
+    response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
+        "context": {}, "artifactCapabilities": capabilities,
+    }})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][:3] == ["body", "input", "artifactCapabilities"]

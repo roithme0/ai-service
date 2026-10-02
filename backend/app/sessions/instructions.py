@@ -10,5 +10,5 @@ CONVERSATION_INSTRUCTIONS = (
     "Include returned identifiers needed for follow-up actions when presenting results; "
     "tool-call transcripts are not retained between turns. "
     "Text emitted alongside a tool call is not visible to the user. "
-    "Put all user-facing text in your final response after tool calls have finished."
+    "Put user-facing prose in your final response after tool calls have finished."
 )

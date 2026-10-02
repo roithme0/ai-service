@@ -9,9 +9,22 @@ export function presentJsonArtifact(artifact: ArtifactResponse): ChatArtifact {
   return {
     kind: 'artifact',
     id: artifact.artifact_id,
-    type: artifact.type,
+    type: 'json',
     headline: artifact.type,
-    payload: artifact.payload,
+    payload: { value: artifact.payload },
+  };
+}
+
+export function presentArtifact(artifact: ArtifactResponse): ChatArtifact {
+  const envelope = artifact.payload;
+  if (!isJsonValue(envelope) || envelope === null || Array.isArray(envelope)
+    || typeof envelope !== 'object' || typeof envelope['title'] !== 'string'
+    || !envelope['title'].trim() || !('payload' in envelope)) {
+    throw new ConversationNetworkError('Der Backend-Dienst hat eine ung\u00fcltige Darstellung gesendet.');
+  }
+  return {
+    kind: 'artifact', id: artifact.artifact_id, type: artifact.type,
+    headline: envelope['title'], payload: envelope['payload'],
   };
 }
 

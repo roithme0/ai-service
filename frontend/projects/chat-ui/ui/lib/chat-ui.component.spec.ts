@@ -63,14 +63,14 @@ describe('ChatUiComponent', () => {
     );
   });
 
-  it('uses a matching renderer and safely falls back to readable JSON', () => {
+  it('uses a matching renderer and renders explicit JSON safely', () => {
     const templateFixture = TestBed.createComponent(RendererTemplateHost);
     templateFixture.detectChanges();
     const content: readonly ChatContent[] = [
       { kind: 'artifact', id: 'custom', type: 'known', headline: 'Known', payload: { label: 'typed' } },
-      { kind: 'artifact', id: 'fallback', type: 'unknown', headline: 'Unknown', payload: {
+      { kind: 'artifact', id: 'fallback', type: 'json', headline: 'JSON', payload: { value: {
         nested: [true, null], empty: {}, text: '<script>unsafe()</script>',
-      } },
+      } } },
     ];
     const fixture = createFixture(content);
     fixture.componentRef.setInput('artifactRenderers', {
@@ -84,6 +84,17 @@ describe('ChatUiComponent', () => {
     expect(cards[1].querySelector('script')).toBeNull();
     expect(cards[1].querySelector('pre')?.textContent).toContain('"nested"');
     expect(cards[1].textContent).toContain('<script>unsafe()</script>');
+  });
+
+  it('does not silently render unsupported types as JSON', () => {
+    const fixture = createFixture([{
+      kind: 'artifact', id: 'unsupported', type: 'unknown', headline: 'Unknown',
+      payload: { secret: 'not presented' },
+    }]);
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('pre')).toBeNull();
+    expect(element.textContent).toContain('Diese Darstellung wird nicht unterst\u00fctzt.');
+    expect(element.textContent).not.toContain('not presented');
   });
 
   it('offers library-owned German expansion only for overflowing renderer bodies', async () => {
@@ -103,7 +114,7 @@ describe('ChatUiComponent', () => {
     }
     vi.stubGlobal('ResizeObserver', OverflowObserver);
     const fixture = createFixture([{
-      kind: 'artifact', id: 'large', type: 'unknown', headline: 'Large', payload: { rows: [1, 2, 3] },
+      kind: 'artifact', id: 'large', type: 'json', headline: 'Large', payload: { value: { rows: [1, 2, 3] } },
     }]);
     fixture.detectChanges();
     await fixture.whenStable();

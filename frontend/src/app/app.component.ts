@@ -1,6 +1,6 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
-import { ConversationController, type ConversationViewState } from '@roithme0/chat-ui/conversation';
+import { ConversationController, presentJsonArtifact, type ConversationViewState } from '@roithme0/chat-ui/conversation';
 import { DemoTransport } from './demo-transport';
 
 const DEMO_ERROR_MESSAGE = 'Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.';
@@ -37,6 +37,7 @@ export class App implements OnInit {
           }
         : state,
     ),
+    presentJsonArtifact,
   );
 
   ngOnInit(): void {

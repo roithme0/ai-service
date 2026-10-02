@@ -33,3 +33,13 @@ def test_limit_counts_the_actual_model_context_including_the_prefix() -> None:
     rejected = validate_context_input(payload)
     assert isinstance(rejected, AgentInputRejected)
     assert rejected.issues[0].location == ("context",)
+
+
+def test_capabilities_are_detached_from_the_callers_mutable_schema() -> None:
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+    outcome = validate_context_input({"context": {}, "artifactCapabilities": [{
+        "type": "example", "description": "Show an example", "payloadSchema": schema,
+    }]})
+    assert isinstance(outcome, AgentInputAccepted)
+    schema["properties"]["name"]["type"] = "number"
+    assert outcome.context.artifact_capabilities[0].payload_schema["properties"] == {"name": {"type": "string"}}

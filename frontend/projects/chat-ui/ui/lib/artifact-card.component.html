@@ -6,8 +6,10 @@
         [ngTemplateOutlet]="selected.template"
         [ngTemplateOutletContext]="renderContext()"
       />
+    } @else if (formattedPayload(); as json) {
+      <pre class="json-artifact">{{ json }}</pre>
     } @else {
-      <pre class="json-fallback">{{ formattedPayload() }}</pre>
+      <p role="status">Diese Darstellung wird nicht unterstützt.</p>
     }
   </div>
   @if (overflowing()) {

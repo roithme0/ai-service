@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ConversationNetworkError } from './conversation-api';
 import type { ArtifactResponse } from '../generated/types.gen';
-import { presentJsonArtifact } from './generic-artifact-mapper';
+import { presentArtifact, presentJsonArtifact } from './generic-artifact-mapper';
 
 const artifact: ArtifactResponse = {
   artifact_id: 'artifact-1', type: 'other.result', created_at: '2026-09-25T12:00:00Z',
@@ -9,11 +9,19 @@ const artifact: ArtifactResponse = {
 };
 
 describe('generic artifact mapping', () => {
-  it('preserves backend identity, type, and JSON payload', () => {
+  it('explicitly selects JSON presentation for arbitrary backend data', () => {
     expect(presentJsonArtifact(artifact)).toEqual({
-      kind: 'artifact', id: 'artifact-1', type: 'other.result', headline: 'other.result',
-      payload: { nested: [null, true, 2] },
+      kind: 'artifact', id: 'artifact-1', type: 'json', headline: 'other.result',
+      payload: { value: { nested: [null, true, 2] } },
     });
+  });
+
+  it('maps a presentation without choosing a different renderer', () => {
+    expect(presentArtifact({ ...artifact, type: 'json', payload: {
+      title: 'Selected ingredient', payload: { value: { name: 'Oats' } },
+    } })).toEqual({ kind: 'artifact', id: 'artifact-1', type: 'json',
+      headline: 'Selected ingredient', payload: { value: { name: 'Oats' } } });
+    expect(() => presentArtifact(artifact)).toThrow(ConversationNetworkError);
   });
 
   it('rejects values outside the library JSON contract', () => {
