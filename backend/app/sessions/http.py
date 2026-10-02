@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_serializer
 
-from app.agents.recipe import RecipeSessionInput
+from app.agents.kochwiki import KochwikiSessionInput
 from app.agents.wiring import get_configured_agents
 from app.recipe_improvement.validation import ValidationIssue
 from app.sessions.agent_service import AgentInputRejected, ConfiguredAgentService
@@ -209,13 +209,13 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
         return _error(outcome.kind, outcome.turn_id)
 
 
-def _recipe_input(value: object) -> RecipeSessionInput:
+def _kochwiki_input(value: object) -> KochwikiSessionInput:
     if isinstance(value, dict):
-        return RecipeSessionInput(value.get("source"), value.get("foodstuffs"))
-    return RecipeSessionInput(None, None)
+        return KochwikiSessionInput(value.get("source"), value.get("foodstuffs"))
+    return KochwikiSessionInput(None, None)
 
 
-def _recipe_issue(issue: ValidationIssue) -> InputIssue:
+def _kochwiki_issue(issue: ValidationIssue) -> InputIssue:
     return InputIssue(location=("input", *issue.location), message=issue.message)
 
 
@@ -225,11 +225,15 @@ def _demo_issue(issue: str) -> InputIssue:
 
 def get_agent_registry() -> dict[str, ConversationTransport | None]:
     agents = get_configured_agents()
-    recipe: ConversationTransport | None = (
-        AgentTransport(agents.recipe, _recipe_input, _recipe_issue) if agents.recipe else None
+    kochwiki_agent = agents.kochwiki.agent
+    demo_agent = agents.demo.agent
+    kochwiki: ConversationTransport | None = (
+        AgentTransport(kochwiki_agent, _kochwiki_input, _kochwiki_issue) if kochwiki_agent else None
     )
-    demo: ConversationTransport = AgentTransport(agents.demo, lambda value: value, _demo_issue)
-    return {AgentConfiguration.KOCHWIKI: recipe, AgentConfiguration.DEMO: demo}
+    demo: ConversationTransport | None = (
+        AgentTransport(demo_agent, lambda value: value, _demo_issue) if demo_agent else None
+    )
+    return {AgentConfiguration.KOCHWIKI: kochwiki, AgentConfiguration.DEMO: demo}
 
 
 def _agent(configuration: str, registry: dict[str, ConversationTransport | None]) -> ConversationTransport | JSONResponse:

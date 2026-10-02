@@ -1,4 +1,4 @@
-"""Recipe improvement agent configuration and input normalization."""
+"""Kochwiki agent configuration and input normalization."""
 
 from __future__ import annotations
 
@@ -27,18 +27,18 @@ from app.sessions.conversation import ConversationSessionSettings
 
 
 @dataclass(frozen=True)
-class RecipeSessionInput:
+class KochwikiSessionInput:
     source: object
     foodstuffs: object
 
 
-RecipeAgent = ConfiguredAgentService[
-    RecipeSessionInput, RecipeImprovementSessionInput, RecipeProposalPayload, ValidationIssue
+KochwikiAgent = ConfiguredAgentService[
+    KochwikiSessionInput, RecipeImprovementSessionInput, RecipeProposalPayload, ValidationIssue
 ]
 
 
-def validate_recipe_input(
-    value: RecipeSessionInput,
+def validate_kochwiki_input(
+    value: KochwikiSessionInput,
 ) -> AgentInputAccepted[RecipeImprovementSessionInput] | AgentInputRejected[ValidationIssue]:
     result = validate_recipe_improvement_session_input(
         _decode_json_decimal_amounts(value.source), value.foodstuffs,
@@ -48,7 +48,7 @@ def validate_recipe_input(
     return AgentInputAccepted(result.session_input)
 
 
-def create_recipe_agent(
+def create_kochwiki_agent(
     generator: AgenticGenerator,
     resolver: RecipePresentationResolver,
     store: RecipeImprovementSessionStore | None = None,
@@ -59,10 +59,10 @@ def create_recipe_agent(
     max_tool_successes: int = MAX_TOOL_SUCCESSES,
     max_provider_responses: int = MAX_PROVIDER_RESPONSES,
     tool_factory: RecipeToolFactory = proposal_registration_tool,
-) -> RecipeAgent:
+) -> KochwikiAgent:
     owned_store = store if store is not None else new_recipe_session_store()
     return ConfiguredAgentService(
-        owned_store, validate_recipe_input,
+        owned_store, validate_kochwiki_input,
         RecipeTurnStrategy(
             owned_store, generator, resolver, instructions, tool_factory,
             max_attempts=max_tool_attempts, max_successes=max_tool_successes,

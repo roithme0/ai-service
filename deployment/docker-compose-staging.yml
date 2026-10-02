@@ -4,10 +4,11 @@ services:
   backend:
     image: roithme0/ai-service-backend:alpha
     restart: unless-stopped
-  environment:
-    KOCHWIKI_BASE_URL: "${KOCHWIKI_BASE_URL:-}"
-    OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-    RECIPE_IMPROVEMENT_OPENAI_MODEL: "${RECIPE_IMPROVEMENT_OPENAI_MODEL:-}"
+    environment:
+      KOCHWIKI_BASE_URL: "${KOCHWIKI_BASE_URL:-}"
+      KOCHWIKI_MCP_URL: "${KOCHWIKI_MCP_URL:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      KOCHWIKI_OPENAI_MODEL: "${KOCHWIKI_OPENAI_MODEL:-}"
 
   frontend:
     image: roithme0/ai-service-frontend:alpha

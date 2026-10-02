@@ -2,11 +2,11 @@
 
 The AI Service provides shared, provider-neutral AI capabilities and an agent-based interface for projects in the network. It owns model integration, reusable AI operations, agent orchestration, and service connectors while domain services remain authoritative for their data and business rules.
 
-The current implementation includes configured recipe-improvement and deterministic demo agent services, bounded model/tool orchestration, and a reusable chat UI library. This repository is authoritative for its implementation, API contracts, and deployment configuration. The application runs a deterministic UI demo, described in the [chat UI demo concept](docs/concepts/2026-09-25-chat-ui-demo.md).
+The current implementation includes configured KochWiki and deterministic demo agent services, bounded model/tool orchestration, and a reusable chat UI library. This repository is authoritative for its implementation, API contracts, and deployment configuration. The application runs a deterministic UI demo, described in the [chat UI demo concept](docs/concepts/2026-09-25-chat-ui-demo.md).
 
 ## Core Features
 
-- **Configured agent services**: A shared typed service hosts independent server-configured recipe and demo instances through one generic conversation HTTP API.
+- **Configured agent services**: A shared typed service hosts independent server-configured KochWiki and demo instances through one generic conversation HTTP API.
 - **Supporting features**:
   - **Bounded AI capabilities**: Offer reusable operations requested by other services, initially including structured recipe optimization and, later, image generation.
   - **Conversation foundation**: Support ephemeral multi-turn recipe chat, multiple tool calls, explicit failures, and multiple proposal artifacts within one assistant turn. Responses are returned after turn completion; streaming and user-controlled cancellation are not implemented.

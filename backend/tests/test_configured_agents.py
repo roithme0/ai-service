@@ -2,7 +2,7 @@ import asyncio
 from datetime import UTC, datetime
 
 from app.agents.demo import create_demo_agent, validate_demo_input
-from app.agents.recipe import RecipeSessionInput, create_recipe_agent
+from app.agents.kochwiki import KochwikiSessionInput, create_kochwiki_agent
 from app.demo.session import GreetingPayload, GreetingsPayload, new_demo_session_store
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
 from app.recipe_improvement.session_lifecycle import new_recipe_session_store
@@ -21,17 +21,17 @@ class ReplyGenerator:
         return AgenticGenerationResponse((), (), "Configured reply")
 
 
-def test_direct_recipe_creation_normalizes_json_and_rejects_invalid_input() -> None:
+def test_direct_kochwiki_session_creation_normalizes_json_and_rejects_invalid_input() -> None:
     store = new_recipe_session_store()
-    agent = create_recipe_agent(ReplyGenerator(), FakeResolver(), store)
+    agent = create_kochwiki_agent(ReplyGenerator(), FakeResolver(), store)
     request = valid_request()
-    created = agent.create(RecipeSessionInput(request["source"], request["foodstuffs"]))
+    created = agent.create(KochwikiSessionInput(request["source"], request["foodstuffs"]))
     assert not isinstance(created, AgentInputRejected)
     read = agent.read(created.session_id)
     assert isinstance(read, ConversationReadActive)
     assert str(read.snapshot.session.payload.source.recipe.ingredients[0].amount) == "125.75"
 
-    invalid = agent.create(RecipeSessionInput({}, request["foodstuffs"]))
+    invalid = agent.create(KochwikiSessionInput({}, request["foodstuffs"]))
     assert isinstance(invalid, AgentInputRejected)
     assert invalid.issues[0].location[0] == "source"
     assert len(store._settings) == 1
@@ -106,11 +106,11 @@ def test_instances_own_sessions_and_turns_are_isolated() -> None:
 def test_recipe_instances_bind_distinct_instructions_and_sessions() -> None:
     first_generator = ReplyGenerator()
     second_generator = ReplyGenerator()
-    first_agent = create_recipe_agent(first_generator, FakeResolver(), instructions="First instructions")
-    second_agent = create_recipe_agent(second_generator, FakeResolver(), instructions="Second instructions")
+    first_agent = create_kochwiki_agent(first_generator, FakeResolver(), instructions="First instructions")
+    second_agent = create_kochwiki_agent(second_generator, FakeResolver(), instructions="Second instructions")
     request = valid_request()
-    first = first_agent.create(RecipeSessionInput(request["source"], request["foodstuffs"]))
-    second = second_agent.create(RecipeSessionInput(request["source"], request["foodstuffs"]))
+    first = first_agent.create(KochwikiSessionInput(request["source"], request["foodstuffs"]))
+    second = second_agent.create(KochwikiSessionInput(request["source"], request["foodstuffs"]))
     assert not isinstance(first, AgentInputRejected)
     assert not isinstance(second, AgentInputRejected)
     assert first_agent.read(second.session_id).kind == "unknown"

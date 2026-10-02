@@ -31,13 +31,14 @@ Run the development server:
 fastapi dev app/main.py
 ```
 
-To enable the recipe-improvement agent, copy `.env.example` to `.env` and set
-`OPENAI_API_KEY`, `RECIPE_IMPROVEMENT_OPENAI_MODEL`, and `KOCHWIKI_BASE_URL`.
+To enable the Kochwiki agent, copy `.env.example` to `.env` and set
+`OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`, `KOCHWIKI_BASE_URL`, and
+`KOCHWIKI_MCP_URL`.
 The backend loads this ignored file automatically. The URL identifies Kochwiki's
 API base for resolving validated recipe candidates into authoritative presentations.
 In deployed environments, supply these values through the process environment or
 secret store; never put a real key in tracked configuration. Missing or invalid
-local recipe configuration makes every Kochwiki session endpoint return
+local Kochwiki configuration makes every Kochwiki session endpoint return
 `503 agent_unavailable`. The deterministic demo HTTP configuration remains available
 without model credentials or Kochwiki access. The frontend now uses this demo:
 any text advances its introduction, two greeting artifacts in one turn, one scripted failure, and completion sequence.
@@ -45,6 +46,38 @@ The frontend simulates a 405 compatibility error on the next message after compl
 The generator receives the conversation, recipe and available-foodstuff snapshots,
 and versioned recipe-specific instructions. It may register validated recipe
 proposals through the bounded tool-call flow before returning its reply.
+
+## MCP connection foundation
+
+The Kochwiki agent's model setting is `KOCHWIKI_OPENAI_MODEL`, replacing
+`RECIPE_IMPROVEMENT_OPENAI_MODEL`. Rename that key in existing environment
+configuration; the old name is no longer read.
+
+The `kochwiki` agent owns a generic MCP connection using the official Python
+SDK (`mcp==2.2.0`). Set `KOCHWIKI_MCP_URL` to the complete Streamable HTTP
+endpoint, for example `http://localhost:8002/mcp/` for a backend running on the
+host. Inside Docker use an address reachable from the backend container,
+such as `http://host.docker.internal:8002/mcp/`. The `demo` agent has no MCP
+connections and remains available independently.
+
+Each configured agent has an `AgentRuntime` that owns availability, MCP
+connections and its optional model client. `ConfiguredAgents` delegates startup
+and shutdown to those runtimes. Conversation services handle sessions and turns;
+they do not own external connections. A failed MCP startup disables the owning
+agent and closes its resources. Shutdown closes connections in reverse order
+before the model client, attempting every cleanup even if one fails.
+
+Application startup initializes the connection and retrieves server instructions
+and all pages of tool definitions. The connection stays open until shutdown;
+discovery is performed once, so restart the AI Service after changing tool
+definitions or instructions. SDK requests use a ten-second read timeout.
+Initialization/discovery failures are logged and make only the Kochwiki agent
+unavailable. There is no automatic reconnect or catalogue refresh in this slice.
+
+Discovered tools and instructions are retained on the agent's connector but are
+not yet supplied to the model. Existing recipe tools, instructions, snapshots
+and resolver behavior remain in place. A direct `hello_world` call is exercised
+in `tests/test_mcp_connection.py`; startup never invokes domain tools.
 
 ## Conversation HTTP API
 

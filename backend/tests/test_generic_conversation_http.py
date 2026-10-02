@@ -11,11 +11,11 @@ from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.agents.demo import create_demo_agent
-from app.agents.recipe import create_recipe_agent
+from app.agents.kochwiki import create_kochwiki_agent
 from app.main import app, handle_http_exception, handle_request_validation
 from app.sessions.http import (
     AgentConfiguration, AgentTransport, ConversationTransport, ErrorResponse, SessionErrorKind,
-    ValidationErrorResponse, _demo_issue, _error, _recipe_input, _recipe_issue, get_agent_registry,
+    ValidationErrorResponse, _demo_issue, _error, _kochwiki_input, _kochwiki_issue, get_agent_registry,
 )
 from test_recipe_improvement_session_http import FakeGenerator, FakeResolver, valid_request
 
@@ -23,7 +23,7 @@ from test_recipe_improvement_session_http import FakeGenerator, FakeResolver, va
 @pytest.fixture
 def client() -> Iterator[TestClient]:
     registry: dict[str, ConversationTransport | None] = {
-        "kochwiki": AgentTransport(create_recipe_agent(FakeGenerator(), FakeResolver()), _recipe_input, _recipe_issue),
+        "kochwiki": AgentTransport(create_kochwiki_agent(FakeGenerator(), FakeResolver()), _kochwiki_input, _kochwiki_issue),
         "demo": AgentTransport(create_demo_agent(delay_seconds=0), lambda value: value, _demo_issue),
     }
     app.dependency_overrides[get_agent_registry] = lambda: registry
