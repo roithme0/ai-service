@@ -240,3 +240,11 @@ is collapsed. Omitting capabilities keeps a
 model-backed session text-only. Custom renderer registration does not itself
 advertise a capability: the consumer must select its matching description and
 schema explicitly. Capability changes during a session are not supported.
+
+Capabilities can include optional `titleDescription` and `subtitleDescription`
+to tell the agent which values belong in the header. For example, a foodstuff
+capability can specify the foodstuff name as its title and its brand as the
+subtitle, omitted when absent. This is agent guidance rather than validation
+against the payload. Descriptions must be nonblank and at most 2,000 characters.
+The shared JSON capability includes guidance for a short descriptive title and
+an optional explanatory subtitle.

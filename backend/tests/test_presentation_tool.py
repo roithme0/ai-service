@@ -15,6 +15,8 @@ from app.models.agentic_generation import AgenticGenerationRequest, AgenticGener
 
 
 CAPABILITY = {"type": "example", "description": "An arbitrary consumer presentation",
+              "titleDescription": "Use the retrieved foodstuff name as the title.",
+              "subtitleDescription": "Use the brand as the subtitle; omit it when there is no brand.",
               "payloadSchema": {"$defs": {"name": {"type": "string"}}, "type": "object",
                                 "properties": {"name": {"$ref": "#/$defs/name"}},
                                 "required": ["name"], "additionalProperties": False}}
@@ -113,4 +115,6 @@ def test_presentation_and_other_tool_sources_are_combined() -> None:
         assert {tool["name"] for tool in requests[0].tools} == {"read_data", "present_artifact"}
         assert "Read data with read_data" in requests[0].instructions
         assert "An arbitrary consumer presentation" in requests[0].instructions
+        assert CAPABILITY["titleDescription"] in requests[0].instructions
+        assert CAPABILITY["subtitleDescription"] in requests[0].instructions
     asyncio.run(exercise())

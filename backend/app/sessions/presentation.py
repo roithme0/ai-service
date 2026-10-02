@@ -23,7 +23,16 @@ class ArtifactCapability(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     type: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
     description: str = Field(min_length=1, max_length=2000)
+    title_description: str | None = Field(default=None, alias="titleDescription", min_length=1, max_length=2000)
+    subtitle_description: str | None = Field(default=None, alias="subtitleDescription", min_length=1, max_length=2000)
     payload_schema: dict[str, JsonValue] = Field(alias="payloadSchema")
+
+    @field_validator("title_description", "subtitle_description")
+    @classmethod
+    def nonblank_header_description(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("header descriptions must not be blank")
+        return value
 
     @field_validator("payload_schema")
     @classmethod
@@ -126,7 +135,8 @@ def presentation_tool_source(
     }, execute),), instructions=(
         "Use present_artifact deliberately when a supported presentation helps the user. "
         "Provide complete data matching the selected payload schema. Prefer ordinary text for ordinary answers. "
+        "Follow the selected capability's titleDescription and subtitleDescription when provided. "
         "Presentation does not create or save domain data. Artifacts become visible only when this turn completes.\n"
         "Available presentation capabilities (payload schemas are standalone JSON Schemas):\n"
-        + json.dumps([item.model_dump(by_alias=True) for item in capabilities], ensure_ascii=False)
+        + json.dumps([item.model_dump(by_alias=True, exclude_none=True) for item in capabilities], ensure_ascii=False)
     ))

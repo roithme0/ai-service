@@ -43,3 +43,22 @@ def test_capabilities_are_detached_from_the_callers_mutable_schema() -> None:
     assert isinstance(outcome, AgentInputAccepted)
     schema["properties"]["name"]["type"] = "number"
     assert outcome.context.artifact_capabilities[0].payload_schema["properties"] == {"name": {"type": "string"}}
+
+
+@pytest.mark.parametrize("field", ["titleDescription", "subtitleDescription"])
+def test_header_guidance_is_retained_without_requiring_it(field: str) -> None:
+    capability = {"type": "example", "description": "Show an example", "payloadSchema": {},
+                  field: "Use the supplied name or brand."}
+    outcome = validate_context_input({"context": {}, "artifactCapabilities": [capability]})
+    assert isinstance(outcome, AgentInputAccepted)
+    assert outcome.context.artifact_capabilities[0].model_dump(by_alias=True)[field] == capability[field]
+
+
+@pytest.mark.parametrize("field", ["titleDescription", "subtitleDescription"])
+@pytest.mark.parametrize("value", ["", "   ", "x" * 2001, 42])
+def test_invalid_header_guidance_is_rejected(field: str, value: object) -> None:
+    outcome = validate_context_input({"context": {}, "artifactCapabilities": [{
+        "type": "example", "description": "Show an example", "payloadSchema": {}, field: value,
+    }]})
+    assert isinstance(outcome, AgentInputRejected)
+    assert outcome.issues[0].location == ("artifactCapabilities", 0, field)

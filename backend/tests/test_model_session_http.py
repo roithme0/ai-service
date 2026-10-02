@@ -584,6 +584,8 @@ def test_session_history_reports_expiry_then_unknown() -> None:
 
 JSON_CAPABILITY = {
     "type": "json", "description": "Show structured data deliberately",
+    "titleDescription": "Use a short label describing the data.",
+    "subtitleDescription": "Omit unless a secondary label is useful.",
     "payloadSchema": {"type": "object", "properties": {"value": {}},
                       "required": ["value"], "additionalProperties": False},
 }
@@ -623,6 +625,8 @@ def test_advertised_presentation_is_validated_published_and_retained(client: Tes
     assert [tool["name"] for tool in request.tools] == ["present_artifact"]
     assert "Show structured data deliberately" in request.instructions
     assert "payloadSchema" in request.instructions
+    assert JSON_CAPABILITY["titleDescription"] in request.instructions
+    assert JSON_CAPABILITY["subtitleDescription"] in request.instructions
     outputs = [json.loads(str(item["output"])) for item in fake_generator.calls[-1].input_items
                if item.get("type") == "function_call_output"]
     assert [item.get("reason", item["kind"]) for item in outputs] == ["unsupported_type", "invalid_payload", "presented"]

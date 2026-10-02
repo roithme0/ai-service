@@ -139,6 +139,12 @@ Model-backed session input accepts an optional `artifactCapabilities` array besi
 for the session; renderer implementations remain in the frontend. Omit the array
 or send an empty array for text-only sessions without the local presentation tool.
 
+Capabilities may also supply `titleDescription` and `subtitleDescription` to
+explain the intended header values. For a foodstuff display, these could require
+the foodstuff name as the title and its brand as the subtitle, omitted when absent.
+Provided descriptions must be nonblank and at most 2,000 characters. They are
+passed to the agent as guidance, not used to validate generated header values.
+
 ```json
 {
   "input": {

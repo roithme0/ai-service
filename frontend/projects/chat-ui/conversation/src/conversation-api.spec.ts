@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpConversationTransport, ConversationApiError, ConversationNetworkError, AgentConfiguration } from './conversation-api';
+import { JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
 
 describe('HttpConversationTransport', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -13,7 +14,7 @@ describe('HttpConversationTransport', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    const input = { marker: configuration };
+    const input = { marker: configuration, artifactCapabilities: [JSON_ARTIFACT_CAPABILITY] };
     const transport = new HttpConversationTransport('/api/v1', configuration, input);
     const created = await transport.createSession();
 
