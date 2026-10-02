@@ -34,16 +34,9 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -e "../backend[test]"
 
-      - name: Check recipe resolver and proposal flow
+      - name: Run backend tests
         working-directory: backend
-        run: >-
-          python -m pytest
-          tests/test_recipe_presentation_resolver.py
-          tests/test_recipe_proposal_validation.py
-          tests/test_recipe_improvement_session_input.py
-          tests/test_recipe_improvement_session_http.py
-          tests/test_agentic_recipe_turns.py
-          tests/test_openai_agentic_generation.py
+        run: python -m pytest
 
       - name: Install frontend dependencies
         run: npm ci
