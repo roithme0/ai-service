@@ -6,10 +6,10 @@ import inspect
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, Protocol, TypeVar
 
 
-ArtifactT = TypeVar("ArtifactT")
+ArtifactT = TypeVar("ArtifactT", covariant=True)
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,22 @@ class RegisteredTool(Generic[ArtifactT]):
     execute: Callable[
         [ToolInvocation], ToolExecution[ArtifactT] | Awaitable[ToolExecution[ArtifactT]]
     ]
+
+
+class ToolSource(Protocol[ArtifactT]):
+    def registered_tools(self) -> tuple[RegisteredTool[ArtifactT], ...]: ...
+
+    @property
+    def instructions(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class LocalToolSource(Generic[ArtifactT]):
+    tools: tuple[RegisteredTool[ArtifactT], ...]
+    instructions: str = ""
+
+    def registered_tools(self) -> tuple[RegisteredTool[ArtifactT], ...]:
+        return self.tools
 
 
 class ToolRegistry(Generic[ArtifactT]):

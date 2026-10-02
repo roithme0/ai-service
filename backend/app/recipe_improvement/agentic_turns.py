@@ -9,6 +9,7 @@ from app.recipe_improvement.tools.register_recipe_proposal import (
 )
 from app.sessions.text_sessions import TextMessage
 from app.sessions.tool_turns import ToolTurnResult, run_tool_turn
+from app.sessions.tools import LocalToolSource, ToolSource
 
 
 MAX_TOOL_ATTEMPTS = 6
@@ -26,9 +27,10 @@ async def generate_agentic_recipe_turn(
     max_attempts: int = MAX_TOOL_ATTEMPTS,
     max_successes: int = MAX_TOOL_SUCCESSES,
     max_provider_responses: int = MAX_PROVIDER_RESPONSES,
+    tool_sources: tuple[ToolSource[RecipeProposal], ...] = (),
 ) -> ToolTurnResult[RecipeProposal]:
     return await run_tool_turn(
         generator, messages, context, instructions,
-        (tool_factory(register),),
+        (LocalToolSource((tool_factory(register),)),) + tool_sources,
         max_attempts, max_successes, max_provider_responses,
     )

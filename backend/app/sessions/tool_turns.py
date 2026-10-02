@@ -6,9 +6,9 @@ import json
 from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem
+from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem, AgenticToolCall
 from app.sessions.text_sessions import MAX_MESSAGE_LENGTH, TextMessage
-from app.sessions.tools import RegisteredTool, ToolExecution, ToolRegistry
+from app.sessions.tools import RegisteredTool, ToolExecution, ToolRegistry, ToolSource
 
 
 ArtifactT = TypeVar("ArtifactT")
@@ -21,17 +21,56 @@ class ToolTurnResult(Generic[ArtifactT]):
     artifacts: tuple[ArtifactT, ...]
 
 
+def combine_tool_inputs(
+    tool_sources: tuple[ToolSource[ArtifactT], ...],
+    instructions: str,
+) -> tuple[tuple[RegisteredTool[ArtifactT], ...], str]:
+    combined_tools: tuple[RegisteredTool[ArtifactT], ...] = ()
+    instruction_sections: list[str] = []
+    for tool_source in tool_sources:
+        additional_tools: tuple[RegisteredTool[ArtifactT], ...] = tool_source.registered_tools()
+        combined_tools += additional_tools
+        source_instructions = tool_source.instructions
+        if source_instructions.strip():
+            instruction_sections.append(source_instructions)
+    if instruction_sections:
+        instruction_sections.append(
+            "Local agent instructions (take precedence over tool-source instructions where they conflict):\n"
+            + instructions
+        )
+        instructions = "\n\n".join(instruction_sections)
+    return combined_tools, instructions
+
+
+async def execute_tool_call(
+    registry: ToolRegistry[ArtifactT],
+    call: AgenticToolCall,
+    attempts: int,
+    successes: int,
+    max_attempts: int,
+    max_successes: int,
+) -> tuple[ToolExecution[ArtifactT], int]:
+    if registry.has_tool(call.name):
+        if attempts >= max_attempts or successes >= max_successes:
+            return ToolExecution(json.dumps({
+                "kind": "limit_reached", "attempts": attempts, "successes": successes,
+            })), attempts
+        attempts += 1
+    return await registry.invoke(call.name, call.arguments), attempts
+
+
 async def run_tool_turn(
     generator: AgenticGenerator,
     messages: tuple[TextMessage, ...],
     context: str,
     instructions: str,
-    tools: tuple[RegisteredTool[ArtifactT], ...],
+    tool_sources: tuple[ToolSource[ArtifactT], ...],
     max_attempts: int,
     max_successes: int,
     max_provider_responses: int,
 ) -> ToolTurnResult[ArtifactT]:
-    registry = ToolRegistry(tools)
+    combined_tools, instructions = combine_tool_inputs(tool_sources, instructions)
+    registry = ToolRegistry(combined_tools)
 
     input_items: list[AgenticInputItem] = [{"role": "user", "content": context}]
     input_items.extend({"role": message.role, "content": message.text} for message in messages)
@@ -49,16 +88,11 @@ async def run_tool_turn(
 
         input_items.extend(response.output_items)
         for call in response.tool_calls:
-            if registry.has_tool(call.name) and (attempts >= max_attempts or len(artifacts) >= max_successes):
-                execution = ToolExecution[ArtifactT](json.dumps({
-                    "kind": "limit_reached", "attempts": attempts, "successes": len(artifacts),
-                }))
-            else:
-                if registry.has_tool(call.name):
-                    attempts += 1
-                execution = await registry.invoke(call.name, call.arguments)
-                if execution.artifact is not None:
-                    artifacts.append(execution.artifact)
+            execution, attempts = await execute_tool_call(
+                registry, call, attempts, len(artifacts), max_attempts, max_successes,
+            )
+            if execution.artifact is not None:
+                artifacts.append(execution.artifact)
             input_items.append({"type": "function_call_output", "call_id": call.call_id,
                                 "output": execution.output})
     return ToolTurnResult("generation_failed", None, tuple(artifacts))

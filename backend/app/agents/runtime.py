@@ -5,6 +5,7 @@ from contextlib import AsyncExitStack
 from typing import Generic, Protocol, TypeVar
 
 from app.mcp_connection import MCPConnection
+from app.mcp_tools import MCPToolset
 
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class AgentRuntime(Generic[AgentT]):
         self.name = name
         self.agent = agent
         self.mcp_connections = mcp_connections
+        self.mcp_tools = MCPToolset(mcp_connections)
         self._model_client = model_client
         self._started = False
         self._closed = False
@@ -36,6 +38,7 @@ class AgentRuntime(Generic[AgentT]):
         try:
             for connection in self.mcp_connections:
                 await connection.start()
+            self.mcp_tools.validate()
         except Exception as error:
             logger.warning("Agent %s unavailable: MCP initialization failed (%s)", self.name, type(error).__name__)
             await self.close()

@@ -47,7 +47,7 @@ The generator receives the conversation, recipe and available-foodstuff snapshot
 and versioned recipe-specific instructions. It may register validated recipe
 proposals through the bounded tool-call flow before returning its reply.
 
-## MCP connection foundation
+## MCP connections and tool execution
 
 The Kochwiki agent's model setting is `KOCHWIKI_OPENAI_MODEL`, replacing
 `RECIPE_IMPROVEMENT_OPENAI_MODEL`. Rename that key in existing environment
@@ -74,10 +74,39 @@ definitions or instructions. SDK requests use a ten-second read timeout.
 Initialization/discovery failures are logged and make only the Kochwiki agent
 unavailable. There is no automatic reconnect or catalogue refresh in this slice.
 
-Discovered tools and instructions are retained on the agent's connector but are
-not yet supplied to the model. Existing recipe tools, instructions, snapshots
-and resolver behavior remain in place. A direct `hello_world` call is exercised
-in `tests/test_mcp_connection.py`; startup never invokes domain tools.
+Each agent can own multiple MCP connections. Their configured names must be
+unique within that agent. Every MCP tool is exposed to the model as
+`<connection>__<tool>`, for example `kochwiki__search_foodstuffs`, and routed back
+to the original server tool name. Generated names must contain only ASCII
+letters, digits, underscores or hyphens and fit the model's 64-character limit.
+Unsupported names or collisions in discovered tools disable the owning agent
+at startup; names are never silently rewritten or truncated.
+
+The generic `MCPToolset` adapts discovered input schemas into function tools with
+`strict: false`, preserving optional fields and the server's validation contract.
+The shared tool loop accepts one ordered `tool_sources` tuple. `LocalToolSource`
+supplies locally registered tools, including artifact-producing tools, while
+`MCPToolset` supplies artifact-free MCP tools through the same generic interface.
+Each source contributes tools and instructions; an MCP source can itself contain
+multiple connections. All tools share the existing call limits. Collisions across
+sources or with local tool names are rejected before model generation.
+Server instructions include explicit mappings to model-facing tool names.
+Source instructions appear once in configured source order, followed by local
+agent instructions, which take precedence where they conflict. During this
+migration Kochwiki's local proposal registration remains the default proposal
+workflow. Existing snapshots and resolver behavior remain in place.
+
+Tool arguments must be a JSON object. MCP results are returned to the model as
+JSON, preserving content blocks, structured content and the `isError` flag.
+Transport/protocol failures return a generic tool failure so the model can respond;
+the backend logs the connection, tool name and exception type. Cancellation
+propagates normally. No automatic retries are performed for tool calls.
+The generic adapter does not interpret domain payloads or create chat artifacts.
+
+`tests/test_mcp_connection.py` exercises a complete configured-agent tool turn
+against a Streamable HTTP `hello_world` server with a scripted model.
+`tests/test_mcp_tools.py` covers multiple servers, routing, errors and limits.
+Startup discovers capabilities but never invokes domain tools.
 
 ## Conversation HTTP API
 

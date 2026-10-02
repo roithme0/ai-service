@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import httpx2
 import pytest
@@ -15,6 +16,9 @@ from app.core.config import Settings
 from app.main import AgentLifespan
 from app.mcp_connection import MCPConnection
 from app.sessions.text_sessions import TextSessionCreation
+from app.agents.kochwiki import KochwikiSessionInput
+from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from test_recipe_improvement_session_http import valid_request
 
 
 def configured_settings() -> Settings:
@@ -28,6 +32,23 @@ def configured_settings() -> Settings:
 
 def test_http_discovery_agent_isolation_invocation_and_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
     async def exercise() -> None:
+        requests: list[AgenticGenerationRequest] = []
+
+        class Generator:
+            async def generate(self, request: AgenticGenerationRequest) -> AgenticGenerationResponse:
+                requests.append(request)
+                if len(requests) == 1:
+                    call = AgenticToolCall("hello", "kochwiki__hello_world", "{}")
+                    return AgenticGenerationResponse(
+                        ({"type": "function_call", "call_id": call.call_id,
+                          "name": call.name, "arguments": call.arguments},), (call,), None,
+                    )
+                return AgenticGenerationResponse((), (), "Hello World received")
+
+        def generator_factory(*, model: str, client: object) -> Generator:
+            return Generator()
+
+        monkeypatch.setattr("app.agents.wiring.OpenAIAgenticGenerator", generator_factory)
         server = MCPServer("Test", instructions="Server-owned domain guidance")
 
         @server.tool()
@@ -60,6 +81,23 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(monkeypatch: pyt
                 result = await connection.call_tool("hello_world", {})
                 assert not result.is_error
                 assert result.structured_content == {"message": "Hello World"}
+                payload = valid_request()
+                created = agents.kochwiki.agent.create(KochwikiSessionInput(payload["source"], payload["foodstuffs"]))
+                assert isinstance(created, TextSessionCreation)
+                agents.kochwiki.agent.append_user_message(created.session_id, "Call hello world")
+                turn = await agents.kochwiki.agent.execute_turn(created.session_id)
+                assert turn.kind == "completed"
+                assert turn.text == "Hello World received"
+                assert turn.artifacts == ()
+                assert [tool["name"] for tool in requests[0].tools] == [
+                    "register_recipe_proposal", "kochwiki__hello_world",
+                ]
+                assert "Server-owned domain guidance" in requests[0].instructions
+                assert "hello_world -> kochwiki__hello_world" in requests[0].instructions
+                output = requests[1].input_items[-1]
+                assert output["call_id"] == "hello"
+                assert isinstance(output["output"], str)
+                assert json.loads(output["output"])["structuredContent"] == {"message": "Hello World"}
                 assert agents.demo.agent is not None
                 assert isinstance(agents.demo.agent.create(None), TextSessionCreation)
             finally:

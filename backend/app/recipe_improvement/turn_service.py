@@ -19,6 +19,7 @@ from app.recipe_improvement.proposals import (
     ProposalRejected,
     ProposalSessionUnavailable,
     RecipeProposalPayload,
+    RecipeProposal,
     proposal_from_artifact,
 )
 from app.recipe_improvement.tools.register_recipe_proposal import (
@@ -32,6 +33,7 @@ from app.recipe_improvement.session_lifecycle import (
 from app.recipe_improvement.session_input import RecipeImprovementSessionInput
 from app.sessions.artifacts import ArtifactPreparationRejected, ArtifactRegistry
 from app.sessions.conversation import ConversationStageAccepted, ConversationStageRejected, ConversationTurnResult
+from app.sessions.tools import ToolSource
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,7 @@ class RecipeTurnStrategy:
         max_attempts: int = MAX_TOOL_ATTEMPTS,
         max_successes: int = MAX_TOOL_SUCCESSES,
         max_provider_responses: int = MAX_PROVIDER_RESPONSES,
+        tool_sources: tuple[ToolSource[RecipeProposal], ...] = (),
     ) -> None:
         if not instructions.strip():
             raise ValueError("instructions must not be blank")
@@ -58,6 +61,7 @@ class RecipeTurnStrategy:
         self._max_attempts = max_attempts
         self._max_successes = max_successes
         self._max_provider_responses = max_provider_responses
+        self._tool_sources = tool_sources
 
     async def __call__(self, session_id: str) -> ConversationTurnResult[RecipeProposalPayload]:
         return await generate_recipe_turn(
@@ -65,6 +69,7 @@ class RecipeTurnStrategy:
             instructions=self._instructions, tool_factory=self._tool_factory,
             max_attempts=self._max_attempts, max_successes=self._max_successes,
             max_provider_responses=self._max_provider_responses,
+            tool_sources=self._tool_sources,
         )
 
 
@@ -80,6 +85,7 @@ async def generate_recipe_turn(
     max_attempts: int = MAX_TOOL_ATTEMPTS,
     max_successes: int = MAX_TOOL_SUCCESSES,
     max_provider_responses: int = MAX_PROVIDER_RESPONSES,
+    tool_sources: tuple[ToolSource[RecipeProposal], ...] = (),
 ) -> ConversationTurnResult[RecipeProposalPayload]:
     if registry is None:
         if resolver is None:
@@ -147,6 +153,7 @@ async def generate_recipe_turn(
             max_attempts,
             max_successes,
             max_provider_responses,
+            tool_sources,
         )
         return store.complete_turn(session_id, reservation, result.kind, result.text)
     except asyncio.CancelledError:

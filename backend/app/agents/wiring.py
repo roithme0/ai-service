@@ -56,14 +56,16 @@ def configure_kochwiki_agent(settings: Settings) -> AgentRuntime[KochwikiAgent]:
         return AgentRuntime("kochwiki", None)
     assert key is not None and model is not None and base_url is not None and mcp_url is not None
     client = AsyncOpenAI(api_key=key.get_secret_value(), max_retries=0)
-    agent = create_kochwiki_agent(
-        OpenAIAgenticGenerator(model=model, client=client),
-        KochwikiRecipePresentationResolver(base_url),
-    )
-    return AgentRuntime(
-        "kochwiki", agent, model_client=client,
+    runtime: AgentRuntime[KochwikiAgent] = AgentRuntime(
+        "kochwiki", None, model_client=client,
         mcp_connections=(MCPConnection("kochwiki", mcp_url),),
     )
+    runtime.agent = create_kochwiki_agent(
+        OpenAIAgenticGenerator(model=model, client=client),
+        KochwikiRecipePresentationResolver(base_url),
+        tool_sources=(runtime.mcp_tools,),
+    )
+    return runtime
 
 
 def configure_agents(settings: Settings) -> ConfiguredAgents:
