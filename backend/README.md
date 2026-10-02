@@ -61,7 +61,7 @@ before the model client, attempting every cleanup even if one fails.
 Application startup initializes the connection and retrieves server instructions
 and all pages of tool definitions. The connection stays open until shutdown;
 discovery is performed once, so restart the AI Service after changing tool
-definitions or instructions. SDK requests use a ten-second read timeout.
+definitions or instructions. SDK requests use a 60-second read timeout.
 Initialization/discovery failures are logged and make only the Kochwiki agent
 unavailable. There is no automatic reconnect or catalogue refresh in this slice.
 
@@ -88,8 +88,8 @@ agent supplies its MCP tool source plus a session-specific presentation tool whe
 the caller advertises artifact capabilities. Local `register_recipe_proposal`,
 recipe workflow instructions, presentation resolution and AI Service proposal
 ownership have been removed. Its generic model turn strategy preserves snapshot, history,
-turn reservation, failure, cancellation and expiration behavior. Turns allow six
-tool attempts and eight provider responses. Artifact-free sources have no separate
+turn reservation, failure, cancellation and expiration behavior. Turns allow 32
+tool attempts and 40 provider responses. Artifact-free sources have no separate
 artifact success limit; a successful MCP call does not count as a chat artifact.
 
 Tool arguments must be a JSON object. MCP results are returned to the model as
@@ -127,10 +127,16 @@ There is no individual artifact lookup route.
 Model-backed sessions require an `input` object containing only `context`, which
 must be a JSON object (an empty object is allowed). Nested JSON values retain
 their types; non-finite numbers and non-JSON values are rejected. The serialized
-model context, including its data-only prefix, is limited to 16,000 characters.
+model context, including its data-only prefix, is limited to 64,000 characters.
 It is captured at creation and reused for every turn without being included in
 session read responses. Domain validation and snapshot assembly belong to the
 caller. The former `source`/`foodstuffs` input envelope is no longer accepted.
+
+Sessions allow 200 messages of up to 16,000 characters each and model-backed
+sessions allow 100 artifacts. The fixed 90-minute lifetime remains unchanged.
+The OpenAI adapter allows 16,384 output tokens and a 120-second request timeout
+per model response. These are individual request limits, not an overall turn
+deadline; a multi-call turn can still exceed a gateway's request timeout.
 
 Run the tests:
 

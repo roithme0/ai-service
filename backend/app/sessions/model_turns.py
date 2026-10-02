@@ -16,8 +16,8 @@ from app.sessions.tools import ToolSource
 
 ContextT = TypeVar("ContextT")
 ArtifactT = TypeVar("ArtifactT")
-MAX_TOOL_ATTEMPTS = 6
-MAX_PROVIDER_RESPONSES = 8
+MAX_TOOL_ATTEMPTS = 32
+MAX_PROVIDER_RESPONSES = 40
 logger = logging.getLogger(__name__)
 
 

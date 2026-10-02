@@ -83,6 +83,7 @@ def test_artifact_free_turn_enforces_attempt_and_provider_budgets(provider_budge
             store, Generator(), lambda context: context,
             (LocalToolSource((RegisteredTool("sample", {"type": "function", "name": "sample"}, execute),)),),
             max_provider_responses=provider_budget,
+            max_attempts=6,
         )
         created = store.create("Snapshot", ConversationSessionSettings(20))
         store.append_user_message(created.session_id, "Run")

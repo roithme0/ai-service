@@ -160,3 +160,40 @@ def test_presentation_and_other_tool_sources_are_combined() -> None:
         assert CAPABILITY["titleDescription"] in requests[0].instructions
         assert CAPABILITY["subtitleDescription"] in requests[0].instructions
     asyncio.run(exercise())
+
+
+def test_default_budgets_complete_an_extended_presentation_turn() -> None:
+    async def exercise() -> None:
+        class Generator:
+            def __init__(self) -> None:
+                self.responses = 0
+
+            async def generate(self, request: AgenticGenerationRequest) -> AgenticGenerationResponse:
+                self.responses += 1
+                if self.responses > 25:
+                    return AgenticGenerationResponse((), (), "Shown. " + "Details. " * 600)
+                call = AgenticToolCall(str(self.responses), "present_artifact", json.dumps({
+                    "type": "example", "title": f"Item {self.responses}",
+                    "payload": {"name": f"Item {self.responses}"},
+                }))
+                return AgenticGenerationResponse(({
+                    "type": "function_call", "call_id": call.call_id,
+                    "name": call.name, "arguments": call.arguments,
+                },), (call,), None)
+
+        generator = Generator()
+        agent = create_model_agent(generator)
+        created = agent.create({"context": {"description": "x" * 20_000},
+                                "artifactCapabilities": [CAPABILITY]})
+        assert isinstance(created, TextSessionCreation)
+        agent.append_user_message(created.session_id, "Show the requested items. " + "Context. " * 600)
+        result = await agent.execute_turn(created.session_id)
+        assert result.kind == "completed"
+        assert len(result.artifacts) == 25
+        assert generator.responses == 26
+        assert result.text is not None and len(result.text) > 4_000
+        assert [artifact.payload.payload for artifact in result.artifacts] == [
+            {"name": f"Item {index}"} for index in range(1, 26)
+        ]
+
+    asyncio.run(exercise())

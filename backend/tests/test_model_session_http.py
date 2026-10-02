@@ -18,7 +18,8 @@ from app.sessions.http import (
 from app.agents.demo import create_demo_agent
 from app.sessions.model_sessions import new_model_session_store
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
-from app.sessions.text_sessions import MAX_MESSAGE_COUNT
+from app.sessions.context import MAX_CONTEXT_LENGTH
+from app.sessions.text_sessions import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 
 
 RECIPE_VERSION_UUID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
@@ -134,14 +135,14 @@ def test_integer_amount_is_accepted_without_exposing_input(client: TestClient) -
 
 def test_oversized_initial_snapshot_context_is_rejected_at_creation(client: TestClient) -> None:
     request = valid_request()
-    request["context"] = {"description": "x" * 16000}
+    request["context"] = {"description": "x" * MAX_CONTEXT_LENGTH}
 
     response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": request})
 
     assert response.status_code == 422
     assert response.json()["kind"] == "invalid_input"
     assert response.json()["detail"] == [
-        {"loc": ["body", "input", "context"], "msg": "initial context exceeds 16000 characters",
+        {"loc": ["body", "input", "context"], "msg": f"initial context exceeds {MAX_CONTEXT_LENGTH} characters",
          "type": "value_error"}
     ]
 
@@ -249,7 +250,7 @@ def test_user_messages_append_in_order_and_preserve_submitted_text(client: TestC
         {"text": 123},
         {"text": ""},
         {"text": " \t "},
-        {"text": "x" * 4_001},
+        {"text": "x" * (MAX_MESSAGE_LENGTH + 1)},
     ],
 )
 def test_rejected_user_messages_do_not_change_the_conversation(
@@ -279,7 +280,9 @@ def test_message_limit_returns_conflict_without_appending(client: TestClient) ->
     assert rejected.status_code == 409
     assert read.status_code == 200
     assert len(read.json()["messages"]) == MAX_MESSAGE_COUNT - 1
-    assert read.json()["messages"][-1] == {"role": "user", "text": "98", "turn_id": None}
+    assert read.json()["messages"][-1] == {
+        "role": "user", "text": str(MAX_MESSAGE_COUNT - 2), "turn_id": None,
+    }
 
 
 def test_unknown_and_expired_user_message_appends_do_not_expose_session_content() -> None:

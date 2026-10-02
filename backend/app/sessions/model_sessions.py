@@ -32,7 +32,7 @@ def create_model_agent(
     store: ModelSessionStore | None = None,
     *,
     instructions: str = CONVERSATION_INSTRUCTIONS,
-    max_artifacts: int = 20,
+    max_artifacts: int = 100,
     max_tool_attempts: int = MAX_TOOL_ATTEMPTS,
     max_provider_responses: int = MAX_PROVIDER_RESPONSES,
     tool_sources: tuple[ToolSource[StagedArtifact[PresentationPayload]], ...] = (),

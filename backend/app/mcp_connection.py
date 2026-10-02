@@ -9,7 +9,7 @@ from mcp.types import CallToolResult, Tool
 class MCPConnection:
     def __init__(self, name: str, url: str) -> None:
         self.name = name
-        self._client = Client(url, read_timeout_seconds=10)
+        self._client = Client(url, read_timeout_seconds=60)
         self._resources: AsyncExitStack | None = None
         self.instructions: str | None = None
         self.tools: tuple[Tool, ...] = ()
