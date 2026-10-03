@@ -160,6 +160,7 @@ jobs:
           regctl image copy "$APP_IMAGE:$RELEASE_VERSION" "$APP_IMAGE:$RELEASE_CHANNEL"
 
   build-chat-ui:
+    needs: check-conversation-contract
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release.outputs.version }}
