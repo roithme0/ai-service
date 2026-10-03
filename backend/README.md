@@ -109,8 +109,9 @@ display messages are projections of those records; opaque reasoning is retained
 separately as continuation context. Current replay includes previous-turn context.
 Published artifacts derive their API `order` from the one-based position of their
 artifact record in the full history. Values may have gaps; candidates have no
-identity or order. The current UI sorts artifacts within a turn by this value; exposing the
-full mixed timeline remains deferred.
+identity or order. The HTTP timeline projects user/final messages, tool calls with safe statuses,
+artifact references, and failed-turn markers in recorded order. Active-turn tool
+activity and artifacts remain hidden until termination; streaming is deferred.
 Artifact tools return validated local candidates without mutating session state.
 Orchestration checks capacity, assigns identity and timestamp, and records the
 finalized tool result and artifact reference in history while storing the full
@@ -127,7 +128,12 @@ standalone text store and its conditional-append contract have been removed.
 Unresolved calls receive explicitly service-generated reports distinguishing
 execution never started from an unknown outcome; an unknown outcome may already
 have completed and requires investigation before repeating a state-changing action.
-This context is internal and is not exposed through HTTP snapshots or logging.
+Raw call arguments, results, and reasoning remain internal. The timeline exposes
+only tool names, execution identities, and statuses. Explicit tool failure metadata
+(including MCP `isError`) produces `failed`; arbitrary output text is never parsed
+to infer failure. `completed` means a result returned without explicit failure,
+not that a domain objective succeeded. Unresolved calls display `not_executed` or
+`outcome_unknown` according to the retained service report.
 There is no automatic rollback or duplicate-mutation prevention. Confirmed failed
 turn requests remain cached; a later ordinary message starts a new turn.
 

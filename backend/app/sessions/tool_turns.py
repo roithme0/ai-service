@@ -56,7 +56,7 @@ async def execute_tool_call(
         if attempts >= max_attempts or (max_successes is not None and successes >= max_successes):
             return ToolExecution(json.dumps({
                 "kind": "limit_reached", "attempts": attempts, "successes": successes,
-            })), attempts
+            }), failed=True), attempts
         attempts += 1
     return await registry.invoke(call.name, call.arguments), attempts
 

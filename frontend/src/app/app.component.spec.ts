@@ -17,6 +17,10 @@ describe('Demo application', () => {
       .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Any text', turn_id: null }))
       .mockResolvedValueOnce(Response.json({
         kind: 'completed', turn_id: 'turn-2',
+        timeline: [
+          { kind: 'artifact', turn_id: 'turn-2', artifact_id: 'greeting-1' },
+          { kind: 'message', turn_id: 'turn-2', id: 'assistant-turn-2', role: 'assistant', text: 'Scripted reply' },
+        ],
         message: { role: 'assistant', text: 'Scripted reply', turn_id: 'turn-2' },
         artifacts: [{ artifact_id: 'greeting-1', type,
           created_at: '2026-09-26T12:00:00Z', order: 1, turn_id: 'turn-2',
@@ -80,7 +84,16 @@ describe('Demo application', () => {
       .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Show error', turn_id: null }))
       .mockResolvedValueOnce(Response.json({
         detail: 'Turn generation failed', kind: 'generation_failed', turn_id: 'turn-4',
-      }, { status: 502 }));
+      }, { status: 502 }))
+      .mockResolvedValueOnce(Response.json({
+        session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z',
+        messages: [{ role: 'user', text: 'Show error', turn_id: null }], artifacts: [],
+        terminal_turn_id: 'turn-4', terminal_turn_kind: 'generation_failed',
+        timeline: [
+          { kind: 'message', id: 'confirmed-0-user', turn_id: 'turn-4', role: 'user', text: 'Show error' },
+          { kind: 'failure', turn_id: 'turn-4' },
+        ],
+      }));
     vi.stubGlobal('fetch', fetchMock);
     TestBed.configureTestingModule({ imports: [App] });
     const fixture = TestBed.createComponent(App);
@@ -100,7 +113,7 @@ describe('Demo application', () => {
     expect(action.textContent).toContain('Demo-Aktion (ohne Funktion)');
     action.click();
     fixture.detectChanges();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(chat.conversationStatus()?.action?.id).toBe('demo-noop');
     expect(chat.composerDisabled()).toBe(false);
   });

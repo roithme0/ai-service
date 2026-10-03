@@ -24,6 +24,7 @@ class ToolInvocation:
 class ToolExecution(Generic[ArtifactT]):
     output: str | ArtifactToolOutput
     artifact: ArtifactT | None = None
+    failed: bool = False
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,6 @@ class ToolRegistry(Generic[ArtifactT]):
     async def invoke(self, name: str, arguments: str) -> ToolExecution[ArtifactT]:
         handler = self._handlers.get(name)
         if handler is None:
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": "unknown_tool"}))
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "unknown_tool"}), failed=True)
         execution = handler(ToolInvocation(name, arguments))
         return await execution if inspect.isawaitable(execution) else execution

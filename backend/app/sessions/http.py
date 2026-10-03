@@ -16,6 +16,7 @@ from app.agents.wiring import get_configured_agents
 from app.sessions.context import ContextIssue
 from app.sessions.agent_service import AgentInputRejected, ConfiguredAgentService
 from app.sessions.conversation import ConversationMessageBusy, ConversationReadActive, PublishedArtifact, TurnKind
+from app.sessions.timeline import TimelineItem, TimelineMessage
 from app.sessions.text_sessions import (
     TextMessage, TextSessionAppendAccepted, TextSessionAppendExpired,
     TextSessionAppendInvalidMessage, TextSessionAppendLimitReached,
@@ -136,6 +137,7 @@ class SessionSnapshotResponse(BaseModel):
     artifacts: list[ArtifactResponse]
     terminal_turn_id: str | None
     terminal_turn_kind: TurnKind | None
+    timeline: list[Annotated[TimelineItem, Field(discriminator="kind")]]
 
     @field_serializer("expires_at")
     def serialize_expires_at(self, value: datetime) -> str:
@@ -147,6 +149,7 @@ class CompletedTurnResponse(BaseModel):
     turn_id: str
     message: AssistantMessageResponse
     artifacts: list[ArtifactResponse]
+    timeline: list[Annotated[TimelineItem, Field(discriminator="kind")]]
 
 
 class ConversationTransport(Protocol):
@@ -179,6 +182,7 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
                 artifacts=[_artifact(artifact) for artifact in snapshot.artifacts],
                 terminal_turn_id=snapshot.terminal_turn_id,
                 terminal_turn_kind=snapshot.terminal_turn_kind,
+                timeline=list(snapshot.timeline),
             )
         return _error("expired" if isinstance(outcome, TextSessionReadExpired) else "unknown")
 
@@ -200,10 +204,15 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
         outcome = await self.agent.execute_turn(session_id)
         if outcome.kind == "completed":
             assert outcome.text is not None
+            read = self.agent.read(session_id)
+            if not isinstance(read, ConversationReadActive):
+                return _error(read.kind)
             return CompletedTurnResponse(
                 kind="completed", turn_id=outcome.turn_id,
                 message=AssistantMessageResponse(role="assistant", text=outcome.text, turn_id=outcome.turn_id),
                 artifacts=[_artifact(artifact) for artifact in outcome.artifacts],
+                timeline=[item for item in read.snapshot.timeline if item.turn_id == outcome.turn_id
+                          and not (isinstance(item, TimelineMessage) and item.role == "user")],
             )
         return _error(outcome.kind, outcome.turn_id)
 

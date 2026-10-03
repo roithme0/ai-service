@@ -30,12 +30,12 @@ def create_greeting_tool() -> RegisteredTool[ArtifactCandidate[DemoPayload]]:
         try:
             arguments: object = json.loads(call.arguments)
         except (TypeError, ValueError):
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}))
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}), failed=True)
         if not isinstance(arguments, dict) or set(arguments) != {"name"}:
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}))
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}), failed=True)
         name = arguments["name"]
         if not isinstance(name, str) or not name.strip():
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}))
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}), failed=True)
         payload = GreetingPayload(message=f"Hello, {name}!")
         return ToolExecution(ArtifactToolOutput("created"), ArtifactCandidate(GREETING_ARTIFACT_TYPE, payload))
 

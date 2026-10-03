@@ -18,6 +18,7 @@ from app.sessions.history import (
 )
 from app.sessions.artifacts import ArtifactCandidate, ArtifactEnvelope, ArtifactToolOutput, PublishedArtifact
 from app.sessions.tools import ToolExecution
+from app.sessions.timeline import TimelineItem, timeline
 from app.sessions.text_sessions import (
     MAX_MESSAGE_COUNT,
     MAX_MESSAGE_LENGTH,
@@ -71,6 +72,7 @@ class ConversationSnapshot(Generic[ContextT, ArtifactT]):
     artifacts: tuple[PublishedArtifact[ArtifactT], ...]
     terminal_turn_id: str | None
     terminal_turn_kind: TurnKind | None
+    timeline: tuple[TimelineItem, ...]
 
 
 @dataclass(frozen=True)
@@ -153,6 +155,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     artifacts=tuple(artifact for artifact in self._published_artifacts(session_id) if artifact.turn_id != active_turn_id),
                     terminal_turn_id=terminal.turn_id if terminal else None,
                     terminal_turn_kind=terminal.kind if terminal else None,
+                    timeline=timeline(self._history[session_id], active_turn_id),
                 ),
             )
 
@@ -303,8 +306,8 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     raise ValueError("artifact candidates require structured tool output")
                 if sum(isinstance(record, ArtifactRecord) for record in history) >= self._sessions[session_id].settings.max_artifacts:
                     rejection = json.dumps({"kind": "limit_reached"})
-                    finalized = ToolExecution[ArtifactCandidate[ArtifactT]](rejection)
-                    result = ToolResultRecord(call.turn_id, call.execution_id, call.call.call_id, rejection)
+                    finalized = ToolExecution[ArtifactCandidate[ArtifactT]](rejection, failed=True)
+                    result = ToolResultRecord(call.turn_id, call.execution_id, call.call.call_id, rejection, True)
                     self._history[session_id] = (*history, result)
                     return finalized
                 payload = deepcopy(artifact.payload)
@@ -315,9 +318,9 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     raise TurnHistoryUnavailable("expired")
                 accepted = ArtifactEnvelope(str(uuid4()), artifact.type, created_at, call.turn_id, payload)
                 rendered = json.dumps({"kind": output.kind, "artifact_id": accepted.artifact_id})
-                result = ToolResultRecord(call.turn_id, call.execution_id, call.call.call_id, rendered)
+                result = ToolResultRecord(call.turn_id, call.execution_id, call.call.call_id, rendered, execution.failed)
                 record = ArtifactRecord(call.turn_id, call.execution_id, accepted.artifact_id)
-                finalized = ToolExecution(rendered, returned_candidate)
+                finalized = ToolExecution(rendered, returned_candidate, execution.failed)
                 next_history = (*history, result, record)
                 next_artifacts = {**self._artifacts[session_id], accepted.artifact_id: accepted}
                 self._artifacts[session_id] = next_artifacts
@@ -325,9 +328,9 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 return finalized
             if not isinstance(output, str):
                 raise ValueError("structured artifact output requires a candidate")
-            finalized = ToolExecution[ArtifactCandidate[ArtifactT]](output)
+            finalized = ToolExecution[ArtifactCandidate[ArtifactT]](output, failed=execution.failed)
             self._history[session_id] = (*history, ToolResultRecord(
-                call.turn_id, call.execution_id, call.call.call_id, output))
+                call.turn_id, call.execution_id, call.call.call_id, output, execution.failed))
             return finalized
 
     def _require_turn(self, session_id: str, turn_id: str) -> None:

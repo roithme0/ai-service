@@ -50,6 +50,7 @@ class ToolResultRecord:
     execution_id: str
     call_id: str
     output: str
+    failed: bool = False
 
 
 @dataclass(frozen=True)

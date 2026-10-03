@@ -114,6 +114,7 @@ def test_create_and_read_return_accepted_snapshots_without_derived_index(client:
         "artifacts": [],
         "terminal_turn_id": None,
         "terminal_turn_kind": None,
+        "timeline": [],
     }
     assert "availability_reference_index" not in read.json()
 
@@ -657,6 +658,12 @@ def test_failed_turn_retains_completed_presentations(client: TestClient, fake_ge
     assert snapshot["artifacts"][0]["payload"]["payload"] == {"value": [1, None]}
     assert len(snapshot["messages"]) == 1
     assert snapshot["terminal_turn_kind"] == "generation_failed"
+    assert [item["kind"] for item in snapshot["timeline"]] == ["message", "tool", "artifact", "failure"]
+    assert snapshot["timeline"][1]["name"] == "present_artifact"
+    assert snapshot["timeline"][1]["status"] == "completed"
+    assert snapshot["timeline"][2]["artifact_id"] == snapshot["artifacts"][0]["artifact_id"]
+    assert "arguments" not in snapshot["timeline"][1]
+    assert "output" not in snapshot["timeline"][1]
     assert client.post(base + "/turns", json={}).status_code == 502
     assert len(fake_generator.calls) == 2
 

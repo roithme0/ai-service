@@ -27,7 +27,7 @@ describe('DemoTransport', () => {
             { status: 502 },
           );
         }
-        return Response.json({
+        return Response.json({ timeline: [],
           kind: 'completed', turn_id: `turn-${turnCount}`,
           message: { role: 'assistant', text: 'Scripted reply', turn_id: `turn-${turnCount}` },
           artifacts: [],

@@ -81,6 +81,35 @@
           "message": {
             "$ref": "#/components/schemas/AssistantMessageResponse"
           },
+          "timeline": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "artifact": "#/components/schemas/TimelineArtifact",
+                  "failure": "#/components/schemas/TimelineFailure",
+                  "message": "#/components/schemas/TimelineMessage",
+                  "tool": "#/components/schemas/TimelineTool"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/TimelineMessage"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineTool"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineFailure"
+                }
+              ]
+            },
+            "title": "Timeline",
+            "type": "array"
+          },
           "turn_id": {
             "title": "Turn Id",
             "type": "string"
@@ -90,7 +119,8 @@
           "kind",
           "turn_id",
           "message",
-          "artifacts"
+          "artifacts",
+          "timeline"
         ],
         "title": "CompletedTurnResponse",
         "type": "object"
@@ -228,6 +258,35 @@
               }
             ],
             "title": "Terminal Turn Kind"
+          },
+          "timeline": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "artifact": "#/components/schemas/TimelineArtifact",
+                  "failure": "#/components/schemas/TimelineFailure",
+                  "message": "#/components/schemas/TimelineMessage",
+                  "tool": "#/components/schemas/TimelineTool"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/TimelineMessage"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineTool"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineArtifact"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineFailure"
+                }
+              ]
+            },
+            "title": "Timeline",
+            "type": "array"
           }
         },
         "required": [
@@ -236,9 +295,131 @@
           "messages",
           "artifacts",
           "terminal_turn_id",
-          "terminal_turn_kind"
+          "terminal_turn_kind",
+          "timeline"
         ],
         "title": "SessionSnapshotResponse",
+        "type": "object"
+      },
+      "TimelineArtifact": {
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "artifact",
+            "title": "Kind",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "artifact_id",
+          "kind"
+        ],
+        "title": "TimelineArtifact",
+        "type": "object"
+      },
+      "TimelineFailure": {
+        "properties": {
+          "kind": {
+            "const": "failure",
+            "title": "Kind",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "kind"
+        ],
+        "title": "TimelineFailure",
+        "type": "object"
+      },
+      "TimelineMessage": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "message",
+            "title": "Kind",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "id",
+          "role",
+          "text",
+          "kind"
+        ],
+        "title": "TimelineMessage",
+        "type": "object"
+      },
+      "TimelineTool": {
+        "properties": {
+          "execution_id": {
+            "title": "Execution Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "tool",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "failed",
+              "not_executed",
+              "outcome_unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "execution_id",
+          "name",
+          "status",
+          "kind"
+        ],
+        "title": "TimelineTool",
         "type": "object"
       },
       "UserMessageResponse": {

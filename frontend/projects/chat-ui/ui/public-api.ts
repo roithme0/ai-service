@@ -10,6 +10,9 @@ export type {
   ChatStatusAction,
   ChatSubmission,
   ChatTextMessage,
+  ChatToolCall,
+  ChatToolStatus,
+  ChatTurnFailure,
   JsonPrimitive,
   JsonValue,
 } from './lib/chat-message';

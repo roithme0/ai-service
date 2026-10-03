@@ -114,22 +114,22 @@ def presentation_tool_source(
             json.dumps(request.payload, allow_nan=False)
             json.dumps(request.metadata, allow_nan=False)
         except (ValidationError, ValueError, RecursionError):
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}))
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}), failed=True)
         validator = validators.get(request.type)
         if validator is None:
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": "unsupported_type"}))
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "unsupported_type"}), failed=True)
         rejection = _schema_rejection(validator, request.payload, "payload")
         if rejection is not None:
-            return ToolExecution(rejection)
+            return ToolExecution(rejection, failed=True)
         metadata_validator = metadata_validators.get(request.type)
         if metadata_validator is None:
             if request.metadata is not None:
                 return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_metadata",
-                                                 "detail": "This capability does not advertise metadata"}))
+                                                 "detail": "This capability does not advertise metadata"}), failed=True)
         else:
             rejection = _schema_rejection(metadata_validator, request.metadata or {}, "metadata")
             if rejection is not None:
-                return ToolExecution(rejection)
+                return ToolExecution(rejection, failed=True)
         candidate = ArtifactCandidate(request.type,
             PresentationPayload(title=request.title, subtitle=request.subtitle, payload=request.payload,
                                 metadata=request.metadata))

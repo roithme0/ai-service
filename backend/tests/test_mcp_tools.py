@@ -152,10 +152,12 @@ def test_tool_errors_are_returned_and_transport_errors_do_not_leak_details() -> 
         registry = ToolRegistry(MCPToolset((server,)).registered_tools())
         error = await registry.invoke("server__error", "{}")
         assert json.loads(error.output)["isError"] is True
+        assert error.failed is True
         assert json.loads(error.output)["content"][0]["text"] == "server"
         server.failure = RuntimeError("sensitive transport details")
         failed = await registry.invoke("server__error", "{}")
         assert json.loads(failed.output) == {"kind": "tool_failed", "reason": "mcp_call_failed"}
+        assert failed.failed is True
         server.failure = asyncio.CancelledError()
         with pytest.raises(asyncio.CancelledError):
             await registry.invoke("server__error", "{}")

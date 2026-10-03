@@ -146,6 +146,12 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
         texts.append(body["message"]["text"])
         if index == 1:
             assert len(body["artifacts"]) == 2
+            assert [item["kind"] for item in body["timeline"]] == ["tool", "artifact", "tool", "artifact", "message"]
+            assert [item["name"] for item in body["timeline"] if item["kind"] == "tool"] == ["create_greeting", "create_greetings"]
+            assert all(item["status"] == "completed" for item in body["timeline"] if item["kind"] == "tool")
+            projected = [item for item in client.get(session).json()["timeline"]
+                         if item["turn_id"] == body["turn_id"] and not (item["kind"] == "message" and item["role"] == "user")]
+            assert projected == body["timeline"]
             greeting, greetings = body["artifacts"]
             assert greeting["type"] == "demo.greeting"
             assert greeting["payload"] == {"message": "Hello, World!"}
