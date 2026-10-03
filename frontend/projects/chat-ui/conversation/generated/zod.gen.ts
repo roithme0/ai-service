@@ -24,16 +24,6 @@ export const zAssistantMessageResponse = z.object({
 });
 
 /**
- * CompletedTurnResponse
- */
-export const zCompletedTurnResponse = z.object({
-    artifacts: z.array(zArtifactResponse),
-    kind: z.literal('completed'),
-    message: zAssistantMessageResponse,
-    turn_id: z.string()
-});
-
-/**
  * ErrorResponse
  */
 export const zErrorResponse = z.object({
@@ -65,6 +55,77 @@ export const zSessionCreationResponse = z.object({
 });
 
 /**
+ * TimelineArtifact
+ */
+export const zTimelineArtifact = z.object({
+    artifact_id: z.string(),
+    kind: z.literal('artifact'),
+    turn_id: z.string()
+});
+
+/**
+ * TimelineFailure
+ */
+export const zTimelineFailure = z.object({
+    kind: z.literal('failure'),
+    turn_id: z.string()
+});
+
+/**
+ * TimelineIntermediateMessage
+ */
+export const zTimelineIntermediateMessage = z.object({
+    id: z.string(),
+    kind: z.literal('intermediate'),
+    text: z.string(),
+    turn_id: z.string()
+});
+
+/**
+ * TimelineMessage
+ */
+export const zTimelineMessage = z.object({
+    id: z.string(),
+    kind: z.literal('message'),
+    role: z.enum(['user', 'assistant']),
+    text: z.string(),
+    turn_id: z.string()
+});
+
+/**
+ * TimelineTool
+ */
+export const zTimelineTool = z.object({
+    execution_id: z.string(),
+    kind: z.literal('tool'),
+    name: z.string(),
+    status: z.enum([
+        'completed',
+        'failed',
+        'not_executed',
+        'outcome_unknown'
+    ]),
+    turn_id: z.string()
+});
+
+/**
+ * CompletedTurnResponse
+ */
+export const zCompletedTurnResponse = z.object({
+    artifacts: z.array(zArtifactResponse),
+    kind: z.literal('completed'),
+    message: zAssistantMessageResponse,
+    timeline: z.array(z.union([
+        zTimelineMessage,
+        zTimelineIntermediateMessage,
+        zTimelineTool,
+        zTimelineArtifact,
+        zTimelineFailure
+    ])),
+    turn_id: z.string()
+});
+
+/**
  * UserMessageResponse
  */
 export const zUserMessageResponse = z.object({
@@ -91,7 +152,14 @@ export const zSessionSnapshotResponse = z.object({
         'limit_reached',
         'conflict',
         'busy'
-    ]).nullable()
+    ]).nullable(),
+    timeline: z.array(z.union([
+        zTimelineMessage,
+        zTimelineIntermediateMessage,
+        zTimelineTool,
+        zTimelineArtifact,
+        zTimelineFailure
+    ]))
 });
 
 /**

@@ -25,21 +25,75 @@ class FakeTransport implements ConversationTransport {
 }
 
 describe('ConversationController', () => {
-  it('maps synthetic artifacts in order for successful turns and reconciled history', async () => {
+  it('preserves interleaved tool and artifact positions after success and failure reconciliation', async () => {
+    const transport = new FakeTransport();
+    const retained = artifact('retained', 'turn-1');
+    const activity: SessionSnapshotResponse['timeline'] = [
+      { kind: 'intermediate', id: 'update-1', turn_id: 'turn-1', text: 'Checking results.' },
+      { kind: 'tool', turn_id: 'turn-1', execution_id: 'a', name: 'present', status: 'completed' },
+      { kind: 'artifact', turn_id: 'turn-1', artifact_id: 'retained' },
+      { kind: 'tool', turn_id: 'turn-1', execution_id: 'b', name: 'save', status: 'outcome_unknown' },
+    ];
+    transport.appendMessage.mockResolvedValueOnce(user('Show')).mockResolvedValueOnce(user('Continue'));
+    transport.generateTurn.mockRejectedValueOnce(new ConversationApiError(502, 'generation_failed'))
+      .mockResolvedValueOnce({ kind: 'completed', turn_id: 'turn-2', message: assistant('Done', 'turn-2'), artifacts: [],
+        timeline: [{ kind: 'message', id: 'assistant-turn-2', turn_id: 'turn-2', role: 'assistant', text: 'Done' }] });
+    const failedSnapshot = snapshot([user('Show')]);
+    transport.readSession.mockResolvedValue({ ...failedSnapshot, artifacts: [retained],
+      terminal_turn_kind: 'generation_failed', terminal_turn_id: 'turn-1',
+      timeline: [...failedSnapshot.timeline, ...activity, { kind: 'failure', turn_id: 'turn-1' }] });
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    await controller.submit('Show', () => undefined);
+    expect(transport.readSession).toHaveBeenCalledOnce();
+    expect(controller.state.content.map(item => item.id)).toEqual([
+      'confirmed-0-user', 'update-1', 'tool-a', 'retained', 'tool-b', 'failure-turn-1',
+    ]);
+    expect(controller.state.status?.kind).toBe('error');
+    expect(controller.state.status?.action).toBeUndefined();
+    expect(controller.state.composerDisabled).toBe(false);
+    await controller.submit('Continue', () => undefined);
+    expect(controller.state.content.map(item => item.id)).toEqual([
+      'confirmed-0-user', 'update-1', 'tool-a', 'retained', 'tool-b', 'failure-turn-1', 'confirmed-1-user', 'assistant-turn-2',
+    ]);
+    expect(controller.state.status).toBeNull();
+  });
+
+  it('uses the successful turn timeline rather than regrouping artifacts before the answer', async () => {
+    const transport = new FakeTransport();
+    transport.appendMessage.mockResolvedValue(user('Show'));
+    transport.generateTurn.mockResolvedValue({ kind: 'completed', turn_id: 'turn-1', message: assistant('Done', 'turn-1'),
+      artifacts: [artifact('retained', 'turn-1')], timeline: [
+        { kind: 'intermediate', id: 'update-1', turn_id: 'turn-1', text: 'Checking results.' },
+        { kind: 'tool', turn_id: 'turn-1', execution_id: 'a', name: 'present', status: 'completed' },
+        { kind: 'artifact', turn_id: 'turn-1', artifact_id: 'retained' },
+        { kind: 'tool', turn_id: 'turn-1', execution_id: 'b', name: 'check', status: 'failed' },
+        { kind: 'message', id: 'assistant-turn-1', turn_id: 'turn-1', role: 'assistant', text: 'Done' },
+      ] });
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    await controller.submit('Show', () => undefined);
+    expect(controller.state.content.map(item => item.id)).toEqual([
+      'confirmed-0-user', 'update-1', 'tool-a', 'retained', 'tool-b', 'assistant-turn-1',
+    ]);
+    expect(transport.readSession).not.toHaveBeenCalled();
+  });
+
+  it('maps artifacts with sparse history positions in order for successful turns and reconciled history', async () => {
     const transport = new FakeTransport();
     const later = {
       artifact_id: 'later', type: 'other.result', created_at: '2026-09-25T12:00:00Z',
-      order: 2, turn_id: 'turn-1', payload: { title: "Later", payload: { value: 2 } },
+      order: 12, turn_id: 'turn-1', payload: { title: "Later", payload: { value: 2 } },
     };
-    const earlier = { ...later, artifact_id: 'earlier', order: 1, payload: { title: "Earlier", payload: { value: 1 } } };
+    const earlier = { ...later, artifact_id: 'earlier', order: 8, payload: { title: "Earlier", payload: { value: 1 } } };
     transport.appendMessage.mockResolvedValueOnce(user('Hello')).mockResolvedValueOnce(user('Again'));
-    transport.generateTurn.mockResolvedValueOnce({
+    transport.generateTurn.mockResolvedValueOnce(withTimeline({
       kind: 'completed', turn_id: 'turn-1', message: assistant('Hi', 'turn-1'), artifacts: [later, earlier],
-    }).mockRejectedValueOnce(new ConversationNetworkError('Timeout'));
-    transport.readSession.mockResolvedValue({
+    })).mockRejectedValueOnce(new ConversationNetworkError('Timeout'));
+    transport.readSession.mockResolvedValue(withTimeline({
       ...snapshot([user('Hello'), assistant('Hi', 'turn-1'), user('Again')]),
       artifacts: [later, earlier],
-    });
+    }));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Hello', () => undefined);
@@ -63,11 +117,11 @@ describe('ConversationController', () => {
       headline: 'Custom headline', payload: { mapped: true },
     }));
     transport.appendMessage.mockResolvedValueOnce(user('Hello')).mockResolvedValueOnce(user('Again'));
-    transport.generateTurn.mockResolvedValueOnce({ kind: 'completed', turn_id: 'turn-1',
-      message: assistant('Hi', 'turn-1'), artifacts: [hidden, artifact] })
+    transport.generateTurn.mockResolvedValueOnce(withTimeline({ kind: 'completed', turn_id: 'turn-1',
+      message: assistant('Hi', 'turn-1'), artifacts: [hidden, artifact] }))
       .mockRejectedValueOnce(new ConversationNetworkError('Timeout'));
-    transport.readSession.mockResolvedValue({ ...snapshot([user('Hello'), assistant('Hi', 'turn-1'), user('Again')]),
-      artifacts: [hidden, artifact] });
+    transport.readSession.mockResolvedValue(withTimeline({ ...snapshot([user('Hello'), assistant('Hi', 'turn-1'), user('Again')]),
+      artifacts: [hidden, artifact] }));
     const controller = new ConversationController(transport, () => undefined, mapper);
     await controller.start();
     await controller.submit('Hello', () => undefined);
@@ -84,9 +138,9 @@ describe('ConversationController', () => {
   it('reconciles a busy turn and retains the retry action when its result is still unclear', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Hello'));
-    transport.generateTurn.mockRejectedValueOnce(new ConversationApiError(409, 'busy')).mockResolvedValueOnce({
+    transport.generateTurn.mockRejectedValueOnce(new ConversationApiError(409, 'busy')).mockResolvedValueOnce(withTimeline({
       kind: 'completed', turn_id: 'turn-1', message: assistant('Hi', 'turn-1'), artifacts: [],
-    });
+    }));
     transport.readSession.mockResolvedValue(snapshot([user('Hello')]));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
@@ -202,7 +256,7 @@ describe('ConversationController', () => {
     expect(texts(controller.state.content)).toEqual(['Hallo Demo']);
     expect(controller.state.status?.message).toBe('Antwort wird erstellt …');
 
-    turn.resolve({ kind: 'completed', turn_id: 'turn-1', message: assistant('Gern.', 'turn-1'), artifacts: [] });
+    turn.resolve(withTimeline({ kind: 'completed', turn_id: 'turn-1', message: assistant('Gern.', 'turn-1'), artifacts: [] }));
     await submission;
     expect(texts(controller.state.content)).toEqual([
       'Hallo Demo',
@@ -215,12 +269,12 @@ describe('ConversationController', () => {
   it('places JSON artifacts between the user and final assistant text', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockResolvedValue(user('Alternative'));
-    transport.generateTurn.mockResolvedValue({
+    transport.generateTurn.mockResolvedValue(withTimeline({
       kind: 'completed',
       turn_id: 'turn-1',
       message: assistant('Hier ist sie.', 'turn-1'),
       artifacts: [artifact('artifact-1', 'turn-1')],
-    });
+    }));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
 
@@ -234,16 +288,43 @@ describe('ConversationController', () => {
     }));
   });
 
+  it('excludes intermediate updates from message counting during ambiguous append reconciliation', async () => {
+    const transport = new FakeTransport();
+    const update = { kind: 'intermediate' as const, id: 'update', turn_id: 'turn-1', text: 'Checking.' };
+    const first = withTimeline({ kind: 'completed' as const, turn_id: 'turn-1',
+      message: assistant('Answer', 'turn-1'), artifacts: [] });
+    transport.appendMessage.mockResolvedValueOnce(user('First'))
+      .mockRejectedValueOnce(new ConversationNetworkError('Timeout'));
+    transport.generateTurn.mockResolvedValueOnce({ ...first, timeline: [update, ...first.timeline] })
+      .mockResolvedValueOnce(withTimeline({ kind: 'completed', turn_id: 'turn-2',
+        message: assistant('Next answer', 'turn-2'), artifacts: [] }));
+    const retained = snapshot([user('First'), assistant('Answer', 'turn-1'), user('Next')]);
+    transport.readSession.mockResolvedValue({ ...retained,
+      timeline: [retained.timeline[0], update, ...retained.timeline.slice(1)] });
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    await controller.submit('First', () => undefined);
+    const acknowledge = vi.fn();
+    await controller.submit('Next', acknowledge);
+    expect(acknowledge).toHaveBeenCalledOnce();
+    expect(transport.appendMessage).toHaveBeenCalledTimes(2);
+    expect(transport.generateTurn).toHaveBeenCalledTimes(2);
+    expect(controller.state.content.map(item => item.id)).toEqual([
+      'confirmed-0-user', 'update', 'assistant-turn-1', 'confirmed-2-user', 'assistant-turn-2',
+    ]);
+    expect(controller.state.status).toBeNull();
+  });
+
   it('reconciles an ambiguous append and never appends it a second time', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationNetworkError('Netzwerkfehler'));
     transport.readSession.mockResolvedValue(snapshot([user('Noch eine Frage')]));
-    transport.generateTurn.mockResolvedValue({
+    transport.generateTurn.mockResolvedValue(withTimeline({
       kind: 'completed',
       turn_id: 'turn-1',
       message: assistant('Ja.', 'turn-1'),
       artifacts: [],
-    });
+    }));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();
@@ -262,26 +343,26 @@ describe('ConversationController', () => {
       .mockResolvedValueOnce(user('Erste Frage'))
       .mockRejectedValueOnce(new ConversationNetworkError('Netzwerkfehler'));
     transport.generateTurn
-      .mockResolvedValueOnce({
+      .mockResolvedValueOnce(withTimeline({
         kind: 'completed',
         turn_id: 'turn-1',
         message: assistant('Erste Antwort', 'turn-1'),
         artifacts: [artifact('artifact-1', 'turn-1')],
-      })
-      .mockResolvedValueOnce({
+      }))
+      .mockResolvedValueOnce(withTimeline({
         kind: 'completed',
         turn_id: 'turn-2',
         message: assistant('Zweite Antwort', 'turn-2'),
         artifacts: [],
-      });
-    transport.readSession.mockResolvedValue({
+      }));
+    transport.readSession.mockResolvedValue(withTimeline({
       ...snapshot([
         user('Erste Frage'),
         assistant('Erste Antwort', 'turn-1'),
         user('Zweite Frage'),
       ]),
       artifacts: [artifact('artifact-1', 'turn-1')],
-    });
+    }));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Erste Frage', () => undefined);
@@ -335,12 +416,12 @@ describe('ConversationController', () => {
     transport.appendMessage.mockResolvedValue(user('Weiter'));
     transport.generateTurn
       .mockRejectedValueOnce(new ConversationApiError(503, 'agent_unavailable'))
-      .mockResolvedValueOnce({
+      .mockResolvedValueOnce(withTimeline({
         kind: 'completed',
         turn_id: 'turn-1',
         message: assistant('Versuche das.', 'turn-1'),
         artifacts: [],
-      });
+      }));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Weiter', () => undefined);
@@ -405,14 +486,14 @@ describe('ConversationController', () => {
 });
 
 function snapshot(messages: ApiMessage[]): SessionSnapshotResponse {
-  return {
+  return withTimeline({
     session_id: 'session-1',
     expires_at: CREATED.expires_at,
     messages,
     artifacts: [],
     terminal_turn_id: null,
     terminal_turn_kind: null,
-  };
+  });
 }
 
 function artifact(artifactId: string, turnId: string): ArtifactResponse {
@@ -444,4 +525,19 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
     resolvePromise = resolve;
   });
   return { promise, resolve: resolvePromise };
+}
+
+function withTimeline<const T extends {
+  artifacts: ArtifactResponse[];
+  messages?: ApiMessage[];
+  message?: ApiMessage;
+}>(value: T): T & { timeline: SessionSnapshotResponse['timeline'] } {
+  const messages = value.messages ?? (value.message === undefined ? [] : [value.message]);
+  return { ...value, timeline: messages.flatMap((message, index): SessionSnapshotResponse['timeline'] => [
+    ...[...value.artifacts].sort((a, b) => a.order - b.order)
+      .filter(artifact => artifact.turn_id === message.turn_id)
+      .map(artifact => ({ kind: 'artifact' as const, turn_id: artifact.turn_id, artifact_id: artifact.artifact_id })),
+    { kind: 'message', id: message.role === 'user' ? `confirmed-${index}-user` : `assistant-${message.turn_id}`,
+      turn_id: message.turn_id ?? `user-${index}`, role: message.role, text: message.text },
+  ]) };
 }

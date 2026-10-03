@@ -27,6 +27,12 @@ local Kochwiki configuration makes every Kochwiki session endpoint return
 `503 agent_unavailable`. The deterministic demo HTTP configuration remains available
 without model credentials or Kochwiki access. The frontend now uses this demo:
 any text advances its introduction, two greeting artifacts in one turn, one scripted failure, and completion sequence.
+The artifact turn includes intermediate updates before each tool call to demonstrate
+their placement among tool activity, artifacts, and the standalone final answer.
+It then invokes the greeting tool with an empty name to display an explicit failed
+call without creating an artifact; the turn completes with an explanation.
+The following scripted generation failure retains an intermediate update without
+a final answer, demonstrating that the update survives the failure and later turns.
 The frontend simulates a 405 compatibility error on the next message after completion; the backend still accepts further submissions. Refresh the page to restart with a new session.
 The generator receives the conversation and the retained caller-provided context. Kochwiki supplies all domain tools and workflow instructions through
 MCP; the AI Service supplies only generic conversational guidance.
@@ -101,11 +107,48 @@ The generic adapter does not interpret domain payloads or create chat artifacts.
 Kochwiki owns proposals and saving drafts. MCP results remain data for the model;
 they do not automatically appear as artifacts. Model-backed sessions may separately
 publish caller-advertised presentations through the local `present_artifact` tool.
-Only final replies are supplied as conversation history between turns,
-not tool transcripts, so generic guidance asks the model to include identifiers
-needed for follow-up actions. There is no automatic rollback of MCP writes if
-later model generation fails. Failed turns are retained by the session lifecycle
-and are not replayed on a repeated turn request.
+Sessions retain an ordered internal history of messages, provider continuation
+items, tool calls and exact returned results, accepted artifact records, and terminal
+states. Later ordinary turns replay that context without invoking its tools.
+Each message and tool call has one authoritative history record. Model input and
+display messages are projections of those records; opaque reasoning is retained
+separately as continuation context. Current replay includes previous-turn context.
+Published artifacts derive their API `order` from the one-based position of their
+artifact record in the full history. Values may have gaps; candidates have no
+identity or order. The HTTP timeline projects user/final messages, intermediate assistant updates, tool calls with safe statuses,
+artifact references, and failed-turn markers in recorded order. Active-turn tool
+activity and artifacts remain hidden until termination; streaming is deferred.
+Intermediate updates use the provider's `commentary` phase when available and
+otherwise include messages accompanying tool calls. They remain visible after
+failed turns and are replayed to the model, but are excluded from the final-message
+projection used for message limits and reconciliation. Commentary-only responses
+continue generation within the existing provider-response limit. The prompt asks
+for brief progress explanations and a standalone final answer; opaque provider
+reasoning remains internal.
+Artifact tools return validated local candidates without mutating session state.
+Orchestration checks capacity, assigns identity and timestamp, and records the
+finalized tool result and artifact reference in history while storing the full
+artifact in a session-owned map, atomically under the same lock. History alone
+determines order and publication; the map holds content and expires with history.
+There is no staging/publication step.
+The conversation store retains no second text-message list or terminal-response
+cache. Messages, message revision, and current terminal state are projected from
+history; repeated failed-turn responses are reconstructed from terminal records.
+Session metadata holds only expiry, initialization context, and settings, while
+active reservations coordinate execution under the store lock.
+`sessions/text_sessions.py` contains shared types and limits only; the former
+standalone text store and its conditional-append contract have been removed.
+Unresolved calls receive explicitly service-generated reports distinguishing
+execution never started from an unknown outcome; an unknown outcome may already
+have completed and requires investigation before repeating a state-changing action.
+Raw call arguments, results, and reasoning remain internal. The timeline exposes
+only tool names, execution identities, and statuses. Explicit tool failure metadata
+(including MCP `isError`) produces `failed`; arbitrary output text is never parsed
+to infer failure. `completed` means a result returned without explicit failure,
+not that a domain objective succeeded. Unresolved calls display `not_executed` or
+`outcome_unknown` according to the retained service report.
+There is no automatic rollback or duplicate-mutation prevention. Confirmed failed
+turn requests remain cached; a later ordinary message starts a new turn.
 
 `tests/test_mcp_connection.py` exercises a complete configured-agent tool turn
 against Streamable HTTP servers with a scripted model, including proposal
@@ -181,8 +224,8 @@ The model receives capability descriptions and standalone schemas with a local
 `payload`, and optional object `metadata`.
 The subtitle is a short secondary label beneath the title, such as a brand.
 It may be omitted or null; provided text must be nonblank and at most 200 characters.
-The backend validates arguments and the selected payload schema before staging
-an artifact. Payload schemas can use local fragment references; external schema
+The backend validates arguments and the selected payload schema before returning
+an artifact candidate. Payload schemas can use local fragment references; external schema
 references are rejected and validation never fetches schemas over the network.
 Payload schema `format` annotations do not add format validation. Capabilities
 can also advertise `metadataSchema`; metadata is validated separately, including
@@ -195,7 +238,12 @@ Presentation shares the turn's tool-call budget and the session artifact limit.
 Artifacts use the existing HTTP envelope, whose `payload` contains
 `{"title": "...", "subtitle": <string or null>, "payload": <complete presentation data>, "metadata": <object or null>}`. IDs, order,
 timestamps, and turn attribution are assigned by the conversation store. They
-are published on successful turn completion and discarded if the turn fails or
-is cancelled. Repeated turn reads return the same stored artifacts. Presentation
+are retained once an artifact-producing tool returns its validated artifact, even
+if later generation fails or is cancelled. Active-turn visibility remains deferred
+until termination. Failed-turn artifacts are available through session reads without
+an assistant reply; candidates never returned or accepted leave no artifact state. Repeated turn reads return
+the same artifacts projected from history. These retained artifacts continue consuming capacity.
+History and payloads expire together after 90 minutes or disappear on restart.
+Presentation
 has no domain save effect. The AI Service does not know frontend renderers or
 Kochwiki models, and MCP tool results remain independent of presentation.

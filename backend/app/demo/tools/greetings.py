@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 
-from app.demo.session import DemoContext, DemoPayload, DemoSessionStore, GreetingsPayload
-from app.sessions.artifacts import ArtifactPrepared, ArtifactPreparationRejected, ArtifactRegistry
-from app.sessions.conversation import ConversationStageAccepted, ConversationTurnView, StagedArtifact
+from app.demo.session import DemoPayload, GreetingsPayload
+from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation
 
 
@@ -24,40 +23,18 @@ CREATE_GREETINGS_SCHEMA: dict[str, object] = {
 }
 
 
-class GreetingsHandler:
-    async def prepare(
-        self, view: ConversationTurnView[DemoContext, DemoPayload], candidate: object
-    ) -> ArtifactPrepared[DemoPayload] | ArtifactPreparationRejected[str]:
-        if not isinstance(candidate, list) or not candidate:
-            return ArtifactPreparationRejected("invalid_arguments")
-        messages: list[str] = []
-        for name in candidate:
-            if not isinstance(name, str) or not name.strip():
-                return ArtifactPreparationRejected("invalid_arguments")
-            messages.append(f"Hello, {name}!")
-        return ArtifactPrepared(GreetingsPayload(messages=tuple(messages)))
-
-
-def create_greetings_tool(
-    store: DemoSessionStore, session_id: str, turn_id: str
-) -> RegisteredTool[StagedArtifact[DemoPayload]]:
-    registry = ArtifactRegistry[DemoContext, DemoPayload, str](((GREETINGS_ARTIFACT_TYPE, GreetingsHandler()),))
-
-    async def execute(call: ToolInvocation) -> ToolExecution[StagedArtifact[DemoPayload]]:
+def create_greetings_tool() -> RegisteredTool[ArtifactCandidate[DemoPayload]]:
+    async def execute(call: ToolInvocation) -> ToolExecution[ArtifactCandidate[DemoPayload]]:
         try:
             arguments: object = json.loads(call.arguments)
         except (TypeError, ValueError):
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}))
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}), failed=True)
         if not isinstance(arguments, dict) or set(arguments) != {"names"}:
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}))
-        staged = await registry.register(store, session_id, turn_id, GREETINGS_ARTIFACT_TYPE, arguments["names"])
-        if isinstance(staged, ArtifactPreparationRejected):
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": staged.detail}))
-        if not isinstance(staged, ConversationStageAccepted):
-            return ToolExecution(json.dumps({"kind": staged.kind}))
-        return ToolExecution(
-            json.dumps({"kind": "created", "artifact_id": staged.artifact.artifact_id}),
-            staged.artifact,
-        )
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}), failed=True)
+        names = arguments["names"]
+        if not isinstance(names, list) or not names or any(not isinstance(name, str) or not name.strip() for name in names):
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}), failed=True)
+        payload = GreetingsPayload(messages=tuple(f"Hello, {name}!" for name in names))
+        return ToolExecution(ArtifactToolOutput("created"), ArtifactCandidate(GREETINGS_ARTIFACT_TYPE, payload))
 
     return RegisteredTool("create_greetings", CREATE_GREETINGS_SCHEMA, execute)

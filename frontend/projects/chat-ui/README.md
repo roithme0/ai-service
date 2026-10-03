@@ -1,6 +1,6 @@
 # Chat UI
 
-`@roithme0/chat-ui` is one Angular 22 package with two public entry points. `@roithme0/chat-ui/ui` provides the controlled conversation component; `@roithme0/chat-ui/conversation` optionally provides the AI Service conversation controller and HTTP transport. The UI entry point renders ordered host-supplied text and JSON-compatible artifacts, emits normalized user submissions and generic status actions, and leaves conversation state and transport orchestration to the host. It makes no backend requests.
+`@roithme0/chat-ui` is one Angular 22 package with two public entry points. `@roithme0/chat-ui/ui` provides the controlled conversation component; `@roithme0/chat-ui/conversation` optionally provides the AI Service conversation controller and HTTP transport. The UI entry point renders ordered host-supplied text, tool activity, failure markers, and JSON-compatible artifacts, emits normalized user submissions and generic status actions, and leaves conversation state and transport orchestration to the host. It makes no backend requests.
 
 The `/ui` entry point exports `ChatUiComponent` and the typed content, artifact renderer, submission, status, and status-action contracts. Import the component into the host component's `imports`.
 
@@ -17,7 +17,11 @@ The `/ui` entry point exports `ChatUiComponent` and the typed content, artifact 
 />
 ```
 
+Tool content (`ChatToolCall`) has `kind: 'tool'`, stable `id`, `name`, and `status` (`completed`, `failed`, `not_executed`, or `outcome_unknown`). Each call renders as a compact row in secondary text color with the same packaged tool icon and a German status label. Names render literally; arguments and result payloads are not displayed. Completed means a result was returned without explicitly reported failure. Failure content (`ChatTurnFailure`) has `kind: 'failure'`, `id`, and `text`; a trailing marker is covered by the current error status when present, and remains visible in later history.
+
 Text content has readonly `kind`, `id`, `role` (`user` or `assistant`), and `text` fields. Artifacts have readonly `kind`, `id`, `type`, `headline`, optional `subtitle`, and recursive `JsonValue` payload fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
+
+Intermediate assistant content (`ChatIntermediateMessage`) has readonly `kind: 'intermediate'`, `id`, and `text`. It uses the same safe Markdown renderer with secondary text color and appears in recorded order among tool calls and artifacts, including after failed turns. These are user-facing progress explanations; provider reasoning is not displayed. Final answers remain standalone. Updates arrive after turn termination until streaming is implemented, and do not count as final messages during controller reconciliation.
 
 Map artifact type discriminators to typed Angular templates with `artifactRenderer(template)`. The built-in `json` type renders the escaped, formatted `payload.value`. An absent mapping for any other type shows an unsupported-presentation message; it does not silently select JSON. The library frames every artifact and clips renderer bodies above `--ai-chat-artifact-collapsed-height` (default `18rem`) with German expand/collapse controls and no nested scrolling area.
 
@@ -77,9 +81,9 @@ The required base URL is the prefix immediately before `/agents`: `/api/v1` yiel
 
 The transport binds the URL, agent key, and optional third constructor argument for initialization input. Omitted input sends `{ input: {} }`; supplied input uses `{ input: suppliedInput }`. Replacement sessions use the same transport settings. Server validation is authoritative, and configurations requiring domain input can reject an empty input. No recipe types or fixtures are packaged.
 
-The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentArtifact` is the default mapper: it preserves the advertised type and identity and unwraps the backend presentation payload `{ title, payload }`. `presentJsonArtifact` is an explicit adapter for hosts such as the deterministic demo that deliberately present arbitrary tool payloads using type `json` and `{ value: originalPayload }`; the controller sorts artifacts by backend order and associates history artifacts with their turns. The host owns view-state binding, introductory text and custom renderer registration.
+The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentArtifact` is the default mapper: it preserves the advertised type and identity and unwraps the backend presentation payload `{ title, payload }`. `presentJsonArtifact` is an explicit adapter for hosts such as the deterministic demo that deliberately present arbitrary tool payloads using type `json` and `{ value: originalPayload }`; the controller follows the backend timeline exactly and resolves artifact references against their envelopes, preserving tool/artifact placement even without a final assistant answer. The host owns view-state binding, introductory text and custom renderer registration.
 
-The supported HTTP contract is this repository's AI Service conversation API. `ConversationTransport` remains available for isolated tests. The controller retains acceptance acknowledgement, ambiguous-request reconciliation, turn execution, failure classification and existing recovery actions. It adds no polling, automatic retries, persistence, streaming or cancellation.
+The supported HTTP contract is this repository's AI Service conversation API. `ConversationTransport` remains available for isolated tests. The controller retains acceptance acknowledgement, ambiguous-request reconciliation, turn execution, failure classification and existing recovery actions. Confirmed generation failures trigger one session read to retrieve retained tool activity and artifacts; a failed read preserves the confirmed failure and current content. Completed turn responses contain their ordered activity, while session snapshots contain the full ordered timeline. It adds no polling, automatic retries, persistence, streaming or cancellation.
 
 Expected routing is host frontend ? same-origin backend/proxy ? AI Service gateway. Relays must preserve response bodies and status codes, allow agent-turn durations, and avoid automatic retries of state-changing message/turn requests. Consumer relay implementation and authentication/session authorization are deferred. Same-origin routing is not an authorization guarantee.
 
@@ -95,7 +99,7 @@ The host must install compatible Angular Material and CDK versions and provide a
 @import '@angular/material/prebuilt-themes/magenta-violet.css';
 ```
 
-The library packages selected SVGs from Google's Material Icons collection and registers `send`, `retry`, `tts`, and `add-file` in the `ai-chat` namespace. Its controls reference them through names such as `ai-chat:send`. Hosts do not need to load the Material Icons font or register these icons. The source icons and their Apache 2.0 terms are documented in `MATERIAL_ICONS_LICENSE` in the published package.
+The library packages selected SVGs from Google's Material Icons collection and registers `send`, `retry`, `tts`, and `add-file` in the `ai-chat` namespace. Its controls reference them through names such as `ai-chat:send`. A shared `ai-chat:tool` wrench SVG renders all tool calls. Hosts do not need to load the Material Icons font or register these icons. The source icons and their Apache 2.0 terms are documented in `MATERIAL_ICONS_LICENSE` in the published package.
 
 Set these CSS variables on an ancestor of `ai-chat-ui`:
 

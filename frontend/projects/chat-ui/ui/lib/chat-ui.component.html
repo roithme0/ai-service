@@ -6,9 +6,27 @@
     </section>
 
     <div class="messages">
-      @for (item of content(); track item.id) {
+      @for (item of content(); track item.id; let last = $last) {
         @if (item.kind === 'artifact') {
           <ai-chat-artifact-card [artifact]="item" [renderer]="rendererFor(item.type)" />
+        } @else if (item.kind === 'tool') {
+          <article class="tool-call" aria-label="Werkzeugaufruf">
+            <span class="tool-call__label">
+              <mat-icon svgIcon="ai-chat:tool" aria-hidden="true" />
+              <span class="tool-call__name">{{ item.name }}</span>
+            </span>
+            <span class="tool-call__status">{{ toolStatusLabels[item.status] }}</span>
+          </article>
+        } @else if (item.kind === 'failure') {
+          @if (!last || conversationStatus()?.kind !== 'error') {
+            <article class="status status--error" aria-label="Fehlgeschlagene Antwort"><p>{{ item.text }}</p></article>
+          }
+        } @else if (item.kind === 'intermediate') {
+          <article
+            class="message message--intermediate markdown"
+            aria-label="Zwischenmeldung des Assistenten"
+            [innerHTML]="renderAssistantMarkdown(item.text)"
+          ></article>
         } @else if (item.role === 'user') {
           <article class="message message--user" aria-label="Nachricht des Benutzers">
             <p>{{ item.text }}</p>

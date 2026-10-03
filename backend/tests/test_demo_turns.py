@@ -2,6 +2,7 @@ import asyncio
 import json
 from datetime import UTC, datetime
 
+from app.models.agentic_generation import AgenticToolCall
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import GreetingsPayload, create_demo_session, new_demo_session_store
@@ -10,7 +11,10 @@ from app.sessions.conversation import (
     ConversationReadActive,
     ConversationTurnReservation,
 )
-from app.sessions.tools import ToolRegistry
+from app.sessions.tools import ToolRegistry, RegisteredTool, ToolExecution, ToolInvocation
+from app.demo.session import DemoPayload
+from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.history import ArtifactRecord, CallRecord, ToolResultRecord, ExecutionReportRecord
 
 
 async def no_delay(seconds: float) -> None:
@@ -51,16 +55,20 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
     artifact = second.artifacts[0]
     assert artifact.artifact_id
     assert artifact.created_at.tzinfo is not None
-    assert artifact.order == 1
+    assert artifact.order == 9
     assert artifact.turn_id == second.turn_id
     assert artifact.type == "demo.greeting"
     assert artifact.payload.model_dump() == {"message": "Hello, World!"}
     greetings = second.artifacts[1]
     assert greetings.type == "demo.greetings"
-    assert greetings.order == 2
+    assert greetings.order == 14
     assert greetings.turn_id == second.turn_id
     assert isinstance(greetings.payload, GreetingsPayload)
     assert greetings.payload.messages == tuple(f"Hello, Visitor {index}!" for index in range(1, 31))
+    results = [record for record in store.history(first_session.session_id)
+               if isinstance(record, ToolResultRecord) and record.turn_id == second.turn_id]
+    assert [record.failed for record in results] == [False, False, True]
+    assert json.loads(results[-1].output) == {"kind": "rejected", "reason": "invalid_arguments"}
     read = store.read(first_session.session_id)
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == (artifact, greetings)
@@ -78,42 +86,46 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
     assert restarted.artifacts == ()
 
 
-def test_greeting_tool_validates_arguments_and_stages_only_accepted_artifact() -> None:
+def test_greeting_tool_validates_arguments_and_returns_local_candidate() -> None:
     store = new_demo_session_store()
     session_id = create_demo_session(store).session_id
     store.append_user_message(session_id, "Create a greeting")
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
-    registry = ToolRegistry((create_greeting_tool(store, session_id, reservation.turn_id),))
+    registry = ToolRegistry((create_greeting_tool(),))
 
     for arguments in ("{", "{}", '{"name":""}', '{"name":4}'):
         result = asyncio.run(registry.invoke("create_greeting", arguments))
-        assert json.loads(result.output) == {"kind": "rejected", "reason": "invalid_arguments"}
+        assert json.loads(output_text(result)) == {"kind": "rejected", "reason": "invalid_arguments"}
         assert result.artifact is None
     accepted = asyncio.run(registry.invoke("create_greeting", '{"name":"World"}'))
     assert accepted.artifact is not None
-    assert json.loads(accepted.output) == {
-        "kind": "created", "artifact_id": accepted.artifact.artifact_id,
-    }
+    assert accepted.output == ArtifactToolOutput("created")
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == ()
-    assert store.complete_turn(session_id, reservation, "completed", "Created").artifacts == (accepted.artifact,)
+    call = store.record_call(session_id, reservation.turn_id, AgenticToolCall("create", "create", "{}"))
+    finalized = store.record_result(session_id, call, accepted)
+    published = store.complete_turn(session_id, reservation, "completed", "Created").artifacts
+    assert len(published) == 1
+    assert published[0].artifact_id == json.loads(output_text(finalized))["artifact_id"]
+    assert published[0].payload == accepted.artifact.payload
+    assert published[0].order == 4
 
 
-def test_greetings_tool_validates_list_and_publishes_only_on_completion() -> None:
+def test_greetings_tool_validates_list_and_candidate_acceptance() -> None:
     store = new_demo_session_store()
     session_id = create_demo_session(store).session_id
     store.append_user_message(session_id, "Create greetings")
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
-    registry = ToolRegistry((create_greetings_tool(store, session_id, reservation.turn_id),))
+    registry = ToolRegistry((create_greetings_tool(),))
     for arguments in (
         "{", "{}", '{"names":[]}', '{"names":"World"}', '{"names":[""]}',
         '{"names":["World",4]}', '{"names":["World"," "]}', '{"names":["World"],"extra":true}',
     ):
         result = asyncio.run(registry.invoke("create_greetings", arguments))
-        assert json.loads(result.output) == {"kind": "rejected", "reason": "invalid_arguments"}
+        assert json.loads(output_text(result)) == {"kind": "rejected", "reason": "invalid_arguments"}
         assert result.artifact is None
     accepted = asyncio.run(registry.invoke("create_greetings", '{"names":["World","Friend"]}'))
     assert accepted.artifact is not None
@@ -122,10 +134,16 @@ def test_greetings_tool_validates_list_and_publishes_only_on_completion() -> Non
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == ()
-    assert store.complete_turn(session_id, reservation, "completed", "Created").artifacts == (accepted.artifact,)
+    call = store.record_call(session_id, reservation.turn_id, AgenticToolCall("create", "create", "{}"))
+    finalized = store.record_result(session_id, call, accepted)
+    published = store.complete_turn(session_id, reservation, "completed", "Created").artifacts
+    assert len(published) == 1
+    assert published[0].artifact_id == json.loads(output_text(finalized))["artifact_id"]
+    assert published[0].payload == accepted.artifact.payload
+    assert published[0].order == 4
 
 
-def test_failed_second_turn_discards_both_staged_artifacts_before_retry() -> None:
+def test_unaccepted_candidates_are_absent_after_failure_and_retry() -> None:
     store = new_demo_session_store()
     session_id = create_demo_session(store).session_id
     store.append_user_message(session_id, "First")
@@ -134,8 +152,8 @@ def test_failed_second_turn_discards_both_staged_artifacts_before_retry() -> Non
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
     registry = ToolRegistry((
-        create_greeting_tool(store, session_id, reservation.turn_id),
-        create_greetings_tool(store, session_id, reservation.turn_id),
+        create_greeting_tool(),
+        create_greetings_tool(),
     ))
     assert asyncio.run(registry.invoke("create_greeting", '{"name":"World"}')).artifact is not None
     assert asyncio.run(registry.invoke("create_greetings", '{"names":["World"]}')).artifact is not None
@@ -147,7 +165,7 @@ def test_failed_second_turn_discards_both_staged_artifacts_before_retry() -> Non
     retry = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
     assert retry.text == SECOND_REPLY
     assert [artifact.type for artifact in retry.artifacts] == ["demo.greeting", "demo.greetings"]
-    assert [artifact.order for artifact in retry.artifacts] == [1, 2]
+    assert [artifact.order for artifact in retry.artifacts] == [11, 16]
 
 
 def test_busy_cancellation_and_retry_keep_first_step() -> None:
@@ -185,7 +203,7 @@ def test_busy_cancellation_and_retry_keep_first_step() -> None:
     assert retry.artifacts == ()
 
 
-def test_failed_second_turn_discards_greeting_and_retries_second_step() -> None:
+def test_unaccepted_greeting_does_not_advance_demo_step() -> None:
     store = new_demo_session_store()
     session_id = create_demo_session(store).session_id
     store.append_user_message(session_id, "First")
@@ -193,7 +211,7 @@ def test_failed_second_turn_discards_greeting_and_retries_second_step() -> None:
     store.append_user_message(session_id, "Second")
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
-    registry = ToolRegistry((create_greeting_tool(store, session_id, reservation.turn_id),))
+    registry = ToolRegistry((create_greeting_tool(),))
     assert asyncio.run(registry.invoke("create_greeting", '{"name":"World"}')).artifact is not None
     assert store.fail_turn(session_id, reservation).kind == "generation_failed"
     read = store.read(session_id)
@@ -206,7 +224,7 @@ def test_failed_second_turn_discards_greeting_and_retries_second_step() -> None:
     retry = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
     assert retry.text == SECOND_REPLY
     assert len(retry.artifacts) == 2
-    assert [artifact.order for artifact in retry.artifacts] == [1, 2]
+    assert [artifact.order for artifact in retry.artifacts] == [11, 16]
 
 
 def test_expiry_during_delay_uses_shared_expiry_result() -> None:
@@ -227,3 +245,43 @@ def test_expiry_during_delay_uses_shared_expiry_result() -> None:
     assert result.kind == "expired"
     assert result.artifacts == ()
     assert store.read(created.session_id).kind == "unknown"
+
+
+def test_scripted_turn_retains_completed_first_tool_when_second_tool_fails() -> None:
+    store = new_demo_session_store()
+    session_id = create_demo_session(store).session_id
+    store.append_user_message(session_id, "First")
+    assert asyncio.run(run_demo_turn(store, session_id, 0, no_delay)).kind == "completed"
+    store.append_user_message(session_id, "Second")
+
+    def failing_factory() -> RegisteredTool[ArtifactCandidate[DemoPayload]]:
+        def execute(invocation: ToolInvocation) -> ToolExecution[ArtifactCandidate[DemoPayload]]:
+            raise RuntimeError("second tool failed without returning")
+        return RegisteredTool("create_greetings", {"type": "function", "name": "create_greetings"}, execute)
+
+    result = asyncio.run(run_demo_turn(store, session_id, 0, no_delay,
+                                     greeting_list_tool_factory=failing_factory))
+    assert result.kind == "generation_failed"
+    read = store.read(session_id)
+    assert isinstance(read, ConversationReadActive)
+    assert len(read.snapshot.artifacts) == 1
+    assert read.snapshot.artifacts[0].payload.model_dump() == {"message": "Hello, World!"}
+    history = store.history(session_id)
+    assert len([record for record in history if isinstance(record, CallRecord)]) == 2
+    assert len([record for record in history if isinstance(record, ToolResultRecord)]) == 1
+    assert len([record for record in history if isinstance(record, ArtifactRecord)]) == 1
+    reports = [record for record in history if isinstance(record, ExecutionReportRecord)]
+    assert len(reports) == 1
+    assert reports[0].state == "outcome_unknown"
+    assert asyncio.run(run_demo_turn(store, session_id, 0, no_delay)) == result
+    store.append_user_message(session_id, "Next")
+    next_turn = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
+    assert next_turn.kind == "generation_failed"
+    retained = store.read(session_id)
+    assert isinstance(retained, ConversationReadActive)
+    assert [artifact.order for artifact in retained.snapshot.artifacts] == [9, 20]
+
+
+def output_text[ArtifactT](execution: ToolExecution[ArtifactT]) -> str:
+    assert isinstance(execution.output, str)
+    return execution.output

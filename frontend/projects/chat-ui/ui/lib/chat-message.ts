@@ -22,7 +22,28 @@ export interface ChatArtifact<TPayload extends JsonValue = JsonValue> {
   readonly metadata?: { readonly [key: string]: JsonValue };
 }
 
-export type ChatContent = ChatTextMessage | ChatArtifact;
+export type ChatToolStatus = 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
+
+export interface ChatToolCall {
+  readonly kind: 'tool';
+  readonly id: string;
+  readonly name: string;
+  readonly status: ChatToolStatus;
+}
+
+export interface ChatIntermediateMessage {
+  readonly kind: 'intermediate';
+  readonly id: string;
+  readonly text: string;
+}
+
+export interface ChatTurnFailure {
+  readonly kind: 'failure';
+  readonly id: string;
+  readonly text: string;
+}
+
+export type ChatContent = ChatTextMessage | ChatIntermediateMessage | ChatArtifact | ChatToolCall | ChatTurnFailure;
 
 export interface ChatArtifactRenderContext<TPayload extends JsonValue> {
   readonly $implicit: TPayload;

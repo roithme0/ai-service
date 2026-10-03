@@ -6,9 +6,10 @@ from typing import Never
 import pytest
 
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.text_sessions import TextMessage
+from app.sessions.history import CallRecord
 from app.sessions.tool_turns import run_tool_turn
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from tool_turn_recorder import ToolTurnRecorder
 
 
 class TwoToolGenerator:
@@ -32,10 +33,13 @@ class TwoToolGenerator:
 
 
 def test_advertised_tools_dispatch_by_name_with_shared_limits() -> None:
+    recorder = ToolTurnRecorder[str]()
     generator = TwoToolGenerator()
     invoked: list[str] = []
 
     def first(call: ToolInvocation) -> ToolExecution[str]:
+        assert [record.call.call_id for record in recorder.calls] == ["call-a", "call-b", "call-x"]
+        assert recorder.started == [recorder.calls[0]]
         invoked.append("first")
         return ToolExecution("accepted", "artifact")
 
@@ -44,17 +48,22 @@ def test_advertised_tools_dispatch_by_name_with_shared_limits() -> None:
         return ToolExecution("accepted", "another")
 
     result = asyncio.run(run_tool_turn(
-        generator, (TextMessage("user", "Help"),), "Context", "Instructions",
+        generator, ({"role": "user", "content": "Help"},), "Context", "Instructions",
         (
             LocalToolSource((RegisteredTool("first", {"type": "function", "name": "first"}, first),)),
             LocalToolSource((RegisteredTool("second", {"type": "function", "name": "second"}, second),)),
         ),
         max_attempts=2, max_successes=1, max_provider_responses=2,
+        record_response=recorder.record_response, start_execution=recorder.start_execution,
+        record_result=recorder.record_result,
     ))
 
     assert result.kind == "completed"
     assert result.artifacts == ("artifact",)
     assert invoked == ["first"]
+    assert recorder.started == [recorder.calls[0]]
+    assert [call for call, _ in recorder.results] == recorder.calls
+    assert [accepted for _, accepted in recorder.responses] == [None, True]
     assert [tool["name"] for tool in generator.requests[0].tools] == ["first", "second"]
     outputs = generator.requests[1].input_items[-3:]
     assert outputs[0]["call_id"] == "call-a"
@@ -67,6 +76,7 @@ def test_advertised_tools_dispatch_by_name_with_shared_limits() -> None:
 
 
 def test_each_advertised_name_dispatches_to_its_own_handler() -> None:
+    recorder = ToolTurnRecorder[str]()
     generator = TwoToolGenerator()
     invoked: list[str] = []
 
@@ -77,12 +87,14 @@ def test_each_advertised_name_dispatches_to_its_own_handler() -> None:
         return execute
 
     result = asyncio.run(run_tool_turn(
-        generator, (TextMessage("user", "Help"),), "Context", "Instructions",
+        generator, ({"role": "user", "content": "Help"},), "Context", "Instructions",
         (LocalToolSource((
             RegisteredTool("first", {"type": "function", "name": "first"}, handler("first")),
             RegisteredTool("second", {"type": "function", "name": "second"}, handler("second")),
         )),),
         max_attempts=2, max_successes=2, max_provider_responses=2,
+        record_response=recorder.record_response, start_execution=recorder.start_execution,
+        record_result=recorder.record_result,
     ))
     assert invoked == ["first", "second"]
     assert result.artifacts == ("first", "second")
@@ -92,6 +104,7 @@ def test_each_advertised_name_dispatches_to_its_own_handler() -> None:
 
 
 def test_tool_registration_rejects_schema_dispatch_mismatch() -> None:
+    recorder = ToolTurnRecorder[str]()
     generator = TwoToolGenerator()
 
     def execute(call: ToolInvocation) -> ToolExecution[str]:
@@ -99,9 +112,11 @@ def test_tool_registration_rejects_schema_dispatch_mismatch() -> None:
 
     with pytest.raises(ValueError, match="matching their schemas"):
         asyncio.run(run_tool_turn(
-            generator, (TextMessage("user", "Help"),), "Context", "Instructions",
+            generator, ({"role": "user", "content": "Help"},), "Context", "Instructions",
             (LocalToolSource((RegisteredTool("first", {"type": "function", "name": "second"}, execute),)),),
             max_attempts=1, max_successes=1, max_provider_responses=2,
+            record_response=recorder.record_response, start_execution=recorder.start_execution,
+            record_result=recorder.record_result,
         ))
     assert generator.requests == []
 
@@ -121,6 +136,7 @@ class IndependentToolSource:
 
 
 def test_independent_sources_combine_tools_and_instructions_in_configured_order() -> None:
+    recorder = ToolTurnRecorder[Never]()
     generator = TwoToolGenerator()
     invoked: list[str] = []
     first = IndependentToolSource("first", "First source guidance", invoked)
@@ -128,6 +144,8 @@ def test_independent_sources_combine_tools_and_instructions_in_configured_order(
     result = asyncio.run(run_tool_turn(
         generator, (), "Context", "Local instructions", (first, second),
         max_attempts=2, max_successes=1, max_provider_responses=2,
+        record_response=recorder.record_response, start_execution=recorder.start_execution,
+        record_result=recorder.record_result,
     ))
     assert result.kind == "completed" and result.artifacts == ()
     assert invoked == ["first", "second"]
@@ -141,6 +159,7 @@ def test_independent_sources_combine_tools_and_instructions_in_configured_order(
 
 
 def test_collision_between_independent_sources_is_rejected_before_generation() -> None:
+    recorder = ToolTurnRecorder[Never]()
     generator = TwoToolGenerator()
     invoked: list[str] = []
     with pytest.raises(ValueError, match="unique names"):
@@ -149,6 +168,34 @@ def test_collision_between_independent_sources_is_rejected_before_generation() -
                 IndependentToolSource("same", "First guidance", invoked),
                 IndependentToolSource("same", "Second guidance", invoked),
             ), 2, 1, 2,
+            record_response=recorder.record_response, start_execution=recorder.start_execution,
+            record_result=recorder.record_result,
         ))
     assert generator.requests == []
     assert invoked == []
+
+
+@pytest.mark.parametrize("omit", [False, True])
+def test_mismatched_recorded_calls_fail_before_execution(omit: bool) -> None:
+    generator = TwoToolGenerator()
+    recorder = ToolTurnRecorder[str]()
+    invoked: list[str] = []
+
+    def record_response(response: AgenticGenerationResponse, accepted: bool | None) -> tuple[CallRecord, ...]:
+        calls = recorder.record_response(response, accepted)
+        return () if omit else tuple(reversed(calls))
+
+    def execute(call: ToolInvocation) -> ToolExecution[str]:
+        invoked.append(call.name)
+        return ToolExecution("accepted")
+
+    with pytest.raises(ValueError, match="recorded calls must match"):
+        asyncio.run(run_tool_turn(
+            generator, (), "Context", "Instructions",
+            (LocalToolSource((RegisteredTool("first", {"type": "function", "name": "first"}, execute),)),),
+            2, 1, 2, record_response=record_response,
+            start_execution=recorder.start_execution, record_result=recorder.record_result,
+        ))
+    assert len(generator.requests) == 1
+    assert invoked == []
+    assert recorder.started == recorder.results == []

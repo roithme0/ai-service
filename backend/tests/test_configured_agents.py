@@ -36,7 +36,7 @@ def test_direct_model_session_retains_detached_json_and_rejects_invalid_input() 
     invalid = agent.create({"context": []})
     assert isinstance(invalid, AgentInputRejected)
     assert invalid.issues[0].location[0] == "context"
-    assert len(store._settings) == 1
+    assert len(store._sessions) == 1
 
 
 def test_demo_validation_and_configured_sequence_without_model() -> None:

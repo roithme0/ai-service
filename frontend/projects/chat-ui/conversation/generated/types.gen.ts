@@ -68,6 +68,10 @@ export type CompletedTurnResponse = {
     kind: 'completed';
     message: AssistantMessageResponse;
     /**
+     * Timeline
+     */
+    timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
+    /**
      * Turn Id
      */
     turn_id: string;
@@ -133,6 +137,116 @@ export type SessionSnapshotResponse = {
      * Terminal Turn Kind
      */
     terminal_turn_kind: 'completed' | 'generation_failed' | 'unknown' | 'expired' | 'not_ready' | 'limit_reached' | 'conflict' | 'busy' | null;
+    /**
+     * Timeline
+     */
+    timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
+};
+
+/**
+ * TimelineArtifact
+ */
+export type TimelineArtifact = {
+    /**
+     * Artifact Id
+     */
+    artifact_id: string;
+    /**
+     * Kind
+     */
+    kind: 'artifact';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * TimelineFailure
+ */
+export type TimelineFailure = {
+    /**
+     * Kind
+     */
+    kind: 'failure';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * TimelineIntermediateMessage
+ */
+export type TimelineIntermediateMessage = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'intermediate';
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * TimelineMessage
+ */
+export type TimelineMessage = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'message';
+    /**
+     * Role
+     */
+    role: 'user' | 'assistant';
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * TimelineTool
+ */
+export type TimelineTool = {
+    /**
+     * Execution Id
+     */
+    execution_id: string;
+    /**
+     * Kind
+     */
+    kind: 'tool';
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
 };
 
 /**

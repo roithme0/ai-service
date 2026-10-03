@@ -114,6 +114,7 @@ def test_create_and_read_return_accepted_snapshots_without_derived_index(client:
         "artifacts": [],
         "terminal_turn_id": None,
         "terminal_turn_kind": None,
+        "timeline": [],
     }
     assert "availability_reference_index" not in read.json()
 
@@ -621,7 +622,7 @@ def test_advertised_presentation_is_validated_published_and_retained(client: Tes
     assert len(artifacts) == 1
     assert artifacts[0]["type"] == "json"
     assert artifacts[0]["payload"] == {"title": "Ingredient", "subtitle": "Example brand", "payload": {"value": {"name": "Oats"}}, "metadata": metadata}
-    assert artifacts[0]["order"] == 1
+    assert artifacts[0]["order"] == 11
     assert artifacts[0]["artifact_id"]
     assert artifacts[0]["turn_id"] == response.json()["turn_id"]
     assert client.get(base).json()["artifacts"] == artifacts
@@ -641,20 +642,51 @@ def test_advertised_presentation_is_validated_published_and_retained(client: Tes
     assert [tool["name"] for tool in fake_generator.calls[-1].tools] == ["present_artifact"]
 
 
-def test_failed_turn_discards_staged_presentations(client: TestClient, fake_generator: FakeGenerator) -> None:
+def test_failed_turn_retains_completed_presentations(client: TestClient, fake_generator: FakeGenerator) -> None:
     created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
         "context": {}, "artifactCapabilities": [JSON_CAPABILITY],
     }})
     base = "/api/v1/agents/kochwiki/sessions/" + created.json()["session_id"]
     client.post(base + "/messages", json={"text": "Show data"})
+    presentation = presentation_response({"type": "json", "title": "Data", "payload": {"value": [1, None]}})
+    update = {"type": "message", "role": "assistant", "phase": "commentary", "content": "Preparing data."}
     fake_generator.responses = [
-        presentation_response({"type": "json", "title": "Data", "payload": {"value": [1, None]}}),
+        AgenticGenerationResponse((update, *presentation.output_items), presentation.tool_calls, "Preparing data."),
         AgenticGenerationResponse((), (), ""),
     ]
     assert client.post(base + "/turns", json={}).status_code == 502
-    assert client.get(base).json()["artifacts"] == []
+    snapshot = client.get(base).json()
+    assert len(snapshot["artifacts"]) == 1
+    assert snapshot["artifacts"][0]["payload"]["payload"] == {"value": [1, None]}
+    assert len(snapshot["messages"]) == 1
+    assert snapshot["terminal_turn_kind"] == "generation_failed"
+    assert [item["kind"] for item in snapshot["timeline"]] == ["message", "intermediate", "tool", "artifact", "failure"]
+    assert snapshot["timeline"][1]["text"] == "Preparing data."
+    assert snapshot["timeline"][2]["name"] == "present_artifact"
+    assert snapshot["timeline"][2]["status"] == "completed"
+    assert snapshot["timeline"][3]["artifact_id"] == snapshot["artifacts"][0]["artifact_id"]
+    assert "arguments" not in snapshot["timeline"][2]
+    assert "output" not in snapshot["timeline"][2]
     assert client.post(base + "/turns", json={}).status_code == 502
     assert len(fake_generator.calls) == 2
+
+
+def test_completed_turn_separates_commentary_from_standalone_answer(client: TestClient, fake_generator: FakeGenerator) -> None:
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {"context": {}}}).json()
+    base = "/api/v1/agents/kochwiki/sessions/" + created["session_id"]
+    client.post(base + "/messages", json={"text": "Check"})
+    fake_generator.responses = [AgenticGenerationResponse((
+        {"type": "message", "role": "assistant", "phase": "commentary", "content": "Checking."},
+        {"type": "message", "role": "assistant", "phase": "final_answer", "content": "Complete answer."},
+    ), (), "Checking.Complete answer.")]
+    response = client.post(base + "/turns", json={})
+    assert response.status_code == 201
+    result = response.json()
+    assert result["message"]["text"] == "Complete answer."
+    assert [item["kind"] for item in result["timeline"]] == ["intermediate", "message"]
+    snapshot = client.get(base).json()
+    assert snapshot["timeline"][1:] == result["timeline"]
+    assert [item["text"] for item in snapshot["messages"]] == ["Check", "Complete answer."]
 
 
 def test_no_capabilities_means_no_presentation_tool(client: TestClient, fake_generator: FakeGenerator) -> None:

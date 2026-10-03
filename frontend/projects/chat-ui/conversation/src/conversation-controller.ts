@@ -119,8 +119,7 @@ export class ConversationController {
       this.setState({
         content: [
           ...this.stateValue.content,
-          ...presentArtifacts(result.artifacts, this.mapArtifact),
-          presentMessage(result.message, textContent(this.stateValue.content).length),
+          ...presentTimeline(result.timeline, result.artifacts, this.mapArtifact),
         ],
         composerDisabled: false,
         status: null,
@@ -129,6 +128,14 @@ export class ConversationController {
       if (error instanceof ConversationNetworkError || isKind(error, 'busy')) {
         await this.reconcileTurn(sessionId);
         return;
+      }
+      if (isKind(error, 'generation_failed') || isKind(error, 'conflict')) {
+        try {
+          const snapshot = await this.transport.readSession(sessionId);
+          this.setState({ ...this.stateValue, content: presentSnapshot(snapshot, this.mapArtifact) });
+        } catch {
+          // Keep the confirmed failure if its retained activity cannot be read.
+        }
       }
       this.handleTurnFailure(error);
     }
@@ -308,10 +315,6 @@ export class ConversationController {
   }
 }
 
-function presentMessages(messages: readonly ApiMessage[]): readonly ChatTextMessage[] {
-  return messages.map(presentMessage);
-}
-
 function presentMessage(message: ApiMessage, index: number): ChatTextMessage {
   return {
     kind: 'text',
@@ -322,18 +325,32 @@ function presentMessage(message: ApiMessage, index: number): ChatTextMessage {
 }
 
 function presentSnapshot(snapshot: SessionSnapshotResponse, mapArtifact: ArtifactMapper): readonly ChatContent[] {
-  if (snapshot.artifacts.length === 0) return presentMessages(snapshot.messages);
-  return snapshot.messages.flatMap((message, index) => [
-    ...presentArtifacts(snapshot.artifacts.filter((artifact) => artifact.turn_id === message.turn_id), mapArtifact),
-    presentMessage(message, index),
-  ]);
+  return presentTimeline(snapshot.timeline, snapshot.artifacts, mapArtifact);
 }
 
-function presentArtifacts(artifacts: readonly ArtifactResponse[], mapArtifact: ArtifactMapper): readonly ChatArtifact[] {
-  return [...artifacts]
-    .sort((left, right) => left.order - right.order)
-    .map(mapArtifact)
-    .filter((artifact): artifact is ChatArtifact => artifact !== null);
+function presentTimeline(
+  timeline: SessionSnapshotResponse['timeline'],
+  artifacts: readonly ArtifactResponse[],
+  mapArtifact: ArtifactMapper,
+): readonly ChatContent[] {
+  const envelopes = new Map(artifacts.map((artifact) => [artifact.artifact_id, artifact]));
+  return timeline.flatMap((item): ChatContent[] => {
+    switch (item.kind) {
+      case 'message':
+        return [{ kind: 'text', id: item.id, role: item.role, text: item.text }];
+      case 'intermediate':
+        return [{ kind: 'intermediate', id: item.id, text: item.text }];
+      case 'tool':
+        return [{ kind: 'tool', id: `tool-${item.execution_id}`, name: item.name, status: item.status }];
+      case 'artifact': {
+        const envelope = envelopes.get(item.artifact_id);
+        const artifact = envelope === undefined ? null : mapArtifact(envelope);
+        return artifact === null ? [] : [artifact];
+      }
+      case 'failure':
+        return [{ kind: 'failure', id: `failure-${item.turn_id}`, text: 'Die Antwort konnte nicht erstellt werden.' }];
+    }
+  });
 }
 
 function isTextMessage(content: ChatContent): content is ChatTextMessage {

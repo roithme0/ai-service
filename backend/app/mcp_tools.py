@@ -75,15 +75,15 @@ def _executor(
         try:
             arguments: object = json.loads(invocation.arguments, parse_constant=_reject_constant)
         except ValueError:
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}))
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}), failed=True)
         if not isinstance(arguments, dict):
-            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}))
+            return ToolExecution(json.dumps({"kind": "rejected", "reason": "invalid_arguments"}), failed=True)
         try:
             result = await connection.call_tool(tool_name, arguments)
         except Exception as error:
             logger.warning("MCP tool call failed (%s/%s, %s)", connection.name, tool_name, type(error).__name__)
-            return ToolExecution(json.dumps({"kind": "tool_failed", "reason": "mcp_call_failed"}))
-        return ToolExecution(result.model_dump_json(by_alias=True, exclude_none=True))
+            return ToolExecution(json.dumps({"kind": "tool_failed", "reason": "mcp_call_failed"}), failed=True)
+        return ToolExecution(result.model_dump_json(by_alias=True, exclude_none=True), failed=result.is_error)
 
     return execute
 
