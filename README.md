@@ -1,6 +1,6 @@
 # AI Service
 
-The AI Service provides shared, provider-neutral AI capabilities and an agent-based interface for projects in the network. It owns model integration, reusable AI operations, agent orchestration, and service connectors while domain services remain authoritative for their data and business rules.
+The AI Service is a personal project that provides shared, provider-neutral AI capabilities and an agent-based interface for related projects. It owns model integration, reusable AI operations, agent orchestration, and service connectors while domain services remain authoritative for their data and business rules.
 
 The current implementation includes configured KochWiki and deterministic demo agent services, bounded model/tool orchestration, and a reusable chat UI library. This repository is authoritative for its implementation, API contracts, and deployment configuration. The application runs a deterministic UI demo, described in the [chat UI demo concept](docs/concepts/2026-09-25-chat-ui-demo.md).
 
