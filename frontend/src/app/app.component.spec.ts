@@ -18,7 +18,11 @@ describe('Demo application', () => {
       .mockResolvedValueOnce(Response.json({
         kind: 'completed', turn_id: 'turn-2',
         timeline: [
+          { kind: 'intermediate', turn_id: 'turn-2', id: 'update-1', text: "I'll create a greeting artifact." },
+          { kind: 'tool', turn_id: 'turn-2', execution_id: 'call-1', name: 'create_greeting', status: 'completed' },
           { kind: 'artifact', turn_id: 'turn-2', artifact_id: 'greeting-1' },
+          { kind: 'intermediate', turn_id: 'turn-2', id: 'update-2', text: "I'll demonstrate a failed tool call." },
+          { kind: 'tool', turn_id: 'turn-2', execution_id: 'call-2', name: 'create_greeting', status: 'failed' },
           { kind: 'message', turn_id: 'turn-2', id: 'assistant-turn-2', role: 'assistant', text: 'Scripted reply' },
         ],
         message: { role: 'assistant', text: 'Scripted reply', turn_id: 'turn-2' },
@@ -61,17 +65,27 @@ describe('Demo application', () => {
     }, { timeout: 2000 });
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(chat.content()).toHaveLength(3);
+      expect(chat.content()).toHaveLength(7);
     });
     expect(acknowledge).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/agents/demo/sessions/demo-1/messages',
       expect.objectContaining({ body: JSON.stringify({ text: 'Any text' }) }));
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/v1/agents/demo/sessions/demo-1/turns',
       expect.objectContaining({ method: 'POST' }));
-    expect(chat.content().map((item) => item.id)).toEqual(['confirmed-0-user', 'greeting-1', 'assistant-turn-2']);
-    expect(chat.content()[1]).toEqual({ kind: 'artifact', id: 'greeting-1', type: 'json',
+    expect(chat.content().map((item) => item.id)).toEqual([
+      'confirmed-0-user', 'update-1', 'tool-call-1', 'greeting-1', 'update-2', 'tool-call-2', 'assistant-turn-2',
+    ]);
+    expect(chat.content()[3]).toEqual({ kind: 'artifact', id: 'greeting-1', type: 'json',
       headline: type, payload: { value: payload } });
     const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.message--intermediate')?.textContent).toContain("I'll create a greeting artifact.");
+    const rows = [...element.querySelector('.messages')!.children];
+    expect(rows[1].matches('.message--intermediate')).toBe(true);
+    expect(rows[2].matches('.tool-call')).toBe(true);
+    expect(rows[3].tagName).toBe('AI-CHAT-ARTIFACT-CARD');
+    expect(rows[4].matches('.message--intermediate')).toBe(true);
+    expect(rows[5].querySelector('.tool-call__status')?.textContent).toContain('Fehlgeschlagen');
+    expect(rows[6].matches('.message--assistant')).toBe(true);
     expect(element.querySelector('pre')?.textContent).toContain(text);
     expect(element.textContent).toContain('festen Skript ohne KI-Modell');
     expect(element.textContent).toContain('simulierten API-Fehler');
@@ -91,6 +105,7 @@ describe('Demo application', () => {
         terminal_turn_id: 'turn-4', terminal_turn_kind: 'generation_failed',
         timeline: [
           { kind: 'message', id: 'confirmed-0-user', turn_id: 'turn-4', role: 'user', text: 'Show error' },
+          { kind: 'intermediate', id: 'failed-update', turn_id: 'turn-4', text: 'This update remains visible after generation fails.' },
           { kind: 'failure', turn_id: 'turn-4' },
         ],
       }));
@@ -110,11 +125,16 @@ describe('Demo application', () => {
       expect(chat.conversationStatus()?.action?.id).toBe('demo-noop');
     }, { timeout: 2500 });
     const action = fixture.nativeElement.querySelector('.status-action') as HTMLButtonElement;
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.message--intermediate')?.textContent).toContain('This update remains visible after generation fails.');
+    expect(element.querySelector('.message--assistant')).toBeNull();
+    expect(element.querySelectorAll('.status--error')).toHaveLength(1);
     expect(action.textContent).toContain('Demo-Aktion (ohne Funktion)');
     action.click();
     fixture.detectChanges();
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(chat.conversationStatus()?.action?.id).toBe('demo-noop');
     expect(chat.composerDisabled()).toBe(false);
+    expect(element.querySelector('.message--intermediate')?.textContent).toContain('This update remains visible after generation fails.');
   });
 });

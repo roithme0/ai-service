@@ -9,6 +9,7 @@ from app.sessions.conversation import ConversationSessionSettings, ConversationS
 from app.sessions.history import CallRecord, ExecutionReportRecord, ExecutionStartedRecord, MessageRecord, ContinuationRecord, TerminalRecord, ToolResultRecord, model_input, text_messages
 from app.sessions.model_turns import ModelTurnStrategy
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from app.sessions.timeline import TimelineIntermediateMessage, TimelineMessage
 
 
 def call_response(*calls: AgenticToolCall) -> AgenticGenerationResponse:
@@ -22,6 +23,47 @@ def call_response(*calls: AgenticToolCall) -> AgenticGenerationResponse:
 def final_response(text: str) -> AgenticGenerationResponse:
     return AgenticGenerationResponse(({"type": "message", "id": "reply", "role": "assistant",
         "content": [{"type": "output_text", "text": text, "annotations": []}]},), (), text)
+
+
+@pytest.mark.parametrize("ending", ["final", "failure", "limit"])
+def test_commentary_only_continues_and_remains_visible_without_becoming_final(ending: str) -> None:
+    store = ConversationSessionStore[str, str](timedelta(minutes=90))
+    session_id = store.create("initial", ConversationSessionSettings(2)).session_id
+    commentary = dict(final_response("I will check.").output_items[0], phase="commentary")
+    requests: list[AgenticGenerationRequest] = []
+
+    class Generator:
+        async def generate(self, request: AgenticGenerationRequest) -> AgenticGenerationResponse:
+            requests.append(request)
+            if len(requests) == 1 or ending == "limit":
+                return AgenticGenerationResponse((commentary,), (), "I will check.")
+            assert request.input_items[-1] == commentary
+            if ending == "failure":
+                raise RuntimeError("failed after commentary")
+            update = dict(final_response("Check complete.").output_items[0], phase="commentary")
+            final = dict(final_response("The answer is 42.").output_items[0], phase="final_answer")
+            return AgenticGenerationResponse((update, final), (), "Check complete.The answer is 42.")
+
+    strategy = ModelTurnStrategy(store, Generator(), lambda context: context, (), max_provider_responses=2)
+    store.append_user_message(session_id, "Check")
+    result = asyncio.run(strategy(session_id))
+    assert len(requests) == 2
+    assert result.kind == ("completed" if ending == "final" else "generation_failed")
+    history = store.history(session_id)
+    read = store.read(session_id)
+    updates = [item for item in read.snapshot.timeline if isinstance(item, TimelineIntermediateMessage)]
+    assert updates[0].text == "I will check."
+    assert len({item.id for item in updates}) == len(updates)
+    assert commentary in model_input(history)
+    if ending == "final":
+        assert result.text == "The answer is 42."
+        assert [message.text for message in text_messages(history)] == ["Check", "The answer is 42."]
+        assert [item.kind for item in read.snapshot.timeline] == ["message", "intermediate", "intermediate", "message"]
+        assert isinstance(read.snapshot.timeline[-1], TimelineMessage)
+    else:
+        assert result.text is None
+        assert [message.text for message in text_messages(history)] == ["Check"]
+        assert read.snapshot.timeline[-1].kind == "failure"
 
 
 @pytest.mark.parametrize("failure", [False, True])

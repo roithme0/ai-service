@@ -70,7 +70,7 @@ export type CompletedTurnResponse = {
     /**
      * Timeline
      */
-    timeline: Array<TimelineMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
+    timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
     /**
      * Turn Id
      */
@@ -140,7 +140,7 @@ export type SessionSnapshotResponse = {
     /**
      * Timeline
      */
-    timeline: Array<TimelineMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
+    timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
 };
 
 /**
@@ -169,6 +169,28 @@ export type TimelineFailure = {
      * Kind
      */
     kind: 'failure';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * TimelineIntermediateMessage
+ */
+export type TimelineIntermediateMessage = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'intermediate';
+    /**
+     * Text
+     */
+    text: string;
     /**
      * Turn Id
      */

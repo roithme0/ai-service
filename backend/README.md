@@ -27,6 +27,12 @@ local Kochwiki configuration makes every Kochwiki session endpoint return
 `503 agent_unavailable`. The deterministic demo HTTP configuration remains available
 without model credentials or Kochwiki access. The frontend now uses this demo:
 any text advances its introduction, two greeting artifacts in one turn, one scripted failure, and completion sequence.
+The artifact turn includes intermediate updates before each tool call to demonstrate
+their placement among tool activity, artifacts, and the standalone final answer.
+It then invokes the greeting tool with an empty name to display an explicit failed
+call without creating an artifact; the turn completes with an explanation.
+The following scripted generation failure retains an intermediate update without
+a final answer, demonstrating that the update survives the failure and later turns.
 The frontend simulates a 405 compatibility error on the next message after completion; the backend still accepts further submissions. Refresh the page to restart with a new session.
 The generator receives the conversation and the retained caller-provided context. Kochwiki supplies all domain tools and workflow instructions through
 MCP; the AI Service supplies only generic conversational guidance.
@@ -109,9 +115,16 @@ display messages are projections of those records; opaque reasoning is retained
 separately as continuation context. Current replay includes previous-turn context.
 Published artifacts derive their API `order` from the one-based position of their
 artifact record in the full history. Values may have gaps; candidates have no
-identity or order. The HTTP timeline projects user/final messages, tool calls with safe statuses,
+identity or order. The HTTP timeline projects user/final messages, intermediate assistant updates, tool calls with safe statuses,
 artifact references, and failed-turn markers in recorded order. Active-turn tool
 activity and artifacts remain hidden until termination; streaming is deferred.
+Intermediate updates use the provider's `commentary` phase when available and
+otherwise include messages accompanying tool calls. They remain visible after
+failed turns and are replayed to the model, but are excluded from the final-message
+projection used for message limits and reconciliation. Commentary-only responses
+continue generation within the existing provider-response limit. The prompt asks
+for brief progress explanations and a standalone final answer; opaque provider
+reasoning remains internal.
 Artifact tools return validated local candidates without mutating session state.
 Orchestration checks capacity, assigns identity and timestamp, and records the
 finalized tool result and artifact reference in history while storing the full

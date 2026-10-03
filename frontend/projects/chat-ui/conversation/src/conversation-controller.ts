@@ -338,6 +338,8 @@ function presentTimeline(
     switch (item.kind) {
       case 'message':
         return [{ kind: 'text', id: item.id, role: item.role, text: item.text }];
+      case 'intermediate':
+        return [{ kind: 'intermediate', id: item.id, text: item.text }];
       case 'tool':
         return [{ kind: 'tool', id: `tool-${item.execution_id}`, name: item.name, status: item.status }];
       case 'artifact': {

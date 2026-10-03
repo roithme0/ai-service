@@ -29,6 +29,7 @@ describe('ConversationController', () => {
     const transport = new FakeTransport();
     const retained = artifact('retained', 'turn-1');
     const activity: SessionSnapshotResponse['timeline'] = [
+      { kind: 'intermediate', id: 'update-1', turn_id: 'turn-1', text: 'Checking results.' },
       { kind: 'tool', turn_id: 'turn-1', execution_id: 'a', name: 'present', status: 'completed' },
       { kind: 'artifact', turn_id: 'turn-1', artifact_id: 'retained' },
       { kind: 'tool', turn_id: 'turn-1', execution_id: 'b', name: 'save', status: 'outcome_unknown' },
@@ -46,14 +47,14 @@ describe('ConversationController', () => {
     await controller.submit('Show', () => undefined);
     expect(transport.readSession).toHaveBeenCalledOnce();
     expect(controller.state.content.map(item => item.id)).toEqual([
-      'confirmed-0-user', 'tool-a', 'retained', 'tool-b', 'failure-turn-1',
+      'confirmed-0-user', 'update-1', 'tool-a', 'retained', 'tool-b', 'failure-turn-1',
     ]);
     expect(controller.state.status?.kind).toBe('error');
     expect(controller.state.status?.action).toBeUndefined();
     expect(controller.state.composerDisabled).toBe(false);
     await controller.submit('Continue', () => undefined);
     expect(controller.state.content.map(item => item.id)).toEqual([
-      'confirmed-0-user', 'tool-a', 'retained', 'tool-b', 'failure-turn-1', 'confirmed-1-user', 'assistant-turn-2',
+      'confirmed-0-user', 'update-1', 'tool-a', 'retained', 'tool-b', 'failure-turn-1', 'confirmed-1-user', 'assistant-turn-2',
     ]);
     expect(controller.state.status).toBeNull();
   });
@@ -63,6 +64,7 @@ describe('ConversationController', () => {
     transport.appendMessage.mockResolvedValue(user('Show'));
     transport.generateTurn.mockResolvedValue({ kind: 'completed', turn_id: 'turn-1', message: assistant('Done', 'turn-1'),
       artifacts: [artifact('retained', 'turn-1')], timeline: [
+        { kind: 'intermediate', id: 'update-1', turn_id: 'turn-1', text: 'Checking results.' },
         { kind: 'tool', turn_id: 'turn-1', execution_id: 'a', name: 'present', status: 'completed' },
         { kind: 'artifact', turn_id: 'turn-1', artifact_id: 'retained' },
         { kind: 'tool', turn_id: 'turn-1', execution_id: 'b', name: 'check', status: 'failed' },
@@ -72,7 +74,7 @@ describe('ConversationController', () => {
     await controller.start();
     await controller.submit('Show', () => undefined);
     expect(controller.state.content.map(item => item.id)).toEqual([
-      'confirmed-0-user', 'tool-a', 'retained', 'tool-b', 'assistant-turn-1',
+      'confirmed-0-user', 'update-1', 'tool-a', 'retained', 'tool-b', 'assistant-turn-1',
     ]);
     expect(transport.readSession).not.toHaveBeenCalled();
   });
@@ -284,6 +286,33 @@ describe('ConversationController', () => {
     expect(controller.state.content[1]).toEqual(expect.objectContaining({
       id: 'artifact-1', type: 'example.result', headline: 'Example',
     }));
+  });
+
+  it('excludes intermediate updates from message counting during ambiguous append reconciliation', async () => {
+    const transport = new FakeTransport();
+    const update = { kind: 'intermediate' as const, id: 'update', turn_id: 'turn-1', text: 'Checking.' };
+    const first = withTimeline({ kind: 'completed' as const, turn_id: 'turn-1',
+      message: assistant('Answer', 'turn-1'), artifacts: [] });
+    transport.appendMessage.mockResolvedValueOnce(user('First'))
+      .mockRejectedValueOnce(new ConversationNetworkError('Timeout'));
+    transport.generateTurn.mockResolvedValueOnce({ ...first, timeline: [update, ...first.timeline] })
+      .mockResolvedValueOnce(withTimeline({ kind: 'completed', turn_id: 'turn-2',
+        message: assistant('Next answer', 'turn-2'), artifacts: [] }));
+    const retained = snapshot([user('First'), assistant('Answer', 'turn-1'), user('Next')]);
+    transport.readSession.mockResolvedValue({ ...retained,
+      timeline: [retained.timeline[0], update, ...retained.timeline.slice(1)] });
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    await controller.submit('First', () => undefined);
+    const acknowledge = vi.fn();
+    await controller.submit('Next', acknowledge);
+    expect(acknowledge).toHaveBeenCalledOnce();
+    expect(transport.appendMessage).toHaveBeenCalledTimes(2);
+    expect(transport.generateTurn).toHaveBeenCalledTimes(2);
+    expect(controller.state.content.map(item => item.id)).toEqual([
+      'confirmed-0-user', 'update', 'assistant-turn-1', 'confirmed-2-user', 'assistant-turn-2',
+    ]);
+    expect(controller.state.status).toBeNull();
   });
 
   it('reconciles an ambiguous append and never appends it a second time', async () => {

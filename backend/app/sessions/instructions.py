@@ -12,6 +12,8 @@ CONVERSATION_INSTRUCTIONS = (
     "Prior tool calls and results are retained as conversation context. "
     "Service-generated execution reports describe missing results and are not tool returns. "
     "An unknown outcome may already have completed; investigate before repeating a state-changing action. "
-    "Text emitted alongside a tool call is not visible to the user. "
-    "Put user-facing prose in your final response after tool calls have finished."
+    "Intermediate messages are visible to the user in conversation order. "
+    "Use brief intermediate messages for useful progress updates and explanations of your actions. "
+    "After tool calls have finished, provide a standalone final response containing all relevant "
+    "results, conclusions, and uncertainty without requiring the user to read intermediate messages."
 )

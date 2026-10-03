@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, TypeAlias
+from typing import Literal, Protocol, TypeAlias
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,16 @@ class AgenticToolResult:
 
 AgenticInputItem: TypeAlias = dict[str, object]
 AgenticOutputItem: TypeAlias = dict[str, object]
+AssistantMessagePhase: TypeAlias = Literal["commentary", "final_answer"]
+
+
+def message_phase(item: AgenticInputItem) -> AssistantMessagePhase | None:
+    phase = item.get("phase")
+    if phase == "commentary":
+        return "commentary"
+    if phase == "final_answer":
+        return "final_answer"
+    return None
 
 
 @dataclass(frozen=True)

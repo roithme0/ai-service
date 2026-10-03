@@ -55,16 +55,20 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
     artifact = second.artifacts[0]
     assert artifact.artifact_id
     assert artifact.created_at.tzinfo is not None
-    assert artifact.order == 8
+    assert artifact.order == 9
     assert artifact.turn_id == second.turn_id
     assert artifact.type == "demo.greeting"
     assert artifact.payload.model_dump() == {"message": "Hello, World!"}
     greetings = second.artifacts[1]
     assert greetings.type == "demo.greetings"
-    assert greetings.order == 12
+    assert greetings.order == 14
     assert greetings.turn_id == second.turn_id
     assert isinstance(greetings.payload, GreetingsPayload)
     assert greetings.payload.messages == tuple(f"Hello, Visitor {index}!" for index in range(1, 31))
+    results = [record for record in store.history(first_session.session_id)
+               if isinstance(record, ToolResultRecord) and record.turn_id == second.turn_id]
+    assert [record.failed for record in results] == [False, False, True]
+    assert json.loads(results[-1].output) == {"kind": "rejected", "reason": "invalid_arguments"}
     read = store.read(first_session.session_id)
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == (artifact, greetings)
@@ -161,7 +165,7 @@ def test_unaccepted_candidates_are_absent_after_failure_and_retry() -> None:
     retry = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
     assert retry.text == SECOND_REPLY
     assert [artifact.type for artifact in retry.artifacts] == ["demo.greeting", "demo.greetings"]
-    assert [artifact.order for artifact in retry.artifacts] == [10, 14]
+    assert [artifact.order for artifact in retry.artifacts] == [11, 16]
 
 
 def test_busy_cancellation_and_retry_keep_first_step() -> None:
@@ -220,7 +224,7 @@ def test_unaccepted_greeting_does_not_advance_demo_step() -> None:
     retry = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
     assert retry.text == SECOND_REPLY
     assert len(retry.artifacts) == 2
-    assert [artifact.order for artifact in retry.artifacts] == [10, 14]
+    assert [artifact.order for artifact in retry.artifacts] == [11, 16]
 
 
 def test_expiry_during_delay_uses_shared_expiry_result() -> None:
@@ -275,7 +279,7 @@ def test_scripted_turn_retains_completed_first_tool_when_second_tool_fails() -> 
     assert next_turn.kind == "generation_failed"
     retained = store.read(session_id)
     assert isinstance(retained, ConversationReadActive)
-    assert [artifact.order for artifact in retained.snapshot.artifacts] == [8, 17]
+    assert [artifact.order for artifact in retained.snapshot.artifacts] == [9, 20]
 
 
 def output_text[ArtifactT](execution: ToolExecution[ArtifactT]) -> str:

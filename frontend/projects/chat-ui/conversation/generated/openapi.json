@@ -87,6 +87,7 @@
                 "mapping": {
                   "artifact": "#/components/schemas/TimelineArtifact",
                   "failure": "#/components/schemas/TimelineFailure",
+                  "intermediate": "#/components/schemas/TimelineIntermediateMessage",
                   "message": "#/components/schemas/TimelineMessage",
                   "tool": "#/components/schemas/TimelineTool"
                 },
@@ -95,6 +96,9 @@
               "oneOf": [
                 {
                   "$ref": "#/components/schemas/TimelineMessage"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineIntermediateMessage"
                 },
                 {
                   "$ref": "#/components/schemas/TimelineTool"
@@ -265,6 +269,7 @@
                 "mapping": {
                   "artifact": "#/components/schemas/TimelineArtifact",
                   "failure": "#/components/schemas/TimelineFailure",
+                  "intermediate": "#/components/schemas/TimelineIntermediateMessage",
                   "message": "#/components/schemas/TimelineMessage",
                   "tool": "#/components/schemas/TimelineTool"
                 },
@@ -273,6 +278,9 @@
               "oneOf": [
                 {
                   "$ref": "#/components/schemas/TimelineMessage"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineIntermediateMessage"
                 },
                 {
                   "$ref": "#/components/schemas/TimelineTool"
@@ -342,6 +350,35 @@
           "kind"
         ],
         "title": "TimelineFailure",
+        "type": "object"
+      },
+      "TimelineIntermediateMessage": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "intermediate",
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "id",
+          "text",
+          "kind"
+        ],
+        "title": "TimelineIntermediateMessage",
         "type": "object"
       },
       "TimelineMessage": {

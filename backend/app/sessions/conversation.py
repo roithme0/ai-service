@@ -11,7 +11,7 @@ from threading import RLock
 from typing import Generic, Literal, TypeVar, cast
 from uuid import uuid4
 
-from app.models.agentic_generation import AgenticGenerationResponse, AgenticToolCall
+from app.models.agentic_generation import AgenticGenerationResponse, AgenticToolCall, message_phase
 from app.sessions.history import (
     ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord,
     ContinuationRecord, HistoryRecord, MessageRecord, TerminalRecord, ToolResultRecord, text_messages,
@@ -270,7 +270,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     calls.append(recorded)
                 elif item.get("type") == "message":
                     message_kind: Literal["intermediate", "final", "rejected"] = (
-                        "intermediate" if final_text_accepted is None else
+                        "intermediate" if message_phase(item) == "commentary" or final_text_accepted is None else
                         "final" if final_text_accepted else "rejected")
                     self._append_history(session_id, MessageRecord(turn_id, deepcopy(item), message_kind))
                 else:

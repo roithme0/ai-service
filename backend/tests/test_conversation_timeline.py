@@ -15,6 +15,9 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
     store.append_user_message(session_id, "Show results")
     turn = store.reserve_turn(session_id)
     assert isinstance(turn, ConversationTurnReservation)
+    store.record_provider_response(session_id, turn.turn_id, AgenticGenerationResponse((
+        {"type": "message", "role": "assistant", "phase": "commentary", "content": "Checking results."},
+    ), (), "Checking results."))
     first = store.record_call(session_id, turn.turn_id, AgenticToolCall("same", "present", '{"secret":"argument"}'))
     store.start_execution(session_id, first)
     accepted = store.record_result(session_id, first, ToolExecution(
@@ -41,18 +44,18 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
     items = read.snapshot.timeline
-    assert [item.kind for item in items] == ["message", "tool", "artifact", "tool", "tool", "tool", "tool", "failure"]
+    assert [item.kind for item in items] == ["message", "intermediate", "tool", "artifact", "tool", "tool", "tool", "tool", "failure"]
     tools = [item for item in items if isinstance(item, TimelineTool)]
     assert [item.status for item in tools] == ["completed", "failed", "completed", "outcome_unknown", "not_executed"]
     assert tools[-1].execution_id == never_started.execution_id
-    artifact = items[2]
+    artifact = items[3]
     assert isinstance(artifact, TimelineArtifact)
     assert artifact.artifact_id == read.snapshot.artifacts[0].artifact_id
     assert isinstance(accepted.output, str)
     assert json.loads(accepted.output)["artifact_id"] == artifact.artifact_id
     assert read.snapshot.artifacts[0].payload == "retained content"
     assert "secret" not in repr(items) and "explicit error detail" not in repr(items)
-    assert model_input(store.history(session_id))[2]["output"] == accepted.output
+    assert model_input(store.history(session_id))[3]["output"] == accepted.output
 
     store.append_user_message(session_id, "Continue")
     next_turn = store.reserve_turn(session_id)

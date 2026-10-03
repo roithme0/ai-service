@@ -21,6 +21,12 @@
           @if (!last || conversationStatus()?.kind !== 'error') {
             <article class="status status--error" aria-label="Fehlgeschlagene Antwort"><p>{{ item.text }}</p></article>
           }
+        } @else if (item.kind === 'intermediate') {
+          <article
+            class="message message--intermediate markdown"
+            aria-label="Zwischenmeldung des Assistenten"
+            [innerHTML]="renderAssistantMarkdown(item.text)"
+          ></article>
         } @else if (item.role === 'user') {
           <article class="message message--user" aria-label="Nachricht des Benutzers">
             <p>{{ item.text }}</p>

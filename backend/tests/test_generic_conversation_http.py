@@ -124,6 +124,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     assert client.post(f"{session}/turns").json() == {"detail": "Session is not ready for a turn", "kind": "not_ready"}
     texts: list[str] = []
     artifacts: list[dict[str, object]] = []
+    failed_activity: list[dict[str, object]] = []
     for index in range(5):
         message = client.post(f"{session}/messages", json={"text": f"user {index}"})
         assert message.status_code == 201
@@ -137,6 +138,10 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
             failed_history = client.get(session).json()
             assert failed_history["terminal_turn_kind"] == "generation_failed"
             assert len(failed_history["artifacts"]) == 2
+            failed_activity = [item for item in failed_history["timeline"] if item["turn_id"] == body["turn_id"]]
+            assert [item["kind"] for item in failed_activity] == ["message", "intermediate", "failure"]
+            assert "without a final answer" in failed_activity[1]["text"]
+            assert client.get(session).json()["timeline"] == failed_history["timeline"]
             continue
         assert turn.status_code == 201
         assert body["kind"] == "completed"
@@ -146,20 +151,27 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
         texts.append(body["message"]["text"])
         if index == 1:
             assert len(body["artifacts"]) == 2
-            assert [item["kind"] for item in body["timeline"]] == ["tool", "artifact", "tool", "artifact", "message"]
-            assert [item["name"] for item in body["timeline"] if item["kind"] == "tool"] == ["create_greeting", "create_greetings"]
-            assert all(item["status"] == "completed" for item in body["timeline"] if item["kind"] == "tool")
+            assert [item["kind"] for item in body["timeline"]] == [
+                "intermediate", "tool", "artifact", "intermediate", "tool", "artifact", "intermediate", "tool", "message",
+            ]
+            assert "single greeting" in body["timeline"][0]["text"]
+            assert "30 greetings" in body["timeline"][3]["text"]
+            assert [item["name"] for item in body["timeline"] if item["kind"] == "tool"] == [
+                "create_greeting", "create_greetings", "create_greeting",
+            ]
+            assert [item["status"] for item in body["timeline"] if item["kind"] == "tool"] == ["completed", "completed", "failed"]
+            assert "failed validation" in body["message"]["text"]
             projected = [item for item in client.get(session).json()["timeline"]
                          if item["turn_id"] == body["turn_id"] and not (item["kind"] == "message" and item["role"] == "user")]
             assert projected == body["timeline"]
             greeting, greetings = body["artifacts"]
             assert greeting["type"] == "demo.greeting"
             assert greeting["payload"] == {"message": "Hello, World!"}
-            assert greeting["order"] == 8
+            assert greeting["order"] == 9
             assert greeting["turn_id"] == body["turn_id"]
             assert greetings["type"] == "demo.greetings"
             assert greetings["payload"] == {"messages": [f"Hello, Visitor {number}!" for number in range(1, 31)]}
-            assert greetings["order"] == 12
+            assert greetings["order"] == 14
             assert greetings["turn_id"] == body["turn_id"]
             artifacts.extend((greeting, greetings))
         else:
@@ -168,6 +180,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     assert len(history["messages"]) == 9
     assert history["messages"][0] == {"role": "user", "text": "user 0", "turn_id": None}
     assert history["artifacts"] == artifacts
+    assert [item for item in history["timeline"] if item["turn_id"] == failed_activity[0]["turn_id"]] == failed_activity
     assert "source" not in history
     fresh = client.post(base, json={}).json()
     fresh_session = f"{base}/{fresh['session_id']}"

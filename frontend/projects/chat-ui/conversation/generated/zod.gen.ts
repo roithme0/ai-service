@@ -72,6 +72,16 @@ export const zTimelineFailure = z.object({
 });
 
 /**
+ * TimelineIntermediateMessage
+ */
+export const zTimelineIntermediateMessage = z.object({
+    id: z.string(),
+    kind: z.literal('intermediate'),
+    text: z.string(),
+    turn_id: z.string()
+});
+
+/**
  * TimelineMessage
  */
 export const zTimelineMessage = z.object({
@@ -107,6 +117,7 @@ export const zCompletedTurnResponse = z.object({
     message: zAssistantMessageResponse,
     timeline: z.array(z.union([
         zTimelineMessage,
+        zTimelineIntermediateMessage,
         zTimelineTool,
         zTimelineArtifact,
         zTimelineFailure
@@ -144,6 +155,7 @@ export const zSessionSnapshotResponse = z.object({
     ]).nullable(),
     timeline: z.array(z.union([
         zTimelineMessage,
+        zTimelineIntermediateMessage,
         zTimelineTool,
         zTimelineArtifact,
         zTimelineFailure

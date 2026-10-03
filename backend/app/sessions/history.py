@@ -7,7 +7,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from app.models.agentic_generation import AgenticInputItem, AgenticOutputItem, AgenticToolCall
+from app.models.agentic_generation import AgenticGenerationResponse, AgenticInputItem, AgenticOutputItem, AgenticToolCall, message_phase
 from app.sessions.text_sessions import TextMessage
 
 
@@ -89,6 +89,14 @@ type HistoryRecord = (
     MessageRecord | ContinuationRecord | CallRecord | ExecutionStartedRecord | ToolResultRecord
     | ExecutionReportRecord | ArtifactRecord | TerminalRecord
 )
+
+
+def final_response_text(response: AgenticGenerationResponse) -> str | None:
+    messages = [item for item in response.output_items if item.get("type") == "message"]
+    if any(message_phase(item) is not None for item in messages):
+        text = "".join(message_text(item) for item in messages if message_phase(item) != "commentary")
+        return text if text.strip() else None
+    return response.text
 
 
 def model_input(history: tuple[HistoryRecord, ...]) -> tuple[AgenticInputItem, ...]:

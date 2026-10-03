@@ -31,13 +31,19 @@ export interface ChatToolCall {
   readonly status: ChatToolStatus;
 }
 
+export interface ChatIntermediateMessage {
+  readonly kind: 'intermediate';
+  readonly id: string;
+  readonly text: string;
+}
+
 export interface ChatTurnFailure {
   readonly kind: 'failure';
   readonly id: string;
   readonly text: string;
 }
 
-export type ChatContent = ChatTextMessage | ChatArtifact | ChatToolCall | ChatTurnFailure;
+export type ChatContent = ChatTextMessage | ChatIntermediateMessage | ChatArtifact | ChatToolCall | ChatTurnFailure;
 
 export interface ChatArtifactRenderContext<TPayload extends JsonValue> {
   readonly $implicit: TPayload;

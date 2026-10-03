@@ -6,6 +6,7 @@ export type {
   ChatArtifactRendererMap,
   ChatContent,
   ChatConversationStatus,
+  ChatIntermediateMessage,
   ChatMessageRole,
   ChatStatusAction,
   ChatSubmission,

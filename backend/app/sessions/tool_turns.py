@@ -7,8 +7,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem, AgenticToolCall, AgenticGenerationResponse
-from app.sessions.history import CallRecord
+from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem, AgenticToolCall, AgenticGenerationResponse, message_phase
+from app.sessions.history import CallRecord, final_response_text
 from app.sessions.text_sessions import MAX_MESSAGE_LENGTH
 from app.sessions.tools import RegisteredTool, ToolExecution, ToolRegistry, ToolSource
 
@@ -88,11 +88,17 @@ async def run_tool_turn(
             tools=registry.schemas,
         ))
         if not response.tool_calls:
-            valid_text = response.text is not None and bool(response.text.strip()) and len(response.text) <= MAX_MESSAGE_LENGTH
+            text = final_response_text(response)
+            messages = [item for item in response.output_items if item.get("type") == "message"]
+            if text is None and messages and all(message_phase(item) == "commentary" for item in messages):
+                record_response(response, None)
+                input_items.extend(response.output_items)
+                continue
+            valid_text = text is not None and bool(text.strip()) and len(text) <= MAX_MESSAGE_LENGTH
             record_response(response, valid_text)
             if not valid_text:
                 return ToolTurnResult("generation_failed", None, tuple(artifacts))
-            return ToolTurnResult("completed", response.text, tuple(artifacts))
+            return ToolTurnResult("completed", text, tuple(artifacts))
         recorded_calls = record_response(response, None)
         if tuple(record.call for record in recorded_calls) != response.tool_calls:
             raise ValueError("recorded calls must match requested calls in order")

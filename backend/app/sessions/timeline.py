@@ -5,7 +5,7 @@ from typing import Literal
 
 from app.sessions.history import (
     ArtifactRecord, CallRecord, ExecutionReportRecord, HistoryRecord, MessageRecord,
-    TerminalRecord, ToolResultRecord, text_messages,
+    TerminalRecord, ToolResultRecord, message_text, text_messages,
 )
 
 
@@ -16,6 +16,14 @@ class TimelineMessage:
     role: Literal["user", "assistant"]
     text: str
     kind: Literal["message"]
+
+
+@dataclass(frozen=True)
+class TimelineIntermediateMessage:
+    turn_id: str
+    id: str
+    text: str
+    kind: Literal["intermediate"]
 
 
 @dataclass(frozen=True)
@@ -40,7 +48,7 @@ class TimelineFailure:
     kind: Literal["failure"]
 
 
-type TimelineItem = TimelineMessage | TimelineTool | TimelineArtifact | TimelineFailure
+type TimelineItem = TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure
 
 
 def timeline(history: tuple[HistoryRecord, ...], active_turn_id: str | None = None) -> tuple[TimelineItem, ...]:
@@ -51,11 +59,14 @@ def timeline(history: tuple[HistoryRecord, ...], active_turn_id: str | None = No
                  if isinstance(record, TerminalRecord) and record.kind == "completed"}
     emitted_answers: set[str] = set()
     items: list[TimelineItem] = []
-    for record in history:
+    for history_index, record in enumerate(history):
         if record.turn_id == active_turn_id and not (isinstance(record, MessageRecord) and record.kind == "user"):
             continue
         if isinstance(record, MessageRecord):
-            if record.kind == "user" or (record.kind == "final" and record.turn_id in completed
+            if record.kind == "intermediate":
+                items.append(TimelineIntermediateMessage(record.turn_id, f"intermediate-{record.turn_id}-{history_index}",
+                                                  message_text(record.item), "intermediate"))
+            elif record.kind == "user" or (record.kind == "final" and record.turn_id in completed
                                         and record.turn_id not in emitted_answers):
                 index, message = next(messages)
                 identity = f"confirmed-{index}-user" if message.role == "user" else f"assistant-{record.turn_id}"

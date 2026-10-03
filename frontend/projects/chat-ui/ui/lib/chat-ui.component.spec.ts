@@ -63,6 +63,22 @@ describe('ChatUiComponent', () => {
     );
   });
 
+  it('renders intermediate Markdown with secondary styling in conversation order', () => {
+    const fixture = createFixture([
+      { kind: 'intermediate', id: 'update', text: '**Checking** <script>alert(1)</script>' },
+      { kind: 'tool', id: 'tool', name: 'check', status: 'completed' },
+      { kind: 'text', id: 'final', role: 'assistant', text: 'Standalone result.' },
+    ]);
+    const element = fixture.nativeElement as HTMLElement;
+    const rows = [...element.querySelector('.messages')!.children];
+    expect(rows[0].classList.contains('message--intermediate')).toBe(true);
+    expect(rows[0].getAttribute('aria-label')).toBe('Zwischenmeldung des Assistenten');
+    expect(rows[0].querySelector('strong')?.textContent).toBe('Checking');
+    expect(rows[0].querySelector('script')).toBeNull();
+    expect(rows[1].classList.contains('tool-call')).toBe(true);
+    expect(rows[2].classList.contains('message--assistant')).toBe(true);
+  });
+
   it('renders compact tool rows and artifacts in host order with all four status labels', () => {
     const fixture = createFixture([
       { kind: 'text', id: 'user', role: 'user', text: 'Show' },
