@@ -149,11 +149,11 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
             greeting, greetings = body["artifacts"]
             assert greeting["type"] == "demo.greeting"
             assert greeting["payload"] == {"message": "Hello, World!"}
-            assert greeting["order"] == 1
+            assert greeting["order"] == 8
             assert greeting["turn_id"] == body["turn_id"]
             assert greetings["type"] == "demo.greetings"
             assert greetings["payload"] == {"messages": [f"Hello, Visitor {number}!" for number in range(1, 31)]}
-            assert greetings["order"] == 2
+            assert greetings["order"] == 12
             assert greetings["turn_id"] == body["turn_id"]
             artifacts.extend((greeting, greetings))
         else:

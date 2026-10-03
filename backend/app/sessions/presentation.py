@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from typing import Literal, TypeVar
+from typing import Literal
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
@@ -13,10 +13,8 @@ from referencing.jsonschema import DRAFT202012
 from referencing.exceptions import Unresolvable
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, field_validator
 
-from app.sessions.conversation import ConversationSessionStore, ConversationStageAccepted, StagedArtifact
+from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
-
-ContextT = TypeVar("ContextT")
 
 
 class ArtifactCapability(BaseModel):
@@ -104,16 +102,13 @@ def _schema_rejection(
 
 def presentation_tool_source(
     capabilities: tuple[ArtifactCapability, ...],
-    store: ConversationSessionStore[ContextT, PresentationPayload],
-    session_id: str,
-    turn_id: str,
-) -> LocalToolSource[StagedArtifact[PresentationPayload]]:
+) -> LocalToolSource[ArtifactCandidate[PresentationPayload]]:
     validators = {item.type: Draft202012Validator(item.payload_schema, registry=Registry()) for item in capabilities}
     metadata_validators = {item.type: Draft202012Validator(item.metadata_schema, registry=Registry(),
                            format_checker=Draft202012Validator.FORMAT_CHECKER)
                            for item in capabilities if item.metadata_schema is not None}
 
-    def execute(call: ToolInvocation) -> ToolExecution[StagedArtifact[PresentationPayload]]:
+    def execute(call: ToolInvocation) -> ToolExecution[ArtifactCandidate[PresentationPayload]]:
         try:
             request = PresentationRequest.model_validate_json(call.arguments)
             json.dumps(request.payload, allow_nan=False)
@@ -135,14 +130,10 @@ def presentation_tool_source(
             rejection = _schema_rejection(metadata_validator, request.metadata or {}, "metadata")
             if rejection is not None:
                 return ToolExecution(rejection)
-        staged = store.stage_artifact(
-            session_id, turn_id, request.type,
+        candidate = ArtifactCandidate(request.type,
             PresentationPayload(title=request.title, subtitle=request.subtitle, payload=request.payload,
-                                metadata=request.metadata),
-        )
-        if not isinstance(staged, ConversationStageAccepted):
-            return ToolExecution(json.dumps({"kind": staged.kind}))
-        return ToolExecution(json.dumps({"kind": "presented", "artifact_id": staged.artifact.artifact_id}), staged.artifact)
+                                metadata=request.metadata))
+        return ToolExecution(ArtifactToolOutput("presented"), candidate)
 
     return LocalToolSource((RegisteredTool("present_artifact", {
         "type": "function", "name": "present_artifact", "strict": False,
@@ -165,7 +156,7 @@ def presentation_tool_source(
         "Prefer a purpose-specific presentation over a general JSON presentation when available. "
         "Follow the selected capability's titleDescription and subtitleDescription when provided. "
         "Supply metadata only as advertised by the selected metadataSchema, following its field descriptions. "
-        "Presentation does not create or save domain data. Artifacts become visible only when this turn completes.\n"
+        "Presentation does not create or save domain data. Completed tool artifacts become visible when this turn terminates, even if later generation fails.\n"
         "Available presentation capabilities (payload schemas are standalone JSON Schemas):\n"
         + json.dumps([item.model_dump(by_alias=True, exclude_none=True) for item in capabilities], ensure_ascii=False)
     ))

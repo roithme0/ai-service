@@ -7,11 +7,12 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 
+from app.models.agentic_generation import AgenticToolCall
 from app.demo.tools import DemoToolFactory
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import DemoPayload, DemoSessionStore
-from app.sessions.conversation import ConversationTurnResult
+from app.sessions.conversation import ConversationTurnResult, TurnHistoryUnavailable
 from app.sessions.tools import ToolRegistry
 
 
@@ -44,15 +45,21 @@ async def run_demo_turn(
             reply = FIRST_REPLY
         elif completed_count == 1:
             registry = ToolRegistry((
-                single_greeting_tool_factory(store, session_id, reservation.turn_id),
-                greeting_list_tool_factory(store, session_id, reservation.turn_id),
+                single_greeting_tool_factory(),
+                greeting_list_tool_factory(),
             ))
-            greeting = await registry.invoke("create_greeting", '{"name":"World"}')
+            call = store.record_call(session_id, reservation.turn_id,
+                                     AgenticToolCall("greeting", "create_greeting", '{"name":"World"}'))
+            store.start_execution(session_id, call)
+            greeting = await registry.invoke(call.call.name, call.call.arguments)
+            greeting = store.record_result(session_id, call, greeting)
             if greeting.artifact is None:
                 return store.fail_turn(session_id, reservation)
-            greetings = await registry.invoke(
-                "create_greetings", json.dumps({"names": [f"Visitor {index}" for index in range(1, 31)]})
-            )
+            call = store.record_call(session_id, reservation.turn_id, AgenticToolCall(
+                "greetings", "create_greetings", json.dumps({"names": [f"Visitor {index}" for index in range(1, 31)]})))
+            store.start_execution(session_id, call)
+            greetings = await registry.invoke(call.call.name, call.call.arguments)
+            greetings = store.record_result(session_id, call, greetings)
             if greetings.artifact is None:
                 return store.fail_turn(session_id, reservation)
             reply = SECOND_REPLY
@@ -61,6 +68,8 @@ async def run_demo_turn(
         else:
             reply = COMPLETE_REPLY
         return store.complete_turn(session_id, reservation, "completed", reply)
+    except TurnHistoryUnavailable as error:
+        return ConversationTurnResult(error.kind, reservation.turn_id, None, ())
     except asyncio.CancelledError:
         store.fail_turn(session_id, reservation)
         raise

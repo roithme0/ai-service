@@ -25,13 +25,13 @@ class FakeTransport implements ConversationTransport {
 }
 
 describe('ConversationController', () => {
-  it('maps synthetic artifacts in order for successful turns and reconciled history', async () => {
+  it('maps artifacts with sparse history positions in order for successful turns and reconciled history', async () => {
     const transport = new FakeTransport();
     const later = {
       artifact_id: 'later', type: 'other.result', created_at: '2026-09-25T12:00:00Z',
-      order: 2, turn_id: 'turn-1', payload: { title: "Later", payload: { value: 2 } },
+      order: 12, turn_id: 'turn-1', payload: { title: "Later", payload: { value: 2 } },
     };
-    const earlier = { ...later, artifact_id: 'earlier', order: 1, payload: { title: "Earlier", payload: { value: 1 } } };
+    const earlier = { ...later, artifact_id: 'earlier', order: 8, payload: { title: "Earlier", payload: { value: 1 } } };
     transport.appendMessage.mockResolvedValueOnce(user('Hello')).mockResolvedValueOnce(user('Again'));
     transport.generateTurn.mockResolvedValueOnce({
       kind: 'completed', turn_id: 'turn-1', message: assistant('Hi', 'turn-1'), artifacts: [later, earlier],

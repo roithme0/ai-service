@@ -10,9 +10,11 @@ from app.models.openai_agentic_generation import (
 )
 from typing import Never
 
+from app.models.agentic_generation import AgenticGenerationResponse
+from app.sessions.history import CallRecord
 from app.sessions.tool_turns import run_tool_turn
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
-from app.sessions.text_sessions import TextMessage
+from tool_turn_recorder import ToolTurnRecorder
 
 
 def test_openai_replays_function_call_and_result_without_storage() -> None:
@@ -29,7 +31,7 @@ def test_openai_replays_function_call_and_result_without_storage() -> None:
                        "name": "sample", "arguments": "not-json", "status": "completed"}]
         else:
             assert all("status" not in item for item in payload["input"])
-            output = [{"id": "msg_1", "type": "message", "role": "assistant", "status": "completed",
+            output = [{"id": "msg_1", "type": "message", "role": "assistant", "status": "completed", "phase": "final_answer",
                        "content": [{"type": "output_text", "text": "That call failed.",
                                     "annotations": []}]}]
         return httpx.Response(200, json={"id": f"resp_{len(requests)}", "object": "response",
@@ -37,6 +39,12 @@ def test_openai_replays_function_call_and_result_without_storage() -> None:
                                           "status": "completed", "output": output})
 
     invoked = False
+    responses: list[AgenticGenerationResponse] = []
+    recorder = ToolTurnRecorder[Never]()
+
+    def record_response(response: AgenticGenerationResponse, accepted: bool | None) -> tuple[CallRecord, ...]:
+        responses.append(response)
+        return recorder.record_response(response, accepted)
 
     def execute(call: ToolInvocation) -> ToolExecution[Never]:
         nonlocal invoked
@@ -52,16 +60,18 @@ def test_openai_replays_function_call_and_result_without_storage() -> None:
             async with AsyncOpenAI(api_key="test-key", http_client=http_client) as client:
                 result = await run_tool_turn(
                     OpenAIAgenticGenerator("gpt-5.6-sol", client),
-                    (TextMessage("user", "Try it"),), "Caller context", "Instructions",
+                    ({"role": "user", "content": "Try it"},), "Caller context", "Instructions",
                     (LocalToolSource((RegisteredTool("sample", {
                         "type": "function", "name": "sample", "parameters": {"type": "object"},
-                    }, execute),)),), 6, 3, 8,
+                    }, execute),)),), 6, 3, 8, record_response=record_response,
+                    start_execution=recorder.start_execution, record_result=recorder.record_result,
                 )
                 assert result.kind == "completed"
                 assert result.text == "That call failed."
 
     asyncio.run(run())
     assert not invoked
+    assert responses[-1].output_items[0]["phase"] == "final_answer"
     assert len(requests) == 2
     assert all(request["store"] is False and request["parallel_tool_calls"] is False for request in requests)
     assert all(request["max_output_tokens"] == OPENAI_MAX_OUTPUT_TOKENS for request in requests)

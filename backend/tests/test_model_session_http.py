@@ -621,7 +621,7 @@ def test_advertised_presentation_is_validated_published_and_retained(client: Tes
     assert len(artifacts) == 1
     assert artifacts[0]["type"] == "json"
     assert artifacts[0]["payload"] == {"title": "Ingredient", "subtitle": "Example brand", "payload": {"value": {"name": "Oats"}}, "metadata": metadata}
-    assert artifacts[0]["order"] == 1
+    assert artifacts[0]["order"] == 11
     assert artifacts[0]["artifact_id"]
     assert artifacts[0]["turn_id"] == response.json()["turn_id"]
     assert client.get(base).json()["artifacts"] == artifacts
@@ -641,7 +641,7 @@ def test_advertised_presentation_is_validated_published_and_retained(client: Tes
     assert [tool["name"] for tool in fake_generator.calls[-1].tools] == ["present_artifact"]
 
 
-def test_failed_turn_discards_staged_presentations(client: TestClient, fake_generator: FakeGenerator) -> None:
+def test_failed_turn_retains_completed_presentations(client: TestClient, fake_generator: FakeGenerator) -> None:
     created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
         "context": {}, "artifactCapabilities": [JSON_CAPABILITY],
     }})
@@ -652,7 +652,11 @@ def test_failed_turn_discards_staged_presentations(client: TestClient, fake_gene
         AgenticGenerationResponse((), (), ""),
     ]
     assert client.post(base + "/turns", json={}).status_code == 502
-    assert client.get(base).json()["artifacts"] == []
+    snapshot = client.get(base).json()
+    assert len(snapshot["artifacts"]) == 1
+    assert snapshot["artifacts"][0]["payload"]["payload"] == {"value": [1, None]}
+    assert len(snapshot["messages"]) == 1
+    assert snapshot["terminal_turn_kind"] == "generation_failed"
     assert client.post(base + "/turns", json={}).status_code == 502
     assert len(fake_generator.calls) == 2
 

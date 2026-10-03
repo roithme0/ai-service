@@ -8,6 +8,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Generic, Protocol, TypeVar
 
+from app.sessions.artifacts import ArtifactToolOutput
+
 
 ArtifactT = TypeVar("ArtifactT", covariant=True)
 
@@ -20,7 +22,7 @@ class ToolInvocation:
 
 @dataclass(frozen=True)
 class ToolExecution(Generic[ArtifactT]):
-    output: str
+    output: str | ArtifactToolOutput
     artifact: ArtifactT | None = None
 
 

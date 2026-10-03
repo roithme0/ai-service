@@ -8,7 +8,9 @@ from collections.abc import Callable
 from typing import Generic, TypeVar
 
 from app.models.agentic_generation import AgenticGenerator
-from app.sessions.conversation import ConversationSessionStore, ConversationTurnResult, StagedArtifact
+from app.sessions.conversation import ConversationSessionStore, ConversationTurnResult, TurnHistoryUnavailable
+from app.sessions.history import model_input
+from app.sessions.artifacts import ArtifactCandidate
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.tool_turns import run_tool_turn
 from app.sessions.tools import ToolSource
@@ -27,9 +29,9 @@ class ModelTurnStrategy(Generic[ContextT, ArtifactT]):
         store: ConversationSessionStore[ContextT, ArtifactT],
         generator: AgenticGenerator,
         context: Callable[[ContextT], str],
-        tool_sources: tuple[ToolSource[StagedArtifact[ArtifactT]], ...],
+        tool_sources: tuple[ToolSource[ArtifactCandidate[ArtifactT]], ...],
         *,
-        session_tool_sources: Callable[[ContextT, str, str], tuple[ToolSource[StagedArtifact[ArtifactT]], ...]] | None = None,
+        session_tool_sources: Callable[[ContextT, str, str], tuple[ToolSource[ArtifactCandidate[ArtifactT]], ...]] | None = None,
         instructions: str = CONVERSATION_INSTRUCTIONS,
         max_attempts: int = MAX_TOOL_ATTEMPTS,
         max_provider_responses: int = MAX_PROVIDER_RESPONSES,
@@ -57,12 +59,17 @@ class ModelTurnStrategy(Generic[ContextT, ArtifactT]):
                 if self._session_tool_sources is not None else ()
             )
             result = await run_tool_turn(
-                self._generator, reservation.snapshot.messages,
+                self._generator, model_input(self._store.history(session_id)),
                 self._context(reservation.snapshot.payload), self._instructions,
                 (*self._tool_sources, *session_sources), self._max_attempts,
                 max_successes=None, max_provider_responses=self._max_provider_responses,
+                record_response=lambda response, accepted: self._store.record_provider_response(session_id, reservation.turn_id, response, accepted),
+                start_execution=lambda call: self._store.start_execution(session_id, call),
+                record_result=lambda call, execution: self._store.record_result(session_id, call, execution),
             )
             return self._store.complete_turn(session_id, reservation, result.kind, result.text)
+        except TurnHistoryUnavailable as error:
+            return ConversationTurnResult(error.kind, reservation.turn_id, None, ())
         except asyncio.CancelledError:
             self._store.fail_turn(session_id, reservation)
             raise

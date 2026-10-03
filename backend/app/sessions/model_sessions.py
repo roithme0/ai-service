@@ -8,7 +8,8 @@ from datetime import UTC, datetime, timedelta
 from app.models.agentic_generation import AgenticGenerator
 from app.sessions.agent_service import ConfiguredAgentService
 from app.sessions.context import ContextIssue, SessionContext, format_session_context, validate_context_input
-from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore, StagedArtifact
+from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore
+from app.sessions.artifacts import ArtifactCandidate
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.model_turns import MAX_PROVIDER_RESPONSES, MAX_TOOL_ATTEMPTS, ModelTurnStrategy
 from app.sessions.tools import ToolSource
@@ -35,14 +36,14 @@ def create_model_agent(
     max_artifacts: int = 100,
     max_tool_attempts: int = MAX_TOOL_ATTEMPTS,
     max_provider_responses: int = MAX_PROVIDER_RESPONSES,
-    tool_sources: tuple[ToolSource[StagedArtifact[PresentationPayload]], ...] = (),
+    tool_sources: tuple[ToolSource[ArtifactCandidate[PresentationPayload]], ...] = (),
 ) -> ModelAgent:
     owned_store = store if store is not None else new_model_session_store()
 
-    def session_tools(context: SessionContext, session_id: str, turn_id: str) -> tuple[ToolSource[StagedArtifact[PresentationPayload]], ...]:
+    def session_tools(context: SessionContext, session_id: str, turn_id: str) -> tuple[ToolSource[ArtifactCandidate[PresentationPayload]], ...]:
         if not context.artifact_capabilities:
             return ()
-        return (presentation_tool_source(context.artifact_capabilities, owned_store, session_id, turn_id),)
+        return (presentation_tool_source(context.artifact_capabilities),)
 
     return ConfiguredAgentService(
         owned_store, validate_context_input,

@@ -11,6 +11,7 @@ from app.mcp_tools import MCPToolset
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.tool_turns import run_tool_turn
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation, ToolRegistry
+from tool_turn_recorder import ToolTurnRecorder
 
 
 class Connection(MCPConnection):
@@ -64,6 +65,7 @@ def local_tool(call: ToolInvocation) -> ToolExecution[Never]:
 
 
 def test_two_servers_with_same_tool_route_independently_and_respect_shared_limits() -> None:
+    recorder = ToolTurnRecorder[Never]()
     first = Connection("first", (tool(),))
     second = Connection("second", (tool(),))
     source = MCPToolset((first, second))
@@ -77,6 +79,8 @@ def test_two_servers_with_same_tool_route_independently_and_respect_shared_limit
         generator, (), "Context", "Local guidance",
         (LocalToolSource((RegisteredTool("local", {"type": "function", "name": "local"}, local_tool),)), source),
         2, 1, 2,
+        record_response=recorder.record_response, start_execution=recorder.start_execution,
+        record_result=recorder.record_result,
     ))
     assert result.kind == "completed" and result.artifacts == ()
     assert first.calls == [("hello_world", {"name": "Alice"})]
@@ -101,6 +105,7 @@ def test_two_servers_with_same_tool_route_independently_and_respect_shared_limit
 
 
 def test_mcp_and_artifact_producing_local_source_execute_in_one_turn() -> None:
+    recorder = ToolTurnRecorder[str]()
     connection = Connection("server", (tool(),))
     generator = Generator((
         AgenticToolCall("remote", "server__hello_world", "{}"),
@@ -117,6 +122,8 @@ def test_mcp_and_artifact_producing_local_source_execute_in_one_turn() -> None:
     result = asyncio.run(run_tool_turn(
         generator, (), "Context", "Agent guidance",
         (local_source, MCPToolset((connection,))), 2, 1, 2,
+        record_response=recorder.record_response, start_execution=recorder.start_execution,
+        record_result=recorder.record_result,
     ))
     assert result.kind == "completed"
     assert result.artifacts == ("local artifact",)
@@ -183,6 +190,7 @@ def test_bad_discovered_names_disable_owner_and_close_resources(connections: tup
 
 
 def test_mcp_and_local_name_collision_is_rejected_before_generation() -> None:
+    recorder = ToolTurnRecorder[Never]()
     generator = Generator(())
     connection = Connection("server", (tool(),))
     with pytest.raises(ValueError, match="unique names"):
@@ -191,5 +199,7 @@ def test_mcp_and_local_name_collision_is_rejected_before_generation() -> None:
             (LocalToolSource((RegisteredTool("server__hello_world", {"type": "function", "name": "server__hello_world"}, local_tool),)),
              MCPToolset((connection,))),
             1, 1, 1,
+            record_response=recorder.record_response, start_execution=recorder.start_execution,
+            record_result=recorder.record_result,
         ))
     assert generator.requests == []

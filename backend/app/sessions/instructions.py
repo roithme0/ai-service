@@ -8,8 +8,10 @@ CONVERSATION_INSTRUCTIONS = (
     "Tool results do not automatically create or display chat artifacts. "
     "Prefer ordinary text for ordinary answers. "
     "Present useful results in your final text response. "
-    "Include returned identifiers needed for follow-up actions when presenting results; "
-    "tool-call transcripts are not retained between turns. "
+    "Include returned identifiers when they help the user understand or follow up on results. "
+    "Prior tool calls and results are retained as conversation context. "
+    "Service-generated execution reports describe missing results and are not tool returns. "
+    "An unknown outcome may already have completed; investigate before repeating a state-changing action. "
     "Text emitted alongside a tool call is not visible to the user. "
     "Put user-facing prose in your final response after tool calls have finished."
 )

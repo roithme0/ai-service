@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_serial
 from app.agents.wiring import get_configured_agents
 from app.sessions.context import ContextIssue
 from app.sessions.agent_service import AgentInputRejected, ConfiguredAgentService
-from app.sessions.conversation import ConversationMessageBusy, ConversationReadActive, StagedArtifact, TurnKind
+from app.sessions.conversation import ConversationMessageBusy, ConversationReadActive, PublishedArtifact, TurnKind
 from app.sessions.text_sessions import (
     TextMessage, TextSessionAppendAccepted, TextSessionAppendExpired,
     TextSessionAppendInvalidMessage, TextSessionAppendLimitReached,
@@ -337,7 +337,7 @@ def _message(value: TextMessage) -> UserMessageResponse | AssistantMessageRespon
     return AssistantMessageResponse.model_validate({"role": value.role, "text": value.text, "turn_id": value.turn_id})
 
 
-def _artifact(value: StagedArtifact[PayloadT]) -> ArtifactResponse:
+def _artifact(value: PublishedArtifact[PayloadT]) -> ArtifactResponse:
     return ArtifactResponse(
         artifact_id=value.artifact_id, type=value.type,
         created_at=value.created_at, order=value.order,

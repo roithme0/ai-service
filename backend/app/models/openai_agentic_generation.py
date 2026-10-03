@@ -61,7 +61,7 @@ class OpenAIAgenticGenerator:
                 output_items.append(_replay_item(dumped, ("type", "id", "call_id", "name", "arguments")))
                 calls.append(AgenticToolCall(call_id=call_id, name=name, arguments=arguments))
             elif item_type == "message":
-                output_items.append(_replay_item(dumped, ("type", "id", "role", "content")))
+                output_items.append(_replay_item(dumped, ("type", "id", "role", "content", "phase")))
             else:
                 raise ValueError("OpenAI response contained an unsupported output item")
         text = response.output_text if isinstance(response.output_text, str) and response.output_text.strip() else None

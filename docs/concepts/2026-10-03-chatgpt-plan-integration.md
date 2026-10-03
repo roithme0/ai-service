@@ -2,7 +2,7 @@
 
 ## Status
 
-Concept development. Subscription-backed inference is committed planned work in [the planning initiative](../../../plan/Initiatives/ChatGPT%20Plan%20Integration.md); it is not implemented. The agreed initial deployment supports multiple users, each optionally connecting their own ChatGPT plan. The configured API key is the baseline for users without a connected plan. AI Service retains per-user credentials and refreshes them automatically so routine application use requires no repeated ChatGPT login. Other recommendations below remain tentative unless already required by that initiative.
+Concept development. The backend ordered-history foundation is implemented; streaming, explicit retry, and subscription integration remain planned. Subscription-backed inference is committed planned work in [the planning initiative](../../../plan/Initiatives/ChatGPT%20Plan%20Integration.md); it is not implemented. The agreed initial deployment supports multiple users, each optionally connecting their own ChatGPT plan. The configured API key is the baseline for users without a connected plan. AI Service retains per-user credentials and refreshes them automatically so routine application use requires no repeated ChatGPT login. Other recommendations below remain tentative unless already required by that initiative.
 
 ## Context
 
@@ -16,31 +16,35 @@ The API-key baseline and multiple-user initial scope are subsequent user decisio
 
 - `backend/app/agents/wiring.py` creates a process-wide API-key client and fixed-model Kochwiki agent at startup. Missing an API key currently makes that agent unavailable. There is no universal model-backed configuration or provider connection lifecycle.
 - `backend/app/models/openai_agentic_generation.py` already uses Responses, explicit input history, instructions, and `store=False`. It does not stream, sends `max_output_tokens`, and supplies ordinary function tools. Subscription access requires different request construction and supported tool packaging.
-- `backend/app/sessions/tool_turns.py` retains provider output and tool results within one turn. A subsequent turn reconstructs input from initialization context and text messages; prior tool exchanges are lost.
-- The session store retains text and artifacts in process memory for 90 minutes. Failed turns discard their staged artifacts. This does not roll back domain work already performed by tools.
+- The shared session lifecycle retains an ordered, append-only history of messages, provider continuation items, tool calls, execution outcomes, accepted artifact records, and terminal state. `backend/app/sessions/tool_turns.py` records calls before execution and results when returned. Later ordinary model turns replay that history without invoking recorded tools, including service-generated reports for calls that never started or have an unknown outcome.
+- The session store retains history and artifacts in process memory for 90 minutes. A completed tool's validated artifact survives later generation failure or cancellation; candidates not returned or accepted leave no session artifact state. Active-turn artifacts remain hidden until termination, and retained artifacts consume session capacity. Failed-turn artifacts are retrievable through backend session reads; their frontend display remains deferred. Turn failure does not roll back domain work already performed by tools.
 - The HTTP API returns completed turns. The frontend transport expects one JSON response and has no event stream. The shared UI must gain observable tool activity as well as incremental text.
 
 ## Proposed Direction
 
 ### Prerequisites and Starting Point
 
-The agreed next focus is the reusable conversation foundation before ChatGPT connection, subscription routing, and the shared recovery dialog. Exercise that foundation through the existing API-key mode so OAuth setup does not block streaming development. This is conceptual dependency ordering, not an implementation specification.
+The ordered-history foundation is delivered through the existing API-key mode. The next foundation work remains streaming and deliberate recovery before ChatGPT connection, subscription routing, and the shared recovery dialog; OAuth setup need not block that development. This is conceptual dependency ordering, not an implementation specification.
 
 | Foundation | Why it is needed | Evidence that it is ready |
 | --- | --- | --- |
-| Explicit turn lifecycle and retained execution context | Streaming and retry require an authoritative distinction between running, completed, failed, and uncertain work. Subsequent turns need prior tool calls and results. | Multi-turn API-key conversations replay required context; failure after a tool ran retains its actual outcome. |
+| Explicit turn lifecycle and retained execution context | Streaming and retry require an authoritative distinction between running, completed, failed, and uncertain work. Subsequent turns need prior tool calls and results. | Implemented in the backend: multi-turn API-key conversations replay required context, actual returned outcomes, and explicit reports for unresolved calls; completed artifacts survive later failure. |
 | Streaming through provider, runtime, HTTP, controller, and UI | Users need incremental text and observable tool activity before completion. Internal provider streaming alone is insufficient. | An API-key conversation displays text and distinct tool preparation/execution/outcome entries live through the real gateway. |
 | Failure reconciliation and deliberate retry | A disconnected UI must not trigger duplicate execution; a confirmed failed turn must permit an explicit retry without another user-message append. | Connection loss is reconciled; retry after a confirmed failure preserves the message and accounts for completed or uncertain tool actions. |
 | Verified application identity and ownership | Multiple users need isolated conversations and provider connections. | AI Service validates the caller and rejects another user's session/connection access. Required before exposing per-user plan connection, but not a blocker for isolated foundation development. |
 | Provider selection at safe turn boundaries | The recovery dialog must be able to change billing mode without changing domain behavior or losing conversation context. | Provider/model resolution is independent of agent configuration; an explicit change applies to the next eligible attempt without resubmitting in-flight work. |
 
-Start by settling turn identity, attempt identity, terminal states, and the boundary between display events and retained model/execution context. Then make one API-key turn observable through the whole stack, including a tool call and a failure. Extend that behavior to multi-turn retention and explicit retry before attaching subscription recovery to it. These foundations should remain useful even for users who never connect a plan.
+The delivered slice establishes turn associations, terminal states, and retained model/execution context across ordinary turns. Settle attempt identity and the display-event boundary for streaming and explicit retry next. Then make one API-key turn observable through the whole stack, including a tool call and a failure, before attaching subscription recovery to it. These foundations should remain useful even for users who never connect a plan.
 
 Application authentication can be worked out alongside this foundation, but must be established before real users can manage credentials or access each other's isolated resources. ChatGPT provider authorization does not supply the application's identity boundary.
 
 Later subscription work adds persistent per-user credentials, initial authorization for the LAN deployment, the subscription-compatible adapter and model catalog, provider selection, and the shared recovery dialog. The current concept does not yet choose the identity provider, initial login helper, event transport, credential store, or retry execution strategy.
 
 ### Foundation Decisions to Resolve Next
+
+The first bounded slice is implemented as [Ordered Conversation History and Retained Tool Outcomes](../specs/2026-10-03-ordered-conversation-history.md). It provides one authoritative ordered, append-only session history of messages, model continuation items, tool calls, outcomes, accepted artifact records, and terminal state. Record calls before execution, independently of results; consume history without re-executing it. Provider continuation items are model response context, never credentials. Artifact records reference immutable artifacts in a session-owned map and link producing calls, preserving placement for later UI visualization. Tools return validated candidates; orchestration assigns identity and atomically stores the artifact alongside its result and history reference, without staging storage. History determines ordering and publication; the map holds content.
+
+A validated artifact from a successfully completed artifact-producing tool survives later generation failure; candidates not returned or accepted leave no artifact state. This replaces blanket failed-turn artifact removal. The delivered first slice is backend-only: surviving artifacts are retrievable from session reads, while their failed-turn UI display and tool activity visualization are deferred. Replay all recorded tool calls from failed turns on later ordinary messages, including unresolved calls. Supply actual returned results where available; otherwise supply an explicitly service-generated report distinguishing execution never started from execution started with an unknown outcome. Unknown-outcome reports disclose possible completion and advise investigation before repeating a mutation. These reports are distinct from tool-returned results. Retention guides the model toward finishing completed work but does not itself guarantee duplicate-mutation prevention on a later retry.
 
 Prefer a server-owned turn lifecycle with ordered events and a readable authoritative snapshot. A lost stream should lead to reconciliation; it must not be treated as proof that execution stopped. Whether an explicit cancellation stops remaining work is a separate unresolved choice.
 
@@ -110,13 +114,13 @@ Events should cover turn start, provisional text, tool preparation, validated ex
 
 Treat streamed argument fragments as preparation. Execute a tool only once complete arguments have been received and validated. Runtime execution determines completion or failure; a provider function-call event alone cannot establish the tool's execution outcome. Use tool-owned labels and safe input/result summaries, excluding credentials, sensitive payload fields, and private model reasoning.
 
-Keep streamed text provisional until successful turn completion. Provider success requires its completed event; an interrupted, incomplete, or failed stream is a distinct failure even after text has appeared. A whole agent turn succeeds only after orchestration and artifact publication also complete.
+Keep streamed text provisional until successful turn completion. Provider success requires its completed event; an interrupted, incomplete, or failed stream is a distinct failure even after text has appeared. A whole agent turn succeeds only after orchestration and artifact acceptance also complete.
 
 ### History, Failure, and Recovery
 
 Retain model context separately from display history and safe activity summaries. Preserve required provider output items, complete tool calls, and their results across turns within the existing ephemeral session lifetime. Durable conversation storage is not required; durable credentials are.
 
-Retain an authoritative record of tool execution outcomes when a provider response fails after a tool ran. The later specification must decide which failed-turn context is replayable and how discarded presentation artifacts relate to domain proposals that still exist. Never imply a turn failure rolled back domain work, and never automatically repeat a potentially state-changing tool because the UI connection was lost.
+Retain an authoritative record of tool execution outcomes when a provider response fails after a tool ran. Replay both completed and unresolved calls, using clearly identified service execution reports for missing results rather than omitting the exchange or fabricating a tool return. Preserve confirmed results alongside uncertain ones. Completed, validated tool-produced artifacts survive later generation failure, while candidates not returned or accepted leave no artifact state. Domain proposals remain independent of presentation artifacts. Never imply a turn failure rolled back domain work, and never automatically repeat a potentially state-changing tool because the UI connection was lost.
 
 Recommended candidate: UI transport loss triggers session/turn reconciliation, rather than silently replaying the turn. Decide whether explicit cancellation stops work and what terminal outcomes it records separately from disconnect behavior. Cancellation cannot undo a tool already completed.
 
@@ -152,7 +156,7 @@ The immediate discussion concerns the foundation: event transport and lifecycle,
 3. Should connection management initially be an operator workflow, a shared AI Service screen linked from hosts, or an embedded host settings component?
 4. Should a model be selected per new conversation or supplied by configuration after account-catalog validation?
 5. Does a UI disconnect leave the turn running for reconciliation? Is explicit cancellation part of the first streaming release?
-6. What do users see and what context is retained when a tool succeeds but the turn later fails, including the relationship between discarded UI artifacts and domain-owned proposals?
+6. How will later UI slices display retained tool activity and artifacts from failed turns, and how will explicit recovery handle unresolved calls and possible duplicate domain actions? Backend retention and replay boundaries for the first slice are settled in its specification.
 7. Where should the optional plan-connection prompt, shared recovery dialog, and provider/billing indicator appear? How are explicit retry and model selection represented when switching the existing conversation to API-key usage?
 
 ## Risks
