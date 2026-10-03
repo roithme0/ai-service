@@ -13,7 +13,12 @@ CONVERSATION_INSTRUCTIONS = (
     "Service-generated execution reports describe missing results and are not tool returns. "
     "An unknown outcome may already have completed; investigate before repeating a state-changing action. "
     "Intermediate messages are visible to the user in conversation order. "
-    "Use brief intermediate messages for useful progress updates and explanations of your actions. "
+    "Before starting a coherent group of tool calls, send one brief intermediate message "
+    "explaining your intention and the goal in the user's language. "
+    "Group related calls that serve the same goal, such as retrieving information and presenting its results, "
+    "under that single update. "
+    "Send another intermediate message when you move to a new goal or change direction based on findings. "
+    "Keep updates concise and useful so the user can follow your actions without narrating every tool call. "
     "After tool calls have finished, provide a standalone final response containing all relevant "
     "results, conclusions, and uncertainty without requiring the user to read intermediate messages."
 )
