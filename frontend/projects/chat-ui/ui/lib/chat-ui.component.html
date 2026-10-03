@@ -1,5 +1,5 @@
 <section class="chat-ui" aria-label="Chat-Unterhaltung">
-  <div class="history" role="log" aria-live="polite">
+  <div #history class="history" role="log" aria-live="polite">
     <section class="banner">
       <h2>{{ bannerTitle() }}</h2>
       <p>{{ bannerDescription() }}</p>
@@ -27,16 +27,28 @@
           class="status"
           [class.status--error]="status.kind === 'error'"
           [class.status--assistant]="status.placement === 'assistant'"
+          [class.status--delayed]="status.kind === 'loading' && status.reveal === 'delayed'"
         >
-          <p>{{ status.message }}</p>
-          @if (status.action; as action) {
-            <button
-              type="button"
-              class="status-action"
-              (click)="statusActionTriggered.emit(action.id)"
+          @if (statusVisible()) {
+            @for (label of [status]; track label.message) {
+            <div
+              class="status-content"
+              [class.status-content--fade]="
+                status.kind === 'loading'
+              "
             >
-              {{ action.label }}
-            </button>
+              <p>{{ status.message }}</p>
+              @if (status.action; as action) {
+                <button
+                  type="button"
+                  class="status-action"
+                  (click)="statusActionTriggered.emit(action.id)"
+                >
+                  {{ action.label }}
+                </button>
+              }
+            </div>
+            }
           }
         </article>
       }

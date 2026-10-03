@@ -3,21 +3,25 @@ import {
   ConversationApiError,
   ConversationNetworkError,
   type ApiMessage,
-  type ApiArtifact,
   type ConversationTransport,
-  type SessionCreation,
-  type SessionSnapshot,
-  type TurnResult,
 } from './conversation-api';
+import type {
+  ArtifactResponse,
+  AssistantMessageResponse,
+  CompletedTurnResponse,
+  SessionCreationResponse,
+  SessionSnapshotResponse,
+  UserMessageResponse,
+} from '../generated/types.gen';
 import { ConversationController, type ConversationViewState } from './conversation-controller';
 
-const CREATED: SessionCreation = { session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z' };
+const CREATED: SessionCreationResponse = { session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z' };
 
 class FakeTransport implements ConversationTransport {
-  createSession = vi.fn<() => Promise<SessionCreation>>().mockResolvedValue(CREATED);
-  readSession = vi.fn<(sessionId: string) => Promise<SessionSnapshot>>();
-  appendMessage = vi.fn<(sessionId: string, text: string) => Promise<ApiMessage>>();
-  generateTurn = vi.fn<(sessionId: string) => Promise<TurnResult>>();
+  createSession = vi.fn<() => Promise<SessionCreationResponse>>().mockResolvedValue(CREATED);
+  readSession = vi.fn<(sessionId: string) => Promise<SessionSnapshotResponse>>();
+  appendMessage = vi.fn<(sessionId: string, text: string) => Promise<UserMessageResponse>>();
+  generateTurn = vi.fn<(sessionId: string) => Promise<CompletedTurnResponse>>();
 }
 
 describe('ConversationController', () => {
@@ -25,9 +29,9 @@ describe('ConversationController', () => {
     const transport = new FakeTransport();
     const later = {
       artifact_id: 'later', type: 'other.result', created_at: '2026-09-25T12:00:00Z',
-      order: 2, turn_id: 'turn-1', payload: { value: 2 },
+      order: 2, turn_id: 'turn-1', payload: { title: "Later", payload: { value: 2 } },
     };
-    const earlier = { ...later, artifact_id: 'earlier', order: 1, payload: { value: 1 } };
+    const earlier = { ...later, artifact_id: 'earlier', order: 1, payload: { title: "Earlier", payload: { value: 1 } } };
     transport.appendMessage.mockResolvedValueOnce(user('Hello')).mockResolvedValueOnce(user('Again'));
     transport.generateTurn.mockResolvedValueOnce({
       kind: 'completed', turn_id: 'turn-1', message: assistant('Hi', 'turn-1'), artifacts: [later, earlier],
@@ -51,10 +55,10 @@ describe('ConversationController', () => {
 
   it('supplies complete envelopes to a custom mapper and applies filtering to turns and reconciled history', async () => {
     const transport = new FakeTransport();
-    const artifact: ApiArtifact = { artifact_id: 'custom', type: 'custom.result',
-      created_at: '2026-09-26T12:00:00Z', order: 1, turn_id: 'turn-1', payload: { value: 1 } };
+    const artifact: ArtifactResponse = { artifact_id: 'custom', type: 'custom.result',
+      created_at: '2026-09-26T12:00:00Z', order: 1, turn_id: 'turn-1', payload: { title: "Earlier", payload: { value: 1 } } };
     const hidden = { ...artifact, artifact_id: 'hidden', order: 2 };
-    const mapper = vi.fn((envelope: ApiArtifact) => envelope.artifact_id === 'hidden' ? null : ({
+    const mapper = vi.fn((envelope: ArtifactResponse) => envelope.artifact_id === 'hidden' ? null : ({
       kind: 'artifact' as const, id: envelope.artifact_id, type: envelope.type,
       headline: 'Custom headline', payload: { mapped: true },
     }));
@@ -110,6 +114,45 @@ describe('ConversationController', () => {
     expect(controller.state.status?.action?.id).toBe('new-session');
   });
 
+  it.each([
+    { kind: 'not_found', status: 404, message: 'Der API-Endpunkt ist nicht verfügbar.' },
+    { kind: 'method_not_allowed', status: 405, message: 'App und Backend sind nicht kompatibel.' },
+  ] as const)('reports $kind during create, append, and turn without retry', async ({ kind, status, message }) => {
+    for (const operation of ['create', 'append', 'turn'] as const) {
+      const transport = new FakeTransport();
+      const error = new ConversationApiError(status, kind);
+      if (operation === 'create') transport.createSession.mockRejectedValue(error);
+      if (operation === 'append') transport.appendMessage.mockRejectedValue(error);
+      if (operation === 'turn') {
+        transport.appendMessage.mockResolvedValue(user('Hallo'));
+        transport.generateTurn.mockRejectedValue(error);
+      }
+      const controller = new ConversationController(transport, () => undefined);
+      await controller.start();
+      if (operation !== 'create') await controller.submit('Hallo', () => undefined);
+
+      expect(controller.state.composerDisabled).toBe(true);
+      expect(controller.state.status?.message).toBe(message);
+      expect(controller.state.status?.action).toBeUndefined();
+    }
+  });
+
+  it.each([
+    { kind: 'not_found', status: 404, message: 'Der API-Endpunkt ist nicht verfügbar.' },
+    { kind: 'method_not_allowed', status: 405, message: 'App und Backend sind nicht kompatibel.' },
+  ] as const)('preserves $kind found during turn reconciliation', async ({ kind, status, message }) => {
+    const transport = new FakeTransport();
+    transport.appendMessage.mockResolvedValue(user('Hallo'));
+    transport.generateTurn.mockRejectedValue(new ConversationNetworkError('Timeout'));
+    transport.readSession.mockRejectedValue(new ConversationApiError(status, kind));
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    await controller.submit('Hallo', () => undefined);
+
+    expect(controller.state.status?.message).toBe(message);
+    expect(controller.state.status?.action).toBeUndefined();
+  });
+
   it('reports agent unavailability during message append', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
@@ -140,8 +183,8 @@ describe('ConversationController', () => {
 
   it('starts empty and publishes an accepted turn without optimistic messages', async () => {
     const transport = new FakeTransport();
-    const append = deferred<ApiMessage>();
-    const turn = deferred<TurnResult>();
+    const append = deferred<UserMessageResponse>();
+    const turn = deferred<CompletedTurnResponse>();
     transport.appendMessage.mockReturnValue(append.promise);
     transport.generateTurn.mockReturnValue(turn.promise);
     const states: ConversationViewState[] = [];
@@ -187,7 +230,7 @@ describe('ConversationController', () => {
       'text', 'artifact', 'text',
     ]);
     expect(controller.state.content[1]).toEqual(expect.objectContaining({
-      id: 'artifact-1', type: 'example.result', headline: 'example.result',
+      id: 'artifact-1', type: 'example.result', headline: 'Example',
     }));
   });
 
@@ -329,7 +372,7 @@ describe('ConversationController', () => {
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Hallo', () => undefined);
-    const replacement = deferred<SessionCreation>();
+    const replacement = deferred<SessionCreationResponse>();
     transport.createSession.mockReturnValueOnce(replacement.promise);
 
     const restarting = controller.performAction('new-session');
@@ -345,7 +388,7 @@ describe('ConversationController', () => {
     ['expired', 410],
     ['unknown', 404],
     ['limit_reached', 409],
-  ])('offers a new session after the terminal %s outcome', async (kind, status) => {
+  ] as const)('offers a new session after the terminal %s outcome', async (kind, status) => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationApiError(status, kind));
     const controller = new ConversationController(transport, () => undefined);
@@ -361,9 +404,10 @@ describe('ConversationController', () => {
   });
 });
 
-function snapshot(messages: readonly ApiMessage[]): SessionSnapshot {
+function snapshot(messages: ApiMessage[]): SessionSnapshotResponse {
   return {
     session_id: 'session-1',
+    expires_at: CREATED.expires_at,
     messages,
     artifacts: [],
     terminal_turn_id: null,
@@ -371,22 +415,22 @@ function snapshot(messages: readonly ApiMessage[]): SessionSnapshot {
   };
 }
 
-function artifact(artifactId: string, turnId: string): ApiArtifact {
+function artifact(artifactId: string, turnId: string): ArtifactResponse {
   return {
     artifact_id: artifactId,
     type: 'example.result',
     created_at: '2026-09-25T12:00:00Z',
     order: 1,
     turn_id: turnId,
-    payload: { message: 'Example result' },
+    payload: { title: 'Example', payload: { message: 'Example result' } },
   };
 }
 
-function user(text: string): ApiMessage {
+function user(text: string): UserMessageResponse {
   return { role: 'user', text, turn_id: null };
 }
 
-function assistant(text: string, turnId: string): ApiMessage {
+function assistant(text: string, turnId: string): AssistantMessageResponse {
   return { role: 'assistant', text, turn_id: turnId };
 }
 

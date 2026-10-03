@@ -1,16 +1,34 @@
 import type { ChatArtifact, JsonValue } from '@roithme0/chat-ui/ui';
-import { ConversationNetworkError, type ApiArtifact } from './conversation-api';
+import { ConversationNetworkError } from './conversation-api';
+import type { ArtifactResponse } from '../generated/types.gen';
 
-export function presentJsonArtifact(artifact: ApiArtifact): ChatArtifact {
+export function presentJsonArtifact(artifact: ArtifactResponse): ChatArtifact {
   if (!isJsonValue(artifact.payload)) {
     throw new ConversationNetworkError('Der Backend-Dienst hat eine ungültige Antwort gesendet.');
   }
   return {
     kind: 'artifact',
     id: artifact.artifact_id,
-    type: artifact.type,
+    type: 'json',
     headline: artifact.type,
-    payload: artifact.payload,
+    payload: { value: artifact.payload },
+  };
+}
+
+export function presentArtifact(artifact: ArtifactResponse): ChatArtifact {
+  const envelope = artifact.payload;
+  if (!isJsonValue(envelope) || envelope === null || Array.isArray(envelope)
+    || typeof envelope !== 'object' || typeof envelope['title'] !== 'string'
+    || !envelope['title'].trim() || !('payload' in envelope)
+    || (envelope['subtitle'] != null && (typeof envelope['subtitle'] !== 'string' || !envelope['subtitle'].trim()))
+    || (envelope['metadata'] != null && (typeof envelope['metadata'] !== 'object' || Array.isArray(envelope['metadata'])))) {
+    throw new ConversationNetworkError('Der Backend-Dienst hat eine ung\u00fcltige Darstellung gesendet.');
+  }
+  return {
+    kind: 'artifact', id: artifact.artifact_id, type: artifact.type,
+    headline: envelope['title'], payload: envelope['payload'],
+    ...(typeof envelope['subtitle'] === 'string' ? { subtitle: envelope['subtitle'] } : {}),
+    ...(envelope['metadata'] != null ? { metadata: envelope['metadata'] as { readonly [key: string]: JsonValue } } : {}),
   };
 }
 

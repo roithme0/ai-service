@@ -6,20 +6,20 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app.agents.recipe import RecipeAgent, create_recipe_agent
+from app.sessions.model_sessions import ModelAgent, create_model_agent
 from app.agents.wiring import configure_agents
 from app.core.config import Settings
 from app.main import app
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.http import (
-    AgentTransport, ConversationTransport, _demo_issue, _recipe_input,
-    _recipe_issue, get_agent_registry,
+    AgentTransport, ConversationTransport, _demo_issue,
+    _context_issue, get_agent_registry,
 )
 from app.agents.demo import create_demo_agent
-from app.recipe_improvement.session_lifecycle import new_recipe_session_store
-from app.recipe_improvement.instructions import RECIPE_IMPROVEMENT_INSTRUCTIONS
-from app.recipe_improvement.resolver import RecipePresentation
-from app.sessions.text_sessions import MAX_MESSAGE_COUNT
+from app.sessions.model_sessions import new_model_session_store
+from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
+from app.sessions.context import MAX_CONTEXT_LENGTH
+from app.sessions.text_sessions import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 
 
 RECIPE_VERSION_UUID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
@@ -52,25 +52,11 @@ class FakeGenerator:
         return AgenticGenerationResponse(output_items=(), tool_calls=(), text=self.text)
 
 
-class FakeResolver:
-    async def resolve(self, candidate: object) -> RecipePresentation:
-        return RecipePresentation.model_validate({
-            "servings": candidate.servings, "preptime": candidate.preparation_time,
-            "kcal": 10.0, "carbs": 2.0, "protein": 1.0, "fat": 0.5,
-            "ingredients": [{"index": item.index, "amount": float(item.amount), "foodstuff": {
-                "id": item.foodstuff_reference, "name": "Current oats", "brand": None,
-                "unit": "G", "unitVerbose": "g", "kcal": 370.0, "carbs": 60.0,
-                "protein": 13.0, "fat": 7.0,
-            }} for item in candidate.ingredients],
-            "steps": [step.model_dump() for step in candidate.steps],
-        })
-
-
 @pytest.fixture
 def client(fake_generator: FakeGenerator) -> Iterator[TestClient]:
-    store = new_recipe_session_store()
-    agent = create_recipe_agent(fake_generator, FakeResolver(), store)
-    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(agent)
+    store = new_model_session_store()
+    agent = create_model_agent(fake_generator, store)
+    app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(agent)
     try:
         yield TestClient(app)
     finally:
@@ -82,22 +68,20 @@ def fake_generator() -> FakeGenerator:
     return FakeGenerator()
 
 
-def recipe_registry(agent: RecipeAgent | None) -> dict[str, ConversationTransport | None]:
-    return {"kochwiki": AgentTransport(agent, _recipe_input, _recipe_issue) if agent else None,
+def kochwiki_registry(agent: ModelAgent | None) -> dict[str, ConversationTransport | None]:
+    return {"kochwiki": AgentTransport(agent, lambda value: value, _context_issue) if agent else None,
             "demo": AgentTransport(create_demo_agent(delay_seconds=0), lambda value: value,
                                    _demo_issue)}
 
 
 def valid_request(foodstuff_reference: int = 1) -> dict[str, object]:
-    return {
+    return {"context": {
         "source": {
             "external_reference": RECIPE_VERSION_UUID,
             "recipe": {
                 "name": "Overnight oats",
                 "servings": 2,
                 "preparation_time": 15,
-                "origin_name": "Kitchen",
-                "origin_url": "https://example.test/overnight-oats",
                 "ingredients": [
                     {"index": 1, "amount": 125.75, "foodstuff_reference": foodstuff_reference}
                 ],
@@ -108,7 +92,7 @@ def valid_request(foodstuff_reference: int = 1) -> dict[str, object]:
             {"external_reference": 1, "name": "Oats", "brand": "Pantry", "unit": "G",
              "unit_verbose": "g", "kcal": 370, "carbs": 60, "protein": 13, "fat": 7}
         ],
-    }
+    }}
 
 
 def test_create_and_read_return_accepted_snapshots_without_derived_index(client: TestClient) -> None:
@@ -136,7 +120,7 @@ def test_create_and_read_return_accepted_snapshots_without_derived_index(client:
 
 def test_integer_amount_is_accepted_without_exposing_input(client: TestClient) -> None:
     request = valid_request()
-    request["source"]["recipe"]["ingredients"][0]["amount"] = 125
+    request["context"]["source"]["recipe"]["ingredients"][0]["amount"] = 125
 
     initial_creation = client.post("/api/v1/agents/kochwiki/sessions", json={"input": request})
 
@@ -151,37 +135,30 @@ def test_integer_amount_is_accepted_without_exposing_input(client: TestClient) -
 
 def test_oversized_initial_snapshot_context_is_rejected_at_creation(client: TestClient) -> None:
     request = valid_request()
-    request["foodstuffs"] = [
-        {"external_reference": index, "name": "N" * 50, "brand": "B" * 100, "unit": "G",
-         "unit_verbose": "g", "kcal": None, "carbs": None, "protein": None, "fat": None}
-        for index in range(1, 101)
-    ]
+    request["context"] = {"description": "x" * MAX_CONTEXT_LENGTH}
 
     response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": request})
 
     assert response.status_code == 422
     assert response.json()["kind"] == "invalid_input"
-    assert response.json()["issues"] == [
-        {"location": ["input"], "message": "initial source recipe and foodstuffs context exceeds 16000 characters"}
+    assert response.json()["detail"] == [
+        {"loc": ["body", "input", "context"], "msg": f"initial context exceeds {MAX_CONTEXT_LENGTH} characters",
+         "type": "value_error"}
     ]
 
 
 @pytest.mark.parametrize(
     ("payload", "location"),
-    [
-        ({**valid_request(), "source": {**valid_request()["source"], "external_reference": "bad"}}, ["source", "external_reference"]),
-        ({**valid_request(), "foodstuffs": []}, ["source", "recipe", "ingredients", 0, "foodstuff_reference"]),
-    ],
+    [(None, []), ({}, ["context"]), ({"context": []}, ["context"]),
+     ({"context": {}, "tools": []}, ["tools"])],
 )
-def test_invalid_input_returns_domain_issues_and_does_not_create_session(
-    client: TestClient, payload: dict[str, object], location: list[str | int]
+def test_invalid_context_returns_details_without_creating_session(
+    client: TestClient, payload: object, location: list[str | int]
 ) -> None:
     response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": payload})
-
     assert response.status_code == 422
-    body = response.json()
-    assert body["kind"] == "invalid_input"
-    assert body["issues"][0]["location"] == ["input", *location]
+    assert response.json()["kind"] == "invalid_input"
+    assert response.json()["detail"][0]["loc"] == ["body", "input", *location]
     assert client.get("/api/v1/agents/kochwiki/sessions/not-created").status_code == 404
 
 
@@ -189,13 +166,40 @@ def test_unknown_session_returns_not_found(client: TestClient) -> None:
     response = client.get("/api/v1/agents/kochwiki/sessions/missing")
 
     assert response.status_code == 404
-    assert response.json() == {"kind": "unknown"}
+    assert response.json() == {"detail": "Session not found", "kind": "unknown"}
+
+
+def test_arbitrary_domain_context_is_retained_for_every_turn(
+    client: TestClient, fake_generator: FakeGenerator,
+) -> None:
+    context = {"device": {"id": "lamp", "enabled": False}, "metadata": [None, 1.25, "1.250"]}
+    creation = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {"context": context}})
+    assert creation.status_code == 201
+    session_url = f"/api/v1/agents/kochwiki/sessions/{creation.json()['session_id']}"
+    for text in ("first", "second"):
+        assert client.post(f"{session_url}/messages", json={"text": text}).status_code == 201
+        assert client.post(f"{session_url}/turns").status_code == 201
+    first_context = str(fake_generator.calls[0].input_items[0]["content"])
+    assert json.loads(first_context.split("\n", 1)[1]) == context
+    assert fake_generator.calls[1].input_items[0]["content"] == first_context
+    assert "context" not in client.get(session_url).json()
+
+
+@pytest.mark.parametrize("number", ["NaN", "Infinity", "-Infinity"])
+def test_http_rejects_non_finite_context_numbers(client: TestClient, number: str) -> None:
+    response = client.post(
+        "/api/v1/agents/kochwiki/sessions",
+        content='{"input":{"context":{"number":' + number + '}}}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 422
+    assert response.json()["kind"] == "invalid_input"
 
 
 def test_retained_expired_session_returns_gone_without_snapshot() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
-    store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(create_recipe_agent(FakeGenerator(), FakeResolver(), store))
+    store = new_model_session_store(clock=clock.now)
+    app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(create_model_agent(FakeGenerator(), store))
     try:
         client = TestClient(app)
         created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
@@ -212,7 +216,7 @@ def test_retained_expired_session_returns_gone_without_snapshot() -> None:
         response = client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}")
 
         assert response.status_code == 410
-        assert response.json() == {"kind": "expired"}
+        assert response.json() == {"detail": "Session expired", "kind": "expired"}
         assert "source" not in response.json()
         assert client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}").status_code == 404
     finally:
@@ -228,13 +232,13 @@ def test_user_messages_append_in_order_and_preserve_submitted_text(client: TestC
     read = client.get(session_url)
 
     assert first.status_code == 201
-    assert first.json() == {"role": "user", "text": "  Make it lighter.  "}
+    assert first.json() == {"role": "user", "text": "  Make it lighter.  ", "turn_id": None}
     assert second.status_code == 201
-    assert second.json() == {"role": "user", "text": "Keep it filling."}
+    assert second.json() == {"role": "user", "text": "Keep it filling.", "turn_id": None}
     assert read.status_code == 200
     assert read.json()["messages"] == [
-        {"role": "user", "text": "  Make it lighter.  "},
-        {"role": "user", "text": "Keep it filling."},
+        {"role": "user", "text": "  Make it lighter.  ", "turn_id": None},
+        {"role": "user", "text": "Keep it filling.", "turn_id": None},
     ]
 
 
@@ -246,7 +250,7 @@ def test_user_messages_append_in_order_and_preserve_submitted_text(client: TestC
         {"text": 123},
         {"text": ""},
         {"text": " \t "},
-        {"text": "x" * 4_001},
+        {"text": "x" * (MAX_MESSAGE_LENGTH + 1)},
     ],
 )
 def test_rejected_user_messages_do_not_change_the_conversation(
@@ -276,13 +280,15 @@ def test_message_limit_returns_conflict_without_appending(client: TestClient) ->
     assert rejected.status_code == 409
     assert read.status_code == 200
     assert len(read.json()["messages"]) == MAX_MESSAGE_COUNT - 1
-    assert read.json()["messages"][-1] == {"role": "user", "text": "98"}
+    assert read.json()["messages"][-1] == {
+        "role": "user", "text": str(MAX_MESSAGE_COUNT - 2), "turn_id": None,
+    }
 
 
 def test_unknown_and_expired_user_message_appends_do_not_expose_session_content() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
-    store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(create_recipe_agent(FakeGenerator(), FakeResolver(), store))
+    store = new_model_session_store(clock=clock.now)
+    app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(create_model_agent(FakeGenerator(), store))
     try:
         client = TestClient(app)
         unknown = client.post(
@@ -298,9 +304,9 @@ def test_unknown_and_expired_user_message_appends_do_not_expose_session_content(
         read = client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}")
 
         assert unknown.status_code == 404
-        assert unknown.json() == {"kind": "unknown"}
+        assert unknown.json() == {"detail": "Session not found", "kind": "unknown"}
         assert expired.status_code == 410
-        assert expired.json() == {"kind": "expired"}
+        assert expired.json() == {"detail": "Session expired", "kind": "expired"}
         assert "messages" not in expired.json()
         assert read.status_code == 404
     finally:
@@ -309,8 +315,8 @@ def test_unknown_and_expired_user_message_appends_do_not_expose_session_content(
 
 def test_user_message_append_and_read_preserve_the_fixed_expiry() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
-    store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(create_recipe_agent(FakeGenerator(), FakeResolver(), store))
+    store = new_model_session_store(clock=clock.now)
+    app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(create_model_agent(FakeGenerator(), store))
     try:
         client = TestClient(app)
         created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
@@ -354,12 +360,11 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
     assert '"name":"Overnight oats"' in recipe_context
     assert '"name":"Oats"' in recipe_context
     assert "availability_reference_index" not in recipe_context
-    assert generation_request.instructions == RECIPE_IMPROVEMENT_INSTRUCTIONS
-    assert "stated goals, preferences, and constraints" in generation_request.instructions
-    assert "For health-related questions" in generation_request.instructions
-    assert "register_recipe_proposal" in generation_request.instructions
+    assert generation_request.instructions == CONVERSATION_INSTRUCTIONS
+    assert "register_recipe_proposal" not in generation_request.instructions
+    assert generation_request.tools == ()
     assert read.json()["messages"] == [
-        {"role": "user", "text": "  question  "},
+        {"role": "user", "text": "  question  ", "turn_id": None},
         {
             "role": "assistant",
             "text": "Test reply",
@@ -368,35 +373,37 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
     ]
 
 
-@pytest.mark.parametrize("missing", ["openai_api_key", "recipe_improvement_openai_model", "kochwiki_base_url"])
-def test_recipe_agent_requires_every_setting(missing: str) -> None:
+@pytest.mark.parametrize("missing", ["openai_api_key", "kochwiki_openai_model", "kochwiki_mcp_url"])
+def test_kochwiki_agent_requires_every_setting(missing: str) -> None:
     values = {
         "openai_api_key": "test-key",
-        "recipe_improvement_openai_model": "test-model",
-        "kochwiki_base_url": "https://kochwiki.test/api",
+        "kochwiki_openai_model": "test-model",
+        "kochwiki_mcp_url": "https://kochwiki.test/mcp/",
     }
     values[missing] = None
     agents = configure_agents(Settings(_env_file=None, **values))
-    assert agents.recipe is None
-    assert agents.demo.create({}).session_id
+    assert agents.kochwiki.agent is None
+    assert agents.demo.agent is not None
+    assert agents.demo.agent.create({}).session_id
 
 
-def test_locally_valid_recipe_configuration_constructs_agent_without_remote_probe() -> None:
+def test_locally_valid_kochwiki_configuration_constructs_agent_without_remote_probe() -> None:
     agents = configure_agents(Settings(
         _env_file=None,
         openai_api_key="test-key",
-        recipe_improvement_openai_model="test-model",
-        kochwiki_base_url="https://kochwiki.test/api",
+        kochwiki_openai_model="test-model",
+        kochwiki_mcp_url="https://kochwiki.test/mcp/",
     ))
     try:
-        assert agents.recipe is not None
-        assert agents.demo.create(None).session_id
+        assert agents.kochwiki.agent is not None
+        assert agents.demo.agent is not None
+        assert agents.demo.agent.create(None).session_id
     finally:
         asyncio.run(agents.close())
 
 
 def test_all_recipe_endpoints_report_unavailable() -> None:
-    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(None)
+    app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(None)
     try:
         client = TestClient(app)
         prefix = "/api/v1/agents/kochwiki/sessions"
@@ -409,7 +416,7 @@ def test_all_recipe_endpoints_report_unavailable() -> None:
             client.post(f"{prefix}/missing/turns"),
         ]
         assert all(response.status_code == 503 for response in responses)
-        assert all(response.json() == {"kind": "agent_unavailable"} for response in responses)
+        assert all(response.json() == {"detail": "Agent unavailable", "kind": "agent_unavailable"} for response in responses)
     finally:
         app.dependency_overrides.clear()
 
@@ -423,9 +430,9 @@ def test_turn_endpoint_reports_unknown_and_not_ready(
     not_ready = client.post(f"{session_url}/turns")
 
     assert unknown.status_code == 404
-    assert unknown.json() == {"kind": "unknown"}
+    assert unknown.json() == {"detail": "Session not found", "kind": "unknown"}
     assert not_ready.status_code == 409
-    assert not_ready.json() == {"kind": "not_ready"}
+    assert not_ready.json() == {"detail": "Session is not ready for a turn", "kind": "not_ready"}
     assert fake_generator.calls == []
 
 
@@ -442,7 +449,7 @@ def test_turn_endpoint_reports_generation_failure_without_appending(
     assert response.status_code == 502
     assert response.json()["kind"] == "generation_failed"
     assert response.json()["turn_id"]
-    assert client.get(session_url).json()["messages"] == [{"role": "user", "text": "question"}]
+    assert client.get(session_url).json()["messages"] == [{"role": "user", "text": "question", "turn_id": None}]
 
 
 def test_turn_endpoint_rejects_reply_after_new_message(
@@ -455,7 +462,7 @@ def test_turn_endpoint_rejects_reply_after_new_message(
     def append_another_message() -> None:
         blocked = client.post(f"{session_url}/messages", json={"text": "second"})
         assert blocked.status_code == 409
-        assert blocked.json() == {"kind": "busy"}
+        assert blocked.json() == {"detail": "Session is busy", "kind": "busy"}
 
     fake_generator.before_return = append_another_message
 
@@ -463,7 +470,7 @@ def test_turn_endpoint_rejects_reply_after_new_message(
 
     assert response.status_code == 201
     assert client.get(session_url).json()["messages"] == [
-        {"role": "user", "text": "first"},
+        {"role": "user", "text": "first", "turn_id": None},
         {
             "role": "assistant",
             "text": "Test reply",
@@ -474,8 +481,8 @@ def test_turn_endpoint_rejects_reply_after_new_message(
 
 def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGenerator) -> None:
     clock = MutableClock(datetime(2026, 9, 13, 10, 30, tzinfo=UTC))
-    store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(create_recipe_agent(fake_generator, FakeResolver(), store))
+    store = new_model_session_store(clock=clock.now)
+    app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(create_model_agent(fake_generator, store))
     try:
         client = TestClient(app)
         created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
@@ -520,17 +527,13 @@ def test_turn_endpoint_uses_reserved_assistant_capacity(
     assert len(fake_generator.calls) == 1
 
 
-def test_partial_failure_drops_accepted_proposals_and_retry_is_stable(
+def test_unknown_retired_tool_and_failed_final_keep_retry_stable(
     client: TestClient, fake_generator: FakeGenerator
 ) -> None:
     created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
     session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
     client.post(f"{session_url}/messages", json={"text": "Propose one"})
-    recipe = valid_request()["source"]["recipe"]
-    recipe.pop("origin_name")
-    recipe.pop("origin_url")
-    recipe["ingredients"][0]["amount"] = "125.75"
-    arguments = json.dumps({"base": {"kind": "source"}, "candidate": recipe})
+    arguments = "{}"
     fake_generator.responses = [
         AgenticGenerationResponse(
             output_items=({"type": "function_call", "call_id": "call_1",
@@ -546,59 +549,23 @@ def test_partial_failure_drops_accepted_proposals_and_retry_is_stable(
 
     assert first.status_code == retry.status_code == 502
     assert first.json() == retry.json()
-    assert first.json() == {"kind": "generation_failed", "turn_id": first.json()["turn_id"]}
+    assert first.json() == {
+        "detail": "Turn generation failed", "kind": "generation_failed", "turn_id": first.json()["turn_id"]
+    }
     assert len(fake_generator.calls) == 2
+    assert fake_generator.calls[0].tools == ()
+    tool_output = fake_generator.calls[1].input_items[-1]["output"]
+    assert isinstance(tool_output, str)
+    assert json.loads(tool_output) == {"kind": "rejected", "reason": "unknown_tool"}
     assert read.json()["artifacts"] == []
     assert read.json()["terminal_turn_id"] == first.json()["turn_id"]
-    assert read.json()["messages"] == [{"role": "user", "text": "Propose one"}]
-
-
-def test_session_read_only_exposes_completed_turn_artifacts(
-    client: TestClient, fake_generator: FakeGenerator
-) -> None:
-    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
-    session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
-    client.post(f"{session_url}/messages", json={"text": "Propose one"})
-    recipe = valid_request()["source"]["recipe"]
-    recipe.pop("origin_name")
-    recipe.pop("origin_url")
-    recipe["ingredients"][0]["amount"] = "125.75"
-    arguments = json.dumps({"base": {"kind": "source"}, "candidate": recipe})
-    fake_generator.responses = [
-        AgenticGenerationResponse(
-            output_items=({"type": "function_call", "call_id": "call_1",
-                           "name": "register_recipe_proposal", "arguments": arguments},),
-            tool_calls=(AgenticToolCall("call_1", "register_recipe_proposal", arguments),),
-            text=None,
-        ),
-        AgenticGenerationResponse((), (), "Here is a proposal."),
-    ]
-
-    def check_pending_proposal() -> None:
-        if len(fake_generator.calls) != 2:
-            return
-        pending = client.get(session_url).json()["artifacts"]
-        assert pending == []
-
-    fake_generator.before_return = check_pending_proposal
-    turn = client.post(f"{session_url}/turns")
-
-    assert turn.status_code == 201
-    artifact = turn.json()["artifacts"][0]
-    history = client.get(session_url).json()["artifacts"]
-    assert history == [artifact]
-    assert artifact["artifact_id"]
-    assert artifact["type"] == "recipe.proposal"
-    assert artifact["order"] == 1
-    assert artifact["turn_id"] == turn.json()["turn_id"]
-    assert artifact["payload"]["name"] == "Overnight oats"
-    assert artifact["payload"]["recipe"]["ingredients"][0]["foodstuff"]["name"] == "Current oats"
+    assert read.json()["messages"] == [{"role": "user", "text": "Propose one", "turn_id": None}]
 
 
 def test_session_history_reports_expiry_then_unknown() -> None:
     clock = MutableClock(datetime(2026, 9, 12, 10, 30, tzinfo=UTC))
-    store = new_recipe_session_store(clock=clock.now)
-    app.dependency_overrides[get_agent_registry] = lambda: recipe_registry(create_recipe_agent(FakeGenerator(), FakeResolver(), store))
+    store = new_model_session_store(clock=clock.now)
+    app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(create_model_agent(FakeGenerator(), store))
     try:
         client = TestClient(app)
         created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
@@ -609,8 +576,106 @@ def test_session_history_reports_expiry_then_unknown() -> None:
         unknown = client.get(session_url)
 
         assert expired.status_code == 410
-        assert expired.json() == {"kind": "expired"}
+        assert expired.json() == {"detail": "Session expired", "kind": "expired"}
         assert unknown.status_code == 404
-        assert unknown.json() == {"kind": "unknown"}
+        assert unknown.json() == {"detail": "Session not found", "kind": "unknown"}
     finally:
         app.dependency_overrides.clear()
+
+
+JSON_CAPABILITY = {
+    "type": "json", "description": "Show structured data deliberately",
+    "titleDescription": "Use a short label describing the data.",
+    "subtitleDescription": "Omit unless a secondary label is useful.",
+    "payloadSchema": {"type": "object", "properties": {"value": {}},
+                      "required": ["value"], "additionalProperties": False},
+}
+
+
+def presentation_response(arguments: object) -> AgenticGenerationResponse:
+    call = AgenticToolCall("presentation-call", "present_artifact", json.dumps(arguments))
+    return AgenticGenerationResponse(({
+        "type": "function_call", "call_id": call.call_id,
+        "name": call.name, "arguments": call.arguments,
+    },), (call,), None)
+
+
+def test_advertised_presentation_is_validated_published_and_retained(client: TestClient, fake_generator: FakeGenerator) -> None:
+    capability = {**JSON_CAPABILITY, "metadataSchema": {"type": "object",
+        "properties": {"reference": {"type": "string"}}, "additionalProperties": False}}
+    metadata = {"reference": "stored-object"}
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
+        "context": {"selected": "Oats"}, "artifactCapabilities": [capability],
+    }})
+    session_id = created.json()["session_id"]
+    base = f"/api/v1/agents/kochwiki/sessions/{session_id}"
+    client.post(base + "/messages", json={"text": "Show the ingredient"})
+    fake_generator.responses = [
+        presentation_response({"type": "missing", "title": "Ingredient", "payload": {"value": {}}}),
+        presentation_response({"type": "json", "title": "Ingredient", "payload": {"wrong": 1}}),
+        presentation_response({"type": "json", "title": "Ingredient", "subtitle": "Example brand", "payload": {"value": {"name": "Oats"}}, "metadata": metadata}),
+    ]
+    response = client.post(base + "/turns", json={})
+    assert response.status_code == 201
+    artifacts = response.json()["artifacts"]
+    assert len(artifacts) == 1
+    assert artifacts[0]["type"] == "json"
+    assert artifacts[0]["payload"] == {"title": "Ingredient", "subtitle": "Example brand", "payload": {"value": {"name": "Oats"}}, "metadata": metadata}
+    assert artifacts[0]["order"] == 1
+    assert artifacts[0]["artifact_id"]
+    assert artifacts[0]["turn_id"] == response.json()["turn_id"]
+    assert client.get(base).json()["artifacts"] == artifacts
+    request = fake_generator.calls[0]
+    assert [tool["name"] for tool in request.tools] == ["present_artifact"]
+    assert "Show structured data deliberately" in request.instructions
+    assert "payloadSchema" in request.instructions
+    assert JSON_CAPABILITY["titleDescription"] in request.instructions
+    assert JSON_CAPABILITY["subtitleDescription"] in request.instructions
+    outputs = [json.loads(str(item["output"])) for item in fake_generator.calls[-1].input_items
+               if item.get("type") == "function_call_output"]
+    assert [item.get("reason", item["kind"]) for item in outputs] == ["unsupported_type", "invalid_payload", "presented"]
+    assert "payload" not in outputs[-1]
+    # A later turn receives the same presentation capability.
+    client.post(base + "/messages", json={"text": "Continue"})
+    assert client.post(base + "/turns", json={}).status_code == 201
+    assert [tool["name"] for tool in fake_generator.calls[-1].tools] == ["present_artifact"]
+
+
+def test_failed_turn_discards_staged_presentations(client: TestClient, fake_generator: FakeGenerator) -> None:
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
+        "context": {}, "artifactCapabilities": [JSON_CAPABILITY],
+    }})
+    base = "/api/v1/agents/kochwiki/sessions/" + created.json()["session_id"]
+    client.post(base + "/messages", json={"text": "Show data"})
+    fake_generator.responses = [
+        presentation_response({"type": "json", "title": "Data", "payload": {"value": [1, None]}}),
+        AgenticGenerationResponse((), (), ""),
+    ]
+    assert client.post(base + "/turns", json={}).status_code == 502
+    assert client.get(base).json()["artifacts"] == []
+    assert client.post(base + "/turns", json={}).status_code == 502
+    assert len(fake_generator.calls) == 2
+
+
+def test_no_capabilities_means_no_presentation_tool(client: TestClient, fake_generator: FakeGenerator) -> None:
+    created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {"context": {}}})
+    base = "/api/v1/agents/kochwiki/sessions/" + created.json()["session_id"]
+    client.post(base + "/messages", json={"text": "Hi"})
+    assert client.post(base + "/turns", json={}).status_code == 201
+    assert fake_generator.calls[0].tools == ()
+
+
+@pytest.mark.parametrize("capabilities", [
+    [JSON_CAPABILITY, JSON_CAPABILITY],
+    [{**JSON_CAPABILITY, "payloadSchema": {"type": "not-a-type"}}],
+    [{**JSON_CAPABILITY, "payloadSchema": {"$ref": "https://example.test/schema"}}],
+    [{**JSON_CAPABILITY, "payloadSchema": {"$schema": "http://json-schema.org/draft-07/schema#"}}],
+    [{**JSON_CAPABILITY, "metadataSchema": {"type": "not-a-type"}}],
+    [{**JSON_CAPABILITY, "metadataSchema": {"$ref": "https://example.test/schema"}}],
+])
+def test_invalid_capabilities_reject_session_creation(client: TestClient, capabilities: object) -> None:
+    response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
+        "context": {}, "artifactCapabilities": capabilities,
+    }})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][:3] == ["body", "input", "artifactCapabilities"]

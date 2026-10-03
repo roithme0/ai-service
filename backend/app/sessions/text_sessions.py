@@ -11,8 +11,8 @@ from typing import Generic, Literal, TypeVar, cast
 from uuid import uuid4
 
 
-MAX_MESSAGE_COUNT = 100
-MAX_MESSAGE_LENGTH = 4_000
+MAX_MESSAGE_COUNT = 200
+MAX_MESSAGE_LENGTH = 16_000
 
 SessionRole = Literal["user", "assistant"]
 T = TypeVar("T")

@@ -2,15 +2,15 @@ import type { ChatArtifact, ChatContent, ChatConversationStatus, ChatTextMessage
 import {
   ConversationApiError,
   ConversationNetworkError,
-  type ApiArtifact,
+  type ApiErrorKind,
   type ApiMessage,
   type ConversationTransport,
-  type SessionSnapshot,
 } from './conversation-api';
+import type { ArtifactResponse, SessionSnapshotResponse } from '../generated/types.gen';
 
-import { presentJsonArtifact } from './generic-artifact-mapper';
+import { presentArtifact } from './generic-artifact-mapper';
 
-export type ArtifactMapper = (artifact: ApiArtifact) => ChatArtifact | null;
+export type ArtifactMapper = (artifact: ArtifactResponse) => ChatArtifact | null;
 
 export interface ConversationViewState {
   readonly content: readonly ChatContent[];
@@ -31,7 +31,7 @@ export class ConversationController {
   constructor(
     private readonly transport: ConversationTransport,
     private readonly publish: (state: ConversationViewState) => void,
-    private readonly mapArtifact: ArtifactMapper = presentJsonArtifact,
+    private readonly mapArtifact: ArtifactMapper = presentArtifact,
   ) {}
 
   get state(): ConversationViewState {
@@ -49,6 +49,10 @@ export class ConversationController {
       this.sessionId = created.session_id;
       this.setState({ content: [], composerDisabled: false, status: null });
     } catch (error: unknown) {
+      if (isUnsupportedApiRequest(error)) {
+        this.setUnsupportedApiRequest(error);
+        return;
+      }
       this.setState({
         ...this.stateValue,
         composerDisabled: true,
@@ -69,7 +73,7 @@ export class ConversationController {
     this.setState({
       ...this.stateValue,
       composerDisabled: true,
-      status: loading('Nachricht wird gesendet …', 'assistant'),
+      status: { ...loading('Nachricht wird gesendet …', 'assistant'), reveal: 'delayed' },
     });
     try {
       const accepted = await this.transport.appendMessage(sessionId, text);
@@ -173,14 +177,14 @@ export class ConversationController {
       this.applyTurnSnapshot(snapshot);
     } catch (error: unknown) {
       this.handleTurnFailure(
-        error instanceof ConversationNetworkError || isKind(error, 'agent_unavailable')
+        error instanceof ConversationNetworkError || isKind(error, 'agent_unavailable') || isUnsupportedApiRequest(error)
           ? error
           : new ConversationNetworkError('Abgleich fehlgeschlagen.', { cause: error }),
       );
     }
   }
 
-  private applyTurnSnapshot(snapshot: SessionSnapshot): void {
+  private applyTurnSnapshot(snapshot: SessionSnapshotResponse): void {
     const content = presentSnapshot(snapshot, this.mapArtifact);
     const last = snapshot.messages.at(-1);
     if (last?.role === 'assistant') {
@@ -211,7 +215,10 @@ export class ConversationController {
   }
 
   private handleAppendFailure(error: unknown): void {
-    if (isKind(error, 'agent_unavailable')) {
+    if (isUnsupportedApiRequest(error)) {
+      this.setUnsupportedApiRequest(error);
+      return;
+    } else if (isKind(error, 'agent_unavailable')) {
       this.setAgentUnavailable();
       return;
     } else if (isTerminal(error)) {
@@ -229,7 +236,9 @@ export class ConversationController {
   }
 
   private handleTurnFailure(error: unknown): void {
-    if (isTerminal(error)) {
+    if (isUnsupportedApiRequest(error)) {
+      this.setUnsupportedApiRequest(error);
+    } else if (isTerminal(error)) {
       this.setTerminal(error);
     } else if (isKind(error, 'agent_unavailable')) {
       this.setAgentUnavailable();
@@ -261,6 +270,19 @@ export class ConversationController {
       ...this.stateValue,
       composerDisabled: true,
       status: failure('Der KI-Agent ist derzeit nicht verfügbar.', 'conversation', 'new-session', 'Erneut versuchen'),
+    });
+  }
+
+  private setUnsupportedApiRequest(error: unknown): void {
+    this.setState({
+      ...this.stateValue,
+      composerDisabled: true,
+      status: failure(
+        isKind(error, 'method_not_allowed')
+          ? 'App und Backend sind nicht kompatibel.'
+          : 'Der API-Endpunkt ist nicht verfügbar.',
+        'conversation',
+      ),
     });
   }
 
@@ -299,7 +321,7 @@ function presentMessage(message: ApiMessage, index: number): ChatTextMessage {
   };
 }
 
-function presentSnapshot(snapshot: SessionSnapshot, mapArtifact: ArtifactMapper): readonly ChatContent[] {
+function presentSnapshot(snapshot: SessionSnapshotResponse, mapArtifact: ArtifactMapper): readonly ChatContent[] {
   if (snapshot.artifacts.length === 0) return presentMessages(snapshot.messages);
   return snapshot.messages.flatMap((message, index) => [
     ...presentArtifacts(snapshot.artifacts.filter((artifact) => artifact.turn_id === message.turn_id), mapArtifact),
@@ -307,7 +329,7 @@ function presentSnapshot(snapshot: SessionSnapshot, mapArtifact: ArtifactMapper)
   ]);
 }
 
-function presentArtifacts(artifacts: readonly ApiArtifact[], mapArtifact: ArtifactMapper): readonly ChatArtifact[] {
+function presentArtifacts(artifacts: readonly ArtifactResponse[], mapArtifact: ArtifactMapper): readonly ChatArtifact[] {
   return [...artifacts]
     .sort((left, right) => left.order - right.order)
     .map(mapArtifact)
@@ -347,8 +369,12 @@ function failure(
     : { kind: 'error', message, placement, action: { id, label } };
 }
 
-function isKind(error: unknown, kind: string): boolean {
+function isKind(error: unknown, kind: ApiErrorKind): boolean {
   return error instanceof ConversationApiError && error.kind === kind;
+}
+
+function isUnsupportedApiRequest(error: unknown): boolean {
+  return isKind(error, 'not_found') || isKind(error, 'method_not_allowed');
 }
 
 function isTerminal(error: unknown): boolean {

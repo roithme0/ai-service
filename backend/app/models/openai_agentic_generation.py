@@ -13,8 +13,8 @@ from app.models.agentic_generation import (
 )
 
 
-OPENAI_REQUEST_TIMEOUT_SECONDS = 60.0
-OPENAI_MAX_OUTPUT_TOKENS = 4_096
+OPENAI_REQUEST_TIMEOUT_SECONDS = 120.0
+OPENAI_MAX_OUTPUT_TOKENS = 16_384
 
 logger = logging.getLogger(__name__)
 

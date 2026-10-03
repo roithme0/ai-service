@@ -17,7 +17,9 @@ export interface ChatArtifact<TPayload extends JsonValue = JsonValue> {
   readonly id: string;
   readonly type: string;
   readonly headline: string;
+  readonly subtitle?: string;
   readonly payload: TPayload;
+  readonly metadata?: { readonly [key: string]: JsonValue };
 }
 
 export type ChatContent = ChatTextMessage | ChatArtifact;
@@ -53,5 +55,6 @@ export interface ChatConversationStatus {
   readonly kind: 'loading' | 'error';
   readonly message: string;
   readonly placement: 'conversation' | 'assistant';
+  readonly reveal?: 'delayed';
   readonly action?: ChatStatusAction;
 }
