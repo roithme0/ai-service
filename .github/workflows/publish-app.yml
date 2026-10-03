@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     tags:
-      - '[0-9]*.[0-9]*.[0-9]*'
+      - 'v[0-9]*.[0-9]*.[0-9]*'
 
 permissions:
   contents: read
@@ -73,9 +73,9 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import { appendFileSync } from 'node:fs';
-          const match = /^((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(-alpha(?:\.(?:0|[1-9]\d*))?)?)$/.exec(process.env.RELEASE_TAG ?? '');
+          const match = /^v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(-alpha(?:\.(?:0|[1-9]\d*))?)?)$/.exec(process.env.RELEASE_TAG ?? '');
           if (!match) {
-            throw new Error('Expected 1.2.0, 1.2.0-alpha, or 1.2.0-alpha.123 (no leading zeros).');
+            throw new Error('Expected v1.2.0, v1.2.0-alpha, or v1.2.0-alpha.123 (no leading zeros).');
           }
           const channel = match[2] ? 'alpha' : 'latest';
           appendFileSync(process.env.GITHUB_OUTPUT, `version=${match[1]}\nchannel=${channel}\n`);
@@ -195,9 +195,9 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import { appendFileSync } from 'node:fs';
-          const match = /^((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(-alpha(?:\.(?:0|[1-9]\d*))?)?)$/.exec(process.env.RELEASE_TAG ?? '');
+          const match = /^v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(-alpha(?:\.(?:0|[1-9]\d*))?)?)$/.exec(process.env.RELEASE_TAG ?? '');
           if (!match) {
-            throw new Error('Expected 1.2.0, 1.2.0-alpha, or 1.2.0-alpha.123 (no leading zeros).');
+            throw new Error('Expected v1.2.0, v1.2.0-alpha, or v1.2.0-alpha.123 (no leading zeros).');
           }
           const channel = match[2] ? 'alpha' : 'latest';
           appendFileSync(process.env.GITHUB_OUTPUT, `version=${match[1]}\nchannel=${channel}\n`);

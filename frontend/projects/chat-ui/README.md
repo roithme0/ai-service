@@ -129,22 +129,22 @@ The component inherits typography. Its chat-specific styles are compiled into th
 
 ## GitHub Packages releases
 
-The library publishes to `https://npm.pkg.github.com` and is associated with `roithme0/ai-service`. The `Build and publish app and chat UI` workflow builds the library on pull requests and pushed prefix-free version tags in its distinct `build-chat-ui` job, uploading the built package as a workflow artifact. The `publish-chat-ui` job runs only for release tags and downloads that same artifact. Only this publish job receives `packages: write` permission. The same workflow publishes both Docker images through separate application jobs; every release publishes all three artifacts from the same commit, even when a component has not changed.
+The library publishes to `https://npm.pkg.github.com` and is associated with `roithme0/ai-service`. The `Build and publish app and chat UI` workflow builds the library on pull requests and pushed `v`-prefixed version tags in its distinct `build-chat-ui` job, uploading the built package as a workflow artifact. The `publish-chat-ui` job runs only for release tags and downloads that same artifact. Only this publish job receives `packages: write` permission. The same workflow publishes both Docker images through separate application jobs; every release publishes all three artifacts from the same commit, even when a component has not changed.
 
-The tag determines the published version and npm channel: `1.2.0` publishes `1.2.0` under `latest`; `1.2.0-alpha` or `1.2.0-alpha.123` publishes the corresponding prerelease under `alpha`. Tags must use three numeric version parts, optionally followed by `-alpha` or `-alpha.N`, where `N` contains one or more digits. Numeric parts cannot have leading zeroes except for `0`; other suffixes are rejected. The old `app-v*` and `chat-ui-v*` tags no longer trigger releases. Release tags are validated before frontend dependency installation and the library build. The publish job sets the version in `dist/chat-ui/package.json` and publishes using its `GITHUB_TOKEN` with an explicit npm dist-tag. The source package keeps the local placeholder version `0.0.0` and is not modified by the workflow.
+The tag determines the published version and npm channel: `v1.2.0` publishes `1.2.0` under `latest`; `v1.2.0-alpha` or `v1.2.0-alpha.123` publishes the corresponding prerelease under `alpha`. Tags must start with `v` followed by three numeric version parts, optionally followed by `-alpha` or `-alpha.N`, where `N` contains one or more digits. Numeric parts cannot have leading zeroes except for `0`; other suffixes are rejected. The leading `v` is stripped from published versions. Prefix-free tags and the old `app-v*` and `chat-ui-v*` tags do not trigger releases. Release tags are validated before frontend dependency installation and the library build. The publish job sets the version in `dist/chat-ui/package.json` and publishes using its `GITHUB_TOKEN` with an explicit npm dist-tag. The source package keeps the local placeholder version `0.0.0` and is not modified by the workflow.
 
 To release the repository, commit the changes, then tag that commit and push the tag. For example:
 
 ```powershell
-git tag 1.2.0
-git push origin 1.2.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 For an alpha release, use a new prerelease version tag from the repository root. No package version edit is required:
 
 ```powershell
-git tag 1.3.0-alpha.1
-git push origin 1.3.0-alpha.1
+git tag v1.3.0-alpha.1
+git push origin v1.3.0-alpha.1
 ```
 
 Each release needs a new version; choose the next shared version based on changes to either the application or library, including breaking changes. The first shared version should advance beyond the previously released versions of both components. Both publication jobs wait for the application and library builds to succeed, including the application build's contract checks and backend tests. A failed build prevents all publication. Publication remains independent between jobs, so a registry failure can still leave a partial release; check the entire workflow succeeded before treating a release as complete. Kochwiki has read access under the package's **Manage Actions access** settings and consumes the package from GitHub Packages. Its CI passes the repository's short-lived `GITHUB_TOKEN` to Docker as a BuildKit secret.
