@@ -18,7 +18,7 @@ class ReplyGenerator:
 
     async def generate(self, request: AgenticGenerationRequest) -> AgenticGenerationResponse:
         self.requests.append(request)
-        return AgenticGenerationResponse((), (), "Configured reply")
+        return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Configured reply"},), (), "Configured reply")
 
 
 def test_direct_model_session_retains_detached_json_and_rejects_invalid_input() -> None:

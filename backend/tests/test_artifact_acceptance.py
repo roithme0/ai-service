@@ -179,7 +179,7 @@ def test_model_consumes_assigned_id_and_replay_preserves_same_output(later_failu
             assert json.loads(output)["artifact_id"] == record.artifact_id
             if self.count == 2 and later_failure:
                 raise RuntimeError("later model failed")
-            return AgenticGenerationResponse((), (), "shown")
+            return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "shown"},), (), "shown")
     def execute(invocation: ToolInvocation) -> ToolExecution[ArtifactCandidate[list[str]]]:
         assert not any(isinstance(record, ArtifactRecord) for record in store.history(session_id))
         return candidate()

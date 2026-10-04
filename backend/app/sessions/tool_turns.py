@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem, AgenticToolCall, AgenticGenerationResponse, message_phase
-from app.sessions.history import CallRecord, final_response_text
-from app.sessions.text_sessions import MAX_MESSAGE_LENGTH
+from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem, AgenticToolCall
+from app.models.output_items import final_response_text, validate_message_item
+from app.sessions.history import CallRecord, HistoryRecord
 from app.sessions.tools import RegisteredTool, ToolExecution, ToolRegistry, ToolSource
 
 
@@ -71,7 +72,7 @@ async def run_tool_turn(
     max_successes: int | None,
     max_provider_responses: int,
     *,
-    record_response: Callable[[AgenticGenerationResponse, bool | None], tuple[CallRecord, ...]],
+    record_item: Callable[[AgenticInputItem], HistoryRecord],
     start_execution: Callable[[CallRecord], None],
     record_result: Callable[[CallRecord, ToolExecution[ArtifactT]], ToolExecution[ArtifactT]],
 ) -> ToolTurnResult[ArtifactT]:
@@ -83,23 +84,30 @@ async def run_tool_turn(
     artifacts: list[ArtifactT] = []
     attempts = 0
     for _ in range(max_provider_responses):
+        recorded_items: list[AgenticInputItem] = []
+        records: list[HistoryRecord] = []
+
+        def receive_item(item: AgenticInputItem) -> None:
+            validate_message_item(item)
+            recorded_items.append(deepcopy(item))
+            records.append(record_item(item))
+
         response = await generator.generate(AgenticGenerationRequest(
             input_items=tuple(input_items), instructions=instructions,
-            tools=registry.schemas,
+            tools=registry.schemas, on_output_item=receive_item,
         ))
-        if not response.tool_calls:
-            text = final_response_text(response)
-            messages = [item for item in response.output_items if item.get("type") == "message"]
-            if text is None and messages and all(message_phase(item) == "commentary" for item in messages):
-                record_response(response, None)
-                input_items.extend(response.output_items)
-                continue
-            valid_text = text is not None and bool(text.strip()) and len(text) <= MAX_MESSAGE_LENGTH
-            record_response(response, valid_text)
-            if not valid_text:
-                return ToolTurnResult("generation_failed", None, tuple(artifacts))
-            return ToolTurnResult("completed", text, tuple(artifacts))
-        recorded_calls = record_response(response, None)
+        provider_calls = tuple(AgenticToolCall(str(item.get("call_id")), str(item.get("name")), str(item.get("arguments")))
+                               for item in response.output_items if item.get("type") == "function_call")
+        if provider_calls != response.tool_calls:
+            raise ValueError("provider output and requested calls must match in order")
+        if recorded_items and tuple(recorded_items) != response.output_items:
+            raise ValueError("completed response disagrees with recorded output")
+        if not recorded_items:
+            for item in response.output_items:
+                receive_item(item)
+
+        text = final_response_text(response)
+        recorded_calls = tuple(record for record in records if isinstance(record, CallRecord))
         if tuple(record.call for record in recorded_calls) != response.tool_calls:
             raise ValueError("recorded calls must match requested calls in order")
 
@@ -119,4 +127,6 @@ async def run_tool_turn(
                 raise ValueError("artifact tool outcome must be accepted before model continuation")
             input_items.append({"type": "function_call_output", "call_id": call.call_id,
                                 "output": execution.output})
+        if text is not None:
+            return ToolTurnResult("completed", text, tuple(artifacts))
     return ToolTurnResult("generation_failed", None, tuple(artifacts))

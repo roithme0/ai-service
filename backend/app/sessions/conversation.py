@@ -12,6 +12,7 @@ from typing import Generic, Literal, TypeVar, cast
 from uuid import uuid4
 
 from app.models.agentic_generation import AgenticGenerationResponse, AgenticToolCall, message_phase
+from app.models.output_items import validate_message_item
 from app.sessions.history import (
     ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord,
     ContinuationRecord, HistoryRecord, MessageRecord, TerminalRecord, ToolResultRecord, text_messages,
@@ -215,8 +216,8 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     has_final_message = any(isinstance(record, MessageRecord) and record.turn_id == reservation.turn_id
                                             and record.kind == "final" for record in self._history[session_id])
                     if not has_final_message:
-                        self._append_history(session_id, MessageRecord(reservation.turn_id,
-                            {"role": "assistant", "content": text}, "final"))
+                        message = MessageRecord(reservation.turn_id, {"type": "message", "role": "assistant", "content": text, "phase": "final_answer"}, "final")
+                        self._append_history(session_id, message)
                     terminal_kind = "completed"
                 else:
                     terminal_kind = "conflict"
@@ -254,7 +255,6 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
 
     def record_provider_response(
         self, session_id: str, turn_id: str, response: AgenticGenerationResponse,
-        final_text_accepted: bool | None = None,
     ) -> tuple[CallRecord, ...]:
         with self._lock:
             self._require_turn(session_id, turn_id)
@@ -262,20 +262,27 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                                    for item in response.output_items if item.get("type") == "function_call")
             if provider_calls != response.tool_calls:
                 raise ValueError("provider output and requested calls must match in order")
-            calls: list[CallRecord] = []
-            for item in response.output_items:
-                if item.get("type") == "function_call":
-                    recorded = CallRecord(turn_id, str(uuid4()), deepcopy(item))
-                    self._append_history(session_id, recorded)
-                    calls.append(recorded)
-                elif item.get("type") == "message":
-                    message_kind: Literal["intermediate", "final", "rejected"] = (
-                        "intermediate" if message_phase(item) == "commentary" or final_text_accepted is None else
-                        "final" if final_text_accepted else "rejected")
-                    self._append_history(session_id, MessageRecord(turn_id, deepcopy(item), message_kind))
-                else:
-                    self._append_history(session_id, ContinuationRecord(turn_id, deepcopy(item)))
-            return tuple(calls)
+            records = tuple(self.record_provider_item(session_id, turn_id, item) for item in response.output_items)
+            return tuple(record for record in records if isinstance(record, CallRecord))
+
+    def record_provider_item(self, session_id: str, turn_id: str, item: dict[str, object]) -> HistoryRecord:
+        with self._lock:
+            self._require_turn(session_id, turn_id)
+            validate_message_item(item)
+            copied = deepcopy(item)
+            if copied.get("phase") is None:
+                copied.pop("phase", None)
+            record: HistoryRecord
+            if item.get("type") == "function_call":
+                record = CallRecord(turn_id, str(uuid4()), copied)
+            elif item.get("type") == "message":
+                phase = message_phase(item)
+                record = MessageRecord(turn_id, copied, "intermediate" if phase == "commentary" else
+                                       "final" if phase == "final_answer" else "unspecified")
+            else:
+                record = ContinuationRecord(turn_id, copied)
+            self._append_history(session_id, record)
+            return deepcopy(record)
 
     def record_call(self, session_id: str, turn_id: str, call: AgenticToolCall) -> CallRecord:
         response = AgenticGenerationResponse(({"type": "function_call", "call_id": call.call_id,
@@ -356,7 +363,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
     def _record_missing_results(self, session_id: str, turn_id: str) -> None:
         history = self._history[session_id]
         started = {record.execution_id for record in history if isinstance(record, ExecutionStartedRecord)}
-        returned = {record.execution_id for record in history if isinstance(record, ToolResultRecord)}
+        returned = {record.execution_id for record in history if isinstance(record, (ToolResultRecord, ExecutionReportRecord))}
         for record in history:
             if isinstance(record, CallRecord) and record.turn_id == turn_id and record.execution_id not in returned:
                 state = "outcome_unknown" if record.execution_id in started else "not_executed"

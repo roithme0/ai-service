@@ -24,7 +24,7 @@ def test_failed_or_cancelled_model_turn_releases_session_without_replay(cancel: 
                     entered.set()
                     await release.wait()
                     raise RuntimeError("provider failure")
-                return AgenticGenerationResponse((), (), "Reply")
+                return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Reply"},), (), "Reply")
 
         store = ConversationSessionStore[str, Never](timedelta(minutes=90))
         strategy = ModelTurnStrategy(store, Generator(), lambda context: context, ())
@@ -71,7 +71,7 @@ def test_artifact_free_turn_enforces_attempt_and_provider_budgets(provider_budge
                 requests.append(request)
                 if len(requests) == 8:
                     assert "limit_reached" in str(request.input_items[-1]["output"])
-                    return AgenticGenerationResponse((), (), "Finished")
+                    return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Finished"},), (), "Finished")
                 call = AgenticToolCall(str(len(requests)), "sample", "{}")
                 return AgenticGenerationResponse(({
                     "type": "function_call", "call_id": call.call_id,

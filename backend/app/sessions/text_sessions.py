@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Generic, Literal, TypeVar
 
+from app.models.output_items import MAX_MESSAGE_LENGTH as MAX_MESSAGE_LENGTH
+
 
 MAX_MESSAGE_COUNT = 200
-MAX_MESSAGE_LENGTH = 16_000
+
 
 SessionRole = Literal["user", "assistant"]
 T = TypeVar("T")

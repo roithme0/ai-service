@@ -118,11 +118,15 @@ artifact record in the full history. Values may have gaps; candidates have no
 identity or order. The HTTP timeline projects user/final messages, intermediate assistant updates, tool calls with safe statuses,
 artifact references, and failed-turn markers in recorded order. Active-turn tool
 activity and artifacts remain hidden until termination; client streaming is deferred.
-Intermediate updates use the provider's `commentary` phase when available and
-otherwise include messages accompanying tool calls. They remain visible after
+Intermediate updates use only the provider's explicit `commentary` phase.
+Supplied phases are preserved; absent or null phases remain absent and use the
+primary assistant-message presentation. Phase never depends on later tool calls
+or turn outcomes. They remain visible after
 failed turns and are replayed to the model, but are excluded from the final-message
-projection used for message limits and reconciliation. Commentary-only responses
-continue generation within the existing provider-response limit. The prompt asks
+projection used for message limits and reconciliation. Only an explicit final-answer
+message ends generation after successful provider completion and any tool execution.
+Commentary, phase-less, empty, and continuation-only responses continue until
+that message arrives or the provider-response limit fails the turn. The prompt asks
 for brief progress explanations and a standalone final answer; opaque provider
 reasoning remains internal.
 Artifact tools return validated local candidates without mutating session state.
@@ -178,9 +182,14 @@ caller. The former `source`/`foodstuffs` input envelope is no longer accepted.
 Sessions allow 200 messages of up to 16,000 characters each and model-backed
 sessions allow 100 artifacts. The fixed 90-minute lifetime remains unchanged.
 The OpenAI adapter consumes Responses API streams internally and returns only
-confirmed completed responses. Failed, incomplete, interrupted, or unfinished
-streams produce generation failures without recording partial output or executing
-partial tool calls. Provider streams close on success, failure, timeout, and
+confirmed completed responses. Each structurally valid completed output item is
+retained immediately in immutable history before response completion. Failed,
+incomplete, interrupted, or unfinished streams preserve those complete items,
+while partial items are excluded and requested tools remain unexecuted. Each
+assistant message is validated before retention; invalid messages fail generation
+and are never replayed. The first explicit final message is the successful answer;
+all other valid items remain retained without concatenation. Unexecuted requests receive service
+execution reports during append-only failure cleanup. Provider streams close on success, failure, timeout, and
 cancellation. The adapter allows 16,384 output tokens and a 120-second overall
 deadline covering stream establishment and consumption per model response,
 with the same network timeout and no automatic provider retries. These are individual request limits, not an overall turn

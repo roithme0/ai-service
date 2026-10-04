@@ -151,7 +151,7 @@ def test_presentation_and_other_tool_sources_are_combined() -> None:
                         "type": "example", "title": "Foodstuff", "payload": {"name": "Oats"},
                     }))
                 else:
-                    return AgenticGenerationResponse((), (), "Shown")
+                    return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Shown"},), (), "Shown")
                 return AgenticGenerationResponse(({"type": "function_call", "call_id": call.call_id,
                     "name": call.name, "arguments": call.arguments},), (call,), None)
         agent = create_model_agent(Generator(), tool_sources=(LocalToolSource((RegisteredTool(
@@ -180,7 +180,7 @@ def test_default_budgets_complete_an_extended_presentation_turn() -> None:
             async def generate(self, request: AgenticGenerationRequest) -> AgenticGenerationResponse:
                 self.responses += 1
                 if self.responses > 25:
-                    return AgenticGenerationResponse((), (), "Shown. " + "Details. " * 600)
+                    return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Shown. " + "Details. " * 600},), (), "Shown. " + "Details. " * 600)
                 call = AgenticToolCall(str(self.responses), "present_artifact", json.dumps({
                     "type": "example", "title": f"Item {self.responses}",
                     "payload": {"name": f"Item {self.responses}"},

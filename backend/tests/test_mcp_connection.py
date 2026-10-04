@@ -46,7 +46,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                         ({"type": "function_call", "call_id": call.call_id,
                           "name": call.name, "arguments": call.arguments},), (call,), None,
                     )
-                return AgenticGenerationResponse((), (), "Hello World received")
+                return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Hello World received"},), (), "Hello World received")
 
         def generator_factory(*, model: str, client: object) -> Generator:
             return Generator()
@@ -171,12 +171,12 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
                 result = json.loads(output)
                 if len(requests) == 2:
                     assert result["structuredContent"]["proposalId"] == proposal_id
-                    return AgenticGenerationResponse((), (), f"Proposal {proposal_id}: Adjusted oats.")
+                    return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": f"Proposal {proposal_id}: Adjusted oats."},), (), f"Proposal {proposal_id}: Adjusted oats.")
                 if save_fails:
                     assert result["isError"] is True
-                    return AgenticGenerationResponse((), (), "Saving failed; no draft was saved.")
+                    return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Saving failed; no draft was saved."},), (), "Saving failed; no draft was saved.")
                 assert result["structuredContent"]["id"] == version_id
-                return AgenticGenerationResponse((), (), f"Saved draft {version_id}.")
+                return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": f"Saved draft {version_id}."},), (), f"Saved draft {version_id}.")
 
         def generator_factory(*, model: str, client: object) -> Generator:
             return Generator()

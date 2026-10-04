@@ -63,7 +63,7 @@ class ModelTurnStrategy(Generic[ContextT, ArtifactT]):
                 self._context(reservation.snapshot.payload), self._instructions,
                 (*self._tool_sources, *session_sources), self._max_attempts,
                 max_successes=None, max_provider_responses=self._max_provider_responses,
-                record_response=lambda response, accepted: self._store.record_provider_response(session_id, reservation.turn_id, response, accepted),
+                record_item=lambda item: self._store.record_provider_item(session_id, reservation.turn_id, item),
                 start_execution=lambda call: self._store.start_execution(session_id, call),
                 record_result=lambda call, execution: self._store.record_result(session_id, call, execution),
             )

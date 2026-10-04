@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from dataclasses import dataclass
-from typing import Literal, cast
+from dataclasses import dataclass, field
+from typing import Literal
+from uuid import uuid4
 
-from app.models.agentic_generation import AgenticGenerationResponse, AgenticInputItem, AgenticOutputItem, AgenticToolCall, message_phase
+from app.models.agentic_generation import AgenticInputItem, AgenticOutputItem, AgenticToolCall
+from app.models.output_items import message_text
 from app.sessions.text_sessions import TextMessage
 
 
@@ -15,7 +17,8 @@ from app.sessions.text_sessions import TextMessage
 class MessageRecord:
     turn_id: str
     item: AgenticInputItem
-    kind: Literal["user", "intermediate", "final", "rejected"]
+    kind: Literal["user", "intermediate", "final", "unspecified"]
+    message_id: str = field(default_factory=lambda: str(uuid4()))
 
 
 @dataclass(frozen=True)
@@ -91,18 +94,10 @@ type HistoryRecord = (
 )
 
 
-def final_response_text(response: AgenticGenerationResponse) -> str | None:
-    messages = [item for item in response.output_items if item.get("type") == "message"]
-    if any(message_phase(item) is not None for item in messages):
-        text = "".join(message_text(item) for item in messages if message_phase(item) != "commentary")
-        return text if text.strip() else None
-    return response.text
-
-
 def model_input(history: tuple[HistoryRecord, ...]) -> tuple[AgenticInputItem, ...]:
     items: list[AgenticInputItem] = []
     for record in history:
-        if isinstance(record, MessageRecord) and record.kind != "rejected":
+        if isinstance(record, MessageRecord):
             items.append(deepcopy(record.item))
         elif isinstance(record, (ContinuationRecord, CallRecord)):
             items.append(deepcopy(record.item))
@@ -115,32 +110,14 @@ def model_input(history: tuple[HistoryRecord, ...]) -> tuple[AgenticInputItem, .
 def text_messages(history: tuple[HistoryRecord, ...]) -> tuple[TextMessage, ...]:
     completed = {record.turn_id for record in history
                  if isinstance(record, TerminalRecord) and record.kind == "completed"}
+    emitted: set[str] = set()
     messages: list[TextMessage] = []
     for record in history:
         if not isinstance(record, MessageRecord):
             continue
         if record.kind == "user":
             messages.append(TextMessage("user", message_text(record.item)))
-        elif record.kind == "final" and record.turn_id in completed:
-            text = message_text(record.item)
-            if messages and messages[-1].role == "assistant" and messages[-1].turn_id == record.turn_id:
-                previous = messages[-1]
-                messages[-1] = TextMessage("assistant", previous.text + text, record.turn_id)
-            else:
-                messages.append(TextMessage("assistant", text, record.turn_id))
+        elif record.kind == "final" and record.turn_id in completed and record.turn_id not in emitted:
+            messages.append(TextMessage("assistant", message_text(record.item), record.turn_id))
+            emitted.add(record.turn_id)
     return tuple(messages)
-
-
-def message_text(item: AgenticInputItem) -> str:
-    content = item.get("content")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        texts: list[str] = []
-        for part in cast(list[object], content):
-            if isinstance(part, dict):
-                text = cast(dict[str, object], part).get("text")
-                if isinstance(text, str):
-                    texts.append(text)
-        return "".join(texts)
-    return ""

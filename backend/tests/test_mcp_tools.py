@@ -57,7 +57,7 @@ class Generator:
                 {"type": "function_call", "call_id": call.call_id, "name": call.name, "arguments": call.arguments}
                 for call in self.calls
             ), self.calls, None)
-        return AgenticGenerationResponse((), (), "Finished")
+        return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Finished"},), (), "Finished")
 
 
 def local_tool(call: ToolInvocation) -> ToolExecution[Never]:
@@ -79,7 +79,7 @@ def test_two_servers_with_same_tool_route_independently_and_respect_shared_limit
         generator, (), "Context", "Local guidance",
         (LocalToolSource((RegisteredTool("local", {"type": "function", "name": "local"}, local_tool),)), source),
         2, 1, 2,
-        record_response=recorder.record_response, start_execution=recorder.start_execution,
+        record_item=recorder.record_item, start_execution=recorder.start_execution,
         record_result=recorder.record_result,
     ))
     assert result.kind == "completed" and result.artifacts == ()
@@ -122,7 +122,7 @@ def test_mcp_and_artifact_producing_local_source_execute_in_one_turn() -> None:
     result = asyncio.run(run_tool_turn(
         generator, (), "Context", "Agent guidance",
         (local_source, MCPToolset((connection,))), 2, 1, 2,
-        record_response=recorder.record_response, start_execution=recorder.start_execution,
+        record_item=recorder.record_item, start_execution=recorder.start_execution,
         record_result=recorder.record_result,
     ))
     assert result.kind == "completed"
@@ -201,7 +201,7 @@ def test_mcp_and_local_name_collision_is_rejected_before_generation() -> None:
             (LocalToolSource((RegisteredTool("server__hello_world", {"type": "function", "name": "server__hello_world"}, local_tool),)),
              MCPToolset((connection,))),
             1, 1, 1,
-            record_response=recorder.record_response, start_execution=recorder.start_execution,
+            record_item=recorder.record_item, start_execution=recorder.start_execution,
             record_result=recorder.record_result,
         ))
     assert generator.requests == []

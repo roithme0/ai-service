@@ -3,9 +3,10 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from app.models.output_items import message_text
 from app.sessions.history import (
     ArtifactRecord, CallRecord, ExecutionReportRecord, HistoryRecord, MessageRecord,
-    TerminalRecord, ToolResultRecord, message_text, text_messages,
+    TerminalRecord, ToolResultRecord, text_messages,
 )
 
 
@@ -73,6 +74,9 @@ def timeline(history: tuple[HistoryRecord, ...], active_turn_id: str | None = No
                 items.append(TimelineMessage(record.turn_id, identity, message.role, message.text, "message"))
                 if record.kind == "final":
                     emitted_answers.add(record.turn_id)
+            elif record.kind == "unspecified":
+                items.append(TimelineMessage(record.turn_id, f"message-{record.message_id}", "assistant",
+                                             message_text(record.item), "message"))
         elif isinstance(record, CallRecord):
             result = results.get(record.execution_id)
             status: Literal["completed", "failed", "not_executed", "outcome_unknown"]

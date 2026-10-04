@@ -49,7 +49,7 @@ class FakeGenerator:
             self.before_return()
         if self.responses:
             return self.responses.pop(0)
-        return AgenticGenerationResponse(output_items=(), tool_calls=(), text=self.text)
+        return AgenticGenerationResponse(output_items=({"type": "message", "role": "assistant", "phase": "final_answer", "content": self.text},), tool_calls=(), text=self.text)
 
 
 @pytest.fixture
@@ -542,7 +542,7 @@ def test_unknown_retired_tool_and_failed_final_keep_retry_stable(
             tool_calls=(AgenticToolCall("call_1", "register_recipe_proposal", arguments),),
             text=None,
         ),
-        AgenticGenerationResponse((), (), None),
+        AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": ""},), (), None),
     ]
     first = client.post(f"{session_url}/turns")
     retry = client.post(f"{session_url}/turns")
@@ -652,7 +652,7 @@ def test_failed_turn_retains_completed_presentations(client: TestClient, fake_ge
     update = {"type": "message", "role": "assistant", "phase": "commentary", "content": "Preparing data."}
     fake_generator.responses = [
         AgenticGenerationResponse((update, *presentation.output_items), presentation.tool_calls, "Preparing data."),
-        AgenticGenerationResponse((), (), ""),
+        AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": ""},), (), ""),
     ]
     assert client.post(base + "/turns", json={}).status_code == 502
     snapshot = client.get(base).json()
