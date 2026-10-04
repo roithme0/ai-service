@@ -99,7 +99,7 @@ artifact success limit; a successful MCP call does not count as a chat artifact.
 
 Model agents can opt into hosted web search with `WebSearchConfig` passed to
 `create_model_agent`; Kochwiki enables it using the existing configured model.
-The model chooses when to search. Its separate default budget is eight hosted
+The model chooses when to search. Its separate default budget is sixteen hosted
 calls per turn, including page-open/find actions. Each Responses request receives
 the remaining allowance; after exhaustion, later requests omit search and can
 continue with other tools. OpenAI executes searches internally. Completed or

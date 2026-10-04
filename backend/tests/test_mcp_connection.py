@@ -106,7 +106,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                     "kochwiki__hello_world",
                 ] + (["present_artifact"] if with_presentation else [])
                 assert {"type": "web_search"} in requests[0].tools
-                assert requests[0].max_hosted_tool_calls == 8
+                assert requests[0].max_hosted_tool_calls == 16
                 instructions = requests[0].instructions
                 assert instructions.count("Server-owned domain guidance") == 1
                 assert "hello_world -> kochwiki__hello_world" in instructions

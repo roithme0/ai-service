@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class WebSearchConfig:
-    max_calls_per_turn: int = 8
+    max_calls_per_turn: int = 16
 
     def __post_init__(self) -> None:
         if isinstance(self.max_calls_per_turn, bool) or not isinstance(self.max_calls_per_turn, int) or self.max_calls_per_turn < 1:
