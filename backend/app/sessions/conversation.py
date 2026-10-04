@@ -12,6 +12,7 @@ from typing import Generic, Literal, TypeVar, cast
 from uuid import uuid4
 
 from app.models.agentic_generation import AgenticGenerationResponse, AgenticToolCall, message_phase
+from app.models.output_items import validate_message_item
 from app.sessions.history import (
     ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord,
     ContinuationRecord, HistoryRecord, MessageRecord, TerminalRecord, ToolResultRecord, text_messages,
@@ -19,9 +20,13 @@ from app.sessions.history import (
 from app.sessions.artifacts import ArtifactCandidate, ArtifactEnvelope, ArtifactToolOutput, PublishedArtifact
 from app.sessions.tools import ToolExecution
 from app.sessions.timeline import TimelineItem, timeline
+from app.sessions.turn_types import (
+    ActiveTurnStatus as ActiveTurnStatus, TerminalTurnKind, TurnExecutionKind, TurnKind as TurnKind,
+)
 from app.sessions.text_sessions import (
     MAX_MESSAGE_COUNT,
     MAX_MESSAGE_LENGTH,
+    InvalidMessageReason,
     TextMessage,
     TextSessionAppendAccepted,
     TextSessionAppendExpired,
@@ -39,7 +44,6 @@ from app.sessions.text_sessions import (
 
 ContextT = TypeVar("ContextT")
 ArtifactT = TypeVar("ArtifactT")
-TurnKind = Literal["completed", "generation_failed", "unknown", "expired", "not_ready", "limit_reached", "conflict", "busy"]
 
 
 @dataclass(frozen=True)
@@ -73,6 +77,9 @@ class ConversationSnapshot(Generic[ContextT, ArtifactT]):
     terminal_turn_id: str | None
     terminal_turn_kind: TurnKind | None
     timeline: tuple[TimelineItem, ...]
+    active_turn_id: str | None
+    active_turn_status: ActiveTurnStatus | None
+    sequence: int
 
 
 @dataclass(frozen=True)
@@ -98,7 +105,7 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def _invalid_text_reason(text: object) -> Literal["blank_text", "text_too_long"] | None:
+def _invalid_text_reason(text: object) -> InvalidMessageReason | None:
     if not isinstance(text, str) or not text.strip():
         return "blank_text"
     if len(text) > MAX_MESSAGE_LENGTH:
@@ -126,6 +133,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
         self._sessions: dict[str, _SessionMetadata[ContextT]] = {}
         self._active_turns: dict[str, str] = {}
         self._history: dict[str, tuple[HistoryRecord, ...]] = {}
+        self._listeners: dict[str, set[Callable[[], None]]] = {}
         self._artifacts: dict[str, dict[str, ArtifactEnvelope[ArtifactT]]] = {}
 
     def create(self, context: ContextT, settings: ConversationSessionSettings) -> TextSessionCreation:
@@ -152,12 +160,36 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 kind="active",
                 snapshot=ConversationSnapshot(
                     session=outcome.session,
-                    artifacts=tuple(artifact for artifact in self._published_artifacts(session_id) if artifact.turn_id != active_turn_id),
+                    artifacts=self._published_artifacts(session_id),
                     terminal_turn_id=terminal.turn_id if terminal else None,
                     terminal_turn_kind=terminal.kind if terminal else None,
-                    timeline=timeline(self._history[session_id], active_turn_id),
+                    timeline=timeline(self._history[session_id]),
+                    active_turn_id=active_turn_id,
+                    active_turn_status=(
+                        "closing" if any(isinstance(record, MessageRecord) and record.turn_id == active_turn_id
+                                         and record.kind == "final" for record in self._history[session_id])
+                        else "in_progress"
+                    ) if active_turn_id is not None else None,
+                    sequence=len(self._history[session_id]),
                 ),
             )
+
+    def subscribe(self, session_id: str, listener: Callable[[], None]) -> Callable[[], None]:
+        with self._lock:
+            self._listeners.setdefault(session_id, set()).add(listener)
+            listener()
+        def detach() -> None:
+            with self._lock:
+                listeners = self._listeners.get(session_id)
+                if listeners is not None:
+                    listeners.discard(listener)
+                    if not listeners:
+                        self._listeners.pop(session_id, None)
+        return detach
+
+    def _notify(self, session_id: str) -> None:
+        for listener in tuple(self._listeners.get(session_id, ())):
+            listener()
 
     def append_user_message(self, session_id: str, text: object) -> TextSessionAppendOutcome | ConversationMessageBusy:
         with self._lock:
@@ -178,6 +210,19 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 {"role": "user", "content": accepted_text}, "user"))
             return TextSessionAppendAccepted("accepted", session_id, TextMessage("user", accepted_text))
 
+    def admit_turn(self, session_id: str) -> ConversationTurnReservation[ContextT, ArtifactT] | ConversationTurnResult[ArtifactT]:
+        with self._lock:
+            read = self._read_session(session_id)
+            if not isinstance(read, TextSessionReadActive):
+                return ConversationTurnResult(read.kind, "", None, ())
+            active = self._active_turns.get(session_id)
+            if active is not None:
+                return ConversationTurnResult("busy", active, None, ())
+            terminal = self._latest_terminal(session_id)
+            if terminal is not None:
+                return self._terminal_result(session_id, terminal)
+            return self.reserve_turn(session_id)
+
     def reserve_turn(self, session_id: str) -> ConversationTurnReservation[ContextT, ArtifactT] | ConversationTurnResult[ArtifactT]:
         with self._lock:
             read = self._read_session(session_id)
@@ -195,11 +240,12 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 return ConversationTurnResult("limit_reached", "", None, ())
             turn_id = next(record.turn_id for record in reversed(self._history[session_id]) if isinstance(record, MessageRecord))
             self._active_turns[session_id] = turn_id
+            self._notify(session_id)
             return ConversationTurnReservation(turn_id, read.session, self._published_artifacts(session_id))
 
     def complete_turn(
         self, session_id: str, reservation: ConversationTurnReservation[ContextT, ArtifactT],
-        kind: Literal["completed", "generation_failed"], text: str | None,
+        kind: TurnExecutionKind, text: str | None,
     ) -> ConversationTurnResult[ArtifactT]:
         with self._lock:
             current = self._read_session(session_id)
@@ -207,7 +253,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 return ConversationTurnResult(current.kind, reservation.turn_id, None, ())
             if self._active_turns.get(session_id) != reservation.turn_id:
                 return ConversationTurnResult("conflict", reservation.turn_id, None, ())
-            terminal_kind: Literal["completed", "generation_failed", "conflict"]
+            terminal_kind: TerminalTurnKind
             if current.session.revision != reservation.snapshot.revision:
                 terminal_kind = "conflict"
             elif kind == "completed" and text is not None:
@@ -215,8 +261,8 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     has_final_message = any(isinstance(record, MessageRecord) and record.turn_id == reservation.turn_id
                                             and record.kind == "final" for record in self._history[session_id])
                     if not has_final_message:
-                        self._append_history(session_id, MessageRecord(reservation.turn_id,
-                            {"role": "assistant", "content": text}, "final"))
+                        message = MessageRecord(reservation.turn_id, {"type": "message", "role": "assistant", "content": text, "phase": "final_answer"}, "final")
+                        self._append_history(session_id, message)
                     terminal_kind = "completed"
                 else:
                     terminal_kind = "conflict"
@@ -237,12 +283,13 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
 
     def _finish_turn(
         self, session_id: str, reservation: ConversationTurnReservation[ContextT, ArtifactT],
-        kind: Literal["completed", "generation_failed", "conflict"],
+        kind: TerminalTurnKind,
     ) -> ConversationTurnResult[ArtifactT]:
         self._record_missing_results(session_id, reservation.turn_id)
         terminal = TerminalRecord(reservation.turn_id, kind)
         self._append_history(session_id, terminal)
         self._active_turns.pop(session_id, None)
+        self._notify(session_id)
         return self._terminal_result(session_id, terminal)
 
     def history(self, session_id: str) -> tuple[HistoryRecord, ...]:
@@ -254,7 +301,6 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
 
     def record_provider_response(
         self, session_id: str, turn_id: str, response: AgenticGenerationResponse,
-        final_text_accepted: bool | None = None,
     ) -> tuple[CallRecord, ...]:
         with self._lock:
             self._require_turn(session_id, turn_id)
@@ -262,20 +308,27 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                                    for item in response.output_items if item.get("type") == "function_call")
             if provider_calls != response.tool_calls:
                 raise ValueError("provider output and requested calls must match in order")
-            calls: list[CallRecord] = []
-            for item in response.output_items:
-                if item.get("type") == "function_call":
-                    recorded = CallRecord(turn_id, str(uuid4()), deepcopy(item))
-                    self._append_history(session_id, recorded)
-                    calls.append(recorded)
-                elif item.get("type") == "message":
-                    message_kind: Literal["intermediate", "final", "rejected"] = (
-                        "intermediate" if message_phase(item) == "commentary" or final_text_accepted is None else
-                        "final" if final_text_accepted else "rejected")
-                    self._append_history(session_id, MessageRecord(turn_id, deepcopy(item), message_kind))
-                else:
-                    self._append_history(session_id, ContinuationRecord(turn_id, deepcopy(item)))
-            return tuple(calls)
+            records = tuple(self.record_provider_item(session_id, turn_id, item) for item in response.output_items)
+            return tuple(record for record in records if isinstance(record, CallRecord))
+
+    def record_provider_item(self, session_id: str, turn_id: str, item: dict[str, object]) -> HistoryRecord:
+        with self._lock:
+            self._require_turn(session_id, turn_id)
+            validate_message_item(item)
+            copied = deepcopy(item)
+            if copied.get("phase") is None:
+                copied.pop("phase", None)
+            record: HistoryRecord
+            if item.get("type") == "function_call":
+                record = CallRecord(turn_id, str(uuid4()), copied)
+            elif item.get("type") == "message":
+                phase = message_phase(item)
+                record = MessageRecord(turn_id, copied, "intermediate" if phase == "commentary" else
+                                       "final" if phase == "final_answer" else "unspecified")
+            else:
+                record = ContinuationRecord(turn_id, copied)
+            self._append_history(session_id, record)
+            return deepcopy(record)
 
     def record_call(self, session_id: str, turn_id: str, call: AgenticToolCall) -> CallRecord:
         response = AgenticGenerationResponse(({"type": "function_call", "call_id": call.call_id,
@@ -309,6 +362,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     finalized = ToolExecution[ArtifactCandidate[ArtifactT]](rejection, failed=True)
                     result = ToolResultRecord(call.turn_id, call.execution_id, call.call.call_id, rejection, True)
                     self._history[session_id] = (*history, result)
+                    self._notify(session_id)
                     return finalized
                 payload = deepcopy(artifact.payload)
                 returned_candidate = deepcopy(artifact)
@@ -325,12 +379,14 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 next_artifacts = {**self._artifacts[session_id], accepted.artifact_id: accepted}
                 self._artifacts[session_id] = next_artifacts
                 self._history[session_id] = next_history
+                self._notify(session_id)
                 return finalized
             if not isinstance(output, str):
                 raise ValueError("structured artifact output requires a candidate")
             finalized = ToolExecution[ArtifactCandidate[ArtifactT]](output, failed=execution.failed)
             self._history[session_id] = (*history, ToolResultRecord(
                 call.turn_id, call.execution_id, call.call.call_id, output, execution.failed))
+            self._notify(session_id)
             return finalized
 
     def _require_turn(self, session_id: str, turn_id: str) -> None:
@@ -342,6 +398,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
 
     def _append_history(self, session_id: str, record: HistoryRecord) -> None:
         self._history[session_id] = (*self._history[session_id], record)
+        self._notify(session_id)
 
     def _published_artifacts(self, session_id: str) -> tuple[PublishedArtifact[ArtifactT], ...]:
         artifacts: list[PublishedArtifact[ArtifactT]] = []
@@ -356,7 +413,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
     def _record_missing_results(self, session_id: str, turn_id: str) -> None:
         history = self._history[session_id]
         started = {record.execution_id for record in history if isinstance(record, ExecutionStartedRecord)}
-        returned = {record.execution_id for record in history if isinstance(record, ToolResultRecord)}
+        returned = {record.execution_id for record in history if isinstance(record, (ToolResultRecord, ExecutionReportRecord))}
         for record in history:
             if isinstance(record, CallRecord) and record.turn_id == turn_id and record.execution_id not in returned:
                 state = "outcome_unknown" if record.execution_id in started else "not_executed"
@@ -408,3 +465,4 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
         self._history.pop(session_id, None)
         self._artifacts.pop(session_id, None)
         self._active_turns.pop(session_id, None)
+        self._notify(session_id)

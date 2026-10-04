@@ -11,7 +11,7 @@ from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import DemoContext, DemoPayload, DemoSessionStore, MAX_ARTIFACTS, new_demo_session_store
 from app.demo.turns import TURN_DELAY_SECONDS, run_demo_turn
 from app.sessions.agent_service import AgentInputAccepted, AgentInputRejected, ConfiguredAgentService
-from app.sessions.conversation import ConversationSessionSettings, ConversationTurnResult
+from app.sessions.conversation import ConversationSessionSettings, ConversationTurnReservation, ConversationTurnResult
 
 
 DemoSessionInput = object
@@ -39,11 +39,12 @@ def create_demo_agent(
         raise ValueError("delay_seconds must not be negative")
     owned_store = store if store is not None else new_demo_session_store()
 
-    async def execute(session_id: str) -> ConversationTurnResult[DemoPayload]:
+    async def execute(session_id: str, reservation: ConversationTurnReservation[DemoContext, DemoPayload]) -> ConversationTurnResult[DemoPayload]:
         return await run_demo_turn(
             owned_store,
             session_id,
             delay_seconds=delay_seconds,
+            reservation=reservation,
             pause=pause,
             single_greeting_tool_factory=single_greeting_tool_factory,
             greeting_list_tool_factory=greeting_list_tool_factory,

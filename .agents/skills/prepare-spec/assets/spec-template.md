@@ -1,6 +1,7 @@
 # <Spec Title>
 
 Status: draft
+Confirmation: <Pending, or reference to user confirmation of material decisions and any explicit delegation.>
 Date: YYYY-MM-DD
 Related concept: <filename or "None">
 Related specs: <filenames or "None">
@@ -22,7 +23,7 @@ Related specs: <filenames or "None">
 
 ## Decisions and Behavior
 
-<Record only decisions and non-obvious behavior that cannot safely be inferred from the codebase. Include relevant error and edge-case semantics.>
+<Record confirmed decisions and choices made within explicit delegation, including relevant error and edge-case semantics. Identify delegated choices and cite repository evidence for any material inherited constraints. Keep unconfirmed material choices under Open Questions. Omit routine implementation mechanics established by the codebase.>
 
 ## Contract
 
@@ -43,7 +44,7 @@ Related specs: <filenames or "None">
 
 ## Open Questions
 
-<Include while drafting when unresolved questions remain. Remove this section when none remain.>
+<List unresolved material choices and any recommendations with their tradeoffs. Do not mark the spec ready while these remain unconfirmed or undelegated. Remove this section when none remain.>
 
 ## Coordination
 

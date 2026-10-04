@@ -6,7 +6,7 @@ from typing import Never
 import pytest
 
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.history import CallRecord
+from app.sessions.history import CallRecord, ContinuationRecord, HistoryRecord
 from app.sessions.tool_turns import run_tool_turn
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
 from tool_turn_recorder import ToolTurnRecorder
@@ -29,7 +29,7 @@ class TwoToolGenerator:
                                     "name": call.name, "arguments": call.arguments} for call in calls),
                 tool_calls=calls, text=None,
             )
-        return AgenticGenerationResponse((), (), "Finished")
+        return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Finished"},), (), "Finished")
 
 
 def test_advertised_tools_dispatch_by_name_with_shared_limits() -> None:
@@ -54,7 +54,7 @@ def test_advertised_tools_dispatch_by_name_with_shared_limits() -> None:
             LocalToolSource((RegisteredTool("second", {"type": "function", "name": "second"}, second),)),
         ),
         max_attempts=2, max_successes=1, max_provider_responses=2,
-        record_response=recorder.record_response, start_execution=recorder.start_execution,
+        record_item=recorder.record_item, start_execution=recorder.start_execution,
         record_result=recorder.record_result,
     ))
 
@@ -63,7 +63,6 @@ def test_advertised_tools_dispatch_by_name_with_shared_limits() -> None:
     assert invoked == ["first"]
     assert recorder.started == [recorder.calls[0]]
     assert [call for call, _ in recorder.results] == recorder.calls
-    assert [accepted for _, accepted in recorder.responses] == [None, True]
     assert [tool["name"] for tool in generator.requests[0].tools] == ["first", "second"]
     outputs = generator.requests[1].input_items[-3:]
     assert outputs[0]["call_id"] == "call-a"
@@ -93,7 +92,7 @@ def test_each_advertised_name_dispatches_to_its_own_handler() -> None:
             RegisteredTool("second", {"type": "function", "name": "second"}, handler("second")),
         )),),
         max_attempts=2, max_successes=2, max_provider_responses=2,
-        record_response=recorder.record_response, start_execution=recorder.start_execution,
+        record_item=recorder.record_item, start_execution=recorder.start_execution,
         record_result=recorder.record_result,
     ))
     assert invoked == ["first", "second"]
@@ -115,7 +114,7 @@ def test_tool_registration_rejects_schema_dispatch_mismatch() -> None:
             generator, ({"role": "user", "content": "Help"},), "Context", "Instructions",
             (LocalToolSource((RegisteredTool("first", {"type": "function", "name": "second"}, execute),)),),
             max_attempts=1, max_successes=1, max_provider_responses=2,
-            record_response=recorder.record_response, start_execution=recorder.start_execution,
+            record_item=recorder.record_item, start_execution=recorder.start_execution,
             record_result=recorder.record_result,
         ))
     assert generator.requests == []
@@ -144,7 +143,7 @@ def test_independent_sources_combine_tools_and_instructions_in_configured_order(
     result = asyncio.run(run_tool_turn(
         generator, (), "Context", "Local instructions", (first, second),
         max_attempts=2, max_successes=1, max_provider_responses=2,
-        record_response=recorder.record_response, start_execution=recorder.start_execution,
+        record_item=recorder.record_item, start_execution=recorder.start_execution,
         record_result=recorder.record_result,
     ))
     assert result.kind == "completed" and result.artifacts == ()
@@ -168,7 +167,7 @@ def test_collision_between_independent_sources_is_rejected_before_generation() -
                 IndependentToolSource("same", "First guidance", invoked),
                 IndependentToolSource("same", "Second guidance", invoked),
             ), 2, 1, 2,
-            record_response=recorder.record_response, start_execution=recorder.start_execution,
+            record_item=recorder.record_item, start_execution=recorder.start_execution,
             record_result=recorder.record_result,
         ))
     assert generator.requests == []
@@ -181,9 +180,12 @@ def test_mismatched_recorded_calls_fail_before_execution(omit: bool) -> None:
     recorder = ToolTurnRecorder[str]()
     invoked: list[str] = []
 
-    def record_response(response: AgenticGenerationResponse, accepted: bool | None) -> tuple[CallRecord, ...]:
-        calls = recorder.record_response(response, accepted)
-        return () if omit else tuple(reversed(calls))
+    def record_item(item: dict[str, object]) -> HistoryRecord:
+        recorded = recorder.record_item(item)
+        if isinstance(recorded, CallRecord):
+            return ContinuationRecord("test-turn", item) if omit else CallRecord("test-turn", recorded.execution_id,
+                {**item, "name": "different"})
+        return recorded
 
     def execute(call: ToolInvocation) -> ToolExecution[str]:
         invoked.append(call.name)
@@ -193,7 +195,7 @@ def test_mismatched_recorded_calls_fail_before_execution(omit: bool) -> None:
         asyncio.run(run_tool_turn(
             generator, (), "Context", "Instructions",
             (LocalToolSource((RegisteredTool("first", {"type": "function", "name": "first"}, execute),)),),
-            2, 1, 2, record_response=record_response,
+            2, 1, 2, record_item=record_item,
             start_execution=recorder.start_execution, record_result=recorder.record_result,
         ))
     assert len(generator.requests) == 1

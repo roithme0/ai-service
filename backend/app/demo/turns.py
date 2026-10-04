@@ -11,8 +11,8 @@ from app.models.agentic_generation import AgenticGenerationResponse, AgenticTool
 from app.demo.tools import DemoToolFactory
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
-from app.demo.session import DemoPayload, DemoSessionStore
-from app.sessions.conversation import ConversationTurnResult, TurnHistoryUnavailable
+from app.demo.session import DemoContext, DemoPayload, DemoSessionStore
+from app.sessions.conversation import ConversationTurnReservation, ConversationTurnResult, TurnHistoryUnavailable
 from app.sessions.tools import ToolRegistry
 
 
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 async def run_demo_turn(
     store: DemoSessionStore,
     session_id: str,
+    reservation: ConversationTurnReservation[DemoContext, DemoPayload],
     delay_seconds: float = TURN_DELAY_SECONDS,
     pause: Callable[[float], Awaitable[None]] = asyncio.sleep,
     single_greeting_tool_factory: DemoToolFactory = create_greeting_tool,
@@ -38,10 +39,6 @@ async def run_demo_turn(
 ) -> ConversationTurnResult[DemoPayload]:
     if delay_seconds < 0:
         raise ValueError("delay_seconds must not be negative")
-    reservation = store.reserve_turn(session_id)
-    if isinstance(reservation, ConversationTurnResult):
-        return reservation
-
     try:
         await pause(delay_seconds)
         completed_count = sum(message.role == "assistant" for message in reservation.snapshot.messages)
@@ -57,7 +54,9 @@ async def run_demo_turn(
             ), (), FIRST_TOOL_UPDATE))
             call = store.record_call(session_id, reservation.turn_id,
                                      AgenticToolCall("greeting", "create_greeting", '{"name":"World"}'))
+            await pause(delay_seconds)
             store.start_execution(session_id, call)
+            await pause(delay_seconds)
             greeting = await registry.invoke(call.call.name, call.call.arguments)
             greeting = store.record_result(session_id, call, greeting)
             if greeting.artifact is None:
@@ -67,7 +66,9 @@ async def run_demo_turn(
             ), (), SECOND_TOOL_UPDATE))
             call = store.record_call(session_id, reservation.turn_id, AgenticToolCall(
                 "greetings", "create_greetings", json.dumps({"names": [f"Visitor {index}" for index in range(1, 31)]})))
+            await pause(delay_seconds)
             store.start_execution(session_id, call)
+            await pause(delay_seconds)
             greetings = await registry.invoke(call.call.name, call.call.arguments)
             greetings = store.record_result(session_id, call, greetings)
             if greetings.artifact is None:
@@ -77,7 +78,9 @@ async def run_demo_turn(
             ), (), FAILED_TOOL_UPDATE))
             call = store.record_call(session_id, reservation.turn_id,
                                      AgenticToolCall("invalid-greeting", "create_greeting", '{"name":""}'))
+            await pause(delay_seconds)
             store.start_execution(session_id, call)
+            await pause(delay_seconds)
             rejected = await registry.invoke(call.call.name, call.call.arguments)
             rejected = store.record_result(session_id, call, rejected)
             if not rejected.failed or rejected.artifact is not None:
@@ -87,9 +90,12 @@ async def run_demo_turn(
             store.record_provider_response(session_id, reservation.turn_id, AgenticGenerationResponse((
                 {"type": "message", "role": "assistant", "phase": "commentary", "content": FAILED_GENERATION_UPDATE},
             ), (), FAILED_GENERATION_UPDATE))
+            await pause(delay_seconds)
             return store.fail_turn(session_id, reservation)
         else:
             reply = COMPLETE_REPLY
+        store.record_provider_item(session_id, reservation.turn_id, {"type": "message", "role": "assistant", "phase": "final_answer", "content": reply})
+        await pause(delay_seconds)
         return store.complete_turn(session_id, reservation, "completed", reply)
     except TurnHistoryUnavailable as error:
         return ConversationTurnResult(error.kind, reservation.turn_id, None, ())

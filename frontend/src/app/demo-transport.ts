@@ -1,6 +1,6 @@
 import {
   AgentConfiguration, ConversationApiError, HttpConversationTransport,
-  type CompletedTurnResponse, type SessionCreationResponse, type UserMessageResponse,
+  type StreamEvent, type SessionCreationResponse, type UserMessageResponse,
 } from '@roithme0/chat-ui/conversation';
 
 const COMPLETED_TURNS_BEFORE_COMPATIBILITY_ERROR = 3;
@@ -27,9 +27,10 @@ export class DemoTransport extends HttpConversationTransport {
     return super.appendMessage(sessionId, text);
   }
 
-  override async generateTurn(sessionId: string): Promise<CompletedTurnResponse> {
-    const turn = await super.generateTurn(sessionId);
-    this.completedTurns += 1;
-    return turn;
+  override async *observeTurn(sessionId: string, turnId: string, signal: AbortSignal): AsyncIterable<StreamEvent> {
+    for await (const event of super.observeTurn(sessionId, turnId, signal)) {
+      if (event.kind === 'terminal' && event.outcome === 'completed') this.completedTurns += 1;
+      yield event;
+    }
   }
 }

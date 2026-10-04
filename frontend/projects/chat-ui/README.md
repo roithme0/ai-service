@@ -17,11 +17,11 @@ The `/ui` entry point exports `ChatUiComponent` and the typed content, artifact 
 />
 ```
 
-Tool content (`ChatToolCall`) has `kind: 'tool'`, stable `id`, `name`, and `status` (`completed`, `failed`, `not_executed`, or `outcome_unknown`). Each call renders as a compact row in secondary text color with the same packaged tool icon and a German status label. Names render literally; arguments and result payloads are not displayed. Completed means a result was returned without explicitly reported failure. Failure content (`ChatTurnFailure`) has `kind: 'failure'`, `id`, and `text`; a trailing marker is covered by the current error status when present, and remains visible in later history.
+Tool content (`ChatToolCall`) has `kind: 'tool'`, stable `id`, `name`, and `status` (`requested`, `running`, `completed`, `failed`, `not_executed`, or `outcome_unknown`). Each call renders as a compact row in secondary text color with the same packaged tool icon and a German status label. Names render literally; arguments and result payloads are not displayed. Completed means a result was returned without explicitly reported failure. Failure content (`ChatTurnFailure`) has `kind: 'failure'`, `id`, and `text`; a trailing marker is covered by the current error status when present, and remains visible in later history.
 
 Text content has readonly `kind`, `id`, `role` (`user` or `assistant`), and `text` fields. Artifacts have readonly `kind`, `id`, `type`, `headline`, optional `subtitle`, and recursive `JsonValue` payload fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
 
-Intermediate assistant content (`ChatIntermediateMessage`) has readonly `kind: 'intermediate'`, `id`, and `text`. It uses the same safe Markdown renderer with secondary text color and appears in recorded order among tool calls and artifacts, including after failed turns. These are user-facing progress explanations; provider reasoning is not displayed. Final answers remain standalone. Updates arrive after turn termination until streaming is implemented, and do not count as final messages during controller reconciliation.
+Intermediate assistant content (`ChatIntermediateMessage`) has readonly `kind: 'intermediate'`, `id`, and `text`. It uses the same safe Markdown renderer with secondary text color and appears in recorded order among tool calls and artifacts, including after failed turns. These are user-facing progress explanations; provider reasoning is not displayed. Complete messages appear live and retain their supplied styling permanently. Final messages alone do not finish the busy state; terminal success is authoritative. All complete output and accepted artifacts survive later turn failure.
 
 Map artifact type discriminators to typed Angular templates with `artifactRenderer(template)`. The built-in `json` type renders the escaped, formatted `payload.value`. An absent mapping for any other type shows an unsupported-presentation message; it does not silently select JSON. The library frames every artifact and clips renderer bodies above `--ai-chat-artifact-collapsed-height` (default `18rem`) with German expand/collapse controls and no nested scrolling area.
 
@@ -36,7 +36,7 @@ The root entry point exports no API. This is a breaking import migration: replac
 A complete minimal standalone host (with the Material theme described below):
 
 ```typescript
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
 import {
   AgentConfiguration, ConversationController, HttpConversationTransport, presentJsonArtifact,
@@ -57,7 +57,7 @@ import {
       (statusActionTriggered)="act($event)"
     />`,
 })
-export class ChatHost implements OnInit {
+export class ChatHost implements OnInit, OnDestroy {
   readonly chat = signal<ConversationViewState>({
     content: [], composerDisabled: true, status: null,
   });
@@ -68,6 +68,7 @@ export class ChatHost implements OnInit {
   );
 
   ngOnInit(): void { void this.controller.start(); }
+  ngOnDestroy(): void { this.controller.dispose(); }
   submit(value: ChatSubmission): void {
     void this.controller.submit(value.text, value.acknowledge);
   }
@@ -83,7 +84,9 @@ The transport binds the URL, agent key, and optional third constructor argument 
 
 The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentArtifact` is the default mapper: it preserves the advertised type and identity and unwraps the backend presentation payload `{ title, payload }`. `presentJsonArtifact` is an explicit adapter for hosts such as the deterministic demo that deliberately present arbitrary tool payloads using type `json` and `{ value: originalPayload }`; the controller follows the backend timeline exactly and resolves artifact references against their envelopes, preserving tool/artifact placement even without a final assistant answer. The host owns view-state binding, introductory text and custom renderer registration.
 
-The supported HTTP contract is this repository's AI Service conversation API. `ConversationTransport` remains available for isolated tests. The controller retains acceptance acknowledgement, ambiguous-request reconciliation, turn execution, failure classification and existing recovery actions. Confirmed generation failures trigger one session read to retrieve retained tool activity and artifacts; a failed read preserves the confirmed failure and current content. Completed turn responses contain their ordered activity, while session snapshots contain the full ordered timeline. It adds no polling, automatic retries, persistence, streaming or cancellation.
+The supported HTTP contract is this repository's AI Service conversation API. `ConversationTransport` exposes `generateTurn` for accepted start identity and `observeTurn` as an abortable async iterable of typed stream events. The fetch-based SSE reader validates generated runtime schemas and never reconnects automatically. The controller first attaches to its accepted turn, applies the retained snapshot, and inserts or replaces items by stable identity and order. Artifact envelopes are available atomically with their rows. The backend closing status, supplied in the initial snapshot or a `closing` event, hides the answer progress indicator without classifying displayed messages. Later upserts keep it hidden. The composer stays disabled until typed terminal state; EOF, malformed events, and observation loss retain output and report an unknown outcome without reconnect or retry actions.
+
+Append/start request uncertainty uses authoritative session state once to avoid duplicate execution. This is separate from observer interruption: no read or replacement request restores a lost observer. `start()` creates a fresh session; `dispose()` and replacement sessions abort observation and ignore stale callbacks while backend work continues. There is no resume API, refresh recovery, browser session persistence, generation retry, or cancellation control. The `/ui` entry point remains entirely controlled and network-independent.
 
 Expected routing is host frontend ? same-origin backend/proxy ? AI Service gateway. Relays must preserve response bodies and status codes, allow agent-turn durations, and avoid automatic retries of state-changing message/turn requests. Consumer relay implementation and authentication/session authorization are deferred. Same-origin routing is not an authorization guarantee.
 

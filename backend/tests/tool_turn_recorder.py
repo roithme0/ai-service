@@ -2,27 +2,31 @@
 
 from copy import deepcopy
 
-from app.models.agentic_generation import AgenticGenerationResponse
-from app.sessions.history import CallRecord
+from app.models.agentic_generation import AgenticOutputItem, message_phase
+from app.sessions.history import CallRecord, ContinuationRecord, HistoryRecord, MessageRecord
 from app.sessions.tools import ToolExecution
 
 
 class ToolTurnRecorder[ArtifactT]:
     def __init__(self) -> None:
-        self.responses: list[tuple[AgenticGenerationResponse, bool | None]] = []
+        self.items: list[HistoryRecord] = []
         self.calls: list[CallRecord] = []
         self.started: list[CallRecord] = []
         self.results: list[tuple[CallRecord, ToolExecution[ArtifactT]]] = []
 
-    def record_response(self, response: AgenticGenerationResponse, accepted: bool | None) -> tuple[CallRecord, ...]:
-        self.responses.append((response, accepted))
-        calls: list[CallRecord] = []
-        for item in response.output_items:
-            if item.get("type") == "function_call":
-                record = CallRecord("test-turn", str(len(self.calls)), deepcopy(item))
-                self.calls.append(record)
-                calls.append(record)
-        return tuple(calls)
+    def record_item(self, item: AgenticOutputItem) -> HistoryRecord:
+        record: HistoryRecord
+        if item.get("type") == "function_call":
+            record = CallRecord("test-turn", str(len(self.calls)), deepcopy(item))
+            self.calls.append(record)
+        elif item.get("type") == "message":
+            phase = message_phase(item)
+            record = MessageRecord("test-turn", deepcopy(item), "intermediate" if phase == "commentary" else
+                                   "final" if phase == "final_answer" else "unspecified")
+        else:
+            record = ContinuationRecord("test-turn", deepcopy(item))
+        self.items.append(record)
+        return record
 
     def start_execution(self, call: CallRecord) -> None:
         self.started.append(call)

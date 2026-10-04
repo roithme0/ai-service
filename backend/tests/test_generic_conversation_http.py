@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.testclient import TestClient
+from turn_observation import observe_turn
 from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -28,7 +29,8 @@ def client() -> Iterator[TestClient]:
     }
     app.dependency_overrides[get_agent_registry] = lambda: registry
     try:
-        yield TestClient(app)
+        with TestClient(app) as running:
+            yield running
     finally:
         app.dependency_overrides.clear()
 
@@ -129,12 +131,12 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
         message = client.post(f"{session}/messages", json={"text": f"user {index}"})
         assert message.status_code == 201
         assert message.json() == {"role": "user", "text": f"user {index}", "turn_id": None}
-        turn = client.post(f"{session}/turns")
+        turn = observe_turn(client, f"{session}/turns")
         body = turn.json()
         if index == 2:
             assert turn.status_code == 502
             assert body["kind"] == "generation_failed"
-            assert client.post(f"{session}/turns").json() == body
+            assert observe_turn(client, f"{session}/turns").json() == body
             failed_history = client.get(session).json()
             assert failed_history["terminal_turn_kind"] == "generation_failed"
             assert len(failed_history["artifacts"]) == 2
@@ -143,7 +145,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
             assert "without a final answer" in failed_activity[1]["text"]
             assert client.get(session).json()["timeline"] == failed_history["timeline"]
             continue
-        assert turn.status_code == 201
+        assert turn.status_code == 200
         assert body["kind"] == "completed"
         assert body["message"]["role"] == "assistant"
         assert body["message"]["turn_id"] == body["turn_id"]
@@ -185,7 +187,7 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     fresh = client.post(base, json={}).json()
     fresh_session = f"{base}/{fresh['session_id']}"
     client.post(f"{fresh_session}/messages", json={"text": "again"})
-    assert client.post(f"{fresh_session}/turns").json()["message"]["text"] == texts[0]
+    assert observe_turn(client, f"{fresh_session}/turns").json()["message"]["text"] == texts[0]
 
 
 def test_success_schemas_are_published(client: TestClient) -> None:
@@ -205,16 +207,13 @@ def test_success_schemas_are_published(client: TestClient) -> None:
     assert append_path["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"] == (
         "#/components/schemas/UserMessageResponse"
     )
-    assert turn_path["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"] == (
-        "#/components/schemas/CompletedTurnResponse"
+    assert turn_path["post"]["responses"]["202"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/AcceptedTurnResponse"
     )
     assert "turn_id" in schemas["UserMessageResponse"]["required"]
     assert schemas["UserMessageResponse"]["properties"]["turn_id"]["type"] == "null"
     assert schemas["SessionSnapshotResponse"]["properties"]["messages"]["items"]["discriminator"]["propertyName"] == "role"
-    assert schemas["CompletedTurnResponse"]["properties"]["message"]["$ref"] == (
-        "#/components/schemas/AssistantMessageResponse"
-    )
-    assert schemas["CompletedTurnResponse"]["properties"]["kind"]["const"] == "completed"
+    assert schemas["AcceptedTurnResponse"]["properties"]["kind"]["const"] == "accepted"
 
 
 def test_request_bodies_are_published_and_enforced(client: TestClient) -> None:
@@ -350,7 +349,7 @@ def test_success_bodies_are_validated(client: TestClient) -> None:
 
     with patch.object(AgentTransport, "turn", return_value={"kind": "completed", "turn_id": "turn-1"}):
         with pytest.raises(ResponseValidationError):
-            client.post("/api/v1/agents/demo/sessions/session-1/turns")
+            observe_turn(client, "/api/v1/agents/demo/sessions/session-1/turns")
 
 
 def test_unavailable_agent_precedes_malformed_body() -> None:
@@ -401,11 +400,12 @@ def test_demo_concurrent_sessions_and_busy_turn() -> None:
             second_turn = asyncio.create_task(client.post(f"{base}/{second}/turns"))
             await asyncio.wait_for(entered.wait(), timeout=2)
             busy = await client.post(f"{base}/{first}/turns")
-            assert busy.status_code == 409
-            assert busy.json()["kind"] == "busy"
+            assert busy.status_code == 202
+            assert busy.json() == (await first_turn).json()
             release.set()
-            assert (await first_turn).status_code == 201
-            assert (await second_turn).status_code == 201
+            assert (await first_turn).status_code == 202
+            assert (await second_turn).status_code == 202
+            await agent.close()
 
     try:
         asyncio.run(exercise())

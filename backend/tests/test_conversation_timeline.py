@@ -24,8 +24,8 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
         ArtifactToolOutput("presented"), ArtifactCandidate("example", "retained content")))
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert [item.kind for item in read.snapshot.timeline] == ["message"]
-    assert read.snapshot.artifacts == ()
+    assert [item.kind for item in read.snapshot.timeline] == ["message", "intermediate", "tool", "artifact"]
+    assert len(read.snapshot.artifacts) == 1
 
     calls = tuple(AgenticToolCall(str(index), name, "{}") for index, name in enumerate(
         ("explicit_failure", "domain_payload", "uncertain", "never_started")))

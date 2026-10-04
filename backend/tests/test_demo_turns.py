@@ -6,7 +6,8 @@ from app.models.agentic_generation import AgenticToolCall
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import GreetingsPayload, create_demo_session, new_demo_session_store
-from app.demo.turns import COMPLETE_REPLY, FIRST_REPLY, SECOND_REPLY, run_demo_turn
+from app.agents.demo import create_demo_agent
+from app.demo.turns import COMPLETE_REPLY, FIRST_REPLY, SECOND_REPLY
 from app.sessions.conversation import (
     ConversationReadActive,
     ConversationTurnReservation,
@@ -30,16 +31,16 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
         delays.append(seconds)
 
     store.append_user_message(first_session.session_id, "Anything")
-    first = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
+    first = asyncio.run(create_demo_agent(store, delay_seconds=0.25, pause=record_delay).execute_turn(first_session.session_id))
     store.append_user_message(first_session.session_id, "Unrelated text")
-    second = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
+    second = asyncio.run(create_demo_agent(store, delay_seconds=0.25, pause=record_delay).execute_turn(first_session.session_id))
     store.append_user_message(first_session.session_id, "More")
-    third = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
-    repeated_failure = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
+    third = asyncio.run(create_demo_agent(store, delay_seconds=0.25, pause=record_delay).execute_turn(first_session.session_id))
+    repeated_failure = asyncio.run(create_demo_agent(store, delay_seconds=0.25, pause=record_delay).execute_turn(first_session.session_id))
     store.append_user_message(first_session.session_id, "Again")
-    fourth = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
+    fourth = asyncio.run(create_demo_agent(store, delay_seconds=0.25, pause=record_delay).execute_turn(first_session.session_id))
     store.append_user_message(first_session.session_id, "Still more")
-    fifth = asyncio.run(run_demo_turn(store, first_session.session_id, 0.25, record_delay))
+    fifth = asyncio.run(create_demo_agent(store, delay_seconds=0.25, pause=record_delay).execute_turn(first_session.session_id))
 
     assert [turn.kind for turn in (first, second, third, fourth, fifth)] == [
         "completed", "completed", "generation_failed", "completed", "completed",
@@ -49,7 +50,7 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
         FIRST_REPLY, SECOND_REPLY, None, COMPLETE_REPLY, COMPLETE_REPLY,
     ]
     assert fourth.text == fifth.text == "This scripted demo is complete. Refresh the page to restart it."
-    assert delays == [0.25] * 5
+    assert delays == [0.25] * 16
     assert first.artifacts == third.artifacts == fourth.artifacts == fifth.artifacts == ()
     assert len(second.artifacts) == 2
     artifact = second.artifacts[0]
@@ -81,7 +82,7 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
 
     next_session = create_demo_session(store)
     store.append_user_message(next_session.session_id, "Same text as before")
-    restarted = asyncio.run(run_demo_turn(store, next_session.session_id, 0, no_delay))
+    restarted = asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(next_session.session_id))
     assert restarted.text == FIRST_REPLY
     assert restarted.artifacts == ()
 
@@ -147,7 +148,7 @@ def test_unaccepted_candidates_are_absent_after_failure_and_retry() -> None:
     store = new_demo_session_store()
     session_id = create_demo_session(store).session_id
     store.append_user_message(session_id, "First")
-    assert asyncio.run(run_demo_turn(store, session_id, 0, no_delay)).kind == "completed"
+    assert asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id)).kind == "completed"
     store.append_user_message(session_id, "Second")
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
@@ -162,7 +163,7 @@ def test_unaccepted_candidates_are_absent_after_failure_and_retry() -> None:
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == ()
     store.append_user_message(session_id, "Retry")
-    retry = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
+    retry = asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id))
     assert retry.text == SECOND_REPLY
     assert [artifact.type for artifact in retry.artifacts] == ["demo.greeting", "demo.greetings"]
     assert [artifact.order for artifact in retry.artifacts] == [11, 16]
@@ -179,9 +180,9 @@ def test_busy_cancellation_and_retry_keep_first_step() -> None:
         await asyncio.Event().wait()
 
     async def run() -> None:
-        task = asyncio.create_task(run_demo_turn(store, session_id, 0.4, wait_in_first_turn))
+        task = asyncio.create_task(create_demo_agent(store, delay_seconds=0.4, pause=wait_in_first_turn).execute_turn(session_id))
         await entered.wait()
-        assert (await run_demo_turn(store, session_id, 0, no_delay)).kind == "busy"
+        assert (await create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id)).kind == "busy"
         assert store.append_user_message(session_id, "Blocked").kind == "busy"
         task.cancel()
         try:
@@ -198,7 +199,7 @@ def test_busy_cancellation_and_retry_keep_first_step() -> None:
     assert len(read.snapshot.session.messages) == 1
     assert store.reserve_turn(session_id).kind == "generation_failed"
     store.append_user_message(session_id, "Retry")
-    retry = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
+    retry = asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id))
     assert retry.text == FIRST_REPLY
     assert retry.artifacts == ()
 
@@ -207,7 +208,7 @@ def test_unaccepted_greeting_does_not_advance_demo_step() -> None:
     store = new_demo_session_store()
     session_id = create_demo_session(store).session_id
     store.append_user_message(session_id, "First")
-    assert asyncio.run(run_demo_turn(store, session_id, 0, no_delay)).kind == "completed"
+    assert asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id)).kind == "completed"
     store.append_user_message(session_id, "Second")
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
@@ -218,10 +219,10 @@ def test_unaccepted_greeting_does_not_advance_demo_step() -> None:
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == ()
     assert sum(message.role == "assistant" for message in read.snapshot.session.messages) == 1
-    assert asyncio.run(run_demo_turn(store, session_id, 0, no_delay)).kind == "generation_failed"
+    assert asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id)).kind == "generation_failed"
 
     store.append_user_message(session_id, "Retry")
-    retry = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
+    retry = asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id))
     assert retry.text == SECOND_REPLY
     assert len(retry.artifacts) == 2
     assert [artifact.order for artifact in retry.artifacts] == [11, 16]
@@ -241,7 +242,7 @@ def test_expiry_during_delay_uses_shared_expiry_result() -> None:
         nonlocal current
         current = created.expires_at
 
-    result = asyncio.run(run_demo_turn(store, created.session_id, 0.4, expire))
+    result = asyncio.run(create_demo_agent(store, delay_seconds=0.4, pause=expire).execute_turn(created.session_id))
     assert result.kind == "expired"
     assert result.artifacts == ()
     assert store.read(created.session_id).kind == "unknown"
@@ -251,7 +252,7 @@ def test_scripted_turn_retains_completed_first_tool_when_second_tool_fails() -> 
     store = new_demo_session_store()
     session_id = create_demo_session(store).session_id
     store.append_user_message(session_id, "First")
-    assert asyncio.run(run_demo_turn(store, session_id, 0, no_delay)).kind == "completed"
+    assert asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id)).kind == "completed"
     store.append_user_message(session_id, "Second")
 
     def failing_factory() -> RegisteredTool[ArtifactCandidate[DemoPayload]]:
@@ -259,8 +260,7 @@ def test_scripted_turn_retains_completed_first_tool_when_second_tool_fails() -> 
             raise RuntimeError("second tool failed without returning")
         return RegisteredTool("create_greetings", {"type": "function", "name": "create_greetings"}, execute)
 
-    result = asyncio.run(run_demo_turn(store, session_id, 0, no_delay,
-                                     greeting_list_tool_factory=failing_factory))
+    result = asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay, greeting_list_tool_factory=failing_factory).execute_turn(session_id))
     assert result.kind == "generation_failed"
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
@@ -273,9 +273,9 @@ def test_scripted_turn_retains_completed_first_tool_when_second_tool_fails() -> 
     reports = [record for record in history if isinstance(record, ExecutionReportRecord)]
     assert len(reports) == 1
     assert reports[0].state == "outcome_unknown"
-    assert asyncio.run(run_demo_turn(store, session_id, 0, no_delay)) == result
+    assert asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id)) == result
     store.append_user_message(session_id, "Next")
-    next_turn = asyncio.run(run_demo_turn(store, session_id, 0, no_delay))
+    next_turn = asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id))
     assert next_turn.kind == "generation_failed"
     retained = store.read(session_id)
     assert isinstance(retained, ConversationReadActive)

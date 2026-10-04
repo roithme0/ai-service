@@ -5,6 +5,20 @@ export type ClientOptions = {
 };
 
 /**
+ * AcceptedTurnResponse
+ */
+export type AcceptedTurnResponse = {
+    /**
+     * Kind
+     */
+    kind: 'accepted';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
  * ArtifactResponse
  */
 export type ArtifactResponse = {
@@ -55,29 +69,6 @@ export type AssistantMessageResponse = {
 };
 
 /**
- * CompletedTurnResponse
- */
-export type CompletedTurnResponse = {
-    /**
-     * Artifacts
-     */
-    artifacts: Array<ArtifactResponse>;
-    /**
-     * Kind
-     */
-    kind: 'completed';
-    message: AssistantMessageResponse;
-    /**
-     * Timeline
-     */
-    timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
  * ErrorResponse
  */
 export type ErrorResponse = {
@@ -93,6 +84,16 @@ export type ErrorResponse = {
      * Turn Id
      */
     turn_id?: string | null;
+};
+
+/**
+ * HTTPValidationError
+ */
+export type HttpValidationError = {
+    /**
+     * Detail
+     */
+    detail?: Array<ValidationError>;
 };
 
 /**
@@ -114,6 +115,14 @@ export type SessionCreationResponse = {
  */
 export type SessionSnapshotResponse = {
     /**
+     * Active Turn Id
+     */
+    active_turn_id: string | null;
+    /**
+     * Active Turn Status
+     */
+    active_turn_status: 'in_progress' | 'closing' | null;
+    /**
      * Artifacts
      */
     artifacts: Array<ArtifactResponse>;
@@ -125,6 +134,10 @@ export type SessionSnapshotResponse = {
      * Messages
      */
     messages: Array<UserMessageResponse | AssistantMessageResponse>;
+    /**
+     * Sequence
+     */
+    sequence: number;
     /**
      * Session Id
      */
@@ -141,6 +154,135 @@ export type SessionSnapshotResponse = {
      * Timeline
      */
     timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
+};
+
+/**
+ * StreamClosing
+ */
+export type StreamClosing = {
+    /**
+     * Kind
+     */
+    kind: 'closing';
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * StreamError
+ */
+export type StreamError = {
+    /**
+     * Kind
+     */
+    kind: 'error';
+    /**
+     * Reason
+     */
+    reason: 'unavailable' | 'observation_limit';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * StreamEvent
+ */
+export type StreamEvent = ({
+    kind: 'snapshot';
+} & StreamSnapshot) | ({
+    kind: 'upsert';
+} & StreamUpsert) | ({
+    kind: 'closing';
+} & StreamClosing) | ({
+    kind: 'terminal';
+} & StreamTerminal) | ({
+    kind: 'error';
+} & StreamError);
+
+/**
+ * StreamSnapshot
+ */
+export type StreamSnapshot = {
+    /**
+     * Kind
+     */
+    kind: 'snapshot';
+    snapshot: SessionSnapshotResponse;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * StreamTerminal
+ */
+export type StreamTerminal = {
+    /**
+     * Kind
+     */
+    kind: 'terminal';
+    /**
+     * Outcome
+     */
+    outcome: 'completed' | 'generation_failed' | 'conflict';
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * StreamUpsert
+ */
+export type StreamUpsert = {
+    artifact?: ArtifactResponse | null;
+    /**
+     * Identity
+     */
+    identity: string;
+    /**
+     * Item
+     */
+    item: ({
+        kind: 'message';
+    } & TimelineMessage) | ({
+        kind: 'intermediate';
+    } & TimelineIntermediateMessage) | ({
+        kind: 'tool';
+    } & TimelineTool) | ({
+        kind: 'artifact';
+    } & TimelineArtifact) | ({
+        kind: 'failure';
+    } & TimelineFailure);
+    /**
+     * Kind
+     */
+    kind: 'upsert';
+    /**
+     * Order
+     */
+    order: number;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
 };
 
 /**
@@ -242,7 +384,7 @@ export type TimelineTool = {
     /**
      * Status
      */
-    status: 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
+    status: 'requested' | 'running' | 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
     /**
      * Turn Id
      */
@@ -281,6 +423,34 @@ export type ValidationDetail = {
     msg: string;
     /**
      * Type
+     */
+    type: string;
+};
+
+/**
+ * ValidationError
+ */
+export type ValidationError = {
+    /**
+     * Context
+     */
+    ctx?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Input
+     */
+    input?: unknown;
+    /**
+     * Location
+     */
+    loc: Array<string | number>;
+    /**
+     * Message
+     */
+    msg: string;
+    /**
+     * Error Type
      */
     type: string;
 };
@@ -568,7 +738,65 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostRespons
     /**
      * Successful Response
      */
-    201: CompletedTurnResponse;
+    202: AcceptedTurnResponse;
 };
 
 export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponse = ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponses[keyof ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponses];
+
+export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Configuration
+         */
+        configuration: 'demo' | 'kochwiki';
+        /**
+         * Session Id
+         */
+        session_id: string;
+        /**
+         * Turn Id
+         */
+        turn_id: string;
+    };
+    query?: never;
+    url: '/api/v1/agents/{configuration}/sessions/{session_id}/turns/{turn_id}/events';
+};
+
+export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors = {
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Method Not Allowed
+     */
+    405: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Gone
+     */
+    410: ErrorResponse;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Internal Server Error
+     */
+    500: ErrorResponse;
+};
+
+export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetError = ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors[keyof ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors];
+
+export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: StreamEvent;
+};
+
+export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponse = ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponses[keyof ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponses];

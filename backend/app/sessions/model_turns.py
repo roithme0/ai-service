@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Generic, TypeVar
 
 from app.models.agentic_generation import AgenticGenerator
-from app.sessions.conversation import ConversationSessionStore, ConversationTurnResult, TurnHistoryUnavailable
+from app.sessions.conversation import ConversationSessionStore, ConversationTurnReservation, ConversationTurnResult, TurnHistoryUnavailable
 from app.sessions.history import model_input
 from app.sessions.artifacts import ArtifactCandidate
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
@@ -49,10 +49,7 @@ class ModelTurnStrategy(Generic[ContextT, ArtifactT]):
         self._max_attempts = max_attempts
         self._max_provider_responses = max_provider_responses
 
-    async def __call__(self, session_id: str) -> ConversationTurnResult[ArtifactT]:
-        reservation = self._store.reserve_turn(session_id)
-        if isinstance(reservation, ConversationTurnResult):
-            return reservation
+    async def __call__(self, session_id: str, reservation: ConversationTurnReservation[ContextT, ArtifactT]) -> ConversationTurnResult[ArtifactT]:
         try:
             session_sources = (
                 self._session_tool_sources(reservation.snapshot.payload, session_id, reservation.turn_id)
@@ -63,7 +60,7 @@ class ModelTurnStrategy(Generic[ContextT, ArtifactT]):
                 self._context(reservation.snapshot.payload), self._instructions,
                 (*self._tool_sources, *session_sources), self._max_attempts,
                 max_successes=None, max_provider_responses=self._max_provider_responses,
-                record_response=lambda response, accepted: self._store.record_provider_response(session_id, reservation.turn_id, response, accepted),
+                record_item=lambda item: self._store.record_provider_item(session_id, reservation.turn_id, item),
                 start_execution=lambda call: self._store.start_execution(session_id, call),
                 record_result=lambda call, execution: self._store.record_result(session_id, call, execution),
             )

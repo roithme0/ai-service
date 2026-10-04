@@ -12,6 +12,7 @@ from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation, TurnHistoryUnavailable
 from app.sessions.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ToolResultRecord, model_input
 from app.sessions.model_turns import ModelTurnStrategy
+from reserved_turn import execute_reserved_turn
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
 
 
@@ -54,7 +55,7 @@ def test_acceptance_assigns_identity_atomically_and_failure_retains_capacity() -
     assert history[-1].execution_id == history[-2].execution_id == call.execution_id
     assert json.loads(output_text(finalized))["artifact_id"] == history[-1].artifact_id
     assert model_input(history)[-1]["output"] == finalized.output
-    assert store.read(session_id).snapshot.artifacts == ()
+    assert len(store.read(session_id).snapshot.artifacts) == 1
     store.fail_turn(session_id, turn)
     retained = store.read(session_id).snapshot.artifacts
     assert retained[0].order == len(before) + 2
@@ -146,7 +147,7 @@ def test_tool_failure_or_cancellation_before_return_never_accepts_candidate(canc
                     "name": call.name, "arguments": call.arguments},), (call,), None)
         strategy = ModelTurnStrategy(store, Generator(), str, (LocalToolSource((RegisteredTool(
             "present", {"type": "function", "name": "present"}, execute),)),))
-        task = asyncio.create_task(strategy(session_id))
+        task = asyncio.create_task(execute_reserved_turn(store, strategy, session_id))
         await entered.wait()
         if cancel:
             task.cancel()
@@ -179,17 +180,17 @@ def test_model_consumes_assigned_id_and_replay_preserves_same_output(later_failu
             assert json.loads(output)["artifact_id"] == record.artifact_id
             if self.count == 2 and later_failure:
                 raise RuntimeError("later model failed")
-            return AgenticGenerationResponse((), (), "shown")
+            return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "shown"},), (), "shown")
     def execute(invocation: ToolInvocation) -> ToolExecution[ArtifactCandidate[list[str]]]:
         assert not any(isinstance(record, ArtifactRecord) for record in store.history(session_id))
         return candidate()
     strategy = ModelTurnStrategy(store, Generator(), str, (LocalToolSource((RegisteredTool(
         "present", {"type": "function", "name": "present"}, execute),)),))
-    result = asyncio.run(strategy(session_id))
+    result = asyncio.run(execute_reserved_turn(store, strategy, session_id))
     assert result.kind == ("generation_failed" if later_failure else "completed")
     assert len(store.read(session_id).snapshot.artifacts) == 1
     store.append_user_message(session_id, "next")
-    assert asyncio.run(strategy(session_id)).kind == "completed"
+    assert asyncio.run(execute_reserved_turn(store, strategy, session_id)).kind == "completed"
     assert len(outputs) == 2 and outputs[0] == outputs[1]
 
 

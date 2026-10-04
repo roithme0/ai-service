@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
 
@@ -38,6 +39,7 @@ class AgenticGenerationRequest:
     input_items: tuple[AgenticInputItem, ...]
     instructions: str
     tools: tuple[AgenticInputItem, ...]
+    on_output_item: Callable[[AgenticOutputItem], None] | None = None
 
 
 @dataclass(frozen=True)

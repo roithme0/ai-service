@@ -1,543 +1,246 @@
-import { describe, expect, it, vi } from 'vitest';
-import {
-  ConversationApiError,
-  ConversationNetworkError,
-  type ApiMessage,
-  type ConversationTransport,
-} from './conversation-api';
-import type {
-  ArtifactResponse,
-  AssistantMessageResponse,
-  CompletedTurnResponse,
-  SessionCreationResponse,
-  SessionSnapshotResponse,
-  UserMessageResponse,
-} from '../generated/types.gen';
-import { ConversationController, type ConversationViewState } from './conversation-controller';
-
-const CREATED: SessionCreationResponse = { session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z' };
+﻿import { describe, expect, it, vi } from 'vitest';
+import { ConversationController } from './conversation-controller';
+import { ConversationApiError, ConversationNetworkError, type ConversationTransport } from './conversation-api';
+import type { AcceptedTurnResponse, SessionCreationResponse, SessionSnapshotResponse, StreamEvent, StreamUpsert, UserMessageResponse } from '../generated/types.gen';
 
 class FakeTransport implements ConversationTransport {
-  createSession = vi.fn<() => Promise<SessionCreationResponse>>().mockResolvedValue(CREATED);
-  readSession = vi.fn<(sessionId: string) => Promise<SessionSnapshotResponse>>();
-  appendMessage = vi.fn<(sessionId: string, text: string) => Promise<UserMessageResponse>>();
-  generateTurn = vi.fn<(sessionId: string) => Promise<CompletedTurnResponse>>();
+  createSession = vi.fn<() => Promise<SessionCreationResponse>>().mockResolvedValue({ session_id: 's', expires_at: '2026-10-04T20:00:00Z' });
+  readSession = vi.fn<(id: string) => Promise<SessionSnapshotResponse>>();
+  appendMessage = vi.fn<(id: string, text: string) => Promise<UserMessageResponse>>().mockResolvedValue({ role: 'user', text: 'Hello', turn_id: null });
+  generateTurn = vi.fn<(id: string) => Promise<AcceptedTurnResponse>>().mockResolvedValue({ kind: 'accepted', turn_id: 't' });
+  observeTurn = vi.fn<(id: string, turn: string, signal: AbortSignal) => AsyncIterable<StreamEvent>>();
+}
+function snapshot(overrides: Partial<SessionSnapshotResponse> = {}): SessionSnapshotResponse {
+  return { session_id: 's', expires_at: '2026-10-04T20:00:00Z', messages: [{ role: 'user', text: 'Hello', turn_id: null }], artifacts: [],
+    active_turn_id: 't', active_turn_status: 'in_progress', sequence: 1, terminal_turn_id: null, terminal_turn_kind: null,
+    timeline: [{ kind: 'message', role: 'user', id: 'confirmed-0-user', text: 'Hello', turn_id: 't' }], ...overrides };
+}
+const initial = (): StreamEvent => ({ kind: 'snapshot', turn_id: 't', snapshot: snapshot() });
+const terminal = (outcome: 'completed' | 'generation_failed' = 'completed'): StreamEvent => ({ kind: 'terminal', turn_id: 't', sequence: 10, outcome });
+const tool = (status: 'requested' | 'running' | 'completed', sequence: number): Extract<StreamEvent, { kind: 'upsert' }> => ({
+  kind: 'upsert', turn_id: 't', sequence, identity: 'tool-e', order: 2, artifact: null,
+  item: { kind: 'tool', turn_id: 't', execution_id: 'e', name: 'save', status },
+});
+async function* stream(events: readonly StreamEvent[]): AsyncIterable<StreamEvent> { yield* events; }
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
 }
 
-describe('ConversationController', () => {
-  it('preserves interleaved tool and artifact positions after success and failure reconciliation', async () => {
+describe('live conversation controller', () => {
+  it.each(['event', 'snapshot'] as const)('hides progress on backend closing %s and keeps submission disabled until terminal failure', async (source) => {
     const transport = new FakeTransport();
-    const retained = artifact('retained', 'turn-1');
-    const activity: SessionSnapshotResponse['timeline'] = [
-      { kind: 'intermediate', id: 'update-1', turn_id: 'turn-1', text: 'Checking results.' },
-      { kind: 'tool', turn_id: 'turn-1', execution_id: 'a', name: 'present', status: 'completed' },
-      { kind: 'artifact', turn_id: 'turn-1', artifact_id: 'retained' },
-      { kind: 'tool', turn_id: 'turn-1', execution_id: 'b', name: 'save', status: 'outcome_unknown' },
-    ];
-    transport.appendMessage.mockResolvedValueOnce(user('Show')).mockResolvedValueOnce(user('Continue'));
-    transport.generateTurn.mockRejectedValueOnce(new ConversationApiError(502, 'generation_failed'))
-      .mockResolvedValueOnce({ kind: 'completed', turn_id: 'turn-2', message: assistant('Done', 'turn-2'), artifacts: [],
-        timeline: [{ kind: 'message', id: 'assistant-turn-2', turn_id: 'turn-2', role: 'assistant', text: 'Done' }] });
-    const failedSnapshot = snapshot([user('Show')]);
-    transport.readSession.mockResolvedValue({ ...failedSnapshot, artifacts: [retained],
-      terminal_turn_kind: 'generation_failed', terminal_turn_id: 'turn-1',
-      timeline: [...failedSnapshot.timeline, ...activity, { kind: 'failure', turn_id: 'turn-1' }] });
+    const visible = deferred<void>(); const finish = deferred<void>();
+    transport.observeTurn.mockImplementation(async function* () {
+      yield { kind: 'snapshot', turn_id: 't', snapshot: snapshot({
+        active_turn_status: source === 'snapshot' ? 'closing' : 'in_progress',
+        timeline: [{ kind: 'message', turn_id: 't', id: 'answer', role: 'assistant', text: 'Retained answer' }],
+      }) };
+      if (source === 'event') yield { kind: 'closing', turn_id: 't', sequence: 2 };
+      yield tool('running', 3);
+      visible.resolve(); await finish.promise;
+      yield terminal('generation_failed');
+    });
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
-    await controller.submit('Show', () => undefined);
-    expect(transport.readSession).toHaveBeenCalledOnce();
-    expect(controller.state.content.map(item => item.id)).toEqual([
-      'confirmed-0-user', 'update-1', 'tool-a', 'retained', 'tool-b', 'failure-turn-1',
-    ]);
-    expect(controller.state.status?.kind).toBe('error');
-    expect(controller.state.status?.action).toBeUndefined();
-    expect(controller.state.composerDisabled).toBe(false);
-    await controller.submit('Continue', () => undefined);
-    expect(controller.state.content.map(item => item.id)).toEqual([
-      'confirmed-0-user', 'update-1', 'tool-a', 'retained', 'tool-b', 'failure-turn-1', 'confirmed-1-user', 'assistant-turn-2',
-    ]);
+    const submission = controller.submit('Hello', vi.fn());
+    await visible.promise;
     expect(controller.state.status).toBeNull();
+    expect(controller.state.composerDisabled).toBe(true);
+    await controller.submit('Blocked', vi.fn());
+    expect(transport.appendMessage).toHaveBeenCalledTimes(1);
+    finish.resolve(); await submission;
+    expect(controller.state.status?.kind).toBe('error');
+    expect(controller.state.composerDisabled).toBe(false);
+    expect(controller.state.content[0]).toMatchObject({ text: 'Retained answer' });
   });
 
-  it('uses the successful turn timeline rather than regrouping artifacts before the answer', async () => {
+  it('shows complete messages while busy, preserves all styles/output on failure, and upserts without regression', async () => {
     const transport = new FakeTransport();
-    transport.appendMessage.mockResolvedValue(user('Show'));
-    transport.generateTurn.mockResolvedValue({ kind: 'completed', turn_id: 'turn-1', message: assistant('Done', 'turn-1'),
-      artifacts: [artifact('retained', 'turn-1')], timeline: [
-        { kind: 'intermediate', id: 'update-1', turn_id: 'turn-1', text: 'Checking results.' },
-        { kind: 'tool', turn_id: 'turn-1', execution_id: 'a', name: 'present', status: 'completed' },
-        { kind: 'artifact', turn_id: 'turn-1', artifact_id: 'retained' },
-        { kind: 'tool', turn_id: 'turn-1', execution_id: 'b', name: 'check', status: 'failed' },
-        { kind: 'message', id: 'assistant-turn-1', turn_id: 'turn-1', role: 'assistant', text: 'Done' },
-      ] });
-    const controller = new ConversationController(transport, () => undefined);
+    const visible = deferred<void>(); const finish = deferred<void>();
+    transport.observeTurn.mockImplementation(async function* () {
+      yield initial();
+      yield { kind: 'upsert', turn_id: 't', sequence: 2, identity: 'commentary', order: 1, artifact: null,
+        item: { kind: 'intermediate', turn_id: 't', id: 'commentary', text: 'Checking' } };
+      yield tool('requested', 3); yield tool('running', 4); yield tool('requested', 3); yield tool('completed', 5);
+      yield { kind: 'upsert', turn_id: 't', sequence: 6, identity: 'final', order: 3, artifact: null,
+        item: { kind: 'message', turn_id: 't', id: 'final', role: 'assistant', text: 'Looks complete' } };
+      yield { kind: 'upsert', turn_id: 't', sequence: 7, identity: 'a', order: 4,
+        item: { kind: 'artifact', turn_id: 't', artifact_id: 'a' },
+        artifact: { artifact_id: 'a', type: 'json', created_at: '2026-10-04T18:00:00Z', turn_id: 't', order: 4, payload: { title: 'Data', payload: { value: 1 } } } };
+      visible.resolve(); await finish.promise;
+      yield { kind: 'upsert', turn_id: 't', sequence: 8, identity: 'failure-t', order: 5, artifact: null, item: { kind: 'failure', turn_id: 't' } };
+      yield terminal('generation_failed');
+    });
+    const states: string[] = [];
+    const controller = new ConversationController(transport, (state) => {
+      const row = state.content.find((item) => item.kind === 'tool');
+      if (row?.kind === 'tool') states.push(row.status);
+    });
     await controller.start();
-    await controller.submit('Show', () => undefined);
-    expect(controller.state.content.map(item => item.id)).toEqual([
-      'confirmed-0-user', 'update-1', 'tool-a', 'retained', 'tool-b', 'assistant-turn-1',
-    ]);
+    const submission = controller.submit('Hello', vi.fn());
+    await visible.promise;
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status?.kind).toBe('loading');
+    expect(controller.state.content.map((item) => item.kind)).toEqual(['text', 'intermediate', 'tool', 'text', 'artifact']);
+    expect(states).toContain('requested'); expect(states).toContain('running');
+    expect(controller.state.content.filter((item) => item.kind === 'tool')).toHaveLength(1);
+    finish.resolve(); await submission;
+    expect(controller.state.composerDisabled).toBe(false);
+    expect(controller.state.content.map((item) => item.kind)).toEqual(['text', 'intermediate', 'tool', 'text', 'artifact', 'failure']);
+    expect(controller.state.status?.kind).toBe('error');
+  });
+
+  it.each(['eof', 'error', 'malformed'] as const)('retains output and disables composer after %s without reconnect or retry', async (ending) => {
+    const transport = new FakeTransport();
+    transport.observeTurn.mockImplementation(async function* () {
+      yield initial(); yield tool('running', 3);
+      if (ending === 'error') throw new Error('offline');
+      if (ending === 'malformed') yield { ...tool('completed', 4), identity: 'wrong' };
+    });
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start(); await controller.submit('Hello', vi.fn());
+    expect(controller.state.content).toHaveLength(2);
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status).not.toHaveProperty('action');
+    await controller.performAction('retry-turn'); await controller.submit('again', vi.fn());
+    expect(transport.observeTurn).toHaveBeenCalledTimes(1);
+    expect(transport.generateTurn).toHaveBeenCalledTimes(1);
+    expect(transport.appendMessage).toHaveBeenCalledTimes(1);
     expect(transport.readSession).not.toHaveBeenCalled();
   });
 
-  it('maps artifacts with sparse history positions in order for successful turns and reconciled history', async () => {
+  it('accepts terminal-before-subscribe catch-up and uses terminal metadata rather than displayed text', async () => {
     const transport = new FakeTransport();
-    const later = {
-      artifact_id: 'later', type: 'other.result', created_at: '2026-09-25T12:00:00Z',
-      order: 12, turn_id: 'turn-1', payload: { title: "Later", payload: { value: 2 } },
-    };
-    const earlier = { ...later, artifact_id: 'earlier', order: 8, payload: { title: "Earlier", payload: { value: 1 } } };
-    transport.appendMessage.mockResolvedValueOnce(user('Hello')).mockResolvedValueOnce(user('Again'));
-    transport.generateTurn.mockResolvedValueOnce(withTimeline({
-      kind: 'completed', turn_id: 'turn-1', message: assistant('Hi', 'turn-1'), artifacts: [later, earlier],
-    })).mockRejectedValueOnce(new ConversationNetworkError('Timeout'));
-    transport.readSession.mockResolvedValue(withTimeline({
-      ...snapshot([user('Hello'), assistant('Hi', 'turn-1'), user('Again')]),
-      artifacts: [later, earlier],
-    }));
+    transport.observeTurn.mockReturnValue(stream([{ kind: 'snapshot', turn_id: 't', snapshot: snapshot({ active_turn_id: null, active_turn_status: null, terminal_turn_id: 't', terminal_turn_kind: 'generation_failed',
+      timeline: [{ kind: 'message', turn_id: 't', id: 'f', role: 'assistant', text: 'Final before failure' }] }) }, terminal('generation_failed')]));
     const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    await controller.submit('Hello', () => undefined);
-    expect(controller.state.content.map((item) => item.id)).toEqual([
-      'confirmed-0-user', 'earlier', 'later', 'assistant-turn-1',
-    ]);
-    await controller.submit('Again', () => undefined);
-    expect(controller.state.content.map((item) => item.id)).toEqual([
-      'confirmed-0-user', 'earlier', 'later', 'assistant-turn-1', 'confirmed-2-user',
-    ]);
-    expect(controller.state.status?.action?.id).toBe('retry-turn');
+    await controller.start(); await controller.submit('Hello', vi.fn());
+    expect(controller.state.composerDisabled).toBe(false); expect(controller.state.status?.kind).toBe('error');
+    expect(controller.state.content[0]).toMatchObject({ text: 'Final before failure' });
   });
 
-  it('supplies complete envelopes to a custom mapper and applies filtering to turns and reconciled history', async () => {
-    const transport = new FakeTransport();
-    const artifact: ArtifactResponse = { artifact_id: 'custom', type: 'custom.result',
-      created_at: '2026-09-26T12:00:00Z', order: 1, turn_id: 'turn-1', payload: { title: "Earlier", payload: { value: 1 } } };
-    const hidden = { ...artifact, artifact_id: 'hidden', order: 2 };
-    const mapper = vi.fn((envelope: ArtifactResponse) => envelope.artifact_id === 'hidden' ? null : ({
-      kind: 'artifact' as const, id: envelope.artifact_id, type: envelope.type,
-      headline: 'Custom headline', payload: { mapped: true },
-    }));
-    transport.appendMessage.mockResolvedValueOnce(user('Hello')).mockResolvedValueOnce(user('Again'));
-    transport.generateTurn.mockResolvedValueOnce(withTimeline({ kind: 'completed', turn_id: 'turn-1',
-      message: assistant('Hi', 'turn-1'), artifacts: [hidden, artifact] }))
-      .mockRejectedValueOnce(new ConversationNetworkError('Timeout'));
-    transport.readSession.mockResolvedValue(withTimeline({ ...snapshot([user('Hello'), assistant('Hi', 'turn-1'), user('Again')]),
-      artifacts: [hidden, artifact] }));
-    const controller = new ConversationController(transport, () => undefined, mapper);
-    await controller.start();
-    await controller.submit('Hello', () => undefined);
-    expect(mapper.mock.calls[0][0]).toEqual(artifact);
-    expect(controller.state.content[1]).toEqual({ kind: 'artifact', id: 'custom', type: 'custom.result',
-      headline: 'Custom headline', payload: { mapped: true } });
-    await controller.submit('Again', () => undefined);
-    expect(controller.state.content.map((item) => item.id)).toEqual([
-      'confirmed-0-user', 'custom', 'assistant-turn-1', 'confirmed-2-user',
-    ]);
-    expect(mapper).toHaveBeenCalledTimes(4);
-  });
-
-  it('reconciles a busy turn and retains the retry action when its result is still unclear', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockResolvedValue(user('Hello'));
-    transport.generateTurn.mockRejectedValueOnce(new ConversationApiError(409, 'busy')).mockResolvedValueOnce(withTimeline({
-      kind: 'completed', turn_id: 'turn-1', message: assistant('Hi', 'turn-1'), artifacts: [],
-    }));
-    transport.readSession.mockResolvedValue(snapshot([user('Hello')]));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-
-    await controller.submit('Hello', () => undefined);
-    expect(controller.state.status?.action?.id).toBe('retry-turn');
-    expect(controller.state.composerDisabled).toBe(true);
-    await controller.performAction('retry-turn');
-    expect(transport.appendMessage).toHaveBeenCalledOnce();
-    expect(transport.generateTurn).toHaveBeenCalledTimes(2);
-    expect(controller.state.content.map((item) => item.id)).toEqual([
-      'confirmed-0-user', 'assistant-turn-1',
-    ]);
-    expect(controller.state.composerDisabled).toBe(false);
-  });
-  it('reports agent unavailability during session creation', async () => {
-    const transport = new FakeTransport();
-    transport.createSession.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
-    const controller = new ConversationController(transport, () => undefined);
-
-    await controller.start();
-
-    expect(controller.state.composerDisabled).toBe(true);
-    expect(controller.state.status?.message).toBe('Der KI-Agent ist derzeit nicht verfügbar.');
-    expect(controller.state.status?.action?.id).toBe('new-session');
-  });
-
-  it.each([
-    { kind: 'not_found', status: 404, message: 'Der API-Endpunkt ist nicht verfügbar.' },
-    { kind: 'method_not_allowed', status: 405, message: 'App und Backend sind nicht kompatibel.' },
-  ] as const)('reports $kind during create, append, and turn without retry', async ({ kind, status, message }) => {
-    for (const operation of ['create', 'append', 'turn'] as const) {
-      const transport = new FakeTransport();
-      const error = new ConversationApiError(status, kind);
-      if (operation === 'create') transport.createSession.mockRejectedValue(error);
-      if (operation === 'append') transport.appendMessage.mockRejectedValue(error);
-      if (operation === 'turn') {
-        transport.appendMessage.mockResolvedValue(user('Hallo'));
-        transport.generateTurn.mockRejectedValue(error);
-      }
-      const controller = new ConversationController(transport, () => undefined);
-      await controller.start();
-      if (operation !== 'create') await controller.submit('Hallo', () => undefined);
-
-      expect(controller.state.composerDisabled).toBe(true);
-      expect(controller.state.status?.message).toBe(message);
-      expect(controller.state.status?.action).toBeUndefined();
-    }
-  });
-
-  it.each([
-    { kind: 'not_found', status: 404, message: 'Der API-Endpunkt ist nicht verfügbar.' },
-    { kind: 'method_not_allowed', status: 405, message: 'App und Backend sind nicht kompatibel.' },
-  ] as const)('preserves $kind found during turn reconciliation', async ({ kind, status, message }) => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockResolvedValue(user('Hallo'));
-    transport.generateTurn.mockRejectedValue(new ConversationNetworkError('Timeout'));
-    transport.readSession.mockRejectedValue(new ConversationApiError(status, kind));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    await controller.submit('Hallo', () => undefined);
-
-    expect(controller.state.status?.message).toBe(message);
-    expect(controller.state.status?.action).toBeUndefined();
-  });
-
-  it('reports agent unavailability during message append', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-
-    await controller.submit('Frage', () => undefined);
-
-    expect(controller.state.composerDisabled).toBe(true);
-    expect(controller.state.status?.message).toBe('Der KI-Agent ist derzeit nicht verfügbar.');
-    expect(transport.generateTurn).not.toHaveBeenCalled();
-  });
-
-  it('preserves agent unavailability from a reconciliation read', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockResolvedValue(user('Frage'));
-    transport.generateTurn.mockRejectedValue(new ConversationNetworkError('Timeout'));
-    transport.readSession.mockRejectedValue(new ConversationApiError(503, 'agent_unavailable'));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-
-    await controller.submit('Frage', () => undefined);
-
-    expect(controller.state.composerDisabled).toBe(true);
-    expect(controller.state.status?.message).toBe('Der KI-Agent ist derzeit nicht verfügbar.');
-    expect(controller.state.status?.action?.id).toBe('new-session');
-  });
-
-  it('starts empty and publishes an accepted turn without optimistic messages', async () => {
-    const transport = new FakeTransport();
-    const append = deferred<UserMessageResponse>();
-    const turn = deferred<CompletedTurnResponse>();
-    transport.appendMessage.mockReturnValue(append.promise);
-    transport.generateTurn.mockReturnValue(turn.promise);
-    const states: ConversationViewState[] = [];
-    const controller = new ConversationController(transport, (state) => states.push(state));
-    await controller.start();
-    const acknowledge = vi.fn();
-
-    const submission = controller.submit('Hallo Demo', acknowledge);
-    expect(controller.state.content).toEqual([]);
-    expect(controller.state.composerDisabled).toBe(true);
-    expect(acknowledge).not.toHaveBeenCalled();
-
-    append.resolve(user('Hallo Demo'));
-    await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledOnce());
-    expect(texts(controller.state.content)).toEqual(['Hallo Demo']);
-    expect(controller.state.status?.message).toBe('Antwort wird erstellt …');
-
-    turn.resolve(withTimeline({ kind: 'completed', turn_id: 'turn-1', message: assistant('Gern.', 'turn-1'), artifacts: [] }));
-    await submission;
-    expect(texts(controller.state.content)).toEqual([
-      'Hallo Demo',
-      'Gern.',
-    ]);
-    expect(controller.state.composerDisabled).toBe(false);
-    expect(states.at(-1)?.status).toBeNull();
-  });
-
-  it('places JSON artifacts between the user and final assistant text', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockResolvedValue(user('Alternative'));
-    transport.generateTurn.mockResolvedValue(withTimeline({
-      kind: 'completed',
-      turn_id: 'turn-1',
-      message: assistant('Hier ist sie.', 'turn-1'),
-      artifacts: [artifact('artifact-1', 'turn-1')],
-    }));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-
-    await controller.submit('Alternative', () => undefined);
-
-    expect(controller.state.content.map((item) => item.kind)).toEqual([
-      'text', 'artifact', 'text',
-    ]);
-    expect(controller.state.content[1]).toEqual(expect.objectContaining({
-      id: 'artifact-1', type: 'example.result', headline: 'Example',
-    }));
-  });
-
-  it('excludes intermediate updates from message counting during ambiguous append reconciliation', async () => {
-    const transport = new FakeTransport();
-    const update = { kind: 'intermediate' as const, id: 'update', turn_id: 'turn-1', text: 'Checking.' };
-    const first = withTimeline({ kind: 'completed' as const, turn_id: 'turn-1',
-      message: assistant('Answer', 'turn-1'), artifacts: [] });
-    transport.appendMessage.mockResolvedValueOnce(user('First'))
-      .mockRejectedValueOnce(new ConversationNetworkError('Timeout'));
-    transport.generateTurn.mockResolvedValueOnce({ ...first, timeline: [update, ...first.timeline] })
-      .mockResolvedValueOnce(withTimeline({ kind: 'completed', turn_id: 'turn-2',
-        message: assistant('Next answer', 'turn-2'), artifacts: [] }));
-    const retained = snapshot([user('First'), assistant('Answer', 'turn-1'), user('Next')]);
-    transport.readSession.mockResolvedValue({ ...retained,
-      timeline: [retained.timeline[0], update, ...retained.timeline.slice(1)] });
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    await controller.submit('First', () => undefined);
-    const acknowledge = vi.fn();
-    await controller.submit('Next', acknowledge);
-    expect(acknowledge).toHaveBeenCalledOnce();
-    expect(transport.appendMessage).toHaveBeenCalledTimes(2);
-    expect(transport.generateTurn).toHaveBeenCalledTimes(2);
-    expect(controller.state.content.map(item => item.id)).toEqual([
-      'confirmed-0-user', 'update', 'assistant-turn-1', 'confirmed-2-user', 'assistant-turn-2',
-    ]);
-    expect(controller.state.status).toBeNull();
-  });
-
-  it('reconciles an ambiguous append and never appends it a second time', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new ConversationNetworkError('Netzwerkfehler'));
-    transport.readSession.mockResolvedValue(snapshot([user('Noch eine Frage')]));
-    transport.generateTurn.mockResolvedValue(withTimeline({
-      kind: 'completed',
-      turn_id: 'turn-1',
-      message: assistant('Ja.', 'turn-1'),
-      artifacts: [],
-    }));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    const acknowledge = vi.fn();
-
-    await controller.submit('Noch eine Frage', acknowledge);
-
-    expect(transport.appendMessage).toHaveBeenCalledOnce();
-    expect(transport.readSession).toHaveBeenCalledOnce();
-    expect(acknowledge).toHaveBeenCalledOnce();
-    expect(controller.state.content).toHaveLength(2);
-  });
-
-  it('preserves artifacts in their original turns when reconciling a later append', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage
-      .mockResolvedValueOnce(user('Erste Frage'))
-      .mockRejectedValueOnce(new ConversationNetworkError('Netzwerkfehler'));
-    transport.generateTurn
-      .mockResolvedValueOnce(withTimeline({
-        kind: 'completed',
-        turn_id: 'turn-1',
-        message: assistant('Erste Antwort', 'turn-1'),
-        artifacts: [artifact('artifact-1', 'turn-1')],
-      }))
-      .mockResolvedValueOnce(withTimeline({
-        kind: 'completed',
-        turn_id: 'turn-2',
-        message: assistant('Zweite Antwort', 'turn-2'),
-        artifacts: [],
-      }));
-    transport.readSession.mockResolvedValue(withTimeline({
-      ...snapshot([
-        user('Erste Frage'),
-        assistant('Erste Antwort', 'turn-1'),
-        user('Zweite Frage'),
-      ]),
-      artifacts: [artifact('artifact-1', 'turn-1')],
-    }));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    await controller.submit('Erste Frage', () => undefined);
-
-    await controller.submit('Zweite Frage', () => undefined);
-
-    expect(controller.state.content.map((item) => item.id)).toEqual([
-      'confirmed-0-user',
-      'artifact-1',
-      'assistant-turn-1',
-      'confirmed-2-user',
-      'assistant-turn-2',
-    ]);
-  });
-
-  it('preserves the draft contract and history when appending fails', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new ConversationApiError(422, 'invalid_message'));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    const acknowledge = vi.fn();
-
-    await controller.submit('UngÃ¼ltige Nachricht', acknowledge);
-
-    expect(acknowledge).not.toHaveBeenCalled();
-    expect(controller.state.content).toEqual([]);
-    expect(controller.state.composerDisabled).toBe(false);
-    expect(controller.state.status?.kind).toBe('error');
-    expect(transport.generateTurn).not.toHaveBeenCalled();
-  });
-
-  it('does not acknowledge or repeat an ambiguous append absent from the session', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new ConversationNetworkError('Netzwerkfehler'));
-    transport.readSession.mockResolvedValue(snapshot([]));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    const acknowledge = vi.fn();
-
-    await controller.submit('Nicht bestÃ¤tigt', acknowledge);
-
-    expect(transport.appendMessage).toHaveBeenCalledOnce();
-    expect(acknowledge).not.toHaveBeenCalled();
-    expect(controller.state.content).toEqual([]);
-    expect(controller.state.composerDisabled).toBe(false);
-    expect(transport.generateTurn).not.toHaveBeenCalled();
-  });
-
-  it('offers a new session when the agent is unavailable', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockResolvedValue(user('Weiter'));
-    transport.generateTurn
-      .mockRejectedValueOnce(new ConversationApiError(503, 'agent_unavailable'))
-      .mockResolvedValueOnce(withTimeline({
-        kind: 'completed',
-        turn_id: 'turn-1',
-        message: assistant('Versuche das.', 'turn-1'),
-        artifacts: [],
-      }));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    await controller.submit('Weiter', () => undefined);
-
-    expect(controller.state.status?.action?.id).toBe('new-session');
-    await controller.performAction('new-session');
-
-    expect(transport.appendMessage).toHaveBeenCalledOnce();
-    expect(transport.generateTurn).toHaveBeenCalledTimes(1);
-    expect(transport.createSession).toHaveBeenCalledTimes(2);
-    expect(controller.state.content).toHaveLength(0);
-  });
-
-  it('does not offer generation retry after a recorded failure', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockResolvedValue(user('Ã„ndern'));
-    transport.generateTurn.mockRejectedValue(new ConversationApiError(502, 'generation_failed'));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    await controller.submit('Ã„ndern', () => undefined);
-
-    expect(controller.state.composerDisabled).toBe(false);
-    expect(controller.state.status?.action).toBeUndefined();
-  });
-
-  it('keeps the previous conversation visible until replacement creation succeeds', async () => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new ConversationApiError(410, 'expired'));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-    await controller.submit('Hallo', () => undefined);
-    const replacement = deferred<SessionCreationResponse>();
-    transport.createSession.mockReturnValueOnce(replacement.promise);
-
-    const restarting = controller.performAction('new-session');
-    expect(controller.state.status?.message).toBe('Unterhaltung wird gestartet …');
-    replacement.resolve({ session_id: 'session-2', expires_at: CREATED.expires_at });
-    await restarting;
-
-    expect(controller.state.content).toEqual([]);
-    expect(controller.state.composerDisabled).toBe(false);
-  });
-
-  it.each([
-    ['expired', 410],
-    ['unknown', 404],
-    ['limit_reached', 409],
-  ] as const)('offers a new session after the terminal %s outcome', async (kind, status) => {
-    const transport = new FakeTransport();
-    transport.appendMessage.mockRejectedValue(new ConversationApiError(status, kind));
-    const controller = new ConversationController(transport, () => undefined);
-    await controller.start();
-
-    await controller.submit('Hallo', () => undefined);
-
-    expect(controller.state.composerDisabled).toBe(true);
-    expect(controller.state.status?.action).toEqual({
-      id: 'new-session',
-      label: 'Neue Unterhaltung starten',
+  it('detaches and ignores stale events when replaced or disposed', async () => {
+    const transport = new FakeTransport(); const attached = deferred<void>(); const finish = deferred<void>();
+    let signal: AbortSignal | undefined;
+    transport.observeTurn.mockImplementation(async function* (_id, _turn, current) {
+      signal = current; yield initial(); attached.resolve(); await finish.promise; yield tool('completed', 4); yield terminal();
     });
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start(); const old = controller.submit('Hello', vi.fn()); await attached.promise;
+    await controller.start(); expect(signal?.aborted).toBe(true);
+    finish.resolve(); await old; expect(controller.state.content).toEqual([]);
+    controller.dispose(); await controller.submit('ignored', vi.fn()); expect(transport.appendMessage).toHaveBeenCalledTimes(1);
   });
+
+  it('reconciles uncertain start once and observes the authoritative active turn without replacement execution', async () => {
+    const transport = new FakeTransport(); transport.generateTurn.mockRejectedValue(new ConversationNetworkError('offline'));
+    transport.readSession.mockResolvedValue(snapshot()); transport.observeTurn.mockReturnValue(stream([initial(), terminal()]));
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start(); await controller.submit('Hello', vi.fn());
+    expect(transport.generateTurn).toHaveBeenCalledTimes(1); expect(transport.observeTurn).toHaveBeenCalledWith('s', 't', expect.any(AbortSignal));
+    expect(controller.state.composerDisabled).toBe(false);
+  });
+
+  it('reconciles uncertain append using user history despite extra rendered messages', async () => {
+    const transport = new FakeTransport();
+    transport.observeTurn.mockReturnValue(stream([initial(), { kind: 'upsert', turn_id: 't', sequence: 2, identity: 'phase-less', order: 1, artifact: null,
+      item: { kind: 'message', id: 'phase-less', role: 'assistant', turn_id: 't', text: 'Extra visible output' } }, terminal()]));
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start(); await controller.submit('Hello', vi.fn());
+    transport.appendMessage.mockRejectedValueOnce(new ConversationNetworkError('uncertain'));
+    transport.readSession.mockResolvedValue(snapshot({ messages: [
+      { role: 'user', text: 'Hello', turn_id: null }, { role: 'assistant', text: 'Canonical answer', turn_id: 't' }, { role: 'user', text: 'Next', turn_id: null },
+    ] }));
+    const acknowledge = vi.fn(); await controller.submit('Next', acknowledge);
+    expect(acknowledge).toHaveBeenCalledTimes(1); expect(transport.generateTurn).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['method_not_allowed', 'agent_unavailable', 'expired', 'limit_reached'] as const)('preserves typed append %s state', async (kind) => {
+    const transport = new FakeTransport(); transport.appendMessage.mockRejectedValue(new ConversationApiError(409, kind));
+    const controller = new ConversationController(transport, () => undefined); await controller.start();
+    const acknowledge = vi.fn(); await controller.submit('Hello', acknowledge);
+    expect(acknowledge).not.toHaveBeenCalled(); expect(transport.generateTurn).not.toHaveBeenCalled();
+    expect(controller.state.composerDisabled).toBe(true); expect(controller.state.status?.kind).toBe('error');
+  });
+
+  it('excludes concurrent submissions and acknowledges only accepted messages', async () => {
+    const transport = new FakeTransport(); const pending = deferred<UserMessageResponse>(); transport.appendMessage.mockReturnValue(pending.promise);
+    transport.observeTurn.mockReturnValue(stream([initial(), terminal()]));
+    const controller = new ConversationController(transport, () => undefined); await controller.start(); const acknowledge = vi.fn();
+    const first = controller.submit('Hello', acknowledge); await controller.submit('second', vi.fn());
+    expect(acknowledge).not.toHaveBeenCalled(); expect(transport.appendMessage).toHaveBeenCalledTimes(1);
+    pending.resolve({ role: 'user', text: 'Hello', turn_id: null }); await first; expect(acknowledge).toHaveBeenCalledTimes(1);
+  });
+  it.each(['expired', 'unknown', 'agent_unavailable', 'method_not_allowed'] as const)('preserves typed pre-stream %s errors without reconnect', async (kind) => {
+    const transport = new FakeTransport();
+    transport.observeTurn.mockImplementation(async function* () { throw new ConversationApiError(410, kind); });
+    const controller = new ConversationController(transport, () => undefined); await controller.start(); await controller.submit('Hello', vi.fn());
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status?.message).not.toContain('unbekannt');
+    expect(transport.observeTurn).toHaveBeenCalledTimes(1); expect(transport.readSession).not.toHaveBeenCalled();
+  });
+
+  it.each(['unavailable', 'observation_limit'] as const)('distinguishes typed stream %s from confirmed turn failure', async (reason) => {
+    const transport = new FakeTransport(); transport.observeTurn.mockReturnValue(stream([initial(), { kind: 'error', turn_id: 't', reason }]));
+    const controller = new ConversationController(transport, () => undefined); await controller.start(); await controller.submit('Hello', vi.fn());
+    expect(controller.state.composerDisabled).toBe(true);
+    if (reason === 'unavailable') expect(controller.state.status?.action?.id).toBe('new-session');
+    else { expect(controller.state.status?.message).toContain('unbekannt'); expect(controller.state.status).not.toHaveProperty('action'); }
+    expect(controller.state.content).toHaveLength(1);
+  });
+
+  it.each(['replace', 'dispose'] as const)('ignores a stale append reconciliation rejection after %s', async (operation) => {
+    const transport = new FakeTransport(); const reading = deferred<void>();
+    let reject!: (reason: Error) => void;
+    transport.appendMessage.mockRejectedValue(new ConversationNetworkError('uncertain'));
+    transport.readSession.mockImplementation(() => { reading.resolve(); return new Promise((_resolve, fail) => { reject = fail; }); });
+    const controller = new ConversationController(transport, () => undefined); await controller.start();
+    const old = controller.submit('Hello', vi.fn()); await reading.promise;
+    if (operation === 'replace') await controller.start(); else controller.dispose();
+    const current = controller.state; reject(new ConversationNetworkError('old read failed')); await old;
+    expect(controller.state).toBe(current); expect(transport.generateTurn).not.toHaveBeenCalled();
+  });
+
+  it('retains custom artifact envelope mapping and omission under live updates', async () => {
+    const transport = new FakeTransport();
+    const events: StreamEvent[] = [initial()];
+    for (const id of ['omitted', 'visible']) events.push({ kind: 'upsert', turn_id: 't', identity: id, order: id === 'omitted' ? 1 : 2, sequence: id === 'omitted' ? 2 : 3,
+      item: { kind: 'artifact', turn_id: 't', artifact_id: id },
+      artifact: { artifact_id: id, turn_id: 't', type: 'custom', order: 7, created_at: '2026-10-04T18:00:00Z', payload: { value: id } } });
+    transport.observeTurn.mockReturnValue(stream([...events, terminal()]));
+    const mapper = vi.fn((artifact: import('../generated/types.gen').ArtifactResponse) => artifact.artifact_id === 'omitted' ? null : {
+      kind: 'artifact' as const, id: artifact.artifact_id, type: 'custom', headline: 'Mapped', payload: { value: 'visible' },
+    });
+    const controller = new ConversationController(transport, () => undefined, mapper); await controller.start(); await controller.submit('Hello', vi.fn());
+    expect(controller.state.content.map((item) => item.id)).toEqual(['confirmed-0-user', 'visible']);
+    expect(mapper).toHaveBeenCalledWith(expect.objectContaining({ artifact_id: 'visible', order: 7, payload: { value: 'visible' } }));
+    expect(controller.state.content[1]).toMatchObject({ headline: 'Mapped', type: 'custom' });
+  });
+
+  it('recovers from unavailable session creation with an explicitly requested new session', async () => {
+    const transport = new FakeTransport(); transport.createSession.mockRejectedValueOnce(new ConversationApiError(503, 'agent_unavailable'));
+    const controller = new ConversationController(transport, () => undefined); await controller.start();
+    expect(controller.state.composerDisabled).toBe(true); expect(controller.state.status?.action?.id).toBe('new-session');
+    await controller.performAction('new-session'); expect(controller.state.content).toEqual([]); expect(controller.state.composerDisabled).toBe(false);
+    expect(transport.createSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('establishes an absent ambiguous append without acknowledgement or generation', async () => {
+    const transport = new FakeTransport(); transport.appendMessage.mockRejectedValue(new ConversationNetworkError('uncertain'));
+    transport.readSession.mockResolvedValue(snapshot({ messages: [], timeline: [], active_turn_id: null }));
+    const controller = new ConversationController(transport, () => undefined); await controller.start(); const acknowledge = vi.fn();
+    await controller.submit('Hello', acknowledge);
+    expect(controller.state.composerDisabled).toBe(false); expect(controller.state.status?.kind).toBe('error');
+    expect(acknowledge).not.toHaveBeenCalled(); expect(transport.generateTurn).not.toHaveBeenCalled();
+  });
+
+  it('keeps ambiguous append disabled when authoritative state cannot be read', async () => {
+    const transport = new FakeTransport(); transport.appendMessage.mockRejectedValue(new ConversationNetworkError('uncertain'));
+    transport.readSession.mockRejectedValue(new ConversationNetworkError('unavailable'));
+    const controller = new ConversationController(transport, () => undefined); await controller.start(); await controller.submit('Hello', vi.fn());
+    expect(controller.state.composerDisabled).toBe(true); expect(transport.generateTurn).not.toHaveBeenCalled();
+  });
+
 });
-
-function snapshot(messages: ApiMessage[]): SessionSnapshotResponse {
-  return withTimeline({
-    session_id: 'session-1',
-    expires_at: CREATED.expires_at,
-    messages,
-    artifacts: [],
-    terminal_turn_id: null,
-    terminal_turn_kind: null,
-  });
-}
-
-function artifact(artifactId: string, turnId: string): ArtifactResponse {
-  return {
-    artifact_id: artifactId,
-    type: 'example.result',
-    created_at: '2026-09-25T12:00:00Z',
-    order: 1,
-    turn_id: turnId,
-    payload: { title: 'Example', payload: { message: 'Example result' } },
-  };
-}
-
-function user(text: string): UserMessageResponse {
-  return { role: 'user', text, turn_id: null };
-}
-
-function assistant(text: string, turnId: string): AssistantMessageResponse {
-  return { role: 'assistant', text, turn_id: turnId };
-}
-
-function texts(content: readonly { readonly kind: string; readonly text?: string }[]): readonly string[] {
-  return content.flatMap((item) => item.kind === 'text' && item.text !== undefined ? [item.text] : []);
-}
-
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolvePromise: (value: T) => void = () => undefined;
-  const promise = new Promise<T>((resolve) => {
-    resolvePromise = resolve;
-  });
-  return { promise, resolve: resolvePromise };
-}
-
-function withTimeline<const T extends {
-  artifacts: ArtifactResponse[];
-  messages?: ApiMessage[];
-  message?: ApiMessage;
-}>(value: T): T & { timeline: SessionSnapshotResponse['timeline'] } {
-  const messages = value.messages ?? (value.message === undefined ? [] : [value.message]);
-  return { ...value, timeline: messages.flatMap((message, index): SessionSnapshotResponse['timeline'] => [
-    ...[...value.artifacts].sort((a, b) => a.order - b.order)
-      .filter(artifact => artifact.turn_id === message.turn_id)
-      .map(artifact => ({ kind: 'artifact' as const, turn_id: artifact.turn_id, artifact_id: artifact.artifact_id })),
-    { kind: 'message', id: message.role === 'user' ? `confirmed-${index}-user` : `assistant-${message.turn_id}`,
-      turn_id: message.turn_id ?? `user-${index}`, role: message.role, text: message.text },
-  ]) };
-}

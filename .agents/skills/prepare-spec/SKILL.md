@@ -11,18 +11,25 @@ Turn an intended software change into an approved direction without prescribing 
 
 1. Read the repository guidance and inspect the relevant code, documentation, existing specs, and established contracts.
 2. Confirm that the request is a bounded change. If it is primarily an exploratory product or architecture direction spanning multiple potential changes, explain that it belongs in concept work before creating a spec.
-3. Spar with the user for as many rounds as the change needs. Pressure-test goals, scope, behavior, UX, contracts, constraints, alternatives, and integration impact. Follow the repository's clarification batch limit; do not force a fixed number of rounds.
-4. Once the core direction is stable, create or update a spec from [assets/spec-template.md](assets/spec-template.md). Treat it as the current decision record, not a conversation transcript.
+3. Spar with the user for as many rounds as the change needs. Pressure-test goals, scope, behavior, UX, contracts, constraints, alternatives, and integration impact. Ask about unresolved choices that materially affect the change; offer recommendations with their tradeoffs. Follow the repository's clarification batch limit; do not force a fixed number of rounds.
+4. Create or update a draft spec from [assets/spec-template.md](assets/spec-template.md) as the direction takes shape. Treat it as the current decision record, not a conversation transcript. Keep unconfirmed material choices under Open Questions, including any recommendations.
 5. Keep only decisions the implementation cannot safely recover from the codebase. Scale detail with ambiguity, blast radius, irreversibility, and contract or migration risk.
 6. Review the draft against the codebase and related specs. Surface conflicts or missing decisions and continue sparring until it satisfies the readiness criteria.
-7. Present the resulting spec and unresolved non-blocking risks. Do not begin implementation. An explicit request to run `$deliver-spec` is the implementation approval gate.
+7. Summarize the material decisions and obtain user confirmation before marking the spec ready. Reuse explicit confirmation already given; do not ask again for unchanged decisions. Present the resulting spec and unresolved non-blocking risks. Do not begin implementation. An explicit request to run `$deliver-spec` is the implementation approval gate.
+
+## Decisions and Assumptions
+
+- Do not turn missing information into a settled requirement. Distinguish user-confirmed decisions, facts established by repository evidence, and proposed choices.
+- Use the codebase to establish current behavior, contracts, and conventions; cite the relevant evidence when relying on it. Current behavior does not establish the user's intended change.
+- Material product, scope, UX, behavioral, architectural, compatibility, and migration choices require user confirmation or explicit delegation. Recommendations remain proposals until confirmed. Silence is not confirmation.
+- Routine implementation mechanics may follow established conventions without additional confirmation. Record the scope of delegated choices and any material decisions made within it.
 
 ## Readiness Criteria
 
 A spec is ready for delivery when:
 
 - The outcome and meaningful scope boundaries are clear.
-- Product, behavioral, and contract decisions that affect correctness are settled.
+- Material decisions are user-confirmed or explicitly delegated, and choices made within that delegation are recorded.
 - Acceptance criteria describe observable, verifiable outcomes.
 - No open question would require the implementer to invent a product, architecture, compatibility, or migration decision.
 - For UI-affecting work, the intended experience, interaction model, important states, and visual direction are clear enough that implementation does not require inventing product decisions.

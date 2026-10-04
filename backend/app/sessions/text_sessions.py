@@ -6,11 +6,14 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Generic, Literal, TypeVar
 
+from app.models.output_items import MAX_MESSAGE_LENGTH as MAX_MESSAGE_LENGTH
+
 
 MAX_MESSAGE_COUNT = 200
-MAX_MESSAGE_LENGTH = 16_000
+
 
 SessionRole = Literal["user", "assistant"]
+InvalidMessageReason = Literal["blank_text", "text_too_long"]
 T = TypeVar("T")
 
 
@@ -79,7 +82,7 @@ class TextSessionAppendExpired:
 class TextSessionAppendInvalidMessage:
     kind: Literal["invalid_message"]
     session_id: str
-    reason: Literal["blank_text", "text_too_long"]
+    reason: InvalidMessageReason
 
 
 @dataclass(frozen=True)

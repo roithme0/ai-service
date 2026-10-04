@@ -22,7 +22,7 @@ export interface ChatArtifact<TPayload extends JsonValue = JsonValue> {
   readonly metadata?: { readonly [key: string]: JsonValue };
 }
 
-export type ChatToolStatus = 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
+export type ChatToolStatus = 'requested' | 'running' | 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
 
 export interface ChatToolCall {
   readonly kind: 'tool';
