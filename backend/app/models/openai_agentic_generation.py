@@ -6,7 +6,7 @@ import asyncio
 from copy import deepcopy
 from typing import cast
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, omit
 
 from app.models.agentic_generation import (
     AgenticGenerationRequest,
@@ -39,6 +39,7 @@ class OpenAIAgenticGenerator:
                 include=["reasoning.encrypted_content"],
                 parallel_tool_calls=False,
                 max_output_tokens=OPENAI_MAX_OUTPUT_TOKENS,
+                max_tool_calls=request.max_hosted_tool_calls if request.max_hosted_tool_calls is not None else omit,
                 store=False,
                 timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,
             ) as stream:
@@ -80,6 +81,8 @@ class OpenAIAgenticGenerator:
 def _completed_item(item: dict[str, object]) -> dict[str, object]:
     if not isinstance(item.get("id"), str) or not item["id"]:
         raise ValueError("OpenAI output item lacks identity")
+    if item.get("type") == "web_search_call":
+        return _completed_web_search_item(item)
     if item.get("status") != "completed" and not (item.get("type") == "reasoning" and item.get("status") is None):
         raise ValueError("OpenAI output item is incomplete")
     item_type = item.get("type")
@@ -92,25 +95,42 @@ def _completed_item(item: dict[str, object]) -> dict[str, object]:
             raise ValueError("OpenAI function call is invalid")
         return _replay_item(item, ("type", "id", "call_id", "name", "arguments"))
     if item_type == "message":
-        content = item.get("content")
-        if item.get("role") != "assistant" or not isinstance(content, list) or not content:
-            raise ValueError("OpenAI message is invalid")
-        for part in cast(list[object], content):
-            if not isinstance(part, dict) or part.get("type") not in ("output_text", "refusal"):
-                raise ValueError("OpenAI message content is invalid")
-            part = cast(dict[str, object], part)
-            part.pop("parsed", None)
-            key = "text" if part["type"] == "output_text" else "refusal"
-            if not isinstance(part.get(key), str):
-                raise ValueError("OpenAI message content is incomplete")
-        if item.get("phase") not in (None, "commentary", "final_answer"):
-            raise ValueError("OpenAI message phase is invalid")
-        replay = _replay_item(item, ("type", "id", "role", "content", "phase"))
-        if replay.get("phase") is None:
-            replay.pop("phase", None)
-        validate_message_item(replay)
-        return replay
+        return _completed_message_item(item)
     raise ValueError("OpenAI response contained an unsupported output item")
+
+
+def _completed_web_search_item(item: dict[str, object]) -> dict[str, object]:
+    if item.get("status") not in ("completed", "failed"):
+        raise ValueError("OpenAI web search item is incomplete")
+    action = item.get("action")
+    if not isinstance(action, dict) or action.get("type") not in ("search", "open_page", "find_in_page"):
+        raise ValueError("OpenAI web search action is invalid")
+    action = cast(dict[str, object], action)
+    if action["type"] == "find_in_page" and any(not isinstance(action.get(key), str) for key in ("url", "pattern")):
+        raise ValueError("OpenAI web search find action is invalid")
+    item["action"] = {key: value for key, value in action.items() if value is not None}
+    return _replay_item(item, ("type", "id", "status", "action"))
+
+
+def _completed_message_item(item: dict[str, object]) -> dict[str, object]:
+    content = item.get("content")
+    if item.get("role") != "assistant" or not isinstance(content, list) or not content:
+        raise ValueError("OpenAI message is invalid")
+    for part in cast(list[object], content):
+        if not isinstance(part, dict) or part.get("type") not in ("output_text", "refusal"):
+            raise ValueError("OpenAI message content is invalid")
+        part = cast(dict[str, object], part)
+        part.pop("parsed", None)
+        key = "text" if part["type"] == "output_text" else "refusal"
+        if not isinstance(part.get(key), str):
+            raise ValueError("OpenAI message content is incomplete")
+    if item.get("phase") not in (None, "commentary", "final_answer"):
+        raise ValueError("OpenAI message phase is invalid")
+    replay = _replay_item(item, ("type", "id", "role", "content", "phase"))
+    if replay.get("phase") is None:
+        replay.pop("phase", None)
+    validate_message_item(replay)
+    return replay
 
 
 def _replay_item(item: dict[str, object], fields: tuple[str, ...]) -> dict[str, object]:

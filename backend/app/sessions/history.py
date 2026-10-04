@@ -49,6 +49,14 @@ class ExecutionStartedRecord:
 
 
 @dataclass(frozen=True)
+class HostedToolRecord:
+    turn_id: str
+    execution_id: str
+    item: AgenticOutputItem
+    status: Literal["completed", "failed"]
+
+
+@dataclass(frozen=True)
 class ToolResultRecord:
     turn_id: str
     execution_id: str
@@ -91,7 +99,7 @@ class TerminalRecord:
 
 type HistoryRecord = (
     MessageRecord | ContinuationRecord | CallRecord | ExecutionStartedRecord | ToolResultRecord
-    | ExecutionReportRecord | ArtifactRecord | TerminalRecord
+    | ExecutionReportRecord | HostedToolRecord | ArtifactRecord | TerminalRecord
 )
 
 
@@ -100,7 +108,7 @@ def model_input(history: tuple[HistoryRecord, ...]) -> tuple[AgenticInputItem, .
     for record in history:
         if isinstance(record, MessageRecord):
             items.append(deepcopy(record.item))
-        elif isinstance(record, (ContinuationRecord, CallRecord)):
+        elif isinstance(record, (ContinuationRecord, CallRecord, HostedToolRecord)):
             items.append(deepcopy(record.item))
         elif isinstance(record, (ToolResultRecord, ExecutionReportRecord)):
             items.append({"type": "function_call_output", "call_id": record.call_id,

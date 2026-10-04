@@ -40,6 +40,7 @@ class AgenticGenerationRequest:
     instructions: str
     tools: tuple[AgenticInputItem, ...]
     on_output_item: Callable[[AgenticOutputItem], None] | None = None
+    max_hosted_tool_calls: int | None = None
 
 
 @dataclass(frozen=True)

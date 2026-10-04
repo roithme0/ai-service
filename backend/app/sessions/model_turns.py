@@ -14,6 +14,7 @@ from app.sessions.artifacts import ArtifactCandidate
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.tool_turns import run_tool_turn
 from app.sessions.tools import ToolSource
+from app.sessions.web_search import WebSearchConfig
 
 
 ContextT = TypeVar("ContextT")
@@ -35,6 +36,7 @@ class ModelTurnStrategy(Generic[ContextT, ArtifactT]):
         instructions: str = CONVERSATION_INSTRUCTIONS,
         max_attempts: int = MAX_TOOL_ATTEMPTS,
         max_provider_responses: int = MAX_PROVIDER_RESPONSES,
+        web_search: WebSearchConfig | None = None,
     ) -> None:
         if not instructions.strip():
             raise ValueError("instructions must not be blank")
@@ -48,6 +50,7 @@ class ModelTurnStrategy(Generic[ContextT, ArtifactT]):
         self._instructions = instructions
         self._max_attempts = max_attempts
         self._max_provider_responses = max_provider_responses
+        self._web_search = web_search
 
     async def __call__(self, session_id: str, reservation: ConversationTurnReservation[ContextT, ArtifactT]) -> ConversationTurnResult[ArtifactT]:
         try:
@@ -63,6 +66,7 @@ class ModelTurnStrategy(Generic[ContextT, ArtifactT]):
                 record_item=lambda item: self._store.record_provider_item(session_id, reservation.turn_id, item),
                 start_execution=lambda call: self._store.start_execution(session_id, call),
                 record_result=lambda call, execution: self._store.record_result(session_id, call, execution),
+                web_search=self._web_search,
             )
             return self._store.complete_turn(session_id, reservation, result.kind, result.text)
         except TurnHistoryUnavailable as error:

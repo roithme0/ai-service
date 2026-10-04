@@ -16,6 +16,7 @@ from app.agents.runtime import AgentRuntime
 from app.core.config import Settings, get_settings
 from app.models.openai_agentic_generation import OpenAIAgenticGenerator
 from app.mcp_connection import MCPConnection
+from app.sessions.web_search import WebSearchConfig
 
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ def configure_kochwiki_agent(settings: Settings) -> AgentRuntime[ModelAgent]:
     runtime.agent = create_model_agent(
         OpenAIAgenticGenerator(model=model, client=client),
         tool_sources=(runtime.mcp_tools,),
+        web_search=WebSearchConfig(),
     )
     return runtime
 

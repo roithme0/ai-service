@@ -102,9 +102,11 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                 assert turn.kind == "completed"
                 assert turn.text == "Hello World received"
                 assert turn.artifacts == ()
-                assert [tool["name"] for tool in requests[0].tools] == [
+                assert [tool["name"] for tool in requests[0].tools if tool["type"] == "function"] == [
                     "kochwiki__hello_world",
                 ] + (["present_artifact"] if with_presentation else [])
+                assert {"type": "web_search"} in requests[0].tools
+                assert requests[0].max_hosted_tool_calls == 8
                 instructions = requests[0].instructions
                 assert instructions.count("Server-owned domain guidance") == 1
                 assert "hello_world -> kochwiki__hello_world" in instructions
@@ -227,7 +229,7 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
                                           else f"Saved draft {version_id}.")
                 assert created_proposals == [candidate]
                 assert saved_ids == [proposal_id]
-                assert {tool["name"] for tool in requests[0].tools} == {
+                assert {tool["name"] for tool in requests[0].tools if tool["type"] == "function"} == {
                     "kochwiki__create_recipe_proposal", "kochwiki__save_recipe_proposal",
                 }
                 assert "register_recipe_proposal" not in requests[0].instructions

@@ -7,7 +7,7 @@ from app.models.output_items import message_text
 from app.sessions.text_sessions import SessionRole
 from app.sessions.history import (
     ArtifactRecord, CallRecord, ExecutionReportRecord, HistoryRecord, MessageRecord,
-    TerminalRecord, ToolResultRecord, ExecutionStartedRecord,
+    TerminalRecord, ToolResultRecord, ExecutionStartedRecord, HostedToolRecord,
 )
 
 
@@ -83,6 +83,8 @@ def timeline(history: tuple[HistoryRecord, ...]) -> tuple[TimelineItem, ...]:
             else:
                 status = "running" if record.execution_id in started else "requested"
             items.append(TimelineTool(record.turn_id, record.execution_id, record.call.name, status, "tool"))
+        elif isinstance(record, HostedToolRecord):
+            items.append(TimelineTool(record.turn_id, record.execution_id, "web_search", record.status, "tool"))
         elif isinstance(record, ArtifactRecord):
             items.append(TimelineArtifact(record.turn_id, record.artifact_id, "artifact"))
         elif isinstance(record, TerminalRecord) and record.kind != "completed":
