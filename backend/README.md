@@ -97,6 +97,18 @@ turn reservation, failure, cancellation and expiration behavior. Turns allow 32
 tool attempts and 40 provider responses. Artifact-free sources have no separate
 artifact success limit; a successful MCP call does not count as a chat artifact.
 
+Model agents can opt into hosted web search with `WebSearchConfig` passed to
+`create_model_agent`; Kochwiki enables it using the existing configured model.
+The model chooses when to search. Its separate default budget is sixteen hosted
+calls per turn, including page-open/find actions. Each Responses request receives
+the remaining allowance; after exhaustion, later requests omit search and can
+continue with other tools. OpenAI executes searches internally. Completed or
+failed search activity is retained as hosted tool history and shown through the
+ordinary `web_search` timeline row, without local execution or fabricated results.
+Returned search items and assistant messages are replayed, but full retrieved
+page content is not guaranteed. Citation metadata remains internal and citation
+rendering is deferred; this MVP has no search-specific public API or diagnostics.
+
 Tool arguments must be a JSON object. MCP results are returned to the model as
 JSON, preserving content blocks, structured content and the `isError` flag.
 Transport/protocol failures return a generic tool failure so the model can respond;

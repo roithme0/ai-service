@@ -14,7 +14,7 @@ from uuid import uuid4
 from app.models.agentic_generation import AgenticGenerationResponse, AgenticToolCall, message_phase
 from app.models.output_items import validate_message_item
 from app.sessions.history import (
-    ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord,
+    ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord, HostedToolRecord,
     ContinuationRecord, HistoryRecord, MessageRecord, TerminalRecord, ToolResultRecord, text_messages,
 )
 from app.sessions.artifacts import ArtifactCandidate, ArtifactEnvelope, ArtifactToolOutput, PublishedArtifact
@@ -321,6 +321,11 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             record: HistoryRecord
             if item.get("type") == "function_call":
                 record = CallRecord(turn_id, str(uuid4()), copied)
+            elif item.get("type") == "web_search_call":
+                status = item.get("status")
+                if status not in ("completed", "failed") or not isinstance(item.get("id"), str) or not item["id"]:
+                    raise ValueError("invalid hosted search activity")
+                record = HostedToolRecord(turn_id, str(uuid4()), copied, status)
             elif item.get("type") == "message":
                 phase = message_phase(item)
                 record = MessageRecord(turn_id, copied, "intermediate" if phase == "commentary" else

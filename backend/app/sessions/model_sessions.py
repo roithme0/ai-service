@@ -14,6 +14,7 @@ from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.model_turns import MAX_PROVIDER_RESPONSES, MAX_TOOL_ATTEMPTS, ModelTurnStrategy
 from app.sessions.tools import ToolSource
 from app.sessions.presentation import PresentationPayload, presentation_tool_source
+from app.sessions.web_search import WebSearchConfig
 
 ModelAgent = ConfiguredAgentService[object, SessionContext, PresentationPayload, ContextIssue]
 ModelSessionStore = ConversationSessionStore[SessionContext, PresentationPayload]
@@ -37,6 +38,7 @@ def create_model_agent(
     max_tool_attempts: int = MAX_TOOL_ATTEMPTS,
     max_provider_responses: int = MAX_PROVIDER_RESPONSES,
     tool_sources: tuple[ToolSource[ArtifactCandidate[PresentationPayload]], ...] = (),
+    web_search: WebSearchConfig | None = None,
 ) -> ModelAgent:
     owned_store = store if store is not None else new_model_session_store()
 
@@ -51,6 +53,7 @@ def create_model_agent(
             owned_store, generator, format_session_context, tool_sources,
             session_tool_sources=session_tools, instructions=instructions, max_attempts=max_tool_attempts,
             max_provider_responses=max_provider_responses,
+            web_search=web_search,
         ),
         ConversationSessionSettings(max_artifacts=max_artifacts),
     )
