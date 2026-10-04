@@ -62,6 +62,8 @@ export class ChatUiComponent {
     failed: 'Fehlgeschlagen',
     not_executed: 'Nicht ausgeführt',
     outcome_unknown: 'Ergebnis unklar',
+    requested: 'Angefragt',
+    running: 'Wird ausgeführt',
   };
   private readonly revealedStatus = signal<ChatConversationStatus | null>(null);
   protected readonly statusVisible = computed(() => {

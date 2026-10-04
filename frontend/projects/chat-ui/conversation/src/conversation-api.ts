@@ -1,6 +1,7 @@
 import type {
   AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostData,
-  CompletedTurnResponse,
+  AcceptedTurnResponse,
+  StreamEvent,
   CreateSessionApiV1AgentsConfigurationSessionsPostData,
   ErrorResponse,
   SessionCreationResponse,
@@ -9,7 +10,8 @@ import type {
   ValidationErrorResponse,
 } from '../generated/types.gen';
 import {
-  zCompletedTurnResponse,
+  zAcceptedTurnResponse,
+  zStreamEvent,
   zCreateSessionApiV1AgentsConfigurationSessionsPostPath,
   zErrorResponse,
   zSessionCreationResponse,
@@ -47,7 +49,8 @@ export interface ConversationTransport {
   createSession(): Promise<SessionCreationResponse>;
   readSession(sessionId: string): Promise<SessionSnapshotResponse>;
   appendMessage(sessionId: string, text: string): Promise<UserMessageResponse>;
-  generateTurn(sessionId: string): Promise<CompletedTurnResponse>;
+  generateTurn(sessionId: string): Promise<AcceptedTurnResponse>;
+  observeTurn(sessionId: string, turnId: string, signal: AbortSignal): AsyncIterable<StreamEvent>;
 }
 
 export class HttpConversationTransport implements ConversationTransport {
@@ -71,8 +74,57 @@ export class HttpConversationTransport implements ConversationTransport {
     return parseResponse(zUserMessageResponse, await this.request(`/${sessionId}/messages`, 'POST', body));
   }
 
-  async generateTurn(sessionId: string): Promise<CompletedTurnResponse> {
-    return parseResponse(zCompletedTurnResponse, await this.request(`/${sessionId}/turns`, 'POST'));
+  async generateTurn(sessionId: string): Promise<AcceptedTurnResponse> {
+    return parseResponse(zAcceptedTurnResponse, await this.request(`/${sessionId}/turns`, 'POST'));
+  }
+
+  async *observeTurn(sessionId: string, turnId: string, signal: AbortSignal): AsyncIterable<StreamEvent> {
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      const response = await fetch(`${this.baseUrl}/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/events`, {
+        signal, headers: { Accept: 'text/event-stream' },
+      });
+      if (!response.ok) {
+        const error = parseResponse(errorResponseSchema, await response.json());
+        throw new ConversationApiError(response.status, error.kind);
+      }
+      if (!response.headers.get('Content-Type')?.startsWith('text/event-stream') || response.body === null) throw invalidResponse();
+      reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8', { fatal: true });
+      let buffer = '';
+      let scanFrom = 0;
+      let pendingCarriageReturn = false;
+      while (true) {
+        const chunk = await reader.read();
+        let decoded = decoder.decode(chunk.value, { stream: !chunk.done });
+        if (decoded !== '') {
+          const endedWithCarriageReturn = decoded.endsWith('\r');
+          if (pendingCarriageReturn && decoded.startsWith('\n')) decoded = decoded.slice(1);
+          pendingCarriageReturn = endedWithCarriageReturn;
+          buffer += decoded.replace(/\r\n?/g, '\n');
+        }
+        let end: number;
+        while ((end = buffer.indexOf('\n\n', scanFrom)) !== -1) {
+          const frame = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          scanFrom = 0;
+          const data = frame.split('\n').filter((line) => line.startsWith('data:'))
+            .map((line) => line.slice(5).replace(/^ /, '')).join('\n');
+          if (data === '') continue;
+          yield parseResponse(zStreamEvent, JSON.parse(data) as unknown);
+        }
+        scanFrom = Math.max(0, buffer.length - 1);
+        if (chunk.done) return;
+      }
+    } catch (error: unknown) {
+      if (error instanceof ConversationApiError || error instanceof ConversationNetworkError) throw error;
+      throw new ConversationNetworkError('Die Beobachtung der Antwort wurde unterbrochen.', { cause: error });
+    } finally {
+      if (reader !== undefined) {
+        await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+      }
+    }
   }
 
   private async request(path: string, method: 'GET' | 'POST', body?: object): Promise<unknown> {

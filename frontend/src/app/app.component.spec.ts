@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
 import { By } from '@angular/platform-browser';
 import { App } from './app.component';
+import type { ApiMessage, ArtifactResponse, SessionSnapshotResponse } from '@roithme0/chat-ui/conversation';
 
 describe('Demo application', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -15,7 +16,8 @@ describe('Demo application', () => {
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json({ session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z' }))
       .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Any text', turn_id: null }))
-      .mockResolvedValueOnce(Response.json({
+      .mockResolvedValueOnce(Response.json({ kind: 'accepted', turn_id: 'turn-2' }))
+      .mockResolvedValueOnce(observation({
         kind: 'completed', turn_id: 'turn-2',
         timeline: [
           { kind: 'intermediate', turn_id: 'turn-2', id: 'update-1', text: "I'll create a greeting artifact." },
@@ -61,7 +63,7 @@ describe('Demo application', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     }, { timeout: 2000 });
     await vi.waitFor(() => {
       fixture.detectChanges();
@@ -96,11 +98,9 @@ describe('Demo application', () => {
     const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(Response.json({ session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z' }))
       .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Show error', turn_id: null }))
-      .mockResolvedValueOnce(Response.json({
-        detail: 'Turn generation failed', kind: 'generation_failed', turn_id: 'turn-4',
-      }, { status: 502 }))
-      .mockResolvedValueOnce(Response.json({
-        session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z',
+      .mockResolvedValueOnce(Response.json({ kind: 'accepted', turn_id: 'turn-4' }))
+      .mockResolvedValueOnce(snapshotObservation({
+        active_turn_id: null, sequence: 4, session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z',
         messages: [{ role: 'user', text: 'Show error', turn_id: null }], artifacts: [],
         terminal_turn_id: 'turn-4', terminal_turn_kind: 'generation_failed',
         timeline: [
@@ -138,3 +138,14 @@ describe('Demo application', () => {
     expect(element.querySelector('.message--intermediate')?.textContent).toContain('This update remains visible after generation fails.');
   });
 });
+
+function observation(value: { kind: string; turn_id: string; message: ApiMessage; timeline: SessionSnapshotResponse['timeline']; artifacts: ArtifactResponse[] }): Response {
+  return snapshotObservation({ session_id: 'demo-1', expires_at: '2026-10-04T20:00:00Z', active_turn_id: null, sequence: 10,
+    terminal_turn_id: value.turn_id, terminal_turn_kind: 'completed', messages: [{ role: 'user', text: 'Any text', turn_id: null }, value.message],
+    timeline: [{ kind: 'message', id: 'confirmed-0-user', turn_id: value.turn_id, role: 'user', text: 'Any text' }, ...value.timeline], artifacts: value.artifacts });
+}
+function snapshotObservation(snapshot: SessionSnapshotResponse): Response {
+  const initial = { kind: 'snapshot', turn_id: snapshot.terminal_turn_id, snapshot };
+  const terminal = { kind: 'terminal', turn_id: snapshot.terminal_turn_id, sequence: snapshot.sequence, outcome: snapshot.terminal_turn_kind };
+  return new Response(`data: ${JSON.stringify(initial)}\n\ndata: ${JSON.stringify(terminal)}\n\n`, { headers: { 'Content-Type': 'text/event-stream' } });
+}

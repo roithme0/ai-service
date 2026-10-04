@@ -74,6 +74,8 @@ class ConversationSnapshot(Generic[ContextT, ArtifactT]):
     terminal_turn_id: str | None
     terminal_turn_kind: TurnKind | None
     timeline: tuple[TimelineItem, ...]
+    active_turn_id: str | None
+    sequence: int
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
         self._sessions: dict[str, _SessionMetadata[ContextT]] = {}
         self._active_turns: dict[str, str] = {}
         self._history: dict[str, tuple[HistoryRecord, ...]] = {}
+        self._listeners: dict[str, set[Callable[[], None]]] = {}
         self._artifacts: dict[str, dict[str, ArtifactEnvelope[ArtifactT]]] = {}
 
     def create(self, context: ContextT, settings: ConversationSessionSettings) -> TextSessionCreation:
@@ -153,12 +156,31 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 kind="active",
                 snapshot=ConversationSnapshot(
                     session=outcome.session,
-                    artifacts=tuple(artifact for artifact in self._published_artifacts(session_id) if artifact.turn_id != active_turn_id),
+                    artifacts=self._published_artifacts(session_id),
                     terminal_turn_id=terminal.turn_id if terminal else None,
                     terminal_turn_kind=terminal.kind if terminal else None,
-                    timeline=timeline(self._history[session_id], active_turn_id),
+                    timeline=timeline(self._history[session_id]),
+                    active_turn_id=active_turn_id,
+                    sequence=len(self._history[session_id]),
                 ),
             )
+
+    def subscribe(self, session_id: str, listener: Callable[[], None]) -> Callable[[], None]:
+        with self._lock:
+            self._listeners.setdefault(session_id, set()).add(listener)
+            listener()
+        def detach() -> None:
+            with self._lock:
+                listeners = self._listeners.get(session_id)
+                if listeners is not None:
+                    listeners.discard(listener)
+                    if not listeners:
+                        self._listeners.pop(session_id, None)
+        return detach
+
+    def _notify(self, session_id: str) -> None:
+        for listener in tuple(self._listeners.get(session_id, ())):
+            listener()
 
     def append_user_message(self, session_id: str, text: object) -> TextSessionAppendOutcome | ConversationMessageBusy:
         with self._lock:
@@ -179,6 +201,19 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 {"role": "user", "content": accepted_text}, "user"))
             return TextSessionAppendAccepted("accepted", session_id, TextMessage("user", accepted_text))
 
+    def admit_turn(self, session_id: str) -> ConversationTurnReservation[ContextT, ArtifactT] | ConversationTurnResult[ArtifactT]:
+        with self._lock:
+            read = self._read_session(session_id)
+            if not isinstance(read, TextSessionReadActive):
+                return ConversationTurnResult(read.kind, "", None, ())
+            active = self._active_turns.get(session_id)
+            if active is not None:
+                return ConversationTurnResult("busy", active, None, ())
+            terminal = self._latest_terminal(session_id)
+            if terminal is not None:
+                return self._terminal_result(session_id, terminal)
+            return self.reserve_turn(session_id)
+
     def reserve_turn(self, session_id: str) -> ConversationTurnReservation[ContextT, ArtifactT] | ConversationTurnResult[ArtifactT]:
         with self._lock:
             read = self._read_session(session_id)
@@ -196,6 +231,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 return ConversationTurnResult("limit_reached", "", None, ())
             turn_id = next(record.turn_id for record in reversed(self._history[session_id]) if isinstance(record, MessageRecord))
             self._active_turns[session_id] = turn_id
+            self._notify(session_id)
             return ConversationTurnReservation(turn_id, read.session, self._published_artifacts(session_id))
 
     def complete_turn(
@@ -244,6 +280,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
         terminal = TerminalRecord(reservation.turn_id, kind)
         self._append_history(session_id, terminal)
         self._active_turns.pop(session_id, None)
+        self._notify(session_id)
         return self._terminal_result(session_id, terminal)
 
     def history(self, session_id: str) -> tuple[HistoryRecord, ...]:
@@ -316,6 +353,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     finalized = ToolExecution[ArtifactCandidate[ArtifactT]](rejection, failed=True)
                     result = ToolResultRecord(call.turn_id, call.execution_id, call.call.call_id, rejection, True)
                     self._history[session_id] = (*history, result)
+                    self._notify(session_id)
                     return finalized
                 payload = deepcopy(artifact.payload)
                 returned_candidate = deepcopy(artifact)
@@ -332,12 +370,14 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 next_artifacts = {**self._artifacts[session_id], accepted.artifact_id: accepted}
                 self._artifacts[session_id] = next_artifacts
                 self._history[session_id] = next_history
+                self._notify(session_id)
                 return finalized
             if not isinstance(output, str):
                 raise ValueError("structured artifact output requires a candidate")
             finalized = ToolExecution[ArtifactCandidate[ArtifactT]](output, failed=execution.failed)
             self._history[session_id] = (*history, ToolResultRecord(
                 call.turn_id, call.execution_id, call.call.call_id, output, execution.failed))
+            self._notify(session_id)
             return finalized
 
     def _require_turn(self, session_id: str, turn_id: str) -> None:
@@ -349,6 +389,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
 
     def _append_history(self, session_id: str, record: HistoryRecord) -> None:
         self._history[session_id] = (*self._history[session_id], record)
+        self._notify(session_id)
 
     def _published_artifacts(self, session_id: str) -> tuple[PublishedArtifact[ArtifactT], ...]:
         artifacts: list[PublishedArtifact[ArtifactT]] = []
@@ -415,3 +456,4 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
         self._history.pop(session_id, None)
         self._artifacts.pop(session_id, None)
         self._active_turns.pop(session_id, None)
+        self._notify(session_id)

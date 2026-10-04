@@ -27,6 +27,9 @@ const INITIAL_STATE: ConversationViewState = {
 export class ConversationController {
   private sessionId: string | null = null;
   private stateValue = INITIAL_STATE;
+  private epoch = 0;
+  private observation: AbortController | null = null;
+  private confirmedMessages: readonly ApiMessage[] = [];
 
   constructor(
     private readonly transport: ConversationTransport,
@@ -38,7 +41,16 @@ export class ConversationController {
     return this.stateValue;
   }
 
+  dispose(): void {
+    this.epoch += 1;
+    this.observation?.abort();
+    this.observation = null;
+    this.sessionId = null;
+  }
+
   async start(): Promise<void> {
+    this.dispose();
+    const epoch = this.epoch;
     this.setState({
       ...this.stateValue,
       composerDisabled: true,
@@ -46,9 +58,12 @@ export class ConversationController {
     });
     try {
       const created = await this.transport.createSession();
+      if (epoch !== this.epoch) return;
+      this.confirmedMessages = [];
       this.sessionId = created.session_id;
       this.setState({ content: [], composerDisabled: false, status: null });
     } catch (error: unknown) {
+      if (epoch !== this.epoch) return;
       if (isUnsupportedApiRequest(error)) {
         this.setUnsupportedApiRequest(error);
         return;
@@ -69,7 +84,8 @@ export class ConversationController {
   async submit(text: string, acknowledge: () => void): Promise<void> {
     const sessionId = this.sessionId;
     if (sessionId === null || this.stateValue.composerDisabled) return;
-    const previousContent = this.stateValue.content;
+    const previousMessages = this.confirmedMessages.filter((message) => message.role === 'user');
+    const epoch = this.epoch;
     this.setState({
       ...this.stateValue,
       composerDisabled: true,
@@ -77,11 +93,13 @@ export class ConversationController {
     });
     try {
       const accepted = await this.transport.appendMessage(sessionId, text);
+      if (epoch !== this.epoch) return;
       this.acceptMessage(accepted, acknowledge);
       await this.generate(sessionId);
     } catch (error: unknown) {
+      if (epoch !== this.epoch) return;
       if (error instanceof ConversationNetworkError) {
-        await this.reconcileAppend(sessionId, previousContent, text, acknowledge);
+        await this.reconcileAppend(sessionId, previousMessages, text, acknowledge);
         return;
       }
       this.handleAppendFailure(error);
@@ -91,16 +109,17 @@ export class ConversationController {
   async performAction(actionId: string): Promise<void> {
     if (actionId === 'new-session') {
       await this.start();
-    } else if (actionId === 'retry-turn' && this.sessionId !== null) {
-      await this.generate(this.sessionId);
+
     }
   }
 
   private acceptMessage(message: ApiMessage, acknowledge: () => void): void {
+    const userIndex = this.confirmedMessages.filter((item) => item.role === 'user').length;
+    this.confirmedMessages = [...this.confirmedMessages, message];
     this.setState({
       content: [
         ...this.stateValue.content,
-        presentMessage(message, textContent(this.stateValue.content).length),
+        presentMessage(message, userIndex),
       ],
       composerDisabled: true,
       status: loading('Antwort wird erstellt …', 'assistant'),
@@ -109,50 +128,109 @@ export class ConversationController {
   }
 
   private async generate(sessionId: string): Promise<void> {
-    this.setState({
-      ...this.stateValue,
-      composerDisabled: true,
-      status: loading('Antwort wird erstellt …', 'assistant'),
-    });
+    const epoch = this.epoch;
+    this.setState({ ...this.stateValue, composerDisabled: true, status: loading('Antwort wird erstellt …', 'assistant') });
+    let turnId: string;
     try {
-      const result = await this.transport.generateTurn(sessionId);
-      this.setState({
-        content: [
-          ...this.stateValue.content,
-          ...presentTimeline(result.timeline, result.artifacts, this.mapArtifact),
-        ],
-        composerDisabled: false,
-        status: null,
-      });
+      turnId = (await this.transport.generateTurn(sessionId)).turn_id;
     } catch (error: unknown) {
+      if (epoch !== this.epoch) return;
       if (error instanceof ConversationNetworkError || isKind(error, 'busy')) {
-        await this.reconcileTurn(sessionId);
-        return;
-      }
-      if (isKind(error, 'generation_failed') || isKind(error, 'conflict')) {
         try {
           const snapshot = await this.transport.readSession(sessionId);
+          if (epoch !== this.epoch) return;
+          this.confirmedMessages = snapshot.messages;
           this.setState({ ...this.stateValue, content: presentSnapshot(snapshot, this.mapArtifact) });
+          if (snapshot.active_turn_id !== null) {
+            turnId = snapshot.active_turn_id;
+          } else if (snapshot.terminal_turn_id !== null) {
+            this.applyTurnSnapshot(snapshot);
+            return;
+          } else {
+            this.observationLost();
+            return;
+          }
         } catch {
-          // Keep the confirmed failure if its retained activity cannot be read.
+          if (epoch === this.epoch) this.observationLost();
+          return;
         }
+      } else {
+        this.handleTurnFailure(error);
+        return;
       }
-      this.handleTurnFailure(error);
     }
+    if (epoch !== this.epoch) return;
+    const observation = new AbortController();
+    this.observation = observation;
+    const items = new Map<string, { order: number; sequence: number; item: SessionSnapshotResponse['timeline'][number] }>();
+    const artifacts = new Map<string, ArtifactResponse>();
+    let initialized = false;
+    let latestSequence = -1;
+    try {
+      for await (const event of this.transport.observeTurn(sessionId, turnId, observation.signal)) {
+        if (epoch !== this.epoch) return;
+        if (event.turn_id !== turnId) throw new ConversationNetworkError('Ungültige Turn-Zuordnung.');
+        if (event.kind === 'error') {
+          if (event.reason === 'unavailable') this.setTerminal(new ConversationApiError(410, 'expired'));
+          else this.observationLost();
+          return;
+        }
+        if (event.kind === 'snapshot') {
+          if (initialized || event.snapshot.session_id !== sessionId) throw new ConversationNetworkError('Ungültiger Anfangszustand.');
+          initialized = true;
+          latestSequence = event.snapshot.sequence;
+          this.confirmedMessages = event.snapshot.messages;
+          event.snapshot.artifacts.forEach((artifact) => artifacts.set(artifact.artifact_id, artifact));
+          event.snapshot.timeline.forEach((item, order) => items.set(itemIdentity(item), { item, order, sequence: event.snapshot.sequence }));
+        } else if (event.kind === 'upsert') {
+          if (!initialized || event.item.turn_id !== turnId || event.identity !== itemIdentity(event.item)) throw new ConversationNetworkError('Ungültiger Timeline-Eintrag.');
+          const previous = items.get(event.identity);
+          if (previous !== undefined && event.sequence <= previous.sequence) continue;
+          if (previous !== undefined && event.order !== previous.order) throw new ConversationNetworkError('Ungültige Reihenfolge.');
+          if (event.item.kind === 'artifact') {
+            if (event.artifact == null || event.artifact.artifact_id !== event.item.artifact_id || event.artifact.turn_id !== turnId) throw new ConversationNetworkError('Ungültiges Artefakt.');
+            artifacts.set(event.artifact.artifact_id, event.artifact);
+          } else if (event.artifact != null) throw new ConversationNetworkError('Unerwartetes Artefakt.');
+          latestSequence = Math.max(latestSequence, event.sequence);
+          items.set(event.identity, { item: event.item, order: event.order, sequence: event.sequence });
+        } else {
+          if (!initialized || event.sequence < latestSequence) throw new ConversationNetworkError('Ungültiger Endzustand.');
+          const failed = event.outcome !== 'completed';
+          this.setState({ ...this.stateValue, composerDisabled: false, status: failed ? failure('Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.', 'assistant') : null });
+          return;
+        }
+        const timeline = [...items.values()].sort((a, b) => a.order - b.order).map((entry) => entry.item);
+        this.setState({ content: presentTimeline(timeline, [...artifacts.values()], this.mapArtifact), composerDisabled: true, status: loading('Antwort wird erstellt …', 'assistant') });
+      }
+      if (epoch === this.epoch) this.observationLost();
+    } catch (error: unknown) {
+      if (epoch !== this.epoch) return;
+      if (error instanceof ConversationApiError) this.handleTurnFailure(error);
+      else this.observationLost();
+    } finally {
+      observation.abort();
+      if (this.observation === observation) this.observation = null;
+    }
+  }
+
+  private observationLost(): void {
+    this.setState({ ...this.stateValue, composerDisabled: true, status: failure('Die Verbindung zur Antwort wurde unterbrochen. Der Ausgang ist unbekannt.', 'assistant') });
   }
 
   private async reconcileAppend(
     sessionId: string,
-    previousContent: readonly ChatContent[],
+    previousMessages: readonly ApiMessage[],
     text: string,
     acknowledge: () => void,
   ): Promise<void> {
+    const epoch = this.epoch;
     try {
       const snapshot = await this.transport.readSession(sessionId);
-      const previousMessages = previousContent.filter(isTextMessage);
-      const appended = snapshot.messages[previousMessages.length];
+      if (epoch !== this.epoch) return;
+      const users = snapshot.messages.filter((message) => message.role === 'user');
+      const appended = users[previousMessages.length];
       if (
-        prefixMatches(previousMessages, snapshot.messages) &&
+        prefixMatches(previousMessages, users) &&
         appended?.role === 'user' &&
         appended.text === text
       ) {
@@ -161,6 +239,7 @@ export class ConversationController {
           composerDisabled: true,
           status: loading('Antwort wird erstellt …', 'assistant'),
         });
+        this.confirmedMessages = snapshot.messages;
         acknowledge();
         await this.generate(sessionId);
         return;
@@ -174,27 +253,15 @@ export class ConversationController {
         ),
       });
     } catch (error: unknown) {
-      this.handleAppendFailure(error);
-    }
-  }
-
-  private async reconcileTurn(sessionId: string): Promise<void> {
-    try {
-      const snapshot = await this.transport.readSession(sessionId);
-      this.applyTurnSnapshot(snapshot);
-    } catch (error: unknown) {
-      this.handleTurnFailure(
-        error instanceof ConversationNetworkError || isKind(error, 'agent_unavailable') || isUnsupportedApiRequest(error)
-          ? error
-          : new ConversationNetworkError('Abgleich fehlgeschlagen.', { cause: error }),
-      );
+      if (epoch !== this.epoch) return;
+      if (error instanceof ConversationApiError) this.handleAppendFailure(error);
+      else this.observationLost();
     }
   }
 
   private applyTurnSnapshot(snapshot: SessionSnapshotResponse): void {
     const content = presentSnapshot(snapshot, this.mapArtifact);
-    const last = snapshot.messages.at(-1);
-    if (last?.role === 'assistant') {
+    if (snapshot.terminal_turn_kind === 'completed') {
       this.setState({ content, composerDisabled: false, status: null });
       return;
     }
@@ -215,8 +282,7 @@ export class ConversationController {
       status: failure(
         'Der Status der Antwort ist noch unklar.',
         'assistant',
-        'retry-turn',
-        'Erneut versuchen',
+
       ),
     });
   }
@@ -265,8 +331,7 @@ export class ConversationController {
         status: failure(
           messageFor(error, 'Die Antwort konnte nicht abgeglichen werden.'),
           'assistant',
-          'retry-turn',
-          'Erneut versuchen',
+
         ),
       });
     }
@@ -353,16 +418,17 @@ function presentTimeline(
   });
 }
 
-function isTextMessage(content: ChatContent): content is ChatTextMessage {
-  return content.kind === 'text';
-}
-
-function textContent(content: readonly ChatContent[]): readonly ChatTextMessage[] {
-  return content.filter(isTextMessage);
+function itemIdentity(item: SessionSnapshotResponse['timeline'][number]): string {
+  switch (item.kind) {
+    case 'message': case 'intermediate': return item.id;
+    case 'tool': return `tool-${item.execution_id}`;
+    case 'artifact': return item.artifact_id;
+    case 'failure': return `failure-${item.turn_id}`;
+  }
 }
 
 function prefixMatches(
-  previous: readonly ChatTextMessage[],
+  previous: readonly ApiMessage[],
   current: readonly ApiMessage[],
 ): boolean {
   return previous.every(

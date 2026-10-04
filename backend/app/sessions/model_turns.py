@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Generic, TypeVar
 
 from app.models.agentic_generation import AgenticGenerator
-from app.sessions.conversation import ConversationSessionStore, ConversationTurnResult, TurnHistoryUnavailable
+from app.sessions.conversation import ConversationSessionStore, ConversationTurnReservation, ConversationTurnResult, TurnHistoryUnavailable
 from app.sessions.history import model_input
 from app.sessions.artifacts import ArtifactCandidate
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
@@ -49,10 +49,7 @@ class ModelTurnStrategy(Generic[ContextT, ArtifactT]):
         self._max_attempts = max_attempts
         self._max_provider_responses = max_provider_responses
 
-    async def __call__(self, session_id: str) -> ConversationTurnResult[ArtifactT]:
-        reservation = self._store.reserve_turn(session_id)
-        if isinstance(reservation, ConversationTurnResult):
-            return reservation
+    async def __call__(self, session_id: str, reservation: ConversationTurnReservation[ContextT, ArtifactT]) -> ConversationTurnResult[ArtifactT]:
         try:
             session_sources = (
                 self._session_tool_sources(reservation.snapshot.payload, session_id, reservation.turn_id)

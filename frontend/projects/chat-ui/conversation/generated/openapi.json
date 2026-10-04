@@ -1,6 +1,25 @@
 {
   "components": {
     "schemas": {
+      "AcceptedTurnResponse": {
+        "properties": {
+          "kind": {
+            "const": "accepted",
+            "title": "Kind",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "turn_id"
+        ],
+        "title": "AcceptedTurnResponse",
+        "type": "object"
+      },
       "ArtifactResponse": {
         "properties": {
           "artifact_id": {
@@ -64,71 +83,6 @@
         "title": "AssistantMessageResponse",
         "type": "object"
       },
-      "CompletedTurnResponse": {
-        "properties": {
-          "artifacts": {
-            "items": {
-              "$ref": "#/components/schemas/ArtifactResponse"
-            },
-            "title": "Artifacts",
-            "type": "array"
-          },
-          "kind": {
-            "const": "completed",
-            "title": "Kind",
-            "type": "string"
-          },
-          "message": {
-            "$ref": "#/components/schemas/AssistantMessageResponse"
-          },
-          "timeline": {
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "artifact": "#/components/schemas/TimelineArtifact",
-                  "failure": "#/components/schemas/TimelineFailure",
-                  "intermediate": "#/components/schemas/TimelineIntermediateMessage",
-                  "message": "#/components/schemas/TimelineMessage",
-                  "tool": "#/components/schemas/TimelineTool"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/TimelineMessage"
-                },
-                {
-                  "$ref": "#/components/schemas/TimelineIntermediateMessage"
-                },
-                {
-                  "$ref": "#/components/schemas/TimelineTool"
-                },
-                {
-                  "$ref": "#/components/schemas/TimelineArtifact"
-                },
-                {
-                  "$ref": "#/components/schemas/TimelineFailure"
-                }
-              ]
-            },
-            "title": "Timeline",
-            "type": "array"
-          },
-          "turn_id": {
-            "title": "Turn Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "turn_id",
-          "message",
-          "artifacts",
-          "timeline"
-        ],
-        "title": "CompletedTurnResponse",
-        "type": "object"
-      },
       "ErrorResponse": {
         "additionalProperties": false,
         "properties": {
@@ -175,6 +129,19 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "SessionCreationResponse": {
         "properties": {
           "expires_at": {
@@ -195,6 +162,17 @@
       },
       "SessionSnapshotResponse": {
         "properties": {
+          "active_turn_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Turn Id"
+          },
           "artifacts": {
             "items": {
               "$ref": "#/components/schemas/ArtifactResponse"
@@ -226,6 +204,11 @@
             },
             "title": "Messages",
             "type": "array"
+          },
+          "sequence": {
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
           },
           "session_id": {
             "title": "Session Id",
@@ -304,9 +287,200 @@
           "artifacts",
           "terminal_turn_id",
           "terminal_turn_kind",
-          "timeline"
+          "timeline",
+          "active_turn_id",
+          "sequence"
         ],
         "title": "SessionSnapshotResponse",
+        "type": "object"
+      },
+      "StreamError": {
+        "properties": {
+          "kind": {
+            "const": "error",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "unavailable",
+              "observation_limit"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "turn_id",
+          "reason"
+        ],
+        "title": "StreamError",
+        "type": "object"
+      },
+      "StreamEvent": {
+        "discriminator": {
+          "mapping": {
+            "error": "#/components/schemas/StreamError",
+            "snapshot": "#/components/schemas/StreamSnapshot",
+            "terminal": "#/components/schemas/StreamTerminal",
+            "upsert": "#/components/schemas/StreamUpsert"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StreamSnapshot"
+          },
+          {
+            "$ref": "#/components/schemas/StreamUpsert"
+          },
+          {
+            "$ref": "#/components/schemas/StreamTerminal"
+          },
+          {
+            "$ref": "#/components/schemas/StreamError"
+          }
+        ],
+        "title": "StreamEvent"
+      },
+      "StreamSnapshot": {
+        "properties": {
+          "kind": {
+            "const": "snapshot",
+            "title": "Kind",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SessionSnapshotResponse"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "turn_id",
+          "snapshot"
+        ],
+        "title": "StreamSnapshot",
+        "type": "object"
+      },
+      "StreamTerminal": {
+        "properties": {
+          "kind": {
+            "const": "terminal",
+            "title": "Kind",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "completed",
+              "generation_failed",
+              "conflict"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "turn_id",
+          "sequence",
+          "outcome"
+        ],
+        "title": "StreamTerminal",
+        "type": "object"
+      },
+      "StreamUpsert": {
+        "properties": {
+          "artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity": {
+            "title": "Identity",
+            "type": "string"
+          },
+          "item": {
+            "discriminator": {
+              "mapping": {
+                "artifact": "#/components/schemas/TimelineArtifact",
+                "failure": "#/components/schemas/TimelineFailure",
+                "intermediate": "#/components/schemas/TimelineIntermediateMessage",
+                "message": "#/components/schemas/TimelineMessage",
+                "tool": "#/components/schemas/TimelineTool"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TimelineMessage"
+              },
+              {
+                "$ref": "#/components/schemas/TimelineIntermediateMessage"
+              },
+              {
+                "$ref": "#/components/schemas/TimelineTool"
+              },
+              {
+                "$ref": "#/components/schemas/TimelineArtifact"
+              },
+              {
+                "$ref": "#/components/schemas/TimelineFailure"
+              }
+            ],
+            "title": "Item"
+          },
+          "kind": {
+            "const": "upsert",
+            "title": "Kind",
+            "type": "string"
+          },
+          "order": {
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "sequence": {
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "turn_id",
+          "identity",
+          "order",
+          "sequence",
+          "item"
+        ],
+        "title": "StreamUpsert",
         "type": "object"
       },
       "TimelineArtifact": {
@@ -436,6 +610,8 @@
           },
           "status": {
             "enum": [
+              "requested",
+              "running",
               "completed",
               "failed",
               "not_executed",
@@ -518,6 +694,46 @@
           "type"
         ],
         "title": "ValidationDetail",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
         "type": "object"
       },
       "ValidationErrorResponse": {
@@ -983,11 +1199,11 @@
           "required": false
         },
         "responses": {
-          "201": {
+          "202": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CompletedTurnResponse"
+                  "$ref": "#/components/schemas/AcceptedTurnResponse"
                 }
               }
             },
@@ -1075,6 +1291,121 @@
           }
         },
         "summary": "Execute Turn",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/api/v1/agents/{configuration}/sessions/{session_id}/turns/{turn_id}/events": {
+      "get": {
+        "operationId": "observe_turn_api_v1_agents__configuration__sessions__session_id__turns__turn_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "configuration",
+            "required": true,
+            "schema": {
+              "enum": [
+                "demo",
+                "kochwiki"
+              ],
+              "title": "Configuration",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamEvent",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Observe Turn",
         "tags": [
           "agents"
         ]

@@ -61,8 +61,7 @@ Each configured agent has an `AgentRuntime` that owns availability, MCP
 connections and its optional model client. `ConfiguredAgents` delegates startup
 and shutdown to those runtimes. Conversation services handle sessions and turns;
 they do not own external connections. A failed MCP startup disables the owning
-agent and closes its resources. Shutdown closes connections in reverse order
-before the model client, attempting every cleanup even if one fails.
+agent and closes its resources. Shutdown first cancels and settles backend-owned turns with append-only cleanup, then closes connections in reverse order before the model client, attempting every cleanup even if one fails.
 
 Application startup initializes the connection and retrieves server instructions
 and all pages of tool definitions. The connection stays open until shutdown;
@@ -116,8 +115,7 @@ separately as continuation context. Current replay includes previous-turn contex
 Published artifacts derive their API `order` from the one-based position of their
 artifact record in the full history. Values may have gaps; candidates have no
 identity or order. The HTTP timeline projects user/final messages, intermediate assistant updates, tool calls with safe statuses,
-artifact references, and failed-turn markers in recorded order. Active-turn tool
-activity and artifacts remain hidden until termination; client streaming is deferred.
+artifact references, and failed-turn markers in recorded order. Active activity and accepted artifacts are visible immediately in session snapshots and SSE observation. Every complete message remains visible, including multiple final messages and final messages retained from failed turns.
 Intermediate updates use only the provider's explicit `commentary` phase.
 Supplied phases are preserved; absent or null phases remain absent and use the
 primary assistant-message presentation. Phase never depends on later tool calls
@@ -149,7 +147,7 @@ Raw call arguments, results, and reasoning remain internal. The timeline exposes
 only tool names, execution identities, and statuses. Explicit tool failure metadata
 (including MCP `isError`) produces `failed`; arbitrary output text is never parsed
 to infer failure. `completed` means a result returned without explicit failure,
-not that a domain objective succeeded. Unresolved calls display `not_executed` or
+not that a domain objective succeeded. Calls first display `requested`, then `running` once execution starts. Requested does not promise execution. Unresolved calls display `not_executed` or
 `outcome_unknown` according to the retained service report.
 There is no automatic rollback or duplicate-mutation prevention. Confirmed failed
 turn requests remain cached; a later ordinary message starts a new turn.
@@ -167,8 +165,13 @@ Use `/api/v1/agents/{configuration}/sessions` with the fixed configurations
 `{"input":{"context":{...}}}`; demo accepts `{}` or an empty
 `input`. Read with `GET /{session_id}`, append a user message with
 `POST /{session_id}/messages` and `{"text":"..."}`, then execute it with
-`POST /{session_id}/turns`. A turn does not append a message. Session reads and
-completed turns return published artifacts with shared identity and typed payloads.
+`POST /{session_id}/turns`, which returns HTTP 202 with `{ "kind": "accepted", "turn_id": "..." }` after synchronous admission. A turn does not append a message. Backend-owned work continues when either request or observer disconnects; repeated starts for the current user message return the same turn identity without repeating execution.
+
+Observe with `GET /{session_id}/turns/{turn_id}/events` (`text/event-stream`). The first typed `snapshot` event establishes retained safe state. Ordered `upsert` events contain full safe items, identity, zero-based timeline order, history sequence, and an accepted artifact envelope when needed. A typed `terminal` event supplies `completed`, `generation_failed`, or `conflict`. A typed stream `error` signals unavailable observation or exhausted observer capacity; transport EOF without terminal state also leaves the outcome unknown. Pre-stream errors keep typed HTTP envelopes. Session snapshots include `active_turn_id` and `sequence` alongside terminal metadata.
+
+Subscription and initial capture share the store lock. Upserts covered by the initial snapshot are discarded; subsequent projection updates preserve tool identity and its original position. Observers are limited to eight per session and 128 queued projections each. Slow observers terminate without blocking work. Ten-second heartbeat checks detect session expiry without renewing its lifetime. There is no reconnect cursor, automatic reconnect, generation retry, or refresh recovery.
+
+Verify incremental delivery through a running gateway with `python scripts/verify_timeline_gateway.py --base-url http://localhost:8000` (adjust the port). Response buffering is disabled per SSE response with `X-Accel-Buffering: no`; no proxy configuration change is required.
 There is no individual artifact lookup route.
 
 Model-backed sessions require an `input` object containing only `context`, which
@@ -253,8 +256,7 @@ Artifacts use the existing HTTP envelope, whose `payload` contains
 `{"title": "...", "subtitle": <string or null>, "payload": <complete presentation data>, "metadata": <object or null>}`. IDs, order,
 timestamps, and turn attribution are assigned by the conversation store. They
 are retained once an artifact-producing tool returns its validated artifact, even
-if later generation fails or is cancelled. Active-turn visibility remains deferred
-until termination. Failed-turn artifacts are available through session reads without
+if later generation fails or is cancelled. Accepted artifacts are renderable immediately during the active turn. Failed-turn artifacts are available through session reads without
 an assistant reply; candidates never returned or accepted leave no artifact state. Repeated turn reads return
 the same artifacts projected from history. These retained artifacts continue consuming capacity.
 History and payloads expire together after 90 minutes or disappear on restart.

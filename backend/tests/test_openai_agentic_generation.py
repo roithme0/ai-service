@@ -19,6 +19,7 @@ from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.history import CallRecord, ExecutionReportRecord, MessageRecord, ToolResultRecord, model_input
 from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore
 from app.sessions.model_turns import ModelTurnStrategy
+from reserved_turn import execute_reserved_turn
 from app.sessions.tool_turns import run_tool_turn
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
 from tool_turn_recorder import ToolTurnRecorder
@@ -223,7 +224,7 @@ def test_failed_stream_retains_complete_calls_without_executing_them(ending: str
                 strategy = ModelTurnStrategy(store, OpenAIAgenticGenerator("gpt-5.6-sol", client),
                     lambda context: context, (LocalToolSource((RegisteredTool("sample",
                     {"type": "function", "name": "sample"}, execute),)),))
-                assert (await strategy(session_id)).kind == "generation_failed"
+                assert (await execute_reserved_turn(store, strategy, session_id)).kind == "generation_failed"
                 history = store.history(session_id)
                 assert len([record for record in history if isinstance(record, CallRecord)]) == 1 + int(prior_success)
                 reports = [record for record in history if isinstance(record, ExecutionReportRecord)]
@@ -239,7 +240,7 @@ def test_failed_stream_retains_complete_calls_without_executing_them(ending: str
                     assert replay[0] == {"role": "user", "content": "Run"}
                     assert replay[-1]["call_id"] == "call_1"
                     assert json.loads(str(replay[-1]["output"]))["state"] == "not_executed"
-                assert (await strategy(session_id)).kind == "generation_failed"
+                assert (await execute_reserved_turn(store, strategy, session_id)).kind == "generation_failed"
         assert len(bodies) == 1 + int(prior_success)
         assert len(invocations) == int(prior_success)
         assert all(body.closed for body in bodies)
@@ -380,12 +381,12 @@ def test_completed_items_are_retained_before_stream_finishes_and_replayed(
                 store.append_user_message(session_id, "Run")
                 strategy = ModelTurnStrategy(store, OpenAIAgenticGenerator("model", client), str,
                     (LocalToolSource((RegisteredTool("sample", {"type": "function", "name": "sample"}, execute),)),))
-                task = asyncio.create_task(strategy(session_id))
+                task = asyncio.create_task(execute_reserved_turn(store, strategy, session_id))
                 await asyncio.wait_for(body.paused[0].wait(), 1)
                 first = store.history(session_id)
                 assert len(first) == 2 and isinstance(first[-1], MessageRecord)
                 assert first[-1].item["phase"] == "commentary"
-                assert store.read(session_id).snapshot.timeline[-1].kind == "message"
+                assert store.read(session_id).snapshot.timeline[-1].kind == "intermediate"
                 body.release[0].set()
                 await asyncio.wait_for(body.paused[1].wait(), 1)
                 recorded = store.history(session_id)
@@ -412,10 +413,10 @@ def test_completed_items_are_retained_before_stream_finishes_and_replayed(
                     assert not invocations
                     reports = [record for record in history if isinstance(record, ExecutionReportRecord)]
                     assert len(reports) == 1 and reports[0].state == "not_executed"
-                    assert (await strategy(session_id)).kind == "generation_failed"
+                    assert (await execute_reserved_turn(store, strategy, session_id)).kind == "generation_failed"
                     assert store.history(session_id) == history and len(requests) == 1
                     store.append_user_message(session_id, "Recover")
-                    assert (await strategy(session_id)).kind == "completed"
+                    assert (await execute_reserved_turn(store, strategy, session_id)).kind == "completed"
                     assert requests[-1]["input"][1:-1] == list(model_input(history))
                     assert not invocations
     asyncio.run(run())

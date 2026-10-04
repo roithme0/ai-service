@@ -1,4 +1,4 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
 import { ConversationController, presentJsonArtifact, type ConversationViewState } from '@roithme0/chat-ui/conversation';
 import { DemoTransport } from './demo-transport';
@@ -22,7 +22,7 @@ const INITIAL_STATE: ConversationViewState = {
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
-export class App implements OnInit {
+export class App implements OnInit, OnDestroy {
   protected readonly chat = signal<ConversationViewState>(INITIAL_STATE);
   private readonly controller = new ConversationController(
     new DemoTransport(),
@@ -42,6 +42,10 @@ export class App implements OnInit {
 
   ngOnInit(): void {
     void this.controller.start();
+  }
+
+  ngOnDestroy(): void {
+    this.controller.dispose();
   }
 
   protected handleMessage(submission: ChatSubmission): void {

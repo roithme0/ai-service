@@ -3,6 +3,14 @@
 import * as z from 'zod';
 
 /**
+ * AcceptedTurnResponse
+ */
+export const zAcceptedTurnResponse = z.object({
+    kind: z.literal('accepted'),
+    turn_id: z.string()
+});
+
+/**
  * ArtifactResponse
  */
 export const zArtifactResponse = z.object({
@@ -55,6 +63,29 @@ export const zSessionCreationResponse = z.object({
 });
 
 /**
+ * StreamError
+ */
+export const zStreamError = z.object({
+    kind: z.literal('error'),
+    reason: z.enum(['unavailable', 'observation_limit']),
+    turn_id: z.string()
+});
+
+/**
+ * StreamTerminal
+ */
+export const zStreamTerminal = z.object({
+    kind: z.literal('terminal'),
+    outcome: z.enum([
+        'completed',
+        'generation_failed',
+        'conflict'
+    ]),
+    sequence: z.int().gte(0),
+    turn_id: z.string()
+});
+
+/**
  * TimelineArtifact
  */
 export const zTimelineArtifact = z.object({
@@ -100,6 +131,8 @@ export const zTimelineTool = z.object({
     kind: z.literal('tool'),
     name: z.string(),
     status: z.enum([
+        'requested',
+        'running',
         'completed',
         'failed',
         'not_executed',
@@ -109,19 +142,21 @@ export const zTimelineTool = z.object({
 });
 
 /**
- * CompletedTurnResponse
+ * StreamUpsert
  */
-export const zCompletedTurnResponse = z.object({
-    artifacts: z.array(zArtifactResponse),
-    kind: z.literal('completed'),
-    message: zAssistantMessageResponse,
-    timeline: z.array(z.union([
+export const zStreamUpsert = z.object({
+    artifact: zArtifactResponse.nullish(),
+    identity: z.string(),
+    item: z.discriminatedUnion('kind', [
         zTimelineMessage,
         zTimelineIntermediateMessage,
         zTimelineTool,
         zTimelineArtifact,
         zTimelineFailure
-    ])),
+    ]),
+    kind: z.literal('upsert'),
+    order: z.int().gte(0),
+    sequence: z.int().gte(0),
     turn_id: z.string()
 });
 
@@ -138,9 +173,11 @@ export const zUserMessageResponse = z.object({
  * SessionSnapshotResponse
  */
 export const zSessionSnapshotResponse = z.object({
+    active_turn_id: z.string().nullable(),
     artifacts: z.array(zArtifactResponse),
     expires_at: z.string(),
     messages: z.array(z.union([zUserMessageResponse, zAssistantMessageResponse])),
+    sequence: z.int().gte(0),
     session_id: z.string(),
     terminal_turn_id: z.string().nullable(),
     terminal_turn_kind: z.enum([
@@ -163,12 +200,49 @@ export const zSessionSnapshotResponse = z.object({
 });
 
 /**
+ * StreamSnapshot
+ */
+export const zStreamSnapshot = z.object({
+    kind: z.literal('snapshot'),
+    snapshot: zSessionSnapshotResponse,
+    turn_id: z.string()
+});
+
+/**
+ * StreamEvent
+ */
+export const zStreamEvent = z.discriminatedUnion('kind', [
+    zStreamSnapshot,
+    zStreamUpsert,
+    zStreamTerminal,
+    zStreamError
+]);
+
+/**
  * ValidationDetail
  */
 export const zValidationDetail = z.object({
     loc: z.array(z.union([z.string(), z.int()])).min(1),
     msg: z.string().min(1),
     type: z.string().min(1)
+});
+
+/**
+ * ValidationError
+ */
+export const zValidationError = z.object({
+    ctx: z.record(z.string(), z.unknown()).optional(),
+    input: z.unknown().optional(),
+    loc: z.array(z.union([z.string(), z.int()])),
+    msg: z.string(),
+    type: z.string()
+});
+
+/**
+ * HTTPValidationError
+ */
+export const zHttpValidationError = z.object({
+    detail: z.array(zValidationError).optional()
 });
 
 /**
@@ -246,4 +320,15 @@ export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostPath 
 /**
  * Successful Response
  */
-export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponse = zCompletedTurnResponse;
+export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponse = zAcceptedTurnResponse;
+
+export const zObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetPath = z.object({
+    configuration: z.enum(['demo', 'kochwiki']),
+    session_id: z.string(),
+    turn_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponse = zStreamEvent;

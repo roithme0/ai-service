@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Generic, Literal, Protocol, TypeVar
 
 from fastapi import APIRouter, Depends, Path, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_serializer
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError, field_serializer
 
 from app.agents.wiring import get_configured_agents
 from app.sessions.context import ContextIssue
@@ -138,25 +138,62 @@ class SessionSnapshotResponse(BaseModel):
     terminal_turn_id: str | None
     terminal_turn_kind: TurnKind | None
     timeline: list[Annotated[TimelineItem, Field(discriminator="kind")]]
+    active_turn_id: str | None
+    sequence: int = Field(ge=0)
 
     @field_serializer("expires_at")
     def serialize_expires_at(self, value: datetime) -> str:
         return value.isoformat()
 
 
-class CompletedTurnResponse(BaseModel):
-    kind: Literal["completed"]
+class AcceptedTurnResponse(BaseModel):
+    kind: Literal["accepted"]
     turn_id: str
-    message: AssistantMessageResponse
-    artifacts: list[ArtifactResponse]
-    timeline: list[Annotated[TimelineItem, Field(discriminator="kind")]]
+
+
+class StreamSnapshot(BaseModel):
+    kind: Literal["snapshot"]
+    turn_id: str
+    snapshot: SessionSnapshotResponse
+
+
+class StreamUpsert(BaseModel):
+    kind: Literal["upsert"]
+    turn_id: str
+    identity: str
+    order: int = Field(ge=0)
+    sequence: int = Field(ge=0)
+    item: Annotated[TimelineItem, Field(discriminator="kind")]
+    artifact: ArtifactResponse | None = None
+
+
+class StreamTerminal(BaseModel):
+    kind: Literal["terminal"]
+    turn_id: str
+    sequence: int = Field(ge=0)
+    outcome: Literal["completed", "generation_failed", "conflict"]
+
+
+class StreamError(BaseModel):
+    kind: Literal["error"]
+    turn_id: str
+    reason: Literal["unavailable", "observation_limit"]
+
+
+class StreamEvent(RootModel[Annotated[StreamSnapshot | StreamUpsert | StreamTerminal | StreamError, Field(discriminator="kind")]]):
+    pass
+
+
+class EventStreamResponse(StreamingResponse):
+    media_type = "text/event-stream"
 
 
 class ConversationTransport(Protocol):
     def create(self, value: object) -> SessionCreationResponse | JSONResponse: ...
     def read(self, session_id: str) -> SessionSnapshotResponse | JSONResponse: ...
     def append(self, session_id: str, text: str) -> UserMessageResponse | JSONResponse: ...
-    async def turn(self, session_id: str) -> CompletedTurnResponse | JSONResponse: ...
+    def turn(self, session_id: str) -> AcceptedTurnResponse | JSONResponse: ...
+    def observe(self, session_id: str, turn_id: str) -> StreamingResponse | JSONResponse: ...
 
 
 @dataclass(frozen=True)
@@ -183,6 +220,8 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
                 terminal_turn_id=snapshot.terminal_turn_id,
                 terminal_turn_kind=snapshot.terminal_turn_kind,
                 timeline=list(snapshot.timeline),
+                active_turn_id=snapshot.active_turn_id,
+                sequence=snapshot.sequence,
             )
         return _error("expired" if isinstance(outcome, TextSessionReadExpired) else "unknown")
 
@@ -200,21 +239,56 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
             return _error("busy")
         return _error("unknown")
 
-    async def turn(self, session_id: str) -> CompletedTurnResponse | JSONResponse:
-        outcome = await self.agent.execute_turn(session_id)
-        if outcome.kind == "completed":
-            assert outcome.text is not None
-            read = self.agent.read(session_id)
-            if not isinstance(read, ConversationReadActive):
-                return _error(read.kind)
-            return CompletedTurnResponse(
-                kind="completed", turn_id=outcome.turn_id,
-                message=AssistantMessageResponse(role="assistant", text=outcome.text, turn_id=outcome.turn_id),
-                artifacts=[_artifact(artifact) for artifact in outcome.artifacts],
-                timeline=[item for item in read.snapshot.timeline if item.turn_id == outcome.turn_id
-                          and not (isinstance(item, TimelineMessage) and item.role == "user")],
-            )
+    def turn(self, session_id: str) -> AcceptedTurnResponse | JSONResponse:
+        outcome = self.agent.start_turn(session_id)
+        if outcome.turn_id and outcome.kind in {"busy", "completed", "generation_failed", "conflict"}:
+            return AcceptedTurnResponse(kind="accepted", turn_id=outcome.turn_id)
         return _error(outcome.kind, outcome.turn_id)
+
+    def observe(self, session_id: str, turn_id: str) -> StreamingResponse | JSONResponse:
+        read = self.read(session_id)
+        if isinstance(read, JSONResponse):
+            return read
+        if not any(item.turn_id == turn_id for item in read.timeline):
+            return _error("unknown")
+        if not self.agent.observation_available(session_id):
+            return _error("busy")
+        async def events() -> AsyncIterator[str]:
+            previous: dict[str, TimelineItem] = {}
+            initial = True
+            async for update in self.agent.observe(session_id):
+                if update is None or not isinstance(update, ConversationReadActive):
+                    yield _sse(StreamError(kind="error", turn_id=turn_id, reason="observation_limit" if update is None else "unavailable"))
+                    return
+                snapshot = update.snapshot
+                artifacts = {artifact.artifact_id: _artifact(artifact) for artifact in snapshot.artifacts}
+                if initial:
+                    public = SessionSnapshotResponse(
+                        session_id=session_id, expires_at=snapshot.session.expires_at,
+                        messages=[_message(message) for message in snapshot.session.messages],
+                        artifacts=list(artifacts.values()), terminal_turn_id=snapshot.terminal_turn_id,
+                        terminal_turn_kind=snapshot.terminal_turn_kind, timeline=list(snapshot.timeline),
+                        active_turn_id=snapshot.active_turn_id, sequence=snapshot.sequence,
+                    )
+                    yield _sse(StreamSnapshot(kind="snapshot", turn_id=turn_id, snapshot=public))
+                    initial = False
+                    previous = {_identity(item): item for item in snapshot.timeline}
+                for order, item in enumerate(snapshot.timeline):
+                    identity = _identity(item)
+                    if item.turn_id == turn_id and previous.get(identity) != item:
+                        yield _sse(StreamUpsert(kind="upsert", turn_id=turn_id, identity=identity, order=order,
+                                               sequence=snapshot.sequence, item=item,
+                                               artifact=artifacts.get(item.artifact_id) if item.kind == "artifact" else None))
+                    previous[identity] = item
+                terminal = self.agent.turn_terminal(session_id, turn_id)
+                if terminal is not None:
+                    if snapshot.active_turn_id != turn_id:
+                        yield _sse(StreamTerminal(kind="terminal", turn_id=turn_id, sequence=snapshot.sequence, outcome=terminal.kind))
+                        return
+                yield ": heartbeat\n\n"
+        return StreamingResponse(events(), media_type="text/event-stream", headers={
+            "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+        })
 
 
 def _context_issue(issue: ContextIssue) -> InputIssue:
@@ -312,7 +386,7 @@ async def append_message(
     return agent.append(session_id, message.text)
 
 
-@router.post("/{session_id}/turns", status_code=201, response_model=CompletedTurnResponse, responses={
+@router.post("/{session_id}/turns", status_code=202, response_model=AcceptedTurnResponse, responses={
     404: {"model": ErrorResponse},
     409: {"model": ErrorResponse},
     410: {"model": ErrorResponse},
@@ -323,7 +397,7 @@ async def append_message(
 async def execute_turn(
     configuration: ConfigurationPath, session_id: str, request: Request,
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
-) -> CompletedTurnResponse | JSONResponse:
+) -> AcceptedTurnResponse | JSONResponse:
     agent = _agent(configuration, registry)
     if isinstance(agent, JSONResponse):
         return agent
@@ -333,7 +407,31 @@ async def execute_turn(
             EmptyTurnRequest.model_validate(await _body(request))
         except ValidationError as error:
             return _validation_error("invalid_input", _model_validation_details(error))
-    return await agent.turn(session_id)
+    return agent.turn(session_id)
+
+
+@router.get("/{session_id}/turns/{turn_id}/events", response_class=EventStreamResponse, response_model=None, responses={
+    200: {"model": StreamEvent},
+    404: {"model": ErrorResponse}, 409: {"model": ErrorResponse}, 410: {"model": ErrorResponse},
+})
+def observe_turn(configuration: ConfigurationPath, session_id: str, turn_id: str,
+                 registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry)) -> StreamingResponse | JSONResponse:
+    agent = _agent(configuration, registry)
+    return agent if isinstance(agent, JSONResponse) else agent.observe(session_id, turn_id)
+
+
+def _identity(item: TimelineItem) -> str:
+    if item.kind in {"message", "intermediate"}:
+        return item.id
+    if item.kind == "tool":
+        return f"tool-{item.execution_id}"
+    if item.kind == "artifact":
+        return item.artifact_id
+    return f"failure-{item.turn_id}"
+
+
+def _sse(event: StreamSnapshot | StreamUpsert | StreamTerminal | StreamError) -> str:
+    return f"data: {event.model_dump_json()}\n\n"
 
 
 def _user_message(value: TextMessage) -> UserMessageResponse:
