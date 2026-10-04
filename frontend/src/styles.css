@@ -14,11 +14,6 @@
   color: #f8eef1;
 }
 
-html {
-  max-width: 30rem;
-  margin: auto;
-}
-
 html,
 body,
 app-root {
@@ -29,6 +24,8 @@ app-root {
 
 app-root {
   height: 100dvh;
+  max-width: 30rem;
+  margin: auto;
 }
 
 body {
