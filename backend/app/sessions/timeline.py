@@ -4,17 +4,21 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.models.output_items import message_text
+from app.sessions.text_sessions import SessionRole
 from app.sessions.history import (
     ArtifactRecord, CallRecord, ExecutionReportRecord, HistoryRecord, MessageRecord,
     TerminalRecord, ToolResultRecord, ExecutionStartedRecord,
 )
 
 
+TimelineToolStatus = Literal["requested", "running", "completed", "failed", "not_executed", "outcome_unknown"]
+
+
 @dataclass(frozen=True)
 class TimelineMessage:
     turn_id: str
     id: str
-    role: Literal["user", "assistant"]
+    role: SessionRole
     text: str
     kind: Literal["message"]
 
@@ -32,7 +36,7 @@ class TimelineTool:
     turn_id: str
     execution_id: str
     name: str
-    status: Literal["requested", "running", "completed", "failed", "not_executed", "outcome_unknown"]
+    status: TimelineToolStatus
     kind: Literal["tool"]
 
 
@@ -65,13 +69,13 @@ def timeline(history: tuple[HistoryRecord, ...]) -> tuple[TimelineItem, ...]:
                                                          message_text(record.item), "intermediate"))
             else:
                 identity = f"confirmed-{user_index}-user" if record.kind == "user" else f"message-{record.message_id}"
-                role: Literal["user", "assistant"] = "user" if record.kind == "user" else "assistant"
+                role: SessionRole = "user" if record.kind == "user" else "assistant"
                 items.append(TimelineMessage(record.turn_id, identity, role, message_text(record.item), "message"))
                 if record.kind == "user":
                     user_index += 1
         elif isinstance(record, CallRecord):
             result = results.get(record.execution_id)
-            status: Literal["requested", "running", "completed", "failed", "not_executed", "outcome_unknown"]
+            status: TimelineToolStatus
             if isinstance(result, ToolResultRecord):
                 status = "failed" if result.failed else "completed"
             elif isinstance(result, ExecutionReportRecord):

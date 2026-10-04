@@ -118,6 +118,7 @@ def test_create_and_read_return_accepted_snapshots_without_derived_index(client:
         "terminal_turn_kind": None,
         "timeline": [],
         "active_turn_id": None,
+        "active_turn_status": None,
         "sequence": 0,
     }
     assert "availability_reference_index" not in read.json()

@@ -11,6 +11,7 @@ from uuid import uuid4
 from app.models.agentic_generation import AgenticInputItem, AgenticOutputItem, AgenticToolCall
 from app.models.output_items import message_text
 from app.sessions.text_sessions import TextMessage
+from app.sessions.turn_types import TerminalTurnKind
 
 
 @dataclass(frozen=True)
@@ -85,7 +86,7 @@ class ArtifactRecord:
 @dataclass(frozen=True)
 class TerminalRecord:
     turn_id: str
-    kind: Literal["completed", "generation_failed", "conflict"]
+    kind: TerminalTurnKind
 
 
 type HistoryRecord = (

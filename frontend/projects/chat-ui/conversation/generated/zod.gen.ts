@@ -63,6 +63,15 @@ export const zSessionCreationResponse = z.object({
 });
 
 /**
+ * StreamClosing
+ */
+export const zStreamClosing = z.object({
+    kind: z.literal('closing'),
+    sequence: z.int().gte(0),
+    turn_id: z.string()
+});
+
+/**
  * StreamError
  */
 export const zStreamError = z.object({
@@ -174,6 +183,7 @@ export const zUserMessageResponse = z.object({
  */
 export const zSessionSnapshotResponse = z.object({
     active_turn_id: z.string().nullable(),
+    active_turn_status: z.enum(['in_progress', 'closing']).nullable(),
     artifacts: z.array(zArtifactResponse),
     expires_at: z.string(),
     messages: z.array(z.union([zUserMessageResponse, zAssistantMessageResponse])),
@@ -214,6 +224,7 @@ export const zStreamSnapshot = z.object({
 export const zStreamEvent = z.discriminatedUnion('kind', [
     zStreamSnapshot,
     zStreamUpsert,
+    zStreamClosing,
     zStreamTerminal,
     zStreamError
 ]);

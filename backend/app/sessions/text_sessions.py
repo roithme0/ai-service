@@ -13,6 +13,7 @@ MAX_MESSAGE_COUNT = 200
 
 
 SessionRole = Literal["user", "assistant"]
+InvalidMessageReason = Literal["blank_text", "text_too_long"]
 T = TypeVar("T")
 
 
@@ -81,7 +82,7 @@ class TextSessionAppendExpired:
 class TextSessionAppendInvalidMessage:
     kind: Literal["invalid_message"]
     session_id: str
-    reason: Literal["blank_text", "text_too_long"]
+    reason: InvalidMessageReason
 
 
 @dataclass(frozen=True)

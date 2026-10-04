@@ -119,6 +119,10 @@ export type SessionSnapshotResponse = {
      */
     active_turn_id: string | null;
     /**
+     * Active Turn Status
+     */
+    active_turn_status: 'in_progress' | 'closing' | null;
+    /**
      * Artifacts
      */
     artifacts: Array<ArtifactResponse>;
@@ -153,6 +157,24 @@ export type SessionSnapshotResponse = {
 };
 
 /**
+ * StreamClosing
+ */
+export type StreamClosing = {
+    /**
+     * Kind
+     */
+    kind: 'closing';
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
  * StreamError
  */
 export type StreamError = {
@@ -178,6 +200,8 @@ export type StreamEvent = ({
 } & StreamSnapshot) | ({
     kind: 'upsert';
 } & StreamUpsert) | ({
+    kind: 'closing';
+} & StreamClosing) | ({
     kind: 'terminal';
 } & StreamTerminal) | ({
     kind: 'error';

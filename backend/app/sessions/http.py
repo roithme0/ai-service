@@ -15,8 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, ValidationError, f
 from app.agents.wiring import get_configured_agents
 from app.sessions.context import ContextIssue
 from app.sessions.agent_service import AgentInputRejected, ConfiguredAgentService
-from app.sessions.conversation import ConversationMessageBusy, ConversationReadActive, PublishedArtifact, TurnKind
+from app.sessions.conversation import ActiveTurnStatus, ConversationMessageBusy, ConversationReadActive, PublishedArtifact, TurnKind
 from app.sessions.timeline import TimelineItem, TimelineMessage
+from app.sessions.turn_types import TerminalTurnKind
 from app.sessions.text_sessions import (
     TextMessage, TextSessionAppendAccepted, TextSessionAppendExpired,
     TextSessionAppendInvalidMessage, TextSessionAppendLimitReached,
@@ -58,6 +59,8 @@ ErrorKind = Literal[
     "not_found", SessionErrorKind, "method_not_allowed", "http_error", "internal_error",
 ]
 
+ValidationErrorKind = Literal["invalid_input", "invalid_message", "request_validation"]
+
 
 class ErrorResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -76,7 +79,7 @@ class ValidationDetail(BaseModel):
 class ValidationErrorResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     detail: list[ValidationDetail] = Field(min_length=1)
-    kind: Literal["invalid_input", "invalid_message", "request_validation"]
+    kind: ValidationErrorKind
 
 
 class SessionCreationRequest(BaseModel):
@@ -139,6 +142,7 @@ class SessionSnapshotResponse(BaseModel):
     terminal_turn_kind: TurnKind | None
     timeline: list[Annotated[TimelineItem, Field(discriminator="kind")]]
     active_turn_id: str | None
+    active_turn_status: ActiveTurnStatus | None
     sequence: int = Field(ge=0)
 
     @field_serializer("expires_at")
@@ -167,11 +171,17 @@ class StreamUpsert(BaseModel):
     artifact: ArtifactResponse | None = None
 
 
+class StreamClosing(BaseModel):
+    kind: Literal["closing"]
+    turn_id: str
+    sequence: int = Field(ge=0)
+
+
 class StreamTerminal(BaseModel):
     kind: Literal["terminal"]
     turn_id: str
     sequence: int = Field(ge=0)
-    outcome: Literal["completed", "generation_failed", "conflict"]
+    outcome: TerminalTurnKind
 
 
 class StreamError(BaseModel):
@@ -180,7 +190,7 @@ class StreamError(BaseModel):
     reason: Literal["unavailable", "observation_limit"]
 
 
-class StreamEvent(RootModel[Annotated[StreamSnapshot | StreamUpsert | StreamTerminal | StreamError, Field(discriminator="kind")]]):
+class StreamEvent(RootModel[Annotated[StreamSnapshot | StreamUpsert | StreamClosing | StreamTerminal | StreamError, Field(discriminator="kind")]]):
     pass
 
 
@@ -221,6 +231,7 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
                 terminal_turn_kind=snapshot.terminal_turn_kind,
                 timeline=list(snapshot.timeline),
                 active_turn_id=snapshot.active_turn_id,
+                active_turn_status=snapshot.active_turn_status,
                 sequence=snapshot.sequence,
             )
         return _error("expired" if isinstance(outcome, TextSessionReadExpired) else "unknown")
@@ -256,6 +267,7 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
         async def events() -> AsyncIterator[str]:
             previous: dict[str, TimelineItem] = {}
             initial = True
+            closing_sent = False
             async for update in self.agent.observe(session_id):
                 if update is None or not isinstance(update, ConversationReadActive):
                     yield _sse(StreamError(kind="error", turn_id=turn_id, reason="observation_limit" if update is None else "unavailable"))
@@ -269,10 +281,12 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
                         artifacts=list(artifacts.values()), terminal_turn_id=snapshot.terminal_turn_id,
                         terminal_turn_kind=snapshot.terminal_turn_kind, timeline=list(snapshot.timeline),
                         active_turn_id=snapshot.active_turn_id, sequence=snapshot.sequence,
+                        active_turn_status=snapshot.active_turn_status,
                     )
                     yield _sse(StreamSnapshot(kind="snapshot", turn_id=turn_id, snapshot=public))
                     initial = False
                     previous = {_identity(item): item for item in snapshot.timeline}
+                    closing_sent = snapshot.active_turn_id == turn_id and snapshot.active_turn_status == "closing"
                 for order, item in enumerate(snapshot.timeline):
                     identity = _identity(item)
                     if item.turn_id == turn_id and previous.get(identity) != item:
@@ -280,6 +294,9 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
                                                sequence=snapshot.sequence, item=item,
                                                artifact=artifacts.get(item.artifact_id) if item.kind == "artifact" else None))
                     previous[identity] = item
+                if not closing_sent and snapshot.active_turn_id == turn_id and snapshot.active_turn_status == "closing":
+                    yield _sse(StreamClosing(kind="closing", turn_id=turn_id, sequence=snapshot.sequence))
+                    closing_sent = True
                 terminal = self.agent.turn_terminal(session_id, turn_id)
                 if terminal is not None:
                     if snapshot.active_turn_id != turn_id:
@@ -430,7 +447,7 @@ def _identity(item: TimelineItem) -> str:
     return f"failure-{item.turn_id}"
 
 
-def _sse(event: StreamSnapshot | StreamUpsert | StreamTerminal | StreamError) -> str:
+def _sse(event: StreamSnapshot | StreamUpsert | StreamClosing | StreamTerminal | StreamError) -> str:
     return f"data: {event.model_dump_json()}\n\n"
 
 
@@ -465,7 +482,7 @@ def _model_validation_details(error: ValidationError) -> list[ValidationDetail]:
 
 
 def _validation_error(
-    kind: Literal["invalid_input", "invalid_message", "request_validation"],
+    kind: ValidationErrorKind,
     detail: list[ValidationDetail],
 ) -> JSONResponse:
     return _json(422, ValidationErrorResponse(detail=detail, kind=kind))

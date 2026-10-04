@@ -173,6 +173,21 @@
             ],
             "title": "Active Turn Id"
           },
+          "active_turn_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "in_progress",
+                  "closing"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Turn Status"
+          },
           "artifacts": {
             "items": {
               "$ref": "#/components/schemas/ArtifactResponse"
@@ -289,9 +304,35 @@
           "terminal_turn_kind",
           "timeline",
           "active_turn_id",
+          "active_turn_status",
           "sequence"
         ],
         "title": "SessionSnapshotResponse",
+        "type": "object"
+      },
+      "StreamClosing": {
+        "properties": {
+          "kind": {
+            "const": "closing",
+            "title": "Kind",
+            "type": "string"
+          },
+          "sequence": {
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "turn_id",
+          "sequence"
+        ],
+        "title": "StreamClosing",
         "type": "object"
       },
       "StreamError": {
@@ -325,6 +366,7 @@
       "StreamEvent": {
         "discriminator": {
           "mapping": {
+            "closing": "#/components/schemas/StreamClosing",
             "error": "#/components/schemas/StreamError",
             "snapshot": "#/components/schemas/StreamSnapshot",
             "terminal": "#/components/schemas/StreamTerminal",
@@ -338,6 +380,9 @@
           },
           {
             "$ref": "#/components/schemas/StreamUpsert"
+          },
+          {
+            "$ref": "#/components/schemas/StreamClosing"
           },
           {
             "$ref": "#/components/schemas/StreamTerminal"

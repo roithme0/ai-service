@@ -12,7 +12,7 @@ class FakeTransport implements ConversationTransport {
 }
 function snapshot(overrides: Partial<SessionSnapshotResponse> = {}): SessionSnapshotResponse {
   return { session_id: 's', expires_at: '2026-10-04T20:00:00Z', messages: [{ role: 'user', text: 'Hello', turn_id: null }], artifacts: [],
-    active_turn_id: 't', sequence: 1, terminal_turn_id: null, terminal_turn_kind: null,
+    active_turn_id: 't', active_turn_status: 'in_progress', sequence: 1, terminal_turn_id: null, terminal_turn_kind: null,
     timeline: [{ kind: 'message', role: 'user', id: 'confirmed-0-user', text: 'Hello', turn_id: 't' }], ...overrides };
 }
 const initial = (): StreamEvent => ({ kind: 'snapshot', turn_id: 't', snapshot: snapshot() });
@@ -29,6 +29,33 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 }
 
 describe('live conversation controller', () => {
+  it.each(['event', 'snapshot'] as const)('hides progress on backend closing %s and keeps submission disabled until terminal failure', async (source) => {
+    const transport = new FakeTransport();
+    const visible = deferred<void>(); const finish = deferred<void>();
+    transport.observeTurn.mockImplementation(async function* () {
+      yield { kind: 'snapshot', turn_id: 't', snapshot: snapshot({
+        active_turn_status: source === 'snapshot' ? 'closing' : 'in_progress',
+        timeline: [{ kind: 'message', turn_id: 't', id: 'answer', role: 'assistant', text: 'Retained answer' }],
+      }) };
+      if (source === 'event') yield { kind: 'closing', turn_id: 't', sequence: 2 };
+      yield tool('running', 3);
+      visible.resolve(); await finish.promise;
+      yield terminal('generation_failed');
+    });
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    const submission = controller.submit('Hello', vi.fn());
+    await visible.promise;
+    expect(controller.state.status).toBeNull();
+    expect(controller.state.composerDisabled).toBe(true);
+    await controller.submit('Blocked', vi.fn());
+    expect(transport.appendMessage).toHaveBeenCalledTimes(1);
+    finish.resolve(); await submission;
+    expect(controller.state.status?.kind).toBe('error');
+    expect(controller.state.composerDisabled).toBe(false);
+    expect(controller.state.content[0]).toMatchObject({ text: 'Retained answer' });
+  });
+
   it('shows complete messages while busy, preserves all styles/output on failure, and upserts without regression', async () => {
     const transport = new FakeTransport();
     const visible = deferred<void>(); const finish = deferred<void>();
@@ -55,6 +82,7 @@ describe('live conversation controller', () => {
     const submission = controller.submit('Hello', vi.fn());
     await visible.promise;
     expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status?.kind).toBe('loading');
     expect(controller.state.content.map((item) => item.kind)).toEqual(['text', 'intermediate', 'tool', 'text', 'artifact']);
     expect(states).toContain('requested'); expect(states).toContain('running');
     expect(controller.state.content.filter((item) => item.kind === 'tool')).toHaveLength(1);
@@ -85,7 +113,7 @@ describe('live conversation controller', () => {
 
   it('accepts terminal-before-subscribe catch-up and uses terminal metadata rather than displayed text', async () => {
     const transport = new FakeTransport();
-    transport.observeTurn.mockReturnValue(stream([{ kind: 'snapshot', turn_id: 't', snapshot: snapshot({ active_turn_id: null, terminal_turn_id: 't', terminal_turn_kind: 'generation_failed',
+    transport.observeTurn.mockReturnValue(stream([{ kind: 'snapshot', turn_id: 't', snapshot: snapshot({ active_turn_id: null, active_turn_status: null, terminal_turn_id: 't', terminal_turn_kind: 'generation_failed',
       timeline: [{ kind: 'message', turn_id: 't', id: 'f', role: 'assistant', text: 'Final before failure' }] }) }, terminal('generation_failed')]));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start(); await controller.submit('Hello', vi.fn());

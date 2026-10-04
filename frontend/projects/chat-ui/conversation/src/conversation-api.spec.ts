@@ -12,7 +12,7 @@ describe('HttpConversationTransport', () => {
     ]) {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, {
         session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z', messages: [], artifacts: [],
-        active_turn_id: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null, timeline: [row],
+        active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null, timeline: [row],
       })));
       await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
         .rejects.toBeInstanceOf(ConversationNetworkError);
@@ -37,7 +37,7 @@ describe('HttpConversationTransport', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ input });
     fetchMock.mockResolvedValueOnce(response(200, { timeline: [],
       session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z',
-      messages: [], artifacts: [], active_turn_id: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
+      messages: [], artifacts: [], active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
     })).mockResolvedValueOnce(response(201, { role: 'user', text: 'Hello', turn_id: null })).mockResolvedValueOnce(response(202, { kind: 'accepted', turn_id: 'turn-1' }));
     await transport.readSession('session-1');
     await transport.appendMessage('session-1', 'Hello');
@@ -117,7 +117,7 @@ describe('HttpConversationTransport', () => {
           expires_at: '2026-09-17T12:00:00Z',
           messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
           artifacts: [artifact],
-          active_turn_id: null, sequence: 0, terminal_turn_id: null,
+          active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null,
           terminal_turn_kind: null,
         }),
       )
@@ -133,7 +133,7 @@ describe('HttpConversationTransport', () => {
       expires_at: '2026-09-17T12:00:00Z',
       messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
       artifacts: [artifact],
-      active_turn_id: null, sequence: 0, terminal_turn_id: null,
+      active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null,
       terminal_turn_kind: null,
     });
     await expect(transport.appendMessage('session-1', 'Weniger Zucker')).resolves.toEqual({
@@ -189,7 +189,7 @@ describe('HttpConversationTransport', () => {
 
   it('rejects a snapshot without its required expiry', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, { timeline: [],
-      session_id: 'session-1', messages: [], artifacts: [], active_turn_id: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
+      session_id: 'session-1', messages: [], artifacts: [], active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
     })));
     await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
@@ -208,7 +208,7 @@ describe('HttpConversationTransport', () => {
       session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z', messages: [],
       artifacts: [{ artifact_id: 'artifact-1', type: 'demo', created_at: '2026-09-17T12:00:00Z',
         order: 0, turn_id: 'turn-1', payload: [] }],
-      active_turn_id: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
+      active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
     })));
     await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
@@ -217,7 +217,7 @@ describe('HttpConversationTransport', () => {
   it('rejects a terminal turn kind outside the backend contract', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, { timeline: [],
       session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z', messages: [], artifacts: [],
-      active_turn_id: null, sequence: 0, terminal_turn_id: 'turn-1', terminal_turn_kind: 'future_kind',
+      active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: 'turn-1', terminal_turn_kind: 'future_kind',
     })));
     await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
@@ -231,7 +231,7 @@ describe('HttpConversationTransport', () => {
         artifact_id: 'artifact-1', type: 'demo', created_at: '2026-09-17T12:00:00Z',
         order: 0, turn_id: 'turn-1', future_field: true, payload: { future_field: true },
       }],
-      active_turn_id: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
+      active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
     })));
 
     await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1')).resolves.toEqual({ timeline: [],
@@ -241,7 +241,7 @@ describe('HttpConversationTransport', () => {
         artifact_id: 'artifact-1', type: 'demo', created_at: '2026-09-17T12:00:00Z',
         order: 0, turn_id: 'turn-1', payload: { future_field: true },
       }],
-      active_turn_id: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
+      active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
     });
   });
 });

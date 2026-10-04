@@ -165,6 +165,7 @@ export class ConversationController {
     const items = new Map<string, { order: number; sequence: number; item: SessionSnapshotResponse['timeline'][number] }>();
     const artifacts = new Map<string, ArtifactResponse>();
     let initialized = false;
+    let closing = false;
     let latestSequence = -1;
     try {
       for await (const event of this.transport.observeTurn(sessionId, turnId, observation.signal)) {
@@ -178,6 +179,7 @@ export class ConversationController {
         if (event.kind === 'snapshot') {
           if (initialized || event.snapshot.session_id !== sessionId) throw new ConversationNetworkError('Ungültiger Anfangszustand.');
           initialized = true;
+          closing = event.snapshot.active_turn_id === turnId && event.snapshot.active_turn_status === 'closing';
           latestSequence = event.snapshot.sequence;
           this.confirmedMessages = event.snapshot.messages;
           event.snapshot.artifacts.forEach((artifact) => artifacts.set(artifact.artifact_id, artifact));
@@ -193,6 +195,10 @@ export class ConversationController {
           } else if (event.artifact != null) throw new ConversationNetworkError('Unerwartetes Artefakt.');
           latestSequence = Math.max(latestSequence, event.sequence);
           items.set(event.identity, { item: event.item, order: event.order, sequence: event.sequence });
+        } else if (event.kind === 'closing') {
+          if (!initialized || event.sequence < latestSequence) throw new ConversationNetworkError('Ungültiger Abschlusszustand.');
+          latestSequence = event.sequence;
+          closing = true;
         } else {
           if (!initialized || event.sequence < latestSequence) throw new ConversationNetworkError('Ungültiger Endzustand.');
           const failed = event.outcome !== 'completed';
@@ -200,7 +206,7 @@ export class ConversationController {
           return;
         }
         const timeline = [...items.values()].sort((a, b) => a.order - b.order).map((entry) => entry.item);
-        this.setState({ content: presentTimeline(timeline, [...artifacts.values()], this.mapArtifact), composerDisabled: true, status: loading('Antwort wird erstellt …', 'assistant') });
+        this.setState({ content: presentTimeline(timeline, [...artifacts.values()], this.mapArtifact), composerDisabled: true, status: closing ? null : loading('Antwort wird erstellt …', 'assistant') });
       }
       if (epoch === this.epoch) this.observationLost();
     } catch (error: unknown) {
@@ -437,13 +443,13 @@ function prefixMatches(
   );
 }
 
-function loading(message: string, placement: 'conversation' | 'assistant'): ChatConversationStatus {
+function loading(message: string, placement: ChatConversationStatus['placement']): ChatConversationStatus {
   return { kind: 'loading', message, placement };
 }
 
 function failure(
   message: string,
-  placement: 'conversation' | 'assistant',
+  placement: ChatConversationStatus['placement'],
   id?: string,
   label?: string,
 ): ChatConversationStatus {

@@ -106,6 +106,7 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
                 events = event_lines(response)
                 initial = next(events)
                 assert initial['kind'] == 'snapshot'
+                assert initial['snapshot']['active_turn_status'] == 'in_progress'
                 initial_items = initial['snapshot']['timeline']
                 row = next(item for item in initial_items if item['kind'] == 'tool')
                 assert row['status'] == 'requested'
@@ -125,15 +126,25 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
                         assert event['artifact']['payload']['payload'] == {'value': 42}
                         break
                 assert final_entered.wait(2)
+                while True:
+                    event = next(events)
+                    if event['kind'] == 'closing':
+                        break
                 # Close an observer while the backend remains paused after accepted artifacts.
             snapshot = client.get(url).json()
             assert snapshot['active_turn_id'] == turn_id
+            assert snapshot['active_turn_status'] == 'closing'
             assert len(snapshot['artifacts']) == 1
-            final_release.set()
             with client.stream('GET', f'{url}/turns/{turn_id}/events') as response:
-                retained = list(event_lines(response))
+                events = event_lines(response)
+                catch_up = next(events)
+                assert catch_up['kind'] == 'snapshot'
+                assert catch_up['snapshot']['active_turn_status'] == 'closing'
+                final_release.set()
+                retained = list(events)
             assert retained[-1]['kind'] == 'terminal' and retained[-1]['outcome'] == 'generation_failed'
             snapshot = client.get(url).json()
+            assert snapshot['active_turn_status'] is None
             assert any(item.get('text') == 'Retained final' for item in snapshot['timeline'])
             assert snapshot['timeline'][-1]['kind'] == 'failure'
             assert calls == 2 and tool_calls == 1

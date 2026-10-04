@@ -100,7 +100,7 @@ describe('Demo application', () => {
       .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Show error', turn_id: null }))
       .mockResolvedValueOnce(Response.json({ kind: 'accepted', turn_id: 'turn-4' }))
       .mockResolvedValueOnce(snapshotObservation({
-        active_turn_id: null, sequence: 4, session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z',
+        active_turn_id: null, active_turn_status: null, sequence: 4, session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z',
         messages: [{ role: 'user', text: 'Show error', turn_id: null }], artifacts: [],
         terminal_turn_id: 'turn-4', terminal_turn_kind: 'generation_failed',
         timeline: [
@@ -140,7 +140,7 @@ describe('Demo application', () => {
 });
 
 function observation(value: { kind: string; turn_id: string; message: ApiMessage; timeline: SessionSnapshotResponse['timeline']; artifacts: ArtifactResponse[] }): Response {
-  return snapshotObservation({ session_id: 'demo-1', expires_at: '2026-10-04T20:00:00Z', active_turn_id: null, sequence: 10,
+  return snapshotObservation({ session_id: 'demo-1', expires_at: '2026-10-04T20:00:00Z', active_turn_id: null, active_turn_status: null, sequence: 10,
     terminal_turn_id: value.turn_id, terminal_turn_kind: 'completed', messages: [{ role: 'user', text: 'Any text', turn_id: null }, value.message],
     timeline: [{ kind: 'message', id: 'confirmed-0-user', turn_id: value.turn_id, role: 'user', text: 'Any text' }, ...value.timeline], artifacts: value.artifacts });
 }

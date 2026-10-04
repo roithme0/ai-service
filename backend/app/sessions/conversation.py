@@ -20,9 +20,13 @@ from app.sessions.history import (
 from app.sessions.artifacts import ArtifactCandidate, ArtifactEnvelope, ArtifactToolOutput, PublishedArtifact
 from app.sessions.tools import ToolExecution
 from app.sessions.timeline import TimelineItem, timeline
+from app.sessions.turn_types import (
+    ActiveTurnStatus as ActiveTurnStatus, TerminalTurnKind, TurnExecutionKind, TurnKind as TurnKind,
+)
 from app.sessions.text_sessions import (
     MAX_MESSAGE_COUNT,
     MAX_MESSAGE_LENGTH,
+    InvalidMessageReason,
     TextMessage,
     TextSessionAppendAccepted,
     TextSessionAppendExpired,
@@ -40,7 +44,6 @@ from app.sessions.text_sessions import (
 
 ContextT = TypeVar("ContextT")
 ArtifactT = TypeVar("ArtifactT")
-TurnKind = Literal["completed", "generation_failed", "unknown", "expired", "not_ready", "limit_reached", "conflict", "busy"]
 
 
 @dataclass(frozen=True)
@@ -75,6 +78,7 @@ class ConversationSnapshot(Generic[ContextT, ArtifactT]):
     terminal_turn_kind: TurnKind | None
     timeline: tuple[TimelineItem, ...]
     active_turn_id: str | None
+    active_turn_status: ActiveTurnStatus | None
     sequence: int
 
 
@@ -101,7 +105,7 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
-def _invalid_text_reason(text: object) -> Literal["blank_text", "text_too_long"] | None:
+def _invalid_text_reason(text: object) -> InvalidMessageReason | None:
     if not isinstance(text, str) or not text.strip():
         return "blank_text"
     if len(text) > MAX_MESSAGE_LENGTH:
@@ -161,6 +165,11 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     terminal_turn_kind=terminal.kind if terminal else None,
                     timeline=timeline(self._history[session_id]),
                     active_turn_id=active_turn_id,
+                    active_turn_status=(
+                        "closing" if any(isinstance(record, MessageRecord) and record.turn_id == active_turn_id
+                                         and record.kind == "final" for record in self._history[session_id])
+                        else "in_progress"
+                    ) if active_turn_id is not None else None,
                     sequence=len(self._history[session_id]),
                 ),
             )
@@ -236,7 +245,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
 
     def complete_turn(
         self, session_id: str, reservation: ConversationTurnReservation[ContextT, ArtifactT],
-        kind: Literal["completed", "generation_failed"], text: str | None,
+        kind: TurnExecutionKind, text: str | None,
     ) -> ConversationTurnResult[ArtifactT]:
         with self._lock:
             current = self._read_session(session_id)
@@ -244,7 +253,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 return ConversationTurnResult(current.kind, reservation.turn_id, None, ())
             if self._active_turns.get(session_id) != reservation.turn_id:
                 return ConversationTurnResult("conflict", reservation.turn_id, None, ())
-            terminal_kind: Literal["completed", "generation_failed", "conflict"]
+            terminal_kind: TerminalTurnKind
             if current.session.revision != reservation.snapshot.revision:
                 terminal_kind = "conflict"
             elif kind == "completed" and text is not None:
@@ -274,7 +283,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
 
     def _finish_turn(
         self, session_id: str, reservation: ConversationTurnReservation[ContextT, ArtifactT],
-        kind: Literal["completed", "generation_failed", "conflict"],
+        kind: TerminalTurnKind,
     ) -> ConversationTurnResult[ArtifactT]:
         self._record_missing_results(session_id, reservation.turn_id)
         terminal = TerminalRecord(reservation.turn_id, kind)
