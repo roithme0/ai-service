@@ -117,7 +117,7 @@ Published artifacts derive their API `order` from the one-based position of thei
 artifact record in the full history. Values may have gaps; candidates have no
 identity or order. The HTTP timeline projects user/final messages, intermediate assistant updates, tool calls with safe statuses,
 artifact references, and failed-turn markers in recorded order. Active-turn tool
-activity and artifacts remain hidden until termination; streaming is deferred.
+activity and artifacts remain hidden until termination; client streaming is deferred.
 Intermediate updates use the provider's `commentary` phase when available and
 otherwise include messages accompanying tool calls. They remain visible after
 failed turns and are replayed to the model, but are excluded from the final-message
@@ -177,8 +177,13 @@ caller. The former `source`/`foodstuffs` input envelope is no longer accepted.
 
 Sessions allow 200 messages of up to 16,000 characters each and model-backed
 sessions allow 100 artifacts. The fixed 90-minute lifetime remains unchanged.
-The OpenAI adapter allows 16,384 output tokens and a 120-second request timeout
-per model response. These are individual request limits, not an overall turn
+The OpenAI adapter consumes Responses API streams internally and returns only
+confirmed completed responses. Failed, incomplete, interrupted, or unfinished
+streams produce generation failures without recording partial output or executing
+partial tool calls. Provider streams close on success, failure, timeout, and
+cancellation. The adapter allows 16,384 output tokens and a 120-second overall
+deadline covering stream establishment and consumption per model response,
+with the same network timeout and no automatic provider retries. These are individual request limits, not an overall turn
 deadline; a multi-call turn can still exceed a gateway's request timeout.
 
 Run the tests:

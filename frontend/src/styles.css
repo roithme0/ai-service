@@ -14,6 +14,11 @@
   color: #f8eef1;
 }
 
+html {
+  max-width: 30rem;
+  margin: auto;
+}
+
 html,
 body,
 app-root {

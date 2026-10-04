@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from openai import AsyncOpenAI
@@ -25,17 +26,22 @@ class OpenAIAgenticGenerator:
         self._client = client
 
     async def generate(self, request: AgenticGenerationRequest) -> AgenticGenerationResponse:
-        response = await self._client.responses.create(
-            model=self._model,
-            input=list(request.input_items),
-            instructions=request.instructions,
-            tools=list(request.tools),
-            include=["reasoning.encrypted_content"],
-            parallel_tool_calls=False,
-            max_output_tokens=OPENAI_MAX_OUTPUT_TOKENS,
-            store=False,
-            timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,
-        )
+        async with asyncio.timeout(OPENAI_REQUEST_TIMEOUT_SECONDS):
+            async with self._client.responses.stream(
+                model=self._model,
+                input=list(request.input_items),
+                instructions=request.instructions,
+                tools=list(request.tools),
+                include=["reasoning.encrypted_content"],
+                parallel_tool_calls=False,
+                max_output_tokens=OPENAI_MAX_OUTPUT_TOKENS,
+                store=False,
+                timeout=OPENAI_REQUEST_TIMEOUT_SECONDS,
+            ) as stream:
+                async for event in stream:
+                    if event.type in ("error", "response.failed", "response.incomplete"):
+                        raise ValueError("OpenAI response stream failed")
+                response = await stream.get_final_response()
         if response.error is not None:
             logger.error("OpenAI response %s failed (status=%s, code=%s)", response.id, response.status, response.error.code)
             raise ValueError("OpenAI response contained an error")
