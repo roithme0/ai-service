@@ -172,6 +172,8 @@ Startup discovers capabilities but never invokes domain tools.
 
 ## Conversation HTTP API
 
+Every conversation request requires `X-Application-User: source:id`, including SSE observation. The value must contain exactly one colon and non-empty source and ID portions without whitespace. Prefixes are unrestricted; no user lookup or authentication is performed. Missing, empty, or malformed values return HTTP 422 with the typed `request_validation` envelope before conversation access or execution. This first identity slice does not enforce session ownership. The demo frontend sends `demo:default`; Kochwiki hosts supply `kochwiki:<user-id>`.
+
 Use `/api/v1/agents/{configuration}/sessions` with the fixed configurations
 `kochwiki` and `demo`. Create with `POST` and an object envelope: Kochwiki uses
 `{"input":{"context":{...}}}`; demo accepts `{}` or an empty

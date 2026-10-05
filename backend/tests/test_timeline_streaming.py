@@ -91,7 +91,7 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
     application.include_router(router)
     application.dependency_overrides[get_agent_registry] = lambda: {'kochwiki': AgentTransport(agent, lambda value: value, _context_issue)}
     try:
-        with socket_server(application) as address, httpx.Client(base_url=address, timeout=5) as client:
+        with socket_server(application) as address, httpx.Client(base_url=address, timeout=5, headers={"X-Application-User": "test:user"}) as client:
             base = '/api/v1/agents/kochwiki/sessions'
             session = client.post(base, json={'input': {'context': {}}}).json()['session_id']
             url = f'{base}/{session}'

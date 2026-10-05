@@ -59,7 +59,7 @@ def client(fake_generator: FakeGenerator) -> Iterator[TestClient]:
     agent = create_model_agent(fake_generator, store)
     app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(agent)
     try:
-        with TestClient(app) as running:
+        with TestClient(app, headers={"X-Application-User": "test:user"}) as running:
             yield running
     finally:
         app.dependency_overrides.clear()
@@ -207,7 +207,7 @@ def test_retained_expired_session_returns_gone_without_snapshot() -> None:
     store = new_model_session_store(clock=clock.now)
     app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(create_model_agent(FakeGenerator(), store))
     try:
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-Application-User": "test:user"})
         created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
         clock.value += timedelta(minutes=10)
 
@@ -296,7 +296,7 @@ def test_unknown_and_expired_user_message_appends_do_not_expose_session_content(
     store = new_model_session_store(clock=clock.now)
     app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(create_model_agent(FakeGenerator(), store))
     try:
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-Application-User": "test:user"})
         unknown = client.post(
             "/api/v1/agents/kochwiki/sessions/missing/messages", json={"text": "Hello"}
         )
@@ -324,7 +324,7 @@ def test_user_message_append_and_read_preserve_the_fixed_expiry() -> None:
     store = new_model_session_store(clock=clock.now)
     app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(create_model_agent(FakeGenerator(), store))
     try:
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-Application-User": "test:user"})
         created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
         clock.value += timedelta(minutes=10)
 
@@ -411,7 +411,7 @@ def test_locally_valid_kochwiki_configuration_constructs_agent_without_remote_pr
 def test_all_recipe_endpoints_report_unavailable() -> None:
     app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(None)
     try:
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-Application-User": "test:user"})
         prefix = "/api/v1/agents/kochwiki/sessions"
         responses = [
             client.post(prefix, json={"input": valid_request()}),
@@ -493,7 +493,7 @@ def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGene
     store = new_model_session_store(clock=clock.now)
     app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(create_model_agent(fake_generator, store))
     try:
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-Application-User": "test:user"})
         created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
         session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
         client.post(f"{session_url}/messages", json={"text": "question"})
@@ -576,7 +576,7 @@ def test_session_history_reports_expiry_then_unknown() -> None:
     store = new_model_session_store(clock=clock.now)
     app.dependency_overrides[get_agent_registry] = lambda: kochwiki_registry(create_model_agent(FakeGenerator(), store))
     try:
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-Application-User": "test:user"})
         created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": valid_request()}).json()
         session_url = f"/api/v1/agents/kochwiki/sessions/{created['session_id']}"
         clock.value = datetime.fromisoformat(created["expires_at"])

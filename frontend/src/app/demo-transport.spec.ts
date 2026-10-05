@@ -26,5 +26,8 @@ describe('DemoTransport', () => {
     const fresh = transport.createSession(); await vi.advanceTimersByTimeAsync(1500); await fresh;
     const append = transport.appendMessage(sessionId, 'Fresh'); await vi.advanceTimersByTimeAsync(1500); await expect(append).resolves.toMatchObject({ role: 'user' });
     expect(fetchMock).toHaveBeenCalledTimes(15);
+    for (const [, options] of fetchMock.mock.calls) {
+      expect(new Headers(options?.headers).get('X-Application-User')).toBe('demo:default');
+    }
   });
 });

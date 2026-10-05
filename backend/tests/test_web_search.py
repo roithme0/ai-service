@@ -111,7 +111,7 @@ def test_search_survives_later_provider_failure_in_reads_and_sse(status: str) ->
     application = FastAPI()
     application.include_router(router)
     application.dependency_overrides[get_agent_registry] = lambda: {"test": AgentTransport(agent, lambda value: value, _context_issue)}
-    with TestClient(application) as client:
+    with TestClient(application, headers={"X-Application-User": "test:user"}) as client:
         base = "/api/v1/agents/test/sessions"
         session = client.post(base, json={"input": {"context": {}}}).json()["session_id"]
         client.post(f"{base}/{session}/messages", json={"text": "Search"})

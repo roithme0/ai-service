@@ -25,11 +25,16 @@ import { z, type ZodType } from 'zod';
 const validationDetailSchema = z.strictObject(zValidationDetail.shape);
 const errorResponseSchema = z.union([
   z.strictObject(zErrorResponse.shape),
-  z.strictObject({ ...zValidationErrorResponse.shape, detail: z.array(validationDetailSchema).min(1) }),
+  z.strictObject({
+    ...zValidationErrorResponse.shape,
+    detail: z.array(validationDetailSchema).min(1),
+  }),
 ]);
 
-export const AgentConfiguration = zCreateSessionApiV1AgentsConfigurationSessionsPostPath.shape.configuration.enum;
-export type AgentConfiguration = CreateSessionApiV1AgentsConfigurationSessionsPostData['path']['configuration'];
+export const AgentConfiguration =
+  zCreateSessionApiV1AgentsConfigurationSessionsPostPath.shape.configuration.enum;
+export type AgentConfiguration =
+  CreateSessionApiV1AgentsConfigurationSessionsPostData['path']['configuration'];
 
 export type ApiMessage = SessionSnapshotResponse['messages'][number];
 export type ApiErrorKind = ErrorResponse['kind'] | ValidationErrorResponse['kind'];
@@ -56,12 +61,19 @@ export interface ConversationTransport {
 export class HttpConversationTransport implements ConversationTransport {
   private readonly baseUrl: string;
 
-  constructor(apiBaseUrl: string, configuration: AgentConfiguration, private readonly input: unknown = {}) {
+  constructor(
+    apiBaseUrl: string,
+    configuration: AgentConfiguration,
+    private readonly applicationUser: string,
+    private readonly input: unknown = {},
+  ) {
     this.baseUrl = `${apiBaseUrl.replace(/\/+$/, '')}/agents/${encodeURIComponent(configuration)}/sessions`;
   }
 
   async createSession(): Promise<SessionCreationResponse> {
-    const body = { input: this.input } satisfies CreateSessionApiV1AgentsConfigurationSessionsPostData['body'];
+    const body = {
+      input: this.input,
+    } satisfies CreateSessionApiV1AgentsConfigurationSessionsPostData['body'];
     return parseResponse(zSessionCreationResponse, await this.request('', 'POST', body));
   }
 
@@ -70,25 +82,42 @@ export class HttpConversationTransport implements ConversationTransport {
   }
 
   async appendMessage(sessionId: string, text: string): Promise<UserMessageResponse> {
-    const body = { text } satisfies AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostData['body'];
-    return parseResponse(zUserMessageResponse, await this.request(`/${sessionId}/messages`, 'POST', body));
+    const body = {
+      text,
+    } satisfies AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostData['body'];
+    return parseResponse(
+      zUserMessageResponse,
+      await this.request(`/${sessionId}/messages`, 'POST', body),
+    );
   }
 
   async generateTurn(sessionId: string): Promise<AcceptedTurnResponse> {
     return parseResponse(zAcceptedTurnResponse, await this.request(`/${sessionId}/turns`, 'POST'));
   }
 
-  async *observeTurn(sessionId: string, turnId: string, signal: AbortSignal): AsyncIterable<StreamEvent> {
+  async *observeTurn(
+    sessionId: string,
+    turnId: string,
+    signal: AbortSignal,
+  ): AsyncIterable<StreamEvent> {
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
-      const response = await fetch(`${this.baseUrl}/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/events`, {
-        signal, headers: { Accept: 'text/event-stream' },
-      });
+      const response = await fetch(
+        `${this.baseUrl}/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/events`,
+        {
+          signal,
+          headers: { Accept: 'text/event-stream', 'X-Application-User': this.applicationUser },
+        },
+      );
       if (!response.ok) {
         const error = parseResponse(errorResponseSchema, await response.json());
         throw new ConversationApiError(response.status, error.kind);
       }
-      if (!response.headers.get('Content-Type')?.startsWith('text/event-stream') || response.body === null) throw invalidResponse();
+      if (
+        !response.headers.get('Content-Type')?.startsWith('text/event-stream') ||
+        response.body === null
+      )
+        throw invalidResponse();
       reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8', { fatal: true });
       let buffer = '';
@@ -108,8 +137,11 @@ export class HttpConversationTransport implements ConversationTransport {
           const frame = buffer.slice(0, end);
           buffer = buffer.slice(end + 2);
           scanFrom = 0;
-          const data = frame.split('\n').filter((line) => line.startsWith('data:'))
-            .map((line) => line.slice(5).replace(/^ /, '')).join('\n');
+          const data = frame
+            .split('\n')
+            .filter((line) => line.startsWith('data:'))
+            .map((line) => line.slice(5).replace(/^ /, ''))
+            .join('\n');
           if (data === '') continue;
           yield parseResponse(zStreamEvent, JSON.parse(data) as unknown);
         }
@@ -117,8 +149,11 @@ export class HttpConversationTransport implements ConversationTransport {
         if (chunk.done) return;
       }
     } catch (error: unknown) {
-      if (error instanceof ConversationApiError || error instanceof ConversationNetworkError) throw error;
-      throw new ConversationNetworkError('Die Beobachtung der Antwort wurde unterbrochen.', { cause: error });
+      if (error instanceof ConversationApiError || error instanceof ConversationNetworkError)
+        throw error;
+      throw new ConversationNetworkError('Die Beobachtung der Antwort wurde unterbrochen.', {
+        cause: error,
+      });
     } finally {
       if (reader !== undefined) {
         await reader.cancel().catch(() => undefined);
@@ -132,7 +167,10 @@ export class HttpConversationTransport implements ConversationTransport {
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
         method,
-        headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+        headers: {
+          'X-Application-User': this.applicationUser,
+          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (error: unknown) {

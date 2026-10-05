@@ -87,16 +87,6 @@ export type ErrorResponse = {
 };
 
 /**
- * HTTPValidationError
- */
-export type HttpValidationError = {
-    /**
-     * Detail
-     */
-    detail?: Array<ValidationError>;
-};
-
-/**
  * SessionCreationResponse
  */
 export type SessionCreationResponse = {
@@ -428,34 +418,6 @@ export type ValidationDetail = {
 };
 
 /**
- * ValidationError
- */
-export type ValidationError = {
-    /**
-     * Context
-     */
-    ctx?: {
-        [key: string]: unknown;
-    };
-    /**
-     * Input
-     */
-    input?: unknown;
-    /**
-     * Location
-     */
-    loc: Array<string | number>;
-    /**
-     * Message
-     */
-    msg: string;
-    /**
-     * Error Type
-     */
-    type: string;
-};
-
-/**
  * ValidationErrorResponse
  */
 export type ValidationErrorResponse = {
@@ -512,6 +474,12 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostData = {
          */
         input?: unknown;
     };
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
+    };
     path: {
         /**
          * Configuration
@@ -558,6 +526,12 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostResponse = CreateSe
 
 export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetData = {
     body?: never;
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
+    };
     path: {
         /**
          * Configuration
@@ -619,6 +593,12 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostDa
          * Text
          */
         text: string;
+    };
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
     };
     path: {
         /**
@@ -683,6 +663,12 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostData = 
     body?: {
         [key: string]: never;
     };
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
+    };
     path: {
         /**
          * Configuration
@@ -745,6 +731,12 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostRespons
 
 export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetData = {
     body?: never;
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
+    };
     path: {
         /**
          * Configuration
@@ -781,9 +773,9 @@ export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEvent
      */
     410: ErrorResponse;
     /**
-     * Validation Error
+     * Unprocessable Content
      */
-    422: HttpValidationError;
+    422: ValidationErrorResponse;
     /**
      * Internal Server Error
      */

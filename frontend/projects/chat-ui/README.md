@@ -62,7 +62,7 @@ export class ChatHost implements OnInit, OnDestroy {
     content: [], composerDisabled: true, status: null,
   });
   private readonly controller = new ConversationController(
-    new HttpConversationTransport('/api/v1', AgentConfiguration.demo),
+    new HttpConversationTransport('/api/v1', AgentConfiguration.demo, 'demo:default'),
     (state) => this.chat.set(state),
     presentJsonArtifact,
   );
@@ -88,7 +88,9 @@ The supported HTTP contract is this repository's AI Service conversation API. `C
 
 Append/start request uncertainty uses authoritative session state once to avoid duplicate execution. This is separate from observer interruption: no read or replacement request restores a lost observer. `start()` creates a fresh session; `dispose()` and replacement sessions abort observation and ignore stale callbacks while backend work continues. There is no resume API, refresh recovery, browser session persistence, generation retry, or cancellation control. The `/ui` entry point remains entirely controlled and network-independent.
 
-Expected routing is host frontend ? same-origin backend/proxy ? AI Service gateway. Relays must preserve response bodies and status codes, allow agent-turn durations, and avoid automatic retries of state-changing message/turn requests. Consumer relay implementation and authentication/session authorization are deferred. Same-origin routing is not an authorization guarantee.
+`HttpConversationTransport(apiBaseUrl, configuration, applicationUser, input?)` requires an explicit application identity. Every request, including SSE observation, carries it as `X-Application-User`. The backend accepts a `source:id` value with exactly one colon and non-empty portions without whitespace; prefixes are unrestricted and users are not looked up. Missing or malformed headers return HTTP 422 with a typed `request_validation` error. This trusted-LAN identity is not authenticated, and session ownership enforcement is not implemented yet. Create a transport for the host's selected identity; the demo uses `demo:default`.
+
+Expected routing is host frontend ? same-origin backend/proxy ? AI Service gateway. Relays must forward `X-Application-User`, preserve response bodies and status codes, allow agent-turn durations, and avoid automatic retries of state-changing message/turn requests. Consumer relay implementation and authentication/session authorization are deferred. Same-origin routing is not an authorization guarantee.
 
 ## Built-package verification
 
@@ -234,7 +236,7 @@ const input = {
   context: { selectedItem: item },
   artifactCapabilities: [JSON_ARTIFACT_CAPABILITY],
 };
-const transport = new HttpConversationTransport('/ai/api/v1', AgentConfiguration.kochwiki, input);
+const transport = new HttpConversationTransport('/ai/api/v1', AgentConfiguration.kochwiki, 'kochwiki:42', input);
 ```
 
 The AI Service supplies the agent with a local `present_artifact` tool. The agent

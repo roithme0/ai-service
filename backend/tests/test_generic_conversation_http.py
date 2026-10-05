@@ -29,7 +29,7 @@ def client() -> Iterator[TestClient]:
     }
     app.dependency_overrides[get_agent_registry] = lambda: registry
     try:
-        with TestClient(app) as running:
+        with TestClient(app, headers={"X-Application-User": "test:user"}) as running:
             yield running
     finally:
         app.dependency_overrides.clear()
@@ -37,6 +37,44 @@ def client() -> Iterator[TestClient]:
 
 def test_configuration_registry_matches_published_names() -> None:
     assert set(get_agent_registry()) == set(AgentConfiguration)
+
+
+@pytest.mark.parametrize("identity", [None, "", "alice", ":42", "source:", "source:42:extra", " source:42", "source:two words", "source:42 "])
+def test_invalid_identity_rejects_every_conversation_operation_without_access(
+    client: TestClient, identity: str | None,
+) -> None:
+    base = "/api/v1/agents/demo/sessions"
+    session_id = client.post(base, json={}).json()["session_id"]
+    client.headers.clear()
+    headers = {} if identity is None else {"X-Application-User": identity}
+    with (
+        patch.object(AgentTransport, "create") as create,
+        patch.object(AgentTransport, "read") as read,
+        patch.object(AgentTransport, "append") as append,
+        patch.object(AgentTransport, "turn") as turn,
+        patch.object(AgentTransport, "observe") as observe,
+    ):
+        for method, path, body in (
+            ("POST", base, {}),
+            ("GET", f"{base}/{session_id}", None),
+            ("POST", f"{base}/{session_id}/messages", {"text": "Must not append"}),
+            ("POST", f"{base}/{session_id}/turns", None),
+            ("GET", f"{base}/{session_id}/turns/missing/events", None),
+        ):
+            response = client.request(method, path, json=body, headers=headers)
+            assert response.status_code == 422
+            error = ValidationErrorResponse.model_validate_json(response.text)
+            assert error.kind == "request_validation"
+            assert error.detail[0].loc == ("header", "X-Application-User")
+        for operation in (create, read, append, turn, observe):
+            operation.assert_not_called()
+
+
+@pytest.mark.parametrize("identity", ["kochwiki:42", "demo:default", "unknown-source:user", "42:alice"])
+def test_identity_accepts_unrestricted_prefixes_without_user_lookup(client: TestClient, identity: str) -> None:
+    assert client.post(
+        "/api/v1/agents/demo/sessions", json={}, headers={"X-Application-User": identity},
+    ).status_code == 201
 
 
 def test_every_session_error_kind_has_a_valid_response() -> None:
@@ -107,7 +145,7 @@ def test_framework_http_errors_use_shared_envelope_and_preserve_headers(client: 
 
 def test_unexpected_failure_has_generic_body_and_propagates_for_logging(client: TestClient) -> None:
     with patch.object(AgentTransport, "create", side_effect=RuntimeError("private failure detail")):
-        response = TestClient(app, raise_server_exceptions=False).post("/api/v1/agents/demo/sessions", json={})
+        response = TestClient(app, raise_server_exceptions=False, headers={"X-Application-User": "test:user"}).post("/api/v1/agents/demo/sessions", json={})
         assert response.status_code == 500
         assert response.json() == {"detail": "Internal Server Error", "kind": "internal_error"}
         assert "private failure detail" not in response.text
@@ -355,7 +393,7 @@ def test_success_bodies_are_validated(client: TestClient) -> None:
 def test_unavailable_agent_precedes_malformed_body() -> None:
     app.dependency_overrides[get_agent_registry] = lambda: {"kochwiki": None, "demo": None}
     try:
-        client = TestClient(app)
+        client = TestClient(app, headers={"X-Application-User": "test:user"})
         base = "/api/v1/agents/kochwiki/sessions"
         responses = (
             client.post(base, content="bad json", headers={"content-type": "application/json"}),
@@ -389,7 +427,8 @@ def test_demo_concurrent_sessions_and_busy_turn() -> None:
     async def exercise() -> None:
         from httpx import ASGITransport, AsyncClient
 
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test",
+                               headers={"X-Application-User": "test:user"}) as client:
             base = "/api/v1/agents/demo/sessions"
             first = (await client.post(base, json={})).json()["session_id"]
             second = (await client.post(base, json={})).json()["session_id"]
