@@ -1,4 +1,9 @@
-import type { ChatArtifact, ChatContent, ChatConversationStatus, ChatTextMessage } from '@roithme0/chat-ui/ui';
+import type {
+  ChatArtifact,
+  ChatContent,
+  ChatConversationStatus,
+  ChatTextMessage,
+} from '@roithme0/chat-ui/ui';
 import {
   ConversationApiError,
   ConversationNetworkError,
@@ -95,6 +100,7 @@ export class ConversationController {
       const accepted = await this.transport.appendMessage(sessionId, text);
       if (epoch !== this.epoch) return;
       this.acceptMessage(accepted, acknowledge);
+      if (epoch !== this.epoch) return;
       await this.generate(sessionId);
     } catch (error: unknown) {
       if (epoch !== this.epoch) return;
@@ -109,27 +115,28 @@ export class ConversationController {
   async performAction(actionId: string): Promise<void> {
     if (actionId === 'new-session') {
       await this.start();
-
     }
   }
 
   private acceptMessage(message: ApiMessage, acknowledge: () => void): void {
+    const epoch = this.epoch;
     const userIndex = this.confirmedMessages.filter((item) => item.role === 'user').length;
     this.confirmedMessages = [...this.confirmedMessages, message];
     this.setState({
-      content: [
-        ...this.stateValue.content,
-        presentMessage(message, userIndex),
-      ],
+      content: [...this.stateValue.content, presentMessage(message, userIndex)],
       composerDisabled: true,
       status: loading('Antwort wird erstellt …', 'assistant'),
     });
-    acknowledge();
+    if (epoch === this.epoch) acknowledge();
   }
 
   private async generate(sessionId: string): Promise<void> {
     const epoch = this.epoch;
-    this.setState({ ...this.stateValue, composerDisabled: true, status: loading('Antwort wird erstellt …', 'assistant') });
+    this.setState({
+      ...this.stateValue,
+      composerDisabled: true,
+      status: loading('Antwort wird erstellt …', 'assistant'),
+    });
     let turnId: string;
     try {
       turnId = (await this.transport.generateTurn(sessionId)).turn_id;
@@ -140,7 +147,10 @@ export class ConversationController {
           const snapshot = await this.transport.readSession(sessionId);
           if (epoch !== this.epoch) return;
           this.confirmedMessages = snapshot.messages;
-          this.setState({ ...this.stateValue, content: presentSnapshot(snapshot, this.mapArtifact) });
+          this.setState({
+            ...this.stateValue,
+            content: presentSnapshot(snapshot, this.mapArtifact),
+          });
           if (snapshot.active_turn_id !== null) {
             turnId = snapshot.active_turn_id;
           } else if (snapshot.terminal_turn_id !== null) {
@@ -162,7 +172,10 @@ export class ConversationController {
     if (epoch !== this.epoch) return;
     const observation = new AbortController();
     this.observation = observation;
-    const items = new Map<string, { order: number; sequence: number; item: SessionSnapshotResponse['timeline'][number] }>();
+    const items = new Map<
+      string,
+      { order: number; sequence: number; item: SessionSnapshotResponse['timeline'][number] }
+    >();
     const artifacts = new Map<string, ArtifactResponse>();
     let initialized = false;
     let closing = false;
@@ -170,43 +183,85 @@ export class ConversationController {
     try {
       for await (const event of this.transport.observeTurn(sessionId, turnId, observation.signal)) {
         if (epoch !== this.epoch) return;
-        if (event.turn_id !== turnId) throw new ConversationNetworkError('Ungültige Turn-Zuordnung.');
+        if (event.turn_id !== turnId)
+          throw new ConversationNetworkError('Ungültige Turn-Zuordnung.');
         if (event.kind === 'error') {
-          if (event.reason === 'unavailable') this.setTerminal(new ConversationApiError(410, 'expired'));
+          if (event.reason === 'unavailable')
+            this.setTerminal(new ConversationApiError(410, 'expired'));
           else this.observationLost();
           return;
         }
         if (event.kind === 'snapshot') {
-          if (initialized || event.snapshot.session_id !== sessionId) throw new ConversationNetworkError('Ungültiger Anfangszustand.');
+          if (initialized || event.snapshot.session_id !== sessionId)
+            throw new ConversationNetworkError('Ungültiger Anfangszustand.');
           initialized = true;
-          closing = event.snapshot.active_turn_id === turnId && event.snapshot.active_turn_status === 'closing';
+          closing =
+            event.snapshot.active_turn_id === turnId &&
+            event.snapshot.active_turn_status === 'closing';
           latestSequence = event.snapshot.sequence;
           this.confirmedMessages = event.snapshot.messages;
-          event.snapshot.artifacts.forEach((artifact) => artifacts.set(artifact.artifact_id, artifact));
-          event.snapshot.timeline.forEach((item, order) => items.set(itemIdentity(item), { item, order, sequence: event.snapshot.sequence }));
+          event.snapshot.artifacts.forEach((artifact) =>
+            artifacts.set(artifact.artifact_id, artifact),
+          );
+          event.snapshot.timeline.forEach((item, order) =>
+            items.set(itemIdentity(item), { item, order, sequence: event.snapshot.sequence }),
+          );
         } else if (event.kind === 'upsert') {
-          if (!initialized || event.item.turn_id !== turnId || event.identity !== itemIdentity(event.item)) throw new ConversationNetworkError('Ungültiger Timeline-Eintrag.');
+          if (
+            !initialized ||
+            event.item.turn_id !== turnId ||
+            event.identity !== itemIdentity(event.item)
+          )
+            throw new ConversationNetworkError('Ungültiger Timeline-Eintrag.');
           const previous = items.get(event.identity);
           if (previous !== undefined && event.sequence <= previous.sequence) continue;
-          if (previous !== undefined && event.order !== previous.order) throw new ConversationNetworkError('Ungültige Reihenfolge.');
+          if (previous !== undefined && event.order !== previous.order)
+            throw new ConversationNetworkError('Ungültige Reihenfolge.');
           if (event.item.kind === 'artifact') {
-            if (event.artifact == null || event.artifact.artifact_id !== event.item.artifact_id || event.artifact.turn_id !== turnId) throw new ConversationNetworkError('Ungültiges Artefakt.');
+            if (
+              event.artifact == null ||
+              event.artifact.artifact_id !== event.item.artifact_id ||
+              event.artifact.turn_id !== turnId
+            )
+              throw new ConversationNetworkError('Ungültiges Artefakt.');
             artifacts.set(event.artifact.artifact_id, event.artifact);
-          } else if (event.artifact != null) throw new ConversationNetworkError('Unerwartetes Artefakt.');
+          } else if (event.artifact != null)
+            throw new ConversationNetworkError('Unerwartetes Artefakt.');
           latestSequence = Math.max(latestSequence, event.sequence);
-          items.set(event.identity, { item: event.item, order: event.order, sequence: event.sequence });
+          items.set(event.identity, {
+            item: event.item,
+            order: event.order,
+            sequence: event.sequence,
+          });
         } else if (event.kind === 'closing') {
-          if (!initialized || event.sequence < latestSequence) throw new ConversationNetworkError('Ungültiger Abschlusszustand.');
+          if (!initialized || event.sequence < latestSequence)
+            throw new ConversationNetworkError('Ungültiger Abschlusszustand.');
           latestSequence = event.sequence;
           closing = true;
         } else {
-          if (!initialized || event.sequence < latestSequence) throw new ConversationNetworkError('Ungültiger Endzustand.');
+          if (!initialized || event.sequence < latestSequence)
+            throw new ConversationNetworkError('Ungültiger Endzustand.');
           const failed = event.outcome !== 'completed';
-          this.setState({ ...this.stateValue, composerDisabled: false, status: failed ? failure('Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.', 'assistant') : null });
+          this.setState({
+            ...this.stateValue,
+            composerDisabled: false,
+            status: failed
+              ? failure(
+                  'Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.',
+                  'assistant',
+                )
+              : null,
+          });
           return;
         }
-        const timeline = [...items.values()].sort((a, b) => a.order - b.order).map((entry) => entry.item);
-        this.setState({ content: presentTimeline(timeline, [...artifacts.values()], this.mapArtifact), composerDisabled: true, status: closing ? null : loading('Antwort wird erstellt …', 'assistant') });
+        const timeline = [...items.values()]
+          .sort((a, b) => a.order - b.order)
+          .map((entry) => entry.item);
+        this.setState({
+          content: presentTimeline(timeline, [...artifacts.values()], this.mapArtifact),
+          composerDisabled: true,
+          status: closing ? null : loading('Antwort wird erstellt …', 'assistant'),
+        });
       }
       if (epoch === this.epoch) this.observationLost();
     } catch (error: unknown) {
@@ -220,7 +275,14 @@ export class ConversationController {
   }
 
   private observationLost(): void {
-    this.setState({ ...this.stateValue, composerDisabled: true, status: failure('Die Verbindung zur Antwort wurde unterbrochen. Der Ausgang ist unbekannt.', 'assistant') });
+    this.setState({
+      ...this.stateValue,
+      composerDisabled: true,
+      status: failure(
+        'Die Verbindung zur Antwort wurde unterbrochen. Der Ausgang ist unbekannt.',
+        'assistant',
+      ),
+    });
   }
 
   private async reconcileAppend(
@@ -245,8 +307,10 @@ export class ConversationController {
           composerDisabled: true,
           status: loading('Antwort wird erstellt …', 'assistant'),
         });
+        if (epoch !== this.epoch) return;
         this.confirmedMessages = snapshot.messages;
         acknowledge();
+        if (epoch !== this.epoch) return;
         await this.generate(sessionId);
         return;
       }
@@ -285,11 +349,7 @@ export class ConversationController {
     this.setState({
       content,
       composerDisabled: true,
-      status: failure(
-        'Der Status der Antwort ist noch unklar.',
-        'assistant',
-
-      ),
+      status: failure('Der Status der Antwort ist noch unklar.', 'assistant'),
     });
   }
 
@@ -337,7 +397,6 @@ export class ConversationController {
         status: failure(
           messageFor(error, 'Die Antwort konnte nicht abgeglichen werden.'),
           'assistant',
-
         ),
       });
     }
@@ -347,7 +406,12 @@ export class ConversationController {
     this.setState({
       ...this.stateValue,
       composerDisabled: true,
-      status: failure('Der KI-Agent ist derzeit nicht verfügbar.', 'conversation', 'new-session', 'Erneut versuchen'),
+      status: failure(
+        'Der KI-Agent ist derzeit nicht verfügbar.',
+        'conversation',
+        'new-session',
+        'Erneut versuchen',
+      ),
     });
   }
 
@@ -395,7 +459,10 @@ function presentMessage(message: ApiMessage, index: number): ChatTextMessage {
   };
 }
 
-function presentSnapshot(snapshot: SessionSnapshotResponse, mapArtifact: ArtifactMapper): readonly ChatContent[] {
+function presentSnapshot(
+  snapshot: SessionSnapshotResponse,
+  mapArtifact: ArtifactMapper,
+): readonly ChatContent[] {
   return presentTimeline(snapshot.timeline, snapshot.artifacts, mapArtifact);
 }
 
@@ -412,38 +479,51 @@ function presentTimeline(
       case 'intermediate':
         return [{ kind: 'intermediate', id: item.id, text: item.text }];
       case 'tool':
-        return [{ kind: 'tool', id: `tool-${item.execution_id}`, name: item.name, status: item.status }];
+        return [
+          { kind: 'tool', id: `tool-${item.execution_id}`, name: item.name, status: item.status },
+        ];
       case 'artifact': {
         const envelope = envelopes.get(item.artifact_id);
         const artifact = envelope === undefined ? null : mapArtifact(envelope);
         return artifact === null ? [] : [artifact];
       }
       case 'failure':
-        return [{ kind: 'failure', id: `failure-${item.turn_id}`, text: 'Die Antwort konnte nicht erstellt werden.' }];
+        return [
+          {
+            kind: 'failure',
+            id: `failure-${item.turn_id}`,
+            text: 'Die Antwort konnte nicht erstellt werden.',
+          },
+        ];
     }
   });
 }
 
 function itemIdentity(item: SessionSnapshotResponse['timeline'][number]): string {
   switch (item.kind) {
-    case 'message': case 'intermediate': return item.id;
-    case 'tool': return `tool-${item.execution_id}`;
-    case 'artifact': return item.artifact_id;
-    case 'failure': return `failure-${item.turn_id}`;
+    case 'message':
+    case 'intermediate':
+      return item.id;
+    case 'tool':
+      return `tool-${item.execution_id}`;
+    case 'artifact':
+      return item.artifact_id;
+    case 'failure':
+      return `failure-${item.turn_id}`;
   }
 }
 
-function prefixMatches(
-  previous: readonly ApiMessage[],
-  current: readonly ApiMessage[],
-): boolean {
+function prefixMatches(previous: readonly ApiMessage[], current: readonly ApiMessage[]): boolean {
   return previous.every(
     (message, index) =>
       current[index]?.role === message.role && current[index]?.text === message.text,
   );
 }
 
-function loading(message: string, placement: ChatConversationStatus['placement']): ChatConversationStatus {
+function loading(
+  message: string,
+  placement: ChatConversationStatus['placement'],
+): ChatConversationStatus {
   return { kind: 'loading', message, placement };
 }
 
