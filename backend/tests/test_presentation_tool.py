@@ -32,7 +32,7 @@ def tool_for_session(metadata_schema: dict[str, JsonValue] | None = None) -> tup
     accepted = validate_context_input({"context": {}, "artifactCapabilities": [capability]})
     assert isinstance(accepted, AgentInputAccepted)
     store = new_model_session_store()
-    session = store.create(accepted.context, ConversationSessionSettings(max_artifacts=1))
+    session = store.create(accepted.context, ConversationSessionSettings(max_artifacts=1), owner="test:user")
     store.append_user_message(session.session_id, "Present")
     reservation = store.reserve_turn(session.session_id)
     assert isinstance(reservation, ConversationTurnReservation)
@@ -157,7 +157,7 @@ def test_presentation_and_other_tool_sources_are_combined() -> None:
         agent = create_model_agent(Generator(), tool_sources=(LocalToolSource((RegisteredTool(
             "read_data", {"type": "function", "name": "read_data"}, execute,
         ),), "Read data with read_data"),))
-        created = agent.create({"context": {}, "artifactCapabilities": [CAPABILITY]})
+        created = agent.create({"context": {}, "artifactCapabilities": [CAPABILITY]}, owner="test:user")
         assert isinstance(created, TextSessionCreation)
         agent.append_user_message(created.session_id, "Show")
         result = await agent.execute_turn(created.session_id)
@@ -193,7 +193,7 @@ def test_default_budgets_complete_an_extended_presentation_turn() -> None:
         generator = Generator()
         agent = create_model_agent(generator)
         created = agent.create({"context": {"description": "x" * 20_000},
-                                "artifactCapabilities": [CAPABILITY]})
+                                "artifactCapabilities": [CAPABILITY]}, owner="test:user")
         assert isinstance(created, TextSessionCreation)
         agent.append_user_message(created.session_id, "Show the requested items. " + "Context. " * 600)
         result = await agent.execute_turn(created.session_id)

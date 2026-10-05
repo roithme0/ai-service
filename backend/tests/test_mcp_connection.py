@@ -95,7 +95,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                             "required": ["name"], "additionalProperties": False,
                         },
                     }]
-                created = agents.kochwiki.agent.create(payload)
+                created = agents.kochwiki.agent.create(payload, owner="test:user")
                 assert isinstance(created, TextSessionCreation)
                 agents.kochwiki.agent.append_user_message(created.session_id, "Call hello world")
                 turn = await agents.kochwiki.agent.execute_turn(created.session_id)
@@ -123,7 +123,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                 assert isinstance(output["output"], str)
                 assert json.loads(output["output"])["structuredContent"] == {"message": "Hello World"}
                 assert agents.demo.agent is not None
-                assert isinstance(agents.demo.agent.create(None), TextSessionCreation)
+                assert isinstance(agents.demo.agent.create(None, owner="test:user"), TextSessionCreation)
             finally:
                 await agents.close()
             assert connection.instructions is None
@@ -214,7 +214,7 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
             try:
                 agent = agents.kochwiki.agent
                 assert agent is not None
-                created = agent.create(payload)
+                created = agent.create(payload, owner="test:user")
                 assert isinstance(created, TextSessionCreation)
                 agent.append_user_message(created.session_id, "Propose a change")
                 proposal_turn = await agent.execute_turn(created.session_id)
@@ -306,7 +306,7 @@ def test_connection_failure_disables_only_owning_agent(
             try:
                 assert agents.kochwiki.agent is None
                 assert agents.demo.agent is not None
-                assert isinstance(agents.demo.agent.create(None), TextSessionCreation)
+                assert isinstance(agents.demo.agent.create(None, owner="test:user"), TextSessionCreation)
                 assert connection.tools == ()
                 assert connection.instructions is None
                 with pytest.raises(RuntimeError, match="not started"):

@@ -29,7 +29,7 @@ def final_response(text: str) -> AgenticGenerationResponse:
 @pytest.mark.parametrize("ending", ["final", "failure", "limit"])
 def test_commentary_only_continues_and_remains_visible_without_becoming_final(ending: str) -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("initial", ConversationSessionSettings(2)).session_id
+    session_id = store.create("initial", ConversationSessionSettings(2), owner="test:user").session_id
     commentary = dict(final_response("I will check.").output_items[0], phase="commentary")
     requests: list[AgenticGenerationRequest] = []
 
@@ -70,7 +70,7 @@ def test_commentary_only_continues_and_remains_visible_without_becoming_final(en
 @pytest.mark.parametrize("failure", [False, True])
 def test_later_turn_replays_exact_domain_result_and_context_without_tool_execution(failure: bool) -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("initial", ConversationSessionSettings(2)).session_id
+    session_id = store.create("initial", ConversationSessionSettings(2), owner="test:user").session_id
     requests: list[AgenticGenerationRequest] = []
     invocations: list[ToolInvocation] = []
     output = '{"proposal_id": "domain-123", "kind": "proposed"}'
@@ -129,7 +129,7 @@ def test_later_turn_replays_exact_domain_result_and_context_without_tool_executi
 def test_mixed_exchange_replays_unknown_and_not_executed_reports_without_fabricated_results(cancel: bool) -> None:
     async def exercise() -> None:
         store = ConversationSessionStore[str, str](timedelta(minutes=90))
-        session_id = store.create("initial", ConversationSessionSettings(2)).session_id
+        session_id = store.create("initial", ConversationSessionSettings(2), owner="test:user").session_id
         entered = asyncio.Event()
         executions: list[str] = []
         requests: list[AgenticGenerationRequest] = []
@@ -192,7 +192,7 @@ def test_mixed_exchange_replays_unknown_and_not_executed_reports_without_fabrica
 @pytest.mark.parametrize("invalid_text", ["", "x" * 16001])
 def test_invalid_final_output_is_not_retained_or_replayed(invalid_text: str) -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("initial", ConversationSessionSettings(2)).session_id
+    session_id = store.create("initial", ConversationSessionSettings(2), owner="test:user").session_id
     requests: list[AgenticGenerationRequest] = []
 
     class Generator:
@@ -213,7 +213,7 @@ def test_invalid_final_output_is_not_retained_or_replayed(invalid_text: str) -> 
 
 def test_final_message_with_tool_executes_tool_before_completion() -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("initial", ConversationSessionSettings(2)).session_id
+    session_id = store.create("initial", ConversationSessionSettings(2), owner="test:user").session_id
     requests: list[AgenticGenerationRequest] = []
 
     class Generator:
@@ -237,7 +237,7 @@ def test_final_message_with_tool_executes_tool_before_completion() -> None:
 
 def test_individual_records_preserve_provider_order_and_derive_both_message_views() -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("initial", ConversationSessionSettings(2)).session_id
+    session_id = store.create("initial", ConversationSessionSettings(2), owner="test:user").session_id
     store.append_user_message(session_id, "first")
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
@@ -277,7 +277,7 @@ def test_individual_records_preserve_provider_order_and_derive_both_message_view
 
 def test_history_drives_revision_terminal_status_and_repeated_failure_response() -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("initial", ConversationSessionSettings(2)).session_id
+    session_id = store.create("initial", ConversationSessionSettings(2), owner="test:user").session_id
     assert store.read(session_id).snapshot.session.revision == 0
     store.append_user_message(session_id, "first")
     reservation = store.reserve_turn(session_id)
@@ -317,7 +317,7 @@ def test_history_drives_revision_terminal_status_and_repeated_failure_response()
 @pytest.mark.parametrize("fail", [False, True])
 def test_message_phase_is_immutable_through_turn_outcome(phase: str | None, fail: bool) -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("Context", ConversationSessionSettings(2)).session_id
+    session_id = store.create("Context", ConversationSessionSettings(2), owner="test:user").session_id
     store.append_user_message(session_id, "Run")
     snapshots: list[tuple[object, ...]] = []
     supplied = dict(final_response("First").output_items[0], phase=phase)
@@ -365,7 +365,7 @@ def test_message_phase_is_immutable_through_turn_outcome(phase: str | None, fail
 @pytest.mark.parametrize("text", [" ", "x" * 16001])
 def test_invalid_message_item_fails_before_retention(phase: str | None, text: str) -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("Context", ConversationSessionSettings(2)).session_id
+    session_id = store.create("Context", ConversationSessionSettings(2), owner="test:user").session_id
     store.append_user_message(session_id, "Run")
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
@@ -382,7 +382,7 @@ def test_invalid_message_item_fails_before_retention(phase: str | None, text: st
 @pytest.mark.parametrize("output", ["phaseless", "null", "commentary", "reasoning", "empty", "text_only"])
 def test_response_limit_requires_explicit_final_and_replays_every_completed_item(output: str) -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("Context", ConversationSessionSettings(2)).session_id
+    session_id = store.create("Context", ConversationSessionSettings(2), owner="test:user").session_id
     store.append_user_message(session_id, "Run")
     requests: list[AgenticGenerationRequest] = []
     item: dict[str, object] = {"type": "message", "role": "assistant", "content": "Still working"}
@@ -415,7 +415,7 @@ def test_response_limit_requires_explicit_final_and_replays_every_completed_item
 
 def test_multiple_final_messages_select_first_without_combining_or_aggregate_validation() -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("Context", ConversationSessionSettings(2)).session_id
+    session_id = store.create("Context", ConversationSessionSettings(2), owner="test:user").session_id
     store.append_user_message(session_id, "Run")
     first = final_response("a" * 10000).output_items[0]
     second = dict(final_response("b" * 10000).output_items[0], id="second")

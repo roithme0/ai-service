@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.agents.demo import create_demo_agent
+from app.sessions.agent_service import ConfiguredAgentService
 from app.sessions.model_sessions import create_model_agent
 from app.main import app, handle_http_exception, handle_request_validation
 from app.sessions.http import (
@@ -75,6 +76,44 @@ def test_identity_accepts_unrestricted_prefixes_without_user_lookup(client: Test
     assert client.post(
         "/api/v1/agents/demo/sessions", json={}, headers={"X-Application-User": identity},
     ).status_code == 201
+
+
+@pytest.mark.parametrize("configuration", ["demo", "kochwiki"])
+@pytest.mark.parametrize("other_owner", ["test:other", "another-source:user", "test:User"])
+def test_other_owner_cannot_access_or_change_conversation(
+    client: TestClient, configuration: str, other_owner: str,
+) -> None:
+    base = f"/api/v1/agents/{configuration}/sessions"
+    body = {} if configuration == "demo" else {"input": valid_request()}
+    session_id = client.post(base, json=body).json()["session_id"]
+    assert client.post(f"{base}/{session_id}/messages", json={"text": "Private message"}).status_code == 201
+    before = client.get(f"{base}/{session_id}").json()
+    with (
+        patch.object(ConfiguredAgentService, "read") as read,
+        patch.object(ConfiguredAgentService, "append_user_message") as append,
+        patch.object(ConfiguredAgentService, "start_turn") as start,
+        patch.object(ConfiguredAgentService, "observe") as observe,
+        patch.object(ConfiguredAgentService, "observation_available") as available,
+    ):
+        for method, suffix, payload in (
+            ("GET", "", None),
+            ("POST", "/messages", {"text": "Intrusion"}),
+            ("POST", "/turns", None),
+            ("GET", "/turns/private-turn/events", None),
+        ):
+            denied = client.request(method, f"{base}/{session_id}{suffix}", json=payload,
+                                    headers={"X-Application-User": other_owner})
+            missing = client.request(method, f"{base}/missing{suffix}", json=payload)
+            assert denied.status_code == missing.status_code == 404
+            assert denied.json() == missing.json()
+            assert denied.headers["content-type"] == "application/json"
+        for operation in (read, append, start, observe, available):
+            operation.assert_not_called()
+    assert client.get(f"{base}/{session_id}").json() == before
+    assert client.post(f"{base}/{session_id}/messages", json={"text": "Still mine"}).status_code == 201
+    other_session = client.post(base, json=body, headers={"X-Application-User": other_owner}).json()["session_id"]
+    assert client.get(f"{base}/{other_session}").status_code == 404
+    assert client.get(f"{base}/{other_session}", headers={"X-Application-User": other_owner}).status_code == 200
 
 
 def test_every_session_error_kind_has_a_valid_response() -> None:
@@ -441,9 +480,31 @@ def test_demo_concurrent_sessions_and_busy_turn() -> None:
             busy = await client.post(f"{base}/{first}/turns")
             assert busy.status_code == 202
             assert busy.json() == (await first_turn).json()
+            turn_id = busy.json()["turn_id"]
+            client.headers["X-Application-User"] = "test:other"
+            for method, suffix, body in (
+                ("GET", "", None),
+                ("POST", "/messages", {"text": "Another user"}),
+                ("POST", "/turns", None),
+                ("GET", f"/turns/{turn_id}/events", None),
+            ):
+                denied = await client.request(method, f"{base}/{first}{suffix}", json=body)
+                assert denied.status_code == 404
+                assert denied.json()["kind"] == "unknown"
+            assert calls == 2
             release.set()
             assert (await first_turn).status_code == 202
             assert (await second_turn).status_code == 202
+            client.headers["X-Application-User"] = "test:user"
+            for _ in range(100):
+                snapshot = (await client.get(f"{base}/{first}")).json()
+                if snapshot["terminal_turn_kind"] is not None:
+                    break
+                await asyncio.sleep(0.01)
+            assert snapshot["terminal_turn_kind"] == "completed"
+            observed = await client.get(f"{base}/{first}/turns/{turn_id}/events")
+            assert observed.status_code == 200
+            assert '"kind":"terminal"' in observed.text
             await agent.close()
 
     try:

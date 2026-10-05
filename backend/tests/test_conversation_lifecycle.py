@@ -36,7 +36,7 @@ def new_store(clock: MutableClock | None = None) -> ConversationSessionStore[Mut
 def test_context_is_detached_from_caller_and_returned_snapshots() -> None:
     context = MutableContext(["original"])
     store = new_store()
-    created = store.create(context, ConversationSessionSettings(2))
+    created = store.create(context, ConversationSessionSettings(2), owner="test:user")
     context.values.append("caller change")
     first = store.read(created.session_id)
     assert isinstance(first, ConversationReadActive)
@@ -51,7 +51,7 @@ def test_context_is_detached_from_caller_and_returned_snapshots() -> None:
 def test_reads_and_messages_do_not_renew_consumer_supplied_lifetime() -> None:
     clock = MutableClock()
     store = new_store(clock)
-    created = store.create(MutableContext([]), ConversationSessionSettings(2))
+    created = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:user")
     clock.value += timedelta(minutes=4)
     assert isinstance(store.append_user_message(created.session_id, "  hello  "), TextSessionAppendAccepted)
     reservation = store.reserve_turn(created.session_id)
@@ -74,7 +74,7 @@ def test_reads_and_messages_do_not_renew_consumer_supplied_lifetime() -> None:
                                         ("x" * (MAX_MESSAGE_LENGTH + 1), "text_too_long")])
 def test_invalid_messages_do_not_append_history(text: object, reason: str) -> None:
     store = new_store()
-    session_id = store.create(MutableContext([]), ConversationSessionSettings(2)).session_id
+    session_id = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:user").session_id
     outcome = store.append_user_message(session_id, text)
     assert isinstance(outcome, TextSessionAppendInvalidMessage)
     assert outcome.reason == reason
@@ -84,7 +84,7 @@ def test_invalid_messages_do_not_append_history(text: object, reason: str) -> No
 
 def test_concurrent_appends_reserve_final_answer_capacity_atomically() -> None:
     store = new_store()
-    session_id = store.create(MutableContext([]), ConversationSessionSettings(2)).session_id
+    session_id = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:user").session_id
     for index in range(MAX_MESSAGE_COUNT - 5):
         store.append_user_message(session_id, str(index))
 
@@ -107,16 +107,31 @@ def test_concurrent_appends_reserve_final_answer_capacity_atomically() -> None:
 def test_first_append_after_expiry_reports_expired_and_then_unknown() -> None:
     clock = MutableClock()
     store = new_store(clock)
-    created = store.create(MutableContext([]), ConversationSessionSettings(2))
+    created = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:user")
     clock.value = created.expires_at
     assert isinstance(store.append_user_message(created.session_id, "late"), TextSessionAppendExpired)
     assert isinstance(store.read(created.session_id), TextSessionReadUnknown)
 
 
+def test_owner_metadata_follows_session_lifetime_and_lookup_does_not_consume_expiry() -> None:
+    clock = MutableClock()
+    store = new_store(clock)
+    created = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:user")
+    assert store.belongs_to(created.session_id, "test:user")
+    assert not store.belongs_to(created.session_id, "test:other")
+    clock.value = created.expires_at
+    assert not store.belongs_to(created.session_id, "test:other")
+    assert isinstance(store.read(created.session_id), TextSessionReadExpired)
+    assert not store.belongs_to(created.session_id, "test:user")
+    replacement = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:other")
+    assert store.belongs_to(replacement.session_id, "test:other")
+    assert not store.belongs_to(replacement.session_id, "test:user")
+
+
 def test_read_samples_time_after_waiting_for_the_store_lock() -> None:
     clock = MutableClock()
     store = new_store(clock)
-    created = store.create(MutableContext([]), ConversationSessionSettings(2))
+    created = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:user")
     clock_read = Event()
 
     def signal_clock_read() -> datetime:
@@ -136,7 +151,7 @@ def test_concurrent_creation_uses_distinct_session_ids() -> None:
     store = new_store()
 
     def create(index: int) -> str:
-        return store.create(MutableContext([str(index)]), ConversationSessionSettings(2)).session_id
+        return store.create(MutableContext([str(index)]), ConversationSessionSettings(2), owner="test:user").session_id
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         sessions = tuple(executor.map(create, range(50)))
@@ -153,4 +168,4 @@ def test_nonpositive_session_lifetime_is_rejected(lifetime: timedelta) -> None:
 def test_naive_clock_is_rejected() -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=5), lambda: datetime(2026, 10, 3))
     with pytest.raises(ValueError, match="timezone-aware"):
-        store.create("context", ConversationSessionSettings(2))
+        store.create("context", ConversationSessionSettings(2), owner="test:user")

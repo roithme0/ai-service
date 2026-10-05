@@ -219,6 +219,11 @@ def test_retained_expired_session_returns_gone_without_snapshot() -> None:
         assert active_response.json()["expires_at"] == created["expires_at"]
         clock.value += timedelta(minutes=80)
 
+        denied = client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}",
+                            headers={"X-Application-User": "test:other"})
+        assert denied.status_code == 404
+        assert denied.json() == {"detail": "Session not found", "kind": "unknown"}
+
         response = client.get(f"/api/v1/agents/kochwiki/sessions/{created['session_id']}")
 
         assert response.status_code == 410
@@ -390,7 +395,7 @@ def test_kochwiki_agent_requires_every_setting(missing: str) -> None:
     agents = configure_agents(Settings(_env_file=None, **values))
     assert agents.kochwiki.agent is None
     assert agents.demo.agent is not None
-    assert agents.demo.agent.create({}).session_id
+    assert agents.demo.agent.create({}, owner="test:user").session_id
 
 
 def test_locally_valid_kochwiki_configuration_constructs_agent_without_remote_probe() -> None:
@@ -403,7 +408,7 @@ def test_locally_valid_kochwiki_configuration_constructs_agent_without_remote_pr
     try:
         assert agents.kochwiki.agent is not None
         assert agents.demo.agent is not None
-        assert agents.demo.agent.create(None).session_id
+        assert agents.demo.agent.create(None, owner="test:user").session_id
     finally:
         asyncio.run(agents.close())
 
@@ -468,7 +473,7 @@ def test_turn_endpoint_rejects_reply_after_new_message(
     def append_another_message() -> None:
         transport = kochwiki_registry_for_test["kochwiki"]
         assert isinstance(transport, AgentTransport)
-        blocked = transport.append(session_url.rsplit("/", 1)[1], "second")
+        blocked = transport.append(session_url.rsplit("/", 1)[1], "second", "test:user")
         assert blocked.status_code == 409
         assert json.loads(blocked.body) == {"detail": "Session is busy", "kind": "busy"}
 

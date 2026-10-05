@@ -44,7 +44,6 @@ from app.sessions.text_sessions import (
 router = APIRouter(
     prefix="/api/v1/agents/{configuration}/sessions",
     tags=["agents"],
-    dependencies=[Depends(require_application_user)],
 )
 
 
@@ -248,14 +247,20 @@ class EventStreamResponse(StreamingResponse):
 
 
 class ConversationTransport(Protocol):
-    def create(self, value: object) -> SessionCreationResponse | JSONResponse: ...
-    def read(self, session_id: str) -> SessionSnapshotResponse | JSONResponse: ...
+    def create(
+        self, value: object, owner: str
+    ) -> SessionCreationResponse | JSONResponse: ...
+    def read(
+        self, session_id: str, owner: str
+    ) -> SessionSnapshotResponse | JSONResponse: ...
     def append(
-        self, session_id: str, text: str
+        self, session_id: str, text: str, owner: str
     ) -> UserMessageResponse | JSONResponse: ...
-    def turn(self, session_id: str) -> AcceptedTurnResponse | JSONResponse: ...
+    def turn(
+        self, session_id: str, owner: str
+    ) -> AcceptedTurnResponse | JSONResponse: ...
     def observe(
-        self, session_id: str, turn_id: str
+        self, session_id: str, turn_id: str, owner: str
     ) -> StreamingResponse | JSONResponse: ...
 
 
@@ -265,15 +270,21 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
     input_from_json: Callable[[object], InputT]
     issue_from_domain: Callable[[IssueT], InputIssue]
 
-    def create(self, value: object) -> SessionCreationResponse | JSONResponse:
-        outcome = self.agent.create(self.input_from_json(value))
+    def create(
+        self, value: object, owner: str
+    ) -> SessionCreationResponse | JSONResponse:
+        outcome = self.agent.create(self.input_from_json(value), owner)
         if isinstance(outcome, AgentInputRejected):
             return _input_error(tuple(map(self.issue_from_domain, outcome.issues)))
         return SessionCreationResponse(
             session_id=outcome.session_id, expires_at=outcome.expires_at
         )
 
-    def read(self, session_id: str) -> SessionSnapshotResponse | JSONResponse:
+    def read(
+        self, session_id: str, owner: str
+    ) -> SessionSnapshotResponse | JSONResponse:
+        if not self.agent.belongs_to(session_id, owner):
+            return _error("unknown")
         outcome = self.agent.read(session_id)
         if isinstance(outcome, ConversationReadActive):
             snapshot = outcome.snapshot
@@ -293,7 +304,11 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
             "expired" if isinstance(outcome, TextSessionReadExpired) else "unknown"
         )
 
-    def append(self, session_id: str, text: str) -> UserMessageResponse | JSONResponse:
+    def append(
+        self, session_id: str, text: str, owner: str
+    ) -> UserMessageResponse | JSONResponse:
+        if not self.agent.belongs_to(session_id, owner):
+            return _error("unknown")
         outcome = self.agent.append_user_message(session_id, text)
         if isinstance(outcome, TextSessionAppendAccepted):
             return _user_message(outcome.message)
@@ -310,7 +325,9 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
             return _error("busy")
         return _error("unknown")
 
-    def turn(self, session_id: str) -> AcceptedTurnResponse | JSONResponse:
+    def turn(self, session_id: str, owner: str) -> AcceptedTurnResponse | JSONResponse:
+        if not self.agent.belongs_to(session_id, owner):
+            return _error("unknown")
         outcome = self.agent.start_turn(session_id)
         if outcome.turn_id and outcome.kind in {
             "busy",
@@ -322,9 +339,9 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
         return _error(outcome.kind, outcome.turn_id)
 
     def observe(
-        self, session_id: str, turn_id: str
+        self, session_id: str, turn_id: str, owner: str
     ) -> StreamingResponse | JSONResponse:
-        read = self.read(session_id)
+        read = self.read(session_id, owner)
         if isinstance(read, JSONResponse):
             return read
         if not any(item.turn_id == turn_id for item in read.timeline):
@@ -502,6 +519,7 @@ def _request_body(
 async def create_session(
     configuration: ConfigurationPath,
     request: Request,
+    owner: str = Depends(require_application_user),
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
 ) -> SessionCreationResponse | JSONResponse:
     agent = _agent(configuration, registry)
@@ -511,7 +529,7 @@ async def create_session(
         body = SessionCreationRequest.model_validate(await _body(request))
     except ValidationError as error:
         return _validation_error("invalid_input", _model_validation_details(error))
-    return agent.create(body.input)
+    return agent.create(body.input, owner)
 
 
 @router.get(
@@ -527,10 +545,11 @@ async def create_session(
 def read_session(
     configuration: ConfigurationPath,
     session_id: str,
+    owner: str = Depends(require_application_user),
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
 ) -> SessionSnapshotResponse | JSONResponse:
     agent = _agent(configuration, registry)
-    return agent if isinstance(agent, JSONResponse) else agent.read(session_id)
+    return agent if isinstance(agent, JSONResponse) else agent.read(session_id, owner)
 
 
 @router.post(
@@ -550,6 +569,7 @@ async def append_message(
     configuration: ConfigurationPath,
     session_id: str,
     request: Request,
+    owner: str = Depends(require_application_user),
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
 ) -> UserMessageResponse | JSONResponse:
     agent = _agent(configuration, registry)
@@ -559,7 +579,7 @@ async def append_message(
         message = UserMessageRequest.model_validate(await _body(request))
     except ValidationError as error:
         return _validation_error("invalid_message", _model_validation_details(error))
-    return agent.append(session_id, message.text)
+    return agent.append(session_id, message.text, owner)
 
 
 @router.post(
@@ -580,6 +600,7 @@ async def execute_turn(
     configuration: ConfigurationPath,
     session_id: str,
     request: Request,
+    owner: str = Depends(require_application_user),
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
 ) -> AcceptedTurnResponse | JSONResponse:
     agent = _agent(configuration, registry)
@@ -591,7 +612,7 @@ async def execute_turn(
             EmptyTurnRequest.model_validate(await _body(request))
         except ValidationError as error:
             return _validation_error("invalid_input", _model_validation_details(error))
-    return agent.turn(session_id)
+    return agent.turn(session_id, owner)
 
 
 @router.get(
@@ -610,11 +631,14 @@ def observe_turn(
     configuration: ConfigurationPath,
     session_id: str,
     turn_id: str,
+    owner: str = Depends(require_application_user),
     registry: dict[str, ConversationTransport | None] = Depends(get_agent_registry),
 ) -> StreamingResponse | JSONResponse:
     agent = _agent(configuration, registry)
     return (
-        agent if isinstance(agent, JSONResponse) else agent.observe(session_id, turn_id)
+        agent
+        if isinstance(agent, JSONResponse)
+        else agent.observe(session_id, turn_id, owner)
     )
 
 

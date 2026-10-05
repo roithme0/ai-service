@@ -219,7 +219,7 @@ def test_failed_stream_retains_complete_calls_without_executing_them(ending: str
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http_client:
             async with AsyncOpenAI(api_key="test", http_client=http_client, max_retries=0) as client:
                 store = ConversationSessionStore[str, str](timedelta(minutes=90))
-                session_id = store.create("Context", ConversationSessionSettings(20)).session_id
+                session_id = store.create("Context", ConversationSessionSettings(20), owner="test:user").session_id
                 store.append_user_message(session_id, "Run")
                 strategy = ModelTurnStrategy(store, OpenAIAgenticGenerator("gpt-5.6-sol", client),
                     lambda context: context, (LocalToolSource((RegisteredTool("sample",
@@ -377,7 +377,7 @@ def test_completed_items_are_retained_before_stream_finishes_and_replayed(
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http_client:
             async with AsyncOpenAI(api_key="test", http_client=http_client, max_retries=0) as client:
                 store = ConversationSessionStore[str, str](timedelta(minutes=90))
-                session_id = store.create("Context", ConversationSessionSettings(20)).session_id
+                session_id = store.create("Context", ConversationSessionSettings(20), owner="test:user").session_id
                 store.append_user_message(session_id, "Run")
                 strategy = ModelTurnStrategy(store, OpenAIAgenticGenerator("model", client), str,
                     (LocalToolSource((RegisteredTool("sample", {"type": "function", "name": "sample"}, execute),)),))
