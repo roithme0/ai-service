@@ -18,7 +18,7 @@ from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, T
 
 def ready(limit: int = 2) -> tuple[ConversationSessionStore[str, list[str]], str]:
     store = ConversationSessionStore[str, list[str]](timedelta(minutes=90))
-    session_id = store.create("context", ConversationSessionSettings(limit)).session_id
+    session_id = store.create("context", ConversationSessionSettings(limit), owner="test:user").session_id
     store.append_user_message(session_id, "present")
     return store, session_id
 
@@ -93,7 +93,7 @@ def test_duplicate_acceptance_is_rejected_under_lock() -> None:
 
 def test_candidate_and_snapshot_payloads_are_detached_and_session_isolated() -> None:
     store, session_id, turn = setup()
-    other = store.create("other", ConversationSessionSettings(2)).session_id
+    other = store.create("other", ConversationSessionSettings(2), owner="test:user").session_id
     local = candidate()
     finalized = store.record_result(session_id, start(store, session_id, turn), local)
     assert local.artifact is not None and finalized.artifact is not None
@@ -197,7 +197,7 @@ def test_model_consumes_assigned_id_and_replay_preserves_same_output(later_failu
 def test_expiry_removes_artifact_map_and_rejects_late_acceptance() -> None:
     now = datetime(2026, 10, 3, tzinfo=UTC)
     store = ConversationSessionStore[str, list[str]](timedelta(minutes=90), lambda: now)
-    created = store.create("context", ConversationSessionSettings(2))
+    created = store.create("context", ConversationSessionSettings(2), owner="test:user")
     store.append_user_message(created.session_id, "present")
     turn = store.reserve_turn(created.session_id)
     assert isinstance(turn, ConversationTurnReservation)
@@ -249,7 +249,7 @@ def test_copy_failure_is_atomic_and_does_not_allocate_identity(copy_number: int)
 def test_expiry_between_acceptance_check_and_timestamp_allocates_no_identity() -> None:
     now = datetime(2026, 10, 3, tzinfo=UTC)
     store = ConversationSessionStore[str, list[str]](timedelta(minutes=90), lambda: now)
-    created = store.create("context", ConversationSessionSettings(2))
+    created = store.create("context", ConversationSessionSettings(2), owner="test:user")
     store.append_user_message(created.session_id, "present")
     turn = store.reserve_turn(created.session_id)
     assert isinstance(turn, ConversationTurnReservation)

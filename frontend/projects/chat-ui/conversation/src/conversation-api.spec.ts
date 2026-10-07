@@ -14,7 +14,7 @@ describe('HttpConversationTransport', () => {
         session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z', messages: [], artifacts: [],
         active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null, timeline: [row],
       })));
-      await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
+      await expect(new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'))
         .rejects.toBeInstanceOf(ConversationNetworkError);
     }
   });
@@ -29,7 +29,7 @@ describe('HttpConversationTransport', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const input = { marker: configuration, artifactCapabilities: [JSON_ARTIFACT_CAPABILITY] };
-    const transport = new HttpConversationTransport('/api/v1', configuration, input);
+    const transport = new HttpConversationTransport('/api/v1', configuration, 'test:user', input);
     const created = await transport.createSession();
 
     expect(created.session_id).toBe('session-1');
@@ -42,12 +42,23 @@ describe('HttpConversationTransport', () => {
     await transport.readSession('session-1');
     await transport.appendMessage('session-1', 'Hello');
     await transport.generateTurn('session-1');
+    fetchMock.mockResolvedValueOnce(new Response(
+      'data: {"kind":"terminal","turn_id":"turn-1","sequence":1,"outcome":"completed"}\n\n',
+      { headers: { 'Content-Type': 'text/event-stream' } },
+    ));
+    for await (const event of transport.observeTurn('session-1', 'turn-1', new AbortController().signal)) {
+      expect(event.kind).toBe('terminal');
+    }
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       `/api/v1/agents/${configuration}/sessions`,
       `/api/v1/agents/${configuration}/sessions/session-1`,
       `/api/v1/agents/${configuration}/sessions/session-1/messages`,
       `/api/v1/agents/${configuration}/sessions/session-1/turns`,
+      `/api/v1/agents/${configuration}/sessions/session-1/turns/turn-1/events`,
     ]);
+    for (const call of fetchMock.mock.calls) {
+      expect(call[1].headers['X-Application-User']).toBe('test:user');
+    }
   });
 
   it.each(['/api/v1', '/ai/api/v1/', 'https://example.test/ai/api/v1///'])('preserves the %s prefix and normalizes joining slashes', async (baseUrl) => {
@@ -55,7 +66,7 @@ describe('HttpConversationTransport', () => {
       session_id: 'session-1', expires_at: '2026-09-26T12:00:00Z',
     }));
     vi.stubGlobal('fetch', fetchMock);
-    await new HttpConversationTransport(baseUrl, AgentConfiguration.demo).createSession();
+    await new HttpConversationTransport(baseUrl, AgentConfiguration.demo, 'test:user').createSession();
     expect(fetchMock).toHaveBeenCalledWith(`${baseUrl.replace(/\/+$/, '')}/agents/demo/sessions`,
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ input: {} }) }));
   });
@@ -64,7 +75,7 @@ describe('HttpConversationTransport', () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(new Response('incomplete', { status: 502 }));
     vi.stubGlobal('fetch', fetchMock);
-    const transport = new HttpConversationTransport('/api/v1', AgentConfiguration.demo);
+    const transport = new HttpConversationTransport('/api/v1', AgentConfiguration.demo, 'test:user');
     await expect(transport.createSession()).rejects.toBeInstanceOf(ConversationNetworkError);
     await expect(transport.createSession()).rejects.toBeInstanceOf(ConversationNetworkError);
   });
@@ -75,7 +86,7 @@ describe('HttpConversationTransport', () => {
       vi.fn().mockResolvedValue(response(503, { detail: 'Agent unavailable', kind: 'agent_unavailable' })),
     );
 
-    await expect(new HttpConversationTransport('/api/v1', 'kochwiki', { source: {} }).generateTurn('session-1')).rejects.toEqual(
+    await expect(new HttpConversationTransport('/api/v1', 'kochwiki', 'test:user', { source: {} }).generateTurn('session-1')).rejects.toEqual(
       expect.objectContaining<Partial<ConversationApiError>>({
         status: 503,
         kind: 'agent_unavailable',
@@ -89,7 +100,7 @@ describe('HttpConversationTransport', () => {
   ] as const)('accepts the shared 404 envelope for $kind', async ({ kind, detail }) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(404, { detail, kind })));
 
-    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).readSession('session-1'))
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo, 'test:user').readSession('session-1'))
       .rejects.toEqual(expect.objectContaining<Partial<ConversationApiError>>({ status: 404, kind }));
   });
 
@@ -100,7 +111,7 @@ describe('HttpConversationTransport', () => {
   ] as const)('accepts the shared $status error envelope', async ({ status, kind, detail }) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(status, { detail, kind })));
 
-    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession())
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo, 'test:user').createSession())
       .rejects.toEqual(expect.objectContaining<Partial<ConversationApiError>>({ status, kind }));
   });
 
@@ -126,7 +137,7 @@ describe('HttpConversationTransport', () => {
         response(202, { turn_id: 'turn-1', kind: 'accepted' }),
       );
     vi.stubGlobal('fetch', fetchMock);
-    const transport = new HttpConversationTransport('/api/v1', 'kochwiki', { source: {} });
+    const transport = new HttpConversationTransport('/api/v1', 'kochwiki', 'test:user', { source: {} });
 
     await expect(transport.readSession('session-1')).resolves.toEqual({ timeline: [],
       session_id: 'session-1',
@@ -153,7 +164,7 @@ describe('HttpConversationTransport', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, { timeline: [],
       kind: 'completed', turn_id: 'turn-1', message: null, artifacts: [],
     })));
-    await expect(new HttpConversationTransport('/api/v1', 'demo', null).generateTurn('session-1'))
+    await expect(new HttpConversationTransport('/api/v1', 'demo', 'test:user', null).generateTurn('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
@@ -163,7 +174,7 @@ describe('HttpConversationTransport', () => {
         kind, detail: [{ loc: ['body', 'input', 0], msg: 'Invalid value', type: 'value_error' }],
       })));
 
-      await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession()).rejects.toEqual(
+      await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo, 'test:user').createSession()).rejects.toEqual(
         expect.objectContaining<Partial<ConversationApiError>>({ status: 422, kind }),
       );
     });
@@ -177,13 +188,13 @@ describe('HttpConversationTransport', () => {
   ])('classifies malformed error bodies as uncertain responses: %j', async (payload) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(422, payload)));
 
-    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo).createSession())
+    await expect(new HttpConversationTransport('/api/v1', AgentConfiguration.demo, 'test:user').createSession())
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
   it('rejects a user message without the required null turn_id', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(201, { role: 'user', text: 'Hello' })));
-    await expect(new HttpConversationTransport('/api/v1', 'demo').appendMessage('session-1', 'Hello'))
+    await expect(new HttpConversationTransport('/api/v1', 'demo', 'test:user').appendMessage('session-1', 'Hello'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
@@ -191,7 +202,7 @@ describe('HttpConversationTransport', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(200, { timeline: [],
       session_id: 'session-1', messages: [], artifacts: [], active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
     })));
-    await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
+    await expect(new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
@@ -199,7 +210,7 @@ describe('HttpConversationTransport', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(201, { timeline: [],
       kind: 'completed', turn_id: 'turn-1', message: { role: 'user', text: 'Hello', turn_id: null }, artifacts: [],
     })));
-    await expect(new HttpConversationTransport('/api/v1', 'demo').generateTurn('session-1'))
+    await expect(new HttpConversationTransport('/api/v1', 'demo', 'test:user').generateTurn('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
@@ -210,7 +221,7 @@ describe('HttpConversationTransport', () => {
         order: 0, turn_id: 'turn-1', payload: [] }],
       active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
     })));
-    await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
+    await expect(new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
@@ -219,7 +230,7 @@ describe('HttpConversationTransport', () => {
       session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z', messages: [], artifacts: [],
       active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: 'turn-1', terminal_turn_kind: 'future_kind',
     })));
-    await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1'))
+    await expect(new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'))
       .rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
@@ -234,7 +245,7 @@ describe('HttpConversationTransport', () => {
       active_turn_id: null, active_turn_status: null, sequence: 0, terminal_turn_id: null, terminal_turn_kind: null,
     })));
 
-    await expect(new HttpConversationTransport('/api/v1', 'demo').readSession('session-1')).resolves.toEqual({ timeline: [],
+    await expect(new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1')).resolves.toEqual({ timeline: [],
       session_id: 'session-1', expires_at: '2026-09-17T12:00:00Z',
       messages: [{ role: 'user', text: 'Hello', turn_id: null }],
       artifacts: [{

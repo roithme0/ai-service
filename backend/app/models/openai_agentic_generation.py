@@ -67,7 +67,9 @@ class OpenAIAgenticGenerator:
                         if event.response.status != "completed" or event.response.error is not None:
                             raise ValueError("OpenAI response did not complete successfully")
                         final_items = [_completed_item(item.model_dump(mode="json")) for item in event.response.output]
-                        if final_items != output_items:
+                        if [_comparison_item(item) for item in final_items] != [
+                            _comparison_item(item) for item in output_items
+                        ]:
                             raise ValueError("OpenAI completed response disagrees with recorded items")
                         completed = True
                 if not completed:
@@ -76,6 +78,13 @@ class OpenAIAgenticGenerator:
                       for item in output_items if item["type"] == "function_call")
         response = AgenticGenerationResponse(tuple(output_items), calls, None)
         return AgenticGenerationResponse(response.output_items, calls, final_response_text(response))
+
+
+def _comparison_item(item: dict[str, object]) -> dict[str, object]:
+    # Opaque reasoning tokens can differ between item and response completion.
+    if item["type"] == "reasoning":
+        return {key: value for key, value in item.items() if key != "encrypted_content"}
+    return item
 
 
 def _completed_item(item: dict[str, object]) -> dict[str, object]:

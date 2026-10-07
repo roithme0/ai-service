@@ -29,8 +29,8 @@ def test_failed_or_cancelled_model_turn_releases_session_without_replay(cancel: 
 
         store = ConversationSessionStore[str, Never](timedelta(minutes=90))
         strategy = ModelTurnStrategy(store, Generator(), lambda context: context, ())
-        first = store.create("Snapshot", ConversationSessionSettings(20))
-        second = store.create("Independent", ConversationSessionSettings(20))
+        first = store.create("Snapshot", ConversationSessionSettings(20), owner="test:user")
+        second = store.create("Independent", ConversationSessionSettings(20), owner="test:user")
         store.append_user_message(first.session_id, "first")
         store.append_user_message(second.session_id, "second")
         task = asyncio.create_task(execute_reserved_turn(store, strategy, first.session_id))
@@ -86,7 +86,7 @@ def test_artifact_free_turn_enforces_attempt_and_provider_budgets(provider_budge
             max_provider_responses=provider_budget,
             max_attempts=6,
         )
-        created = store.create("Snapshot", ConversationSessionSettings(20))
+        created = store.create("Snapshot", ConversationSessionSettings(20), owner="test:user")
         store.append_user_message(created.session_id, "Run")
         result = await execute_reserved_turn(store, strategy, created.session_id)
         assert result.kind == ("generation_failed" if provider_budget == 2 else "completed")

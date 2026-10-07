@@ -8,15 +8,20 @@ from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from app.sessions.conversation import (
-    ConversationMessageBusy, ConversationReadActive, ConversationSessionSettings,
-    ConversationSessionStore, ConversationTurnReservation, ConversationTurnResult,
+    ConversationMessageBusy,
+    ConversationReadActive,
+    ConversationSessionSettings,
+    ConversationSessionStore,
+    ConversationTurnReservation,
+    ConversationTurnResult,
 )
 from app.sessions.history import TerminalRecord
 from app.sessions.text_sessions import (
-    TextSessionAppendOutcome, TextSessionCreation, TextSessionReadExpired,
+    TextSessionAppendOutcome,
+    TextSessionCreation,
+    TextSessionReadExpired,
     TextSessionReadUnknown,
 )
-
 
 InputT = TypeVar("InputT")
 ContextT = TypeVar("ContextT")
@@ -38,8 +43,13 @@ class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):
     def __init__(
         self,
         store: ConversationSessionStore[ContextT, ArtifactT],
-        validate: Callable[[InputT], AgentInputAccepted[ContextT] | AgentInputRejected[IssueT]],
-        execute: Callable[[str, ConversationTurnReservation[ContextT, ArtifactT]], Awaitable[ConversationTurnResult[ArtifactT]]],
+        validate: Callable[
+            [InputT], AgentInputAccepted[ContextT] | AgentInputRejected[IssueT]
+        ],
+        execute: Callable[
+            [str, ConversationTurnReservation[ContextT, ArtifactT]],
+            Awaitable[ConversationTurnResult[ArtifactT]],
+        ],
         settings: ConversationSessionSettings,
     ) -> None:
         self._store = store
@@ -50,16 +60,29 @@ class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):
         self._observers: dict[str, int] = {}
         self._closed = False
 
-    def create(self, session_input: InputT) -> TextSessionCreation | AgentInputRejected[IssueT]:
+    def create(
+        self, session_input: InputT, owner: str
+    ) -> TextSessionCreation | AgentInputRejected[IssueT]:
         validated = self._validate(session_input)
         if isinstance(validated, AgentInputRejected):
             return validated
-        return self._store.create(validated.context, self._settings)
+        return self._store.create(validated.context, self._settings, owner)
 
-    def read(self, session_id: str) -> ConversationReadActive[ContextT, ArtifactT] | TextSessionReadExpired | TextSessionReadUnknown:
+    def belongs_to(self, session_id: str, owner: str) -> bool:
+        return self._store.belongs_to(session_id, owner)
+
+    def read(
+        self, session_id: str
+    ) -> (
+        ConversationReadActive[ContextT, ArtifactT]
+        | TextSessionReadExpired
+        | TextSessionReadUnknown
+    ):
         return self._store.read(session_id)
 
-    def append_user_message(self, session_id: str, text: str) -> TextSessionAppendOutcome | ConversationMessageBusy:
+    def append_user_message(
+        self, session_id: str, text: str
+    ) -> TextSessionAppendOutcome | ConversationMessageBusy:
         return self._store.append_user_message(session_id, text)
 
     async def execute_turn(self, session_id: str) -> ConversationTurnResult[ArtifactT]:
@@ -74,6 +97,7 @@ class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):
         reservation = self._store.admit_turn(session_id)
         if isinstance(reservation, ConversationTurnResult):
             return reservation
+
         async def run() -> ConversationTurnResult[ArtifactT]:
             try:
                 return await self._execute(session_id, reservation)
@@ -82,12 +106,17 @@ class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):
                 raise
             except Exception:
                 return self._store.fail_turn(session_id, reservation)
+
         task = asyncio.create_task(run())
         self._tasks.add(task)
-        def finished(completed: asyncio.Task[ConversationTurnResult[ArtifactT]]) -> None:
+
+        def finished(
+            completed: asyncio.Task[ConversationTurnResult[ArtifactT]],
+        ) -> None:
             self._tasks.discard(completed)
             if completed.cancelled():
                 self._store.fail_turn(session_id, reservation)
+
         task.add_done_callback(finished)
         return ConversationTurnResult("busy", reservation.turn_id, None, ())
 
@@ -99,26 +128,51 @@ class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):
         await asyncio.gather(*tasks, return_exceptions=True)
 
     def turn_terminal(self, session_id: str, turn_id: str) -> TerminalRecord | None:
-        return next((record for record in reversed(self._store.history(session_id))
-                     if isinstance(record, TerminalRecord) and record.turn_id == turn_id), None)
+        return next(
+            (
+                record
+                for record in reversed(self._store.history(session_id))
+                if isinstance(record, TerminalRecord) and record.turn_id == turn_id
+            ),
+            None,
+        )
 
     def observation_available(self, session_id: str) -> bool:
         return self._observers.get(session_id, 0) < 8
 
-    async def observe(self, session_id: str) -> AsyncIterator[ConversationReadActive[ContextT, ArtifactT] | TextSessionReadExpired | TextSessionReadUnknown | None]:
+    async def observe(
+        self, session_id: str
+    ) -> AsyncIterator[
+        ConversationReadActive[ContextT, ArtifactT]
+        | TextSessionReadExpired
+        | TextSessionReadUnknown
+        | None
+    ]:
         if not self.observation_available(session_id):
             yield None
             return
         self._observers[session_id] = self._observers.get(session_id, 0) + 1
-        queue: asyncio.Queue[ConversationReadActive[ContextT, ArtifactT] | TextSessionReadExpired | TextSessionReadUnknown] = asyncio.Queue(maxsize=128)
+        queue: asyncio.Queue[
+            ConversationReadActive[ContextT, ArtifactT]
+            | TextSessionReadExpired
+            | TextSessionReadUnknown
+        ] = asyncio.Queue(maxsize=128)
         overflow = False
         loop = asyncio.get_running_loop()
-        def enqueue(value: ConversationReadActive[ContextT, ArtifactT] | TextSessionReadExpired | TextSessionReadUnknown) -> None:
+
+        def enqueue(
+            value: (
+                ConversationReadActive[ContextT, ArtifactT]
+                | TextSessionReadExpired
+                | TextSessionReadUnknown
+            ),
+        ) -> None:
             nonlocal overflow
             if queue.full():
                 overflow = True
             elif not overflow:
                 queue.put_nowait(value)
+
         def notify() -> None:
             value = self._store.read(session_id)
             try:
@@ -129,6 +183,7 @@ class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):
                 enqueue(value)
             else:
                 loop.call_soon_threadsafe(enqueue, value)
+
         detach = self._store.subscribe(session_id, notify)
         try:
             while True:

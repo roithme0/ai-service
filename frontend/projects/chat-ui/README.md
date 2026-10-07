@@ -62,7 +62,7 @@ export class ChatHost implements OnInit, OnDestroy {
     content: [], composerDisabled: true, status: null,
   });
   private readonly controller = new ConversationController(
-    new HttpConversationTransport('/api/v1', AgentConfiguration.demo),
+    new HttpConversationTransport('/api/v1', AgentConfiguration.demo, 'demo:default'),
     (state) => this.chat.set(state),
     presentJsonArtifact,
   );
@@ -80,7 +80,7 @@ The required base URL is the prefix immediately before `/agents`: `/api/v1` yiel
 
 `AgentConfiguration` exports the backend-derived `demo` and `kochwiki` values, plus the derived union type of the same name. Arbitrary string keys are rejected by the TypeScript contract. Known keys do not guarantee runtime availability; the server can return `agent_unavailable`.
 
-The transport binds the URL, agent key, and optional third constructor argument for initialization input. Omitted input sends `{ input: {} }`; supplied input uses `{ input: suppliedInput }`. Replacement sessions use the same transport settings. Server validation is authoritative, and configurations requiring domain input can reject an empty input. No recipe types or fixtures are packaged.
+The transport binds the URL, agent key, and required third constructor argument for application identity, and optional fourth constructor argument for initialization input. Omitted input sends `{ input: {} }`; supplied input uses `{ input: suppliedInput }`. Replacement sessions use the same transport settings. Server validation is authoritative, and configurations requiring domain input can reject an empty input. No recipe types or fixtures are packaged.
 
 The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentArtifact` is the default mapper: it preserves the advertised type and identity and unwraps the backend presentation payload `{ title, payload }`. `presentJsonArtifact` is an explicit adapter for hosts such as the deterministic demo that deliberately present arbitrary tool payloads using type `json` and `{ value: originalPayload }`; the controller follows the backend timeline exactly and resolves artifact references against their envelopes, preserving tool/artifact placement even without a final assistant answer. The host owns view-state binding, introductory text and custom renderer registration.
 
@@ -88,7 +88,11 @@ The supported HTTP contract is this repository's AI Service conversation API. `C
 
 Append/start request uncertainty uses authoritative session state once to avoid duplicate execution. This is separate from observer interruption: no read or replacement request restores a lost observer. `start()` creates a fresh session; `dispose()` and replacement sessions abort observation and ignore stale callbacks while backend work continues. There is no resume API, refresh recovery, browser session persistence, generation retry, or cancellation control. The `/ui` entry point remains entirely controlled and network-independent.
 
-Expected routing is host frontend ? same-origin backend/proxy ? AI Service gateway. Relays must preserve response bodies and status codes, allow agent-turn durations, and avoid automatic retries of state-changing message/turn requests. Consumer relay implementation and authentication/session authorization are deferred. Same-origin routing is not an authorization guarantee.
+`HttpConversationTransport(apiBaseUrl, configuration, applicationUser, input?)` requires an explicit application identity. Every request, including SSE observation, carries it as `X-Application-User`. The backend accepts a `source:id` value with exactly one colon and non-empty portions without whitespace; prefixes are unrestricted and users are not looked up. Missing or malformed headers return HTTP 422 with a typed `request_validation` error. This trusted-LAN identity is not authenticated, and the backend binds each created session to that exact identity. Reads, messages, turn starts, and SSE observation require the same owner; another identity receives the existing HTTP 404 `unknown` error. Changing the caller identity does not transfer sessions or cancel admitted work. Create a transport for the host's selected identity; the demo uses `demo:default`.
+
+For selected-user changes, the host must immediately clear its visible content, status, and draft, dispose the previous controller, and discard it. `dispose()` invalidates pending request callbacks and aborts observation; it does not publish an empty view or cancel backend work. Require a selected user before creating a conversation. Construct a fresh transport and controller using the new stable identity (Kochwiki uses `kochwiki:<stable-user-id>`), then start a fresh conversation when the host needs one. Do not reuse the previous transport, mutate its identity, or resume its session when returning to a previously selected user.
+
+Expected routing is host frontend ? same-origin backend/proxy ? AI Service gateway. Relays must forward `X-Application-User`, preserve response bodies and status codes, allow agent-turn durations, and avoid automatic retries of state-changing message/turn requests. Consumer relay implementation and authentication/session authorization are deferred. Same-origin routing is not an authorization guarantee.
 
 ## Built-package verification
 
@@ -234,7 +238,7 @@ const input = {
   context: { selectedItem: item },
   artifactCapabilities: [JSON_ARTIFACT_CAPABILITY],
 };
-const transport = new HttpConversationTransport('/ai/api/v1', AgentConfiguration.kochwiki, input);
+const transport = new HttpConversationTransport('/ai/api/v1', AgentConfiguration.kochwiki, 'kochwiki:42', input);
 ```
 
 The AI Service supplies the agent with a local `present_artifact` tool. The agent

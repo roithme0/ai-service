@@ -41,7 +41,7 @@ def store(clock: Clock) -> ConversationSessionStore[Context, Artifact]:
 
 
 def create(conversation: ConversationSessionStore[Context, Artifact], limit: int = 2) -> str:
-    return conversation.create(Context("example"), ConversationSessionSettings(max_artifacts=limit)).session_id
+    return conversation.create(Context("example"), ConversationSessionSettings(max_artifacts=limit), owner="test:user").session_id
 
 
 def reserve(conversation: ConversationSessionStore[Context, Artifact], session_id: str) -> ConversationTurnReservation[Context, Artifact]:

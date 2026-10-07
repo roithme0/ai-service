@@ -24,7 +24,7 @@ async def no_delay(seconds: float) -> None:
 
 def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset() -> None:
     store = new_demo_session_store()
-    first_session = create_demo_session(store)
+    first_session = create_demo_session(store, owner="test:user")
     delays: list[float] = []
 
     async def record_delay(seconds: float) -> None:
@@ -80,7 +80,7 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
         "Anything", "Unrelated text", "More", "Again", "Still more",
     ]
 
-    next_session = create_demo_session(store)
+    next_session = create_demo_session(store, owner="test:user")
     store.append_user_message(next_session.session_id, "Same text as before")
     restarted = asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(next_session.session_id))
     assert restarted.text == FIRST_REPLY
@@ -89,7 +89,7 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
 
 def test_greeting_tool_validates_arguments_and_returns_local_candidate() -> None:
     store = new_demo_session_store()
-    session_id = create_demo_session(store).session_id
+    session_id = create_demo_session(store, owner="test:user").session_id
     store.append_user_message(session_id, "Create a greeting")
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
@@ -116,7 +116,7 @@ def test_greeting_tool_validates_arguments_and_returns_local_candidate() -> None
 
 def test_greetings_tool_validates_list_and_candidate_acceptance() -> None:
     store = new_demo_session_store()
-    session_id = create_demo_session(store).session_id
+    session_id = create_demo_session(store, owner="test:user").session_id
     store.append_user_message(session_id, "Create greetings")
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
@@ -146,7 +146,7 @@ def test_greetings_tool_validates_list_and_candidate_acceptance() -> None:
 
 def test_unaccepted_candidates_are_absent_after_failure_and_retry() -> None:
     store = new_demo_session_store()
-    session_id = create_demo_session(store).session_id
+    session_id = create_demo_session(store, owner="test:user").session_id
     store.append_user_message(session_id, "First")
     assert asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id)).kind == "completed"
     store.append_user_message(session_id, "Second")
@@ -171,7 +171,7 @@ def test_unaccepted_candidates_are_absent_after_failure_and_retry() -> None:
 
 def test_busy_cancellation_and_retry_keep_first_step() -> None:
     store = new_demo_session_store()
-    session_id = create_demo_session(store).session_id
+    session_id = create_demo_session(store, owner="test:user").session_id
     store.append_user_message(session_id, "Start")
     entered = asyncio.Event()
 
@@ -206,7 +206,7 @@ def test_busy_cancellation_and_retry_keep_first_step() -> None:
 
 def test_unaccepted_greeting_does_not_advance_demo_step() -> None:
     store = new_demo_session_store()
-    session_id = create_demo_session(store).session_id
+    session_id = create_demo_session(store, owner="test:user").session_id
     store.append_user_message(session_id, "First")
     assert asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id)).kind == "completed"
     store.append_user_message(session_id, "Second")
@@ -235,7 +235,7 @@ def test_expiry_during_delay_uses_shared_expiry_result() -> None:
         return current
 
     store = new_demo_session_store(clock)
-    created = create_demo_session(store)
+    created = create_demo_session(store, owner="test:user")
     store.append_user_message(created.session_id, "First")
 
     async def expire(seconds: float) -> None:
@@ -250,7 +250,7 @@ def test_expiry_during_delay_uses_shared_expiry_result() -> None:
 
 def test_scripted_turn_retains_completed_first_tool_when_second_tool_fails() -> None:
     store = new_demo_session_store()
-    session_id = create_demo_session(store).session_id
+    session_id = create_demo_session(store, owner="test:user").session_id
     store.append_user_message(session_id, "First")
     assert asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id)).kind == "completed"
     store.append_user_message(session_id, "Second")

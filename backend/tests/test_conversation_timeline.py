@@ -11,7 +11,7 @@ from app.sessions.tools import ToolExecution
 
 def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> None:
     store = ConversationSessionStore[str, str](timedelta(minutes=90))
-    session_id = store.create("private context", ConversationSessionSettings(2)).session_id
+    session_id = store.create("private context", ConversationSessionSettings(2), owner="test:user").session_id
     store.append_user_message(session_id, "Show results")
     turn = store.reserve_turn(session_id)
     assert isinstance(turn, ConversationTurnReservation)

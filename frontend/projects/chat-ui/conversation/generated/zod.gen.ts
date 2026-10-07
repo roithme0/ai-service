@@ -239,24 +239,6 @@ export const zValidationDetail = z.object({
 });
 
 /**
- * ValidationError
- */
-export const zValidationError = z.object({
-    ctx: z.record(z.string(), z.unknown()).optional(),
-    input: z.unknown().optional(),
-    loc: z.array(z.union([z.string(), z.int()])),
-    msg: z.string(),
-    type: z.string()
-});
-
-/**
- * HTTPValidationError
- */
-export const zHttpValidationError = z.object({
-    detail: z.array(zValidationError).optional()
-});
-
-/**
  * ValidationErrorResponse
  */
 export const zValidationErrorResponse = z.object({
@@ -282,6 +264,10 @@ export const zCreateSessionApiV1AgentsConfigurationSessionsPostBody = z.object({
     input: z.unknown().optional()
 });
 
+export const zCreateSessionApiV1AgentsConfigurationSessionsPostHeaders = z.object({
+    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+});
+
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostPath = z.object({
     configuration: z.enum(['demo', 'kochwiki'])
 });
@@ -290,6 +276,10 @@ export const zCreateSessionApiV1AgentsConfigurationSessionsPostPath = z.object({
  * Successful Response
  */
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostResponse = zSessionCreationResponse;
+
+export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetHeaders = z.object({
+    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+});
 
 export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetPath = z.object({
     configuration: z.enum(['demo', 'kochwiki']),
@@ -308,6 +298,10 @@ export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPost
     text: z.string()
 });
 
+export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostHeaders = z.object({
+    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+});
+
 export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostPath = z.object({
     configuration: z.enum(['demo', 'kochwiki']),
     session_id: z.string()
@@ -323,6 +317,10 @@ export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPost
  */
 export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostBody = z.record(z.string(), z.never());
 
+export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostHeaders = z.object({
+    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+});
+
 export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostPath = z.object({
     configuration: z.enum(['demo', 'kochwiki']),
     session_id: z.string()
@@ -332,6 +330,10 @@ export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostPath 
  * Successful Response
  */
 export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponse = zAcceptedTurnResponse;
+
+export const zObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetHeaders = z.object({
+    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+});
 
 export const zObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetPath = z.object({
     configuration: z.enum(['demo', 'kochwiki']),

@@ -134,6 +134,79 @@ describe('live conversation controller', () => {
     controller.dispose(); await controller.submit('ignored', vi.fn()); expect(transport.appendMessage).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['publish', 'acknowledge'] as const)('does not start an old turn when %s disposes the controller', async (source) => {
+    const transport = new FakeTransport();
+    const acknowledge = vi.fn(() => { if (source === 'acknowledge') controller.dispose(); });
+    const controller = new ConversationController(transport, (state) => {
+      if (source === 'publish' && state.content.length > 0) controller.dispose();
+    });
+    await controller.start();
+    await controller.submit('Hello', acknowledge);
+    expect(transport.generateTurn).not.toHaveBeenCalled();
+    if (source === 'publish') expect(acknowledge).not.toHaveBeenCalled();
+  });
+
+  it.each(['publish', 'acknowledge'] as const)('does not start an old turn when reconciled %s disposes the controller', async (source) => {
+    const transport = new FakeTransport();
+    transport.appendMessage.mockRejectedValue(new ConversationNetworkError('uncertain'));
+    transport.readSession.mockResolvedValue(snapshot());
+    const controller = new ConversationController(transport, (state) => {
+      if (source === 'publish' && state.content.length > 0) controller.dispose();
+    });
+    await controller.start();
+    const acknowledge = vi.fn(() => { if (source === 'acknowledge') controller.dispose(); });
+    await controller.submit('Hello', acknowledge);
+    expect(transport.generateTurn).not.toHaveBeenCalled();
+    if (source === 'publish') expect(acknowledge).not.toHaveBeenCalled();
+  });
+
+  it('ignores session creation completed after disposal', async () => {
+    const transport = new FakeTransport();
+    const pending = deferred<SessionCreationResponse>();
+    transport.createSession.mockReturnValue(pending.promise);
+    const publish = vi.fn();
+    const controller = new ConversationController(transport, publish);
+    const starting = controller.start();
+    controller.dispose(); publish.mockClear();
+    pending.resolve({ session_id: 'old-owner', expires_at: '2026-10-04T20:00:00Z' });
+    await starting; await controller.submit('ignored', vi.fn());
+    expect(publish).not.toHaveBeenCalled();
+    expect(transport.appendMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not acknowledge or start work for an append completed after disposal', async () => {
+    const transport = new FakeTransport();
+    const pending = deferred<UserMessageResponse>();
+    transport.appendMessage.mockReturnValue(pending.promise);
+    const publish = vi.fn(); const acknowledge = vi.fn();
+    const controller = new ConversationController(transport, publish);
+    await controller.start();
+    const submitting = controller.submit('Hello', acknowledge);
+    controller.dispose(); publish.mockClear();
+    pending.resolve({ role: 'user', text: 'Hello', turn_id: null });
+    await submitting;
+    expect(publish).not.toHaveBeenCalled();
+    expect(acknowledge).not.toHaveBeenCalled();
+    expect(transport.generateTurn).not.toHaveBeenCalled();
+  });
+
+  it('does not attach an observer for turn admission completed after disposal', async () => {
+    const transport = new FakeTransport();
+    const pending = deferred<AcceptedTurnResponse>(); const admitted = deferred<void>();
+    transport.generateTurn.mockImplementation(() => { admitted.resolve(); return pending.promise; });
+    const publish = vi.fn();
+    const controller = new ConversationController(transport, publish);
+    await controller.start();
+    const submitting = controller.submit('Hello', vi.fn());
+    await admitted.promise;
+    controller.dispose(); publish.mockClear();
+    pending.resolve({ kind: 'accepted', turn_id: 'old-owner-turn' });
+    await submitting;
+    expect(publish).not.toHaveBeenCalled();
+    expect(transport.observeTurn).not.toHaveBeenCalled();
+    expect(transport.readSession).not.toHaveBeenCalled();
+  });
+
   it('reconciles uncertain start once and observes the authoritative active turn without replacement execution', async () => {
     const transport = new FakeTransport(); transport.generateTurn.mockRejectedValue(new ConversationNetworkError('offline'));
     transport.readSession.mockResolvedValue(snapshot()); transport.observeTurn.mockReturnValue(stream([initial(), terminal()]));

@@ -9,7 +9,7 @@ describe('fetch SSE observation', () => {
     const body = new ReadableStream<Uint8Array>({ start(controller) { push = controller; } });
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }));
     vi.stubGlobal('fetch', fetchMock);
-    const iterator = new HttpConversationTransport('/ai/api/v1/', 'demo').observeTurn('s', 't', new AbortController().signal)[Symbol.asyncIterator]();
+    const iterator = new HttpConversationTransport('/ai/api/v1/', 'demo', 'test:user').observeTurn('s', 't', new AbortController().signal)[Symbol.asyncIterator]();
     const event: StreamEvent = { kind: 'upsert', turn_id: 't', identity: 'm', order: 1, sequence: 2, artifact: null,
       item: { kind: 'message', turn_id: 't', id: 'm', role: 'assistant', text: 'Gr\u00fc\u00dfe' } };
     const bytes = new TextEncoder().encode(`: heartbeat\r\n\r\ndata: ${JSON.stringify(event)}\r\n\r\n`);
@@ -23,7 +23,7 @@ describe('fetch SSE observation', () => {
   it.each(['{"kind":"future"}', '{bad json}', '{"kind":"terminal","turn_id":"t","sequence":1,"outcome":"success"}'])('rejects malformed event %s without replacement requests', async (data) => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(`data: ${data}\n\n`, { headers: { 'Content-Type': 'text/event-stream' } }));
     vi.stubGlobal('fetch', fetchMock);
-    const iterator = new HttpConversationTransport('/api/v1', 'demo').observeTurn('s', 't', new AbortController().signal)[Symbol.asyncIterator]();
+    const iterator = new HttpConversationTransport('/api/v1', 'demo', 'test:user').observeTurn('s', 't', new AbortController().signal)[Symbol.asyncIterator]();
     await expect(iterator.next()).rejects.toBeInstanceOf(ConversationNetworkError); expect(fetchMock).toHaveBeenCalledTimes(1);
   });
   it('accepts legitimate retained snapshots larger than four MiB delivered in chunks', async () => {
@@ -40,7 +40,7 @@ describe('fetch SSE observation', () => {
     } });
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }));
     vi.stubGlobal('fetch', fetchMock);
-    const iterator = new HttpConversationTransport('/api/v1', 'demo').observeTurn('s', 't', new AbortController().signal)[Symbol.asyncIterator]();
+    const iterator = new HttpConversationTransport('/api/v1', 'demo', 'test:user').observeTurn('s', 't', new AbortController().signal)[Symbol.asyncIterator]();
     expect((await iterator.next()).value).toEqual(event); expect(await iterator.next()).toMatchObject({ done: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
