@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, field_validator
 
-from app.sessions.agent_service import AgentInputAccepted, AgentInputRejected
+from app.agents.service import AgentInputAccepted, AgentInputRejected
 from app.sessions.presentation import ArtifactCapability
 
 MAX_CONTEXT_LENGTH = 64_000

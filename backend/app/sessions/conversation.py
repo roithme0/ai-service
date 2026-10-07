@@ -396,6 +396,16 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
         self._notify(session_id)
         return self._terminal_result(session_id, terminal)
 
+    def turn_terminal(self, session_id: str, turn_id: str) -> TerminalRecord | None:
+        return next(
+            (
+                record
+                for record in reversed(self.history(session_id))
+                if isinstance(record, TerminalRecord) and record.turn_id == turn_id
+            ),
+            None,
+        )
+
     def history(self, session_id: str) -> tuple[HistoryRecord, ...]:
         with self._lock:
             read = self._read_session(session_id)

@@ -275,6 +275,6 @@ def test_observer_capacity_and_expiry_release_resources_without_extending_lifeti
         store.read(created.session_id)
         assert isinstance(await anext(observers[0]), TextSessionReadUnknown)
         for observer in observers: await observer.aclose()
-        assert store._listeners == {} and agent._observers == {}
+        assert store._listeners == {} and agent.observation_available(created.session_id)
         await agent.close()
     asyncio.run(exercise())

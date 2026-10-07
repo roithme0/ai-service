@@ -6,7 +6,7 @@ import pytest
 from pydantic import JsonValue
 
 from app.sessions.artifacts import ArtifactCandidate
-from app.sessions.agent_service import AgentInputAccepted
+from app.agents.service import AgentInputAccepted
 from app.sessions.context import SessionContext, validate_context_input
 from app.sessions.conversation import ConversationSessionSettings, ConversationTurnReservation
 from app.sessions.model_sessions import ModelSessionStore, create_model_agent, new_model_session_store

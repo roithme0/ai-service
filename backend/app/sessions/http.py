@@ -22,7 +22,7 @@ from pydantic import (
 from app.agents.wiring import get_configured_agents
 from app.sessions.context import ContextIssue
 from app.sessions.identity import require_application_user
-from app.sessions.agent_service import AgentInputRejected, ConfiguredAgentService
+from app.agents.service import AgentInputRejected, ConfiguredAgentService
 from app.sessions.conversation import (
     ActiveTurnStatus,
     ConversationMessageBusy,

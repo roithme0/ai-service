@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.sessions.agent_service import AgentInputAccepted, AgentInputRejected
+from app.agents.service import AgentInputAccepted, AgentInputRejected
 from app.sessions.context import CONTEXT_PREFIX, MAX_CONTEXT_LENGTH, validate_context_input
 
 

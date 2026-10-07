@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.demo.agent import create_demo_agent
-from app.sessions.agent_service import ConfiguredAgentService
+from app.agents.service import ConfiguredAgentService
 from app.sessions.model_sessions import create_model_agent
 from app.main import app, handle_http_exception, handle_request_validation
 from app.sessions.http import (
