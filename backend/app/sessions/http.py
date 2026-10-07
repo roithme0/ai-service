@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import Annotated, Generic, Literal, TypeVar
 
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ValidationError
 
+from app.agents.enums.configuration import AgentConfiguration
 from app.agents.wiring import get_configured_agents
 from app.core.models import ValidationDetail
 from app.sessions.models.context import ContextIssue
@@ -59,11 +59,6 @@ router = APIRouter(
     prefix="/api/v1/agents/{configuration}/sessions",
     tags=["agents"],
 )
-
-
-class AgentConfiguration(StrEnum):
-    DEMO = "demo"
-    KOCHWIKI = "kochwiki"
 
 
 ConfigurationPath = Annotated[

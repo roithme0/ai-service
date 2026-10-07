@@ -16,7 +16,8 @@ from app.agents.service import ConfiguredAgentService
 from app.sessions.model_sessions import create_model_agent
 from app.main import app, handle_http_exception, handle_request_validation
 from app.sessions.protocols.http import ConversationTransport
-from app.sessions.http import AgentConfiguration, AgentTransport, _demo_issue, _error, _context_issue, get_agent_registry
+from app.agents.enums.configuration import AgentConfiguration
+from app.sessions.http import AgentTransport, _demo_issue, _error, _context_issue, get_agent_registry
 from app.sessions.models.http import ErrorResponse, SessionErrorKind, ValidationErrorResponse
 from test_model_session_http import FakeGenerator, valid_request
 
