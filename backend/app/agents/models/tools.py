@@ -31,3 +31,12 @@ class ToolSource(Protocol[ArtifactT]):
 
     @property
     def instructions(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class LocalToolSource(Generic[ArtifactT]):
+    tools: tuple[RegisteredTool[ArtifactT], ...]
+    instructions: str = ""
+
+    def registered_tools(self) -> tuple[RegisteredTool[ArtifactT], ...]:
+        return self.tools

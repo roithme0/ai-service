@@ -6,7 +6,7 @@ import pytest
 from pydantic import JsonValue
 
 from app.sessions.models.artifacts import ArtifactCandidate
-from app.agents.service import AgentInputAccepted
+from app.agents.models.input import AgentInputAccepted
 from app.agents.context import validate_context_input
 from app.sessions.models.context import SessionContext
 from app.sessions.models.conversation import ConversationSessionSettings, ConversationTurnReservation
@@ -14,10 +14,11 @@ from app.sessions.model_sessions import ModelSessionStore, create_model_agent, n
 from app.sessions.models.presentation import PresentationPayload
 from app.agents.presentation import presentation_tool_source
 from app.agents.models.tools import RegisteredTool, ToolInvocation
-from app.agents.tools import LocalToolSource, ToolRegistry
+from app.agents.models.tools import LocalToolSource
+from app.agents.tools import ToolRegistry
 from app.sessions.models.execution import ToolExecution
 from app.sessions.models.session import TextSessionCreation
-from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 
 
 CAPABILITY = {"type": "example", "description": "An arbitrary consumer presentation",

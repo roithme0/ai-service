@@ -7,7 +7,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 
-from app.agents.agentic_generation import AgenticGenerationResponse, AgenticToolCall
+from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
 from app.demo.tools import DemoToolFactory
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool

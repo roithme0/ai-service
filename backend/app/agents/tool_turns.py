@@ -7,7 +7,8 @@ from collections.abc import Callable
 from copy import deepcopy
 from typing import TypeVar
 
-from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem, AgenticToolCall
+from app.agents.agentic_generation import AgenticGenerator
+from app.agents.models.generation import AgenticGenerationRequest, AgenticInputItem, AgenticToolCall
 from app.agents.output_items import final_response_text, validate_message_item
 from app.sessions.models.history import CallRecord, HistoryRecord
 from app.agents.models.tools import RegisteredTool, ToolSource

@@ -12,7 +12,7 @@ from pydantic import JsonValue, ValidationError
 
 from app.agents.models.presentation import PresentationRequest
 from app.agents.models.tools import RegisteredTool, ToolInvocation
-from app.agents.tools import LocalToolSource
+from app.agents.models.tools import LocalToolSource
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.execution import ToolExecution
 from app.sessions.models.presentation import ArtifactCapability, PresentationPayload

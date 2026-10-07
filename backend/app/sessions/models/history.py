@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 from uuid import uuid4
 
-from app.agents.agentic_generation import AgenticInputItem, AgenticOutputItem, AgenticToolCall
+from app.agents.models.generation import AgenticInputItem, AgenticOutputItem, AgenticToolCall
 from app.sessions.models.turns import TerminalTurnKind
 
 

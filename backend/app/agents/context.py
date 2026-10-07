@@ -6,7 +6,7 @@ import json
 
 from pydantic import ValidationError
 
-from app.agents.service import AgentInputAccepted, AgentInputRejected
+from app.agents.models.input import AgentInputAccepted, AgentInputRejected
 from app.sessions.models.context import ContextInput, ContextIssue, SessionContext
 
 MAX_CONTEXT_LENGTH = 64_000

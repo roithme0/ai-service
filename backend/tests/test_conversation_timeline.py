@@ -1,7 +1,7 @@
 import json
 from datetime import timedelta
 
-from app.agents.agentic_generation import AgenticGenerationResponse, AgenticToolCall
+from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
 from app.sessions.conversation import ConversationSessionStore

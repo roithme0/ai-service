@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 
-from app.agents.agentic_generation import AgenticInputItem
+from app.agents.models.generation import AgenticInputItem
 from app.sessions.models.history import (
     CallRecord,
     ContinuationRecord,

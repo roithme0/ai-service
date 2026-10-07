@@ -37,7 +37,8 @@ from app.sessions.models.http import (
     ValidationErrorResponse,
 )
 from app.sessions.identity import require_application_user
-from app.agents.service import AgentInputRejected, ConfiguredAgentService
+from app.agents.models.input import AgentInputRejected
+from app.agents.service import ConfiguredAgentService
 from app.sessions.models.conversation import (
     ConversationMessageBusy,
     ConversationReadActive,

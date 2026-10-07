@@ -10,7 +10,8 @@ from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import DemoContext, DemoPayload, DemoSessionStore, MAX_ARTIFACTS, new_demo_session_store
 from app.demo.turns import TURN_DELAY_SECONDS, run_demo_turn
-from app.agents.service import AgentInputAccepted, AgentInputRejected, ConfiguredAgentService
+from app.agents.models.input import AgentInputAccepted, AgentInputRejected
+from app.agents.service import ConfiguredAgentService
 from app.sessions.models.conversation import ConversationSessionSettings, ConversationTurnReservation, ConversationTurnResult
 
 

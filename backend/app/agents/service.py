@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
 from typing import Generic, TypeVar
 
+from app.agents.models.input import AgentInputAccepted, AgentInputRejected
 from app.sessions.models.conversation import (
     ConversationMessageBusy,
     ConversationReadActive,
@@ -28,16 +28,6 @@ InputT = TypeVar("InputT")
 ContextT = TypeVar("ContextT")
 ArtifactT = TypeVar("ArtifactT")
 IssueT = TypeVar("IssueT")
-
-
-@dataclass(frozen=True)
-class AgentInputAccepted(Generic[ContextT]):
-    context: ContextT
-
-
-@dataclass(frozen=True)
-class AgentInputRejected(Generic[IssueT]):
-    issues: tuple[IssueT, ...]
 
 
 class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):

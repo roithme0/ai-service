@@ -8,11 +8,7 @@ from typing import cast
 
 from openai import AsyncOpenAI, omit
 
-from app.agents.agentic_generation import (
-    AgenticGenerationRequest,
-    AgenticGenerationResponse,
-    AgenticToolCall,
-)
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 
 
 from app.agents.output_items import final_response_text, validate_message_item

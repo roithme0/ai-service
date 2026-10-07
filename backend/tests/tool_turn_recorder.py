@@ -2,7 +2,8 @@
 
 from copy import deepcopy
 
-from app.agents.agentic_generation import AgenticOutputItem, message_phase
+from app.agents.models.generation import AgenticOutputItem
+from app.agents.output_items import message_phase
 from app.sessions.models.history import CallRecord, ContinuationRecord, HistoryRecord, MessageRecord
 from app.sessions.models.execution import ToolExecution
 

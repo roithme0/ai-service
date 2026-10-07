@@ -2,8 +2,17 @@
 
 from typing import cast
 
-from app.agents.agentic_generation import AgenticGenerationResponse, AgenticInputItem, message_phase
+from app.agents.models.generation import AgenticGenerationResponse, AgenticInputItem, AssistantMessagePhase
 from app.sessions.limits import MAX_MESSAGE_LENGTH
+
+
+def message_phase(item: AgenticInputItem) -> AssistantMessagePhase | None:
+    phase = item.get("phase")
+    if phase == "commentary":
+        return "commentary"
+    if phase == "final_answer":
+        return "final_answer"
+    return None
 
 
 def final_response_text(response: AgenticGenerationResponse) -> str | None:

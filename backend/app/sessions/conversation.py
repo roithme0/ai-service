@@ -11,11 +11,8 @@ from threading import RLock
 from typing import Generic, Literal, TypeVar, cast
 from uuid import uuid4
 
-from app.agents.agentic_generation import (
-    AgenticGenerationResponse,
-    AgenticToolCall,
-    message_phase,
-)
+from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
+from app.agents.output_items import message_phase
 from app.agents.output_items import validate_message_item
 from app.sessions.models.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord, HostedToolRecord, ContinuationRecord, HistoryRecord, MessageRecord, TerminalRecord, ToolResultRecord
 from app.sessions.history import text_messages

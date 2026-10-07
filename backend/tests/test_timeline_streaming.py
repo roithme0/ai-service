@@ -13,7 +13,7 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import TypeAdapter
 
-from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
 from app.sessions.conversation import ConversationSessionStore
@@ -22,7 +22,7 @@ from app.sessions.models.http import StreamEvent
 from app.sessions.model_sessions import create_model_agent
 from app.sessions.models.presentation import PresentationPayload
 from app.agents.models.tools import RegisteredTool, ToolInvocation
-from app.agents.tools import LocalToolSource
+from app.agents.models.tools import LocalToolSource
 from app.sessions.models.execution import ToolExecution
 
 

@@ -5,22 +5,12 @@ from __future__ import annotations
 import inspect
 import json
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.sessions.models.execution import ToolExecution
 
 ArtifactT = TypeVar("ArtifactT", covariant=True)
-
-
-@dataclass(frozen=True)
-class LocalToolSource(Generic[ArtifactT]):
-    tools: tuple[RegisteredTool[ArtifactT], ...]
-    instructions: str = ""
-
-    def registered_tools(self) -> tuple[RegisteredTool[ArtifactT], ...]:
-        return self.tools
 
 
 class ToolRegistry(Generic[ArtifactT]):
