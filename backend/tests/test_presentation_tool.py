@@ -17,7 +17,7 @@ from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
 from app.agents.tool_registry import ToolRegistry
 from app.sessions.models.execution import ToolExecution
-from app.sessions.models.session import TextSessionCreation
+from app.sessions.models.session import SessionCreation
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 
 
@@ -163,7 +163,7 @@ def test_presentation_and_other_tool_sources_are_combined() -> None:
             "read_data", {"type": "function", "name": "read_data"}, execute,
         ),), "Read data with read_data"),))
         created = agent.create({"context": {}, "artifactCapabilities": [CAPABILITY]}, owner="test:user")
-        assert isinstance(created, TextSessionCreation)
+        assert isinstance(created, SessionCreation)
         agent.append_user_message(created.session_id, "Show")
         result = await agent.execute_turn(created.session_id)
         assert result.kind == "completed"
@@ -199,7 +199,7 @@ def test_default_budgets_complete_an_extended_presentation_turn() -> None:
         agent = create_model_agent(generator)
         created = agent.create({"context": {"description": "x" * 20_000},
                                 "artifactCapabilities": [CAPABILITY]}, owner="test:user")
-        assert isinstance(created, TextSessionCreation)
+        assert isinstance(created, SessionCreation)
         agent.append_user_message(created.session_id, "Show the requested items. " + "Context. " * 600)
         result = await agent.execute_turn(created.session_id)
         assert result.kind == "completed"

@@ -9,7 +9,7 @@ from app.sessions.models.conversation import ConversationSessionSettings, Conver
 from app.sessions.session_store import ConversationSessionStore
 from app.sessions.models.history import CallRecord, ExecutionReportRecord, ExecutionStartedRecord, MessageRecord, ContinuationRecord, TerminalRecord, ToolResultRecord
 from app.agents.history_projection import model_input
-from app.sessions.history import text_messages
+from app.sessions.history import completed_text_messages
 from app.sessions.model_turn_execution import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
 from app.agents.models.tools import RegisteredTool, ToolInvocation
@@ -63,12 +63,12 @@ def test_commentary_only_continues_and_remains_visible_without_becoming_final(en
     assert commentary in model_input(history)
     if ending == "final":
         assert result.text == "The answer is 42."
-        assert [message.text for message in text_messages(history)] == ["Check", "The answer is 42."]
+        assert [message.text for message in completed_text_messages(history)] == ["Check", "The answer is 42."]
         assert [item.kind for item in read.snapshot.timeline] == ["message", "intermediate", "intermediate", "message"]
         assert isinstance(read.snapshot.timeline[-1], TimelineMessage)
     else:
         assert result.text is None
-        assert [message.text for message in text_messages(history)] == ["Check"]
+        assert [message.text for message in completed_text_messages(history)] == ["Check"]
         assert read.snapshot.timeline[-1].kind == "failure"
 
 
@@ -272,7 +272,7 @@ def test_individual_records_preserve_provider_order_and_derive_both_message_view
         {"type": "function_call_output", "call_id": call.call_id, "output": "result"},
         first_final, second_final,
     )
-    messages = text_messages(history)
+    messages = completed_text_messages(history)
     assert [(message.role, message.text) for message in messages] == [
         ("user", "first"), ("assistant", "Hello "),
     ]

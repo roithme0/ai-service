@@ -8,7 +8,6 @@ from app.agents.models.generation import AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.execution import ToolExecution
 from app.sessions.models.conversation import (
-    ConversationMessageBusy,
     ConversationReadActive,
     ConversationSessionSettings,
     ConversationTurnReservation,
@@ -17,7 +16,7 @@ from app.sessions.session_store import (
     ConversationSessionStore,
     TurnHistoryUnavailable,
 )
-from app.sessions.models.session import TextSessionAppendAccepted
+from app.sessions.models.session import SessionMessageAppendAccepted, SessionMessageBusy
 
 
 @dataclass(frozen=True)
@@ -47,7 +46,7 @@ def create(conversation: ConversationSessionStore[Context, Artifact], limit: int
 
 
 def reserve(conversation: ConversationSessionStore[Context, Artifact], session_id: str) -> ConversationTurnReservation[Context, Artifact]:
-    assert isinstance(conversation.append_user_message(session_id, "Continue"), TextSessionAppendAccepted)
+    assert isinstance(conversation.append_user_message(session_id, "Continue"), SessionMessageAppendAccepted)
     reserved = conversation.reserve_turn(session_id)
     assert isinstance(reserved, ConversationTurnReservation)
     return reserved
@@ -60,7 +59,7 @@ def test_stale_completion_does_not_end_newer_active_turn() -> None:
     assert conversation.fail_turn(session_id, first).kind == "generation_failed"
     second = reserve(conversation, session_id)
     assert conversation.complete_turn(session_id, first, "completed", "Stale").kind == "conflict"
-    assert isinstance(conversation.append_user_message(session_id, "Busy"), ConversationMessageBusy)
+    assert isinstance(conversation.append_user_message(session_id, "Busy"), SessionMessageBusy)
     assert conversation.complete_turn(session_id, second, "completed", "Current").kind == "completed"
 
 
@@ -68,9 +67,9 @@ def test_concurrent_user_appends_are_recorded_once_with_derived_revision() -> No
     conversation = store(Clock())
     session_id = create(conversation)
 
-    def append(index: int) -> TextSessionAppendAccepted:
+    def append(index: int) -> SessionMessageAppendAccepted:
         result = conversation.append_user_message(session_id, str(index))
-        assert isinstance(result, TextSessionAppendAccepted)
+        assert isinstance(result, SessionMessageAppendAccepted)
         return result
 
     with ThreadPoolExecutor(max_workers=4) as executor:

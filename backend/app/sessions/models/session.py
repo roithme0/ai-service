@@ -13,7 +13,7 @@ T = TypeVar("T")
 
 
 @dataclass(frozen=True)
-class TextSessionCreation:
+class SessionCreation:
     session_id: str
     expires_at: datetime
 
@@ -26,7 +26,7 @@ class TextMessage:
 
 
 @dataclass(frozen=True)
-class TextSessionSnapshot(Generic[T]):
+class SessionSnapshot(Generic[T]):
     session_id: str
     expires_at: datetime
     revision: int
@@ -35,62 +35,69 @@ class TextSessionSnapshot(Generic[T]):
 
 
 @dataclass(frozen=True)
-class TextSessionReadActive(Generic[T]):
+class SessionReadActive(Generic[T]):
     kind: Literal["active"]
-    session: TextSessionSnapshot[T]
+    session: SessionSnapshot[T]
 
 
 @dataclass(frozen=True)
-class TextSessionReadUnknown:
+class SessionReadUnknown:
     kind: Literal["unknown"]
     session_id: str
 
 
 @dataclass(frozen=True)
-class TextSessionReadExpired:
+class SessionReadExpired:
     kind: Literal["expired"]
     session_id: str
     expires_at: datetime
 
 
 @dataclass(frozen=True)
-class TextSessionAppendAccepted:
+class SessionMessageAppendAccepted:
     kind: Literal["accepted"]
     session_id: str
     message: TextMessage
 
 
 @dataclass(frozen=True)
-class TextSessionAppendUnknown:
+class SessionMessageAppendUnknown:
     kind: Literal["unknown"]
     session_id: str
 
 
 @dataclass(frozen=True)
-class TextSessionAppendExpired:
+class SessionMessageAppendExpired:
     kind: Literal["expired"]
     session_id: str
     expires_at: datetime
 
 
 @dataclass(frozen=True)
-class TextSessionAppendInvalidMessage:
+class SessionMessageAppendInvalidMessage:
     kind: Literal["invalid_message"]
     session_id: str
     reason: InvalidMessageReason
 
 
 @dataclass(frozen=True)
-class TextSessionAppendLimitReached:
+class SessionMessageAppendLimitReached:
     kind: Literal["limit_reached"]
     session_id: str
 
 
-TextSessionAppendOutcome = (
-    TextSessionAppendAccepted
-    | TextSessionAppendUnknown
-    | TextSessionAppendExpired
-    | TextSessionAppendInvalidMessage
-    | TextSessionAppendLimitReached
+@dataclass(frozen=True)
+class SessionMessageBusy:
+    session_id: str
+    kind: Literal["busy"] = "busy"
+
+
+SessionMessageAppendOutcome = (
+    SessionMessageAppendAccepted
+    | SessionMessageAppendUnknown
+    | SessionMessageAppendExpired
+    | SessionMessageAppendInvalidMessage
+    | SessionMessageAppendLimitReached
+    | SessionMessageBusy
 )
 

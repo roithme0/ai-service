@@ -7,7 +7,7 @@ from app.sessions.models.history import HistoryRecord, MessageRecord, TerminalRe
 from app.sessions.models.session import TextMessage
 
 
-def text_messages(history: tuple[HistoryRecord, ...]) -> tuple[TextMessage, ...]:
+def completed_text_messages(history: tuple[HistoryRecord, ...]) -> tuple[TextMessage, ...]:
     completed = {record.turn_id for record in history
                  if isinstance(record, TerminalRecord) and record.kind == "completed"}
     emitted: set[str] = set()

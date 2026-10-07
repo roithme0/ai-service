@@ -150,8 +150,9 @@ cache. Messages, message revision, and current terminal state are projected from
 history; repeated failed-turn responses are reconstructed from terminal records.
 Session metadata holds only expiry, initialization context, and settings, while
 active reservations coordinate execution under the store lock.
-`sessions/text_sessions.py` contains shared types and limits only; the former
-standalone text store and its conditional-append contract have been removed.
+`sessions/models/session.py` defines shared session and text-message contracts;
+`sessions/limits.py` defines message limits. The former standalone text store and
+its conditional-append contract have been removed.
 Unresolved calls receive explicitly service-generated reports distinguishing
 execution never started from an unknown outcome; an unknown outcome may already
 have completed and requires investigation before repeating a state-changing action.

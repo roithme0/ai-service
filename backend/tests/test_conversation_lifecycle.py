@@ -13,12 +13,12 @@ from app.sessions.models.conversation import (
 from app.sessions.session_store import ConversationSessionStore
 from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 from app.sessions.models.session import (
-    TextSessionAppendAccepted,
-    TextSessionAppendExpired,
-    TextSessionAppendInvalidMessage,
-    TextSessionAppendLimitReached,
-    TextSessionReadExpired,
-    TextSessionReadUnknown,
+    SessionMessageAppendAccepted,
+    SessionMessageAppendExpired,
+    SessionMessageAppendInvalidMessage,
+    SessionMessageAppendLimitReached,
+    SessionReadExpired,
+    SessionReadUnknown,
 )
 
 
@@ -59,7 +59,7 @@ def test_reads_and_messages_do_not_renew_consumer_supplied_lifetime() -> None:
     store = new_store(clock)
     created = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:user")
     clock.value += timedelta(minutes=4)
-    assert isinstance(store.append_user_message(created.session_id, "  hello  "), TextSessionAppendAccepted)
+    assert isinstance(store.append_user_message(created.session_id, "  hello  "), SessionMessageAppendAccepted)
     reservation = store.reserve_turn(created.session_id)
     assert isinstance(reservation, ConversationTurnReservation)
     store.complete_turn(created.session_id, reservation, "completed", "answer")
@@ -71,9 +71,9 @@ def test_reads_and_messages_do_not_renew_consumer_supplied_lifetime() -> None:
     ]
     clock.value = created.expires_at
     expired = store.read(created.session_id)
-    assert isinstance(expired, TextSessionReadExpired)
+    assert isinstance(expired, SessionReadExpired)
     assert expired.expires_at == created.expires_at
-    assert isinstance(store.read(created.session_id), TextSessionReadUnknown)
+    assert isinstance(store.read(created.session_id), SessionReadUnknown)
 
 
 @pytest.mark.parametrize("text,reason", [(None, "blank_text"), (" \t ", "blank_text"),
@@ -82,7 +82,7 @@ def test_invalid_messages_do_not_append_history(text: object, reason: str) -> No
     store = new_store()
     session_id = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:user").session_id
     outcome = store.append_user_message(session_id, text)
-    assert isinstance(outcome, TextSessionAppendInvalidMessage)
+    assert isinstance(outcome, SessionMessageAppendInvalidMessage)
     assert outcome.reason == reason
     assert store.history(session_id) == ()
     assert store.read(session_id).snapshot.session.revision == 0
@@ -96,8 +96,8 @@ def test_concurrent_appends_reserve_final_answer_capacity_atomically() -> None:
 
     def append(index: int) -> bool:
         outcome = store.append_user_message(session_id, f"concurrent-{index}")
-        assert isinstance(outcome, (TextSessionAppendAccepted, TextSessionAppendLimitReached))
-        return isinstance(outcome, TextSessionAppendAccepted)
+        assert isinstance(outcome, (SessionMessageAppendAccepted, SessionMessageAppendLimitReached))
+        return isinstance(outcome, SessionMessageAppendAccepted)
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         accepted = tuple(executor.map(append, range(20)))
@@ -107,7 +107,7 @@ def test_concurrent_appends_reserve_final_answer_capacity_atomically() -> None:
     assert isinstance(reservation, ConversationTurnReservation)
     assert store.complete_turn(session_id, reservation, "completed", "answer").kind == "completed"
     assert store.read(session_id).snapshot.session.revision == MAX_MESSAGE_COUNT
-    assert isinstance(store.append_user_message(session_id, "extra"), TextSessionAppendLimitReached)
+    assert isinstance(store.append_user_message(session_id, "extra"), SessionMessageAppendLimitReached)
 
 
 def test_first_append_after_expiry_reports_expired_and_then_unknown() -> None:
@@ -115,8 +115,8 @@ def test_first_append_after_expiry_reports_expired_and_then_unknown() -> None:
     store = new_store(clock)
     created = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:user")
     clock.value = created.expires_at
-    assert isinstance(store.append_user_message(created.session_id, "late"), TextSessionAppendExpired)
-    assert isinstance(store.read(created.session_id), TextSessionReadUnknown)
+    assert isinstance(store.append_user_message(created.session_id, "late"), SessionMessageAppendExpired)
+    assert isinstance(store.read(created.session_id), SessionReadUnknown)
 
 
 def test_owner_metadata_follows_session_lifetime_and_lookup_does_not_consume_expiry() -> None:
@@ -127,7 +127,7 @@ def test_owner_metadata_follows_session_lifetime_and_lookup_does_not_consume_exp
     assert not store.belongs_to(created.session_id, "test:other")
     clock.value = created.expires_at
     assert not store.belongs_to(created.session_id, "test:other")
-    assert isinstance(store.read(created.session_id), TextSessionReadExpired)
+    assert isinstance(store.read(created.session_id), SessionReadExpired)
     assert not store.belongs_to(created.session_id, "test:user")
     replacement = store.create(MutableContext([]), ConversationSessionSettings(2), owner="test:other")
     assert store.belongs_to(replacement.session_id, "test:other")
@@ -150,7 +150,7 @@ def test_read_samples_time_after_waiting_for_the_store_lock() -> None:
             lookup = executor.submit(store.read, created.session_id)
             assert not clock_read.wait(timeout=0.1)
             clock.value = created.expires_at
-        assert isinstance(lookup.result(), TextSessionReadExpired)
+        assert isinstance(lookup.result(), SessionReadExpired)
 
 
 def test_concurrent_creation_uses_distinct_session_ids() -> None:

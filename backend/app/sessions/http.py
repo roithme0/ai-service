@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.sessions.models.session import SessionMessageBusy
+
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Annotated, Generic, TypeVar
@@ -42,18 +44,18 @@ from app.sessions.identity import require_application_user
 from app.agents.models.input import AgentInputRejected
 from app.agents.service import ConfiguredAgentService
 from app.sessions.models.conversation import (
-    ConversationMessageBusy,
     ConversationReadActive,
 )
 from app.sessions.models.artifacts import PublishedArtifact
 from app.sessions.models.timeline import TimelineItem, TimelineMessage
 from app.sessions.models.session import (
+    SessionMessageBusy,
     TextMessage,
-    TextSessionAppendAccepted,
-    TextSessionAppendExpired,
-    TextSessionAppendInvalidMessage,
-    TextSessionAppendLimitReached,
-    TextSessionReadExpired,
+    SessionMessageAppendAccepted,
+    SessionMessageAppendExpired,
+    SessionMessageAppendInvalidMessage,
+    SessionMessageAppendLimitReached,
+    SessionReadExpired,
 )
 
 router = APIRouter(
@@ -119,7 +121,7 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
                 sequence=snapshot.sequence,
             )
         return _error(
-            "expired" if isinstance(outcome, TextSessionReadExpired) else "unknown"
+            "expired" if isinstance(outcome, SessionReadExpired) else "unknown"
         )
 
     def append(
@@ -128,18 +130,18 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
         if not self.agent.belongs_to(session_id, owner):
             return _error("unknown")
         outcome = self.agent.append_user_message(session_id, text)
-        if isinstance(outcome, TextSessionAppendAccepted):
+        if isinstance(outcome, SessionMessageAppendAccepted):
             return _user_message(outcome.message)
-        if isinstance(outcome, TextSessionAppendExpired):
+        if isinstance(outcome, SessionMessageAppendExpired):
             return _error("expired")
-        if isinstance(outcome, TextSessionAppendLimitReached):
+        if isinstance(outcome, SessionMessageAppendLimitReached):
             return _error("limit_reached")
-        if isinstance(outcome, TextSessionAppendInvalidMessage):
+        if isinstance(outcome, SessionMessageAppendInvalidMessage):
             return _input_error(
                 (InputIssue(location=("text",), message="Invalid message"),),
                 "invalid_message",
             )
-        if isinstance(outcome, ConversationMessageBusy):
+        if isinstance(outcome, SessionMessageBusy):
             return _error("busy")
         return _error("unknown")
 

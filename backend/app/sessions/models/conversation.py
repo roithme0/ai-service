@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Generic, Literal, TypeVar
 
 from app.sessions.models.artifacts import PublishedArtifact
-from app.sessions.models.session import TextSessionSnapshot
+from app.sessions.models.session import SessionSnapshot
 from app.sessions.models.timeline import TimelineItem
 from app.sessions.models.turns import ActiveTurnStatus, TurnKind
 
@@ -34,13 +34,13 @@ class ConversationTurnResult(Generic[ArtifactT]):
 @dataclass(frozen=True)
 class ConversationTurnReservation(Generic[ContextT, ArtifactT]):
     turn_id: str
-    snapshot: TextSessionSnapshot[ContextT]
+    snapshot: SessionSnapshot[ContextT]
     previous_artifacts: tuple[PublishedArtifact[ArtifactT], ...]
 
 
 @dataclass(frozen=True)
 class ConversationSnapshot(Generic[ContextT, ArtifactT]):
-    session: TextSessionSnapshot[ContextT]
+    session: SessionSnapshot[ContextT]
     artifacts: tuple[PublishedArtifact[ArtifactT], ...]
     terminal_turn_id: str | None
     terminal_turn_kind: TurnKind | None
@@ -54,9 +54,3 @@ class ConversationSnapshot(Generic[ContextT, ArtifactT]):
 class ConversationReadActive(Generic[ContextT, ArtifactT]):
     kind: Literal["active"]
     snapshot: ConversationSnapshot[ContextT, ArtifactT]
-
-
-@dataclass(frozen=True)
-class ConversationMessageBusy:
-    session_id: str
-    kind: Literal["busy"] = "busy"

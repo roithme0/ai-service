@@ -262,7 +262,7 @@ def test_observer_capacity_and_expiry_release_resources_without_extending_lifeti
         from datetime import UTC, datetime
         from app.demo.agent import create_demo_agent
         from app.demo.session import new_demo_session_store
-        from app.sessions.models.session import TextSessionReadUnknown
+        from app.sessions.models.session import SessionReadUnknown
         now = datetime(2026, 10, 4, tzinfo=UTC)
         store = new_demo_session_store(clock=lambda: now)
         agent = create_demo_agent(store, delay_seconds=0)
@@ -277,7 +277,7 @@ def test_observer_capacity_and_expiry_release_resources_without_extending_lifeti
         await refused.aclose()
         now = created.expires_at
         store.read(created.session_id)
-        assert isinstance(await anext(observers[0]), TextSessionReadUnknown)
+        assert isinstance(await anext(observers[0]), SessionReadUnknown)
         for observer in observers: await observer.aclose()
         assert store._listeners == {} and agent.observation_available(created.session_id)
         await agent.close()

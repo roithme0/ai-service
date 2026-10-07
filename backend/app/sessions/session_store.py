@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.sessions.models.session import SessionMessageBusy
+
 import json
 from collections.abc import Callable
 from copy import deepcopy
@@ -15,7 +17,7 @@ from app.agents.models.generation import AgenticGenerationResponse, AgenticToolC
 from app.agents.generation_messages import message_phase
 from app.agents.generation_messages import validate_message_item
 from app.sessions.models.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord, HostedToolRecord, ContinuationRecord, HistoryRecord, MessageRecord, TerminalRecord, ToolResultRecord
-from app.sessions.history import text_messages
+from app.sessions.history import completed_text_messages
 from app.sessions.models.artifacts import (
     ArtifactCandidate,
     ArtifactEnvelope,
@@ -23,7 +25,6 @@ from app.sessions.models.artifacts import (
     PublishedArtifact,
 )
 from app.sessions.models.conversation import (
-    ConversationMessageBusy,
     ConversationReadActive,
     ConversationSessionSettings,
     ConversationSnapshot,
@@ -38,20 +39,21 @@ from app.sessions.models.turns import (
 )
 from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 from app.sessions.models.session import (
+    SessionMessageBusy,
     InvalidMessageReason,
     SessionUnavailableKind,
     TextMessage,
-    TextSessionAppendAccepted,
-    TextSessionAppendExpired,
-    TextSessionAppendInvalidMessage,
-    TextSessionAppendLimitReached,
-    TextSessionAppendOutcome,
-    TextSessionAppendUnknown,
-    TextSessionCreation,
-    TextSessionReadActive,
-    TextSessionReadExpired,
-    TextSessionReadUnknown,
-    TextSessionSnapshot,
+    SessionMessageAppendAccepted,
+    SessionMessageAppendExpired,
+    SessionMessageAppendInvalidMessage,
+    SessionMessageAppendLimitReached,
+    SessionMessageAppendOutcome,
+    SessionMessageAppendUnknown,
+    SessionCreation,
+    SessionReadActive,
+    SessionReadExpired,
+    SessionReadUnknown,
+    SessionSnapshot,
 )
 
 ContextT = TypeVar("ContextT")
@@ -103,7 +105,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
 
     def create(
         self, context: ContextT, settings: ConversationSessionSettings, owner: str
-    ) -> TextSessionCreation:
+    ) -> SessionCreation:
         with self._lock:
             now = self._now()
             self._discard_expired(now)
@@ -116,7 +118,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             )
             self._history[session_id] = ()
             self._artifacts[session_id] = {}
-            return TextSessionCreation(session_id, expires_at)
+            return SessionCreation(session_id, expires_at)
 
     def belongs_to(self, session_id: str, owner: str) -> bool:
         with self._lock:
@@ -127,12 +129,12 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
         self, session_id: str
     ) -> (
         ConversationReadActive[ContextT, ArtifactT]
-        | TextSessionReadExpired
-        | TextSessionReadUnknown
+        | SessionReadExpired
+        | SessionReadUnknown
     ):
         with self._lock:
             outcome = self._read_session(session_id)
-            if not isinstance(outcome, TextSessionReadActive):
+            if not isinstance(outcome, SessionReadActive):
                 return outcome
             active_turn_id = self._active_turns.get(session_id)
             terminal = self._latest_terminal(session_id)
@@ -186,24 +188,24 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
 
     def append_user_message(
         self, session_id: str, text: object
-    ) -> TextSessionAppendOutcome | ConversationMessageBusy:
+    ) -> SessionMessageAppendOutcome:
         with self._lock:
             read = self._read_session(session_id)
-            if isinstance(read, TextSessionReadExpired):
-                return TextSessionAppendExpired(
+            if isinstance(read, SessionReadExpired):
+                return SessionMessageAppendExpired(
                     kind="expired", session_id=session_id, expires_at=read.expires_at
                 )
-            if isinstance(read, TextSessionReadUnknown):
-                return TextSessionAppendUnknown(kind="unknown", session_id=session_id)
+            if isinstance(read, SessionReadUnknown):
+                return SessionMessageAppendUnknown(kind="unknown", session_id=session_id)
             if session_id in self._active_turns:
-                return ConversationMessageBusy(session_id=session_id)
+                return SessionMessageBusy(session_id=session_id)
             invalid_reason = _invalid_text_reason(text)
             if invalid_reason is not None:
-                return TextSessionAppendInvalidMessage(
+                return SessionMessageAppendInvalidMessage(
                     "invalid_message", session_id, invalid_reason
                 )
             if len(read.session.messages) >= MAX_MESSAGE_COUNT - 1:
-                return TextSessionAppendLimitReached("limit_reached", session_id)
+                return SessionMessageAppendLimitReached("limit_reached", session_id)
             accepted_text = cast(str, text)
             self._append_history(
                 session_id,
@@ -211,7 +213,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     str(uuid4()), {"role": "user", "content": accepted_text}, "user"
                 ),
             )
-            return TextSessionAppendAccepted(
+            return SessionMessageAppendAccepted(
                 "accepted", session_id, TextMessage("user", accepted_text)
             )
 
@@ -223,7 +225,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
     ):
         with self._lock:
             read = self._read_session(session_id)
-            if not isinstance(read, TextSessionReadActive):
+            if not isinstance(read, SessionReadActive):
                 return ConversationTurnResult(read.kind, "", None, ())
             active = self._active_turns.get(session_id)
             if active is not None:
@@ -241,7 +243,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
     ):
         with self._lock:
             read = self._read_session(session_id)
-            if not isinstance(read, TextSessionReadActive):
+            if not isinstance(read, SessionReadActive):
                 return ConversationTurnResult(read.kind, "", None, ())
             if session_id in self._active_turns:
                 return ConversationTurnResult("busy", "", None, ())
@@ -273,7 +275,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
     ) -> ConversationTurnResult[ArtifactT]:
         with self._lock:
             current = self._read_session(session_id)
-            if not isinstance(current, TextSessionReadActive):
+            if not isinstance(current, SessionReadActive):
                 return ConversationTurnResult(
                     current.kind, reservation.turn_id, None, ()
                 )
@@ -319,7 +321,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
     ) -> ConversationTurnResult[ArtifactT]:
         with self._lock:
             current = self._read_session(session_id)
-            if not isinstance(current, TextSessionReadActive):
+            if not isinstance(current, SessionReadActive):
                 return ConversationTurnResult(
                     current.kind, reservation.turn_id, None, ()
                 )
@@ -353,7 +355,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
     def history(self, session_id: str) -> tuple[HistoryRecord, ...]:
         with self._lock:
             read = self._read_session(session_id)
-            if not isinstance(read, TextSessionReadActive):
+            if not isinstance(read, SessionReadActive):
                 return ()
             return deepcopy(self._history[session_id])
 
@@ -541,7 +543,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
 
     def _require_turn(self, session_id: str, turn_id: str) -> None:
         outcome = self._read_session(session_id)
-        if not isinstance(outcome, TextSessionReadActive):
+        if not isinstance(outcome, SessionReadActive):
             raise TurnHistoryUnavailable(outcome.kind)
         if self._active_turns.get(session_id) != turn_id:
             raise TurnHistoryUnavailable("unknown")
@@ -614,7 +616,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             return ConversationTurnResult(terminal.kind, terminal.turn_id, None, ())
         text = next(
             message.text
-            for message in text_messages(self._history[session_id])
+            for message in completed_text_messages(self._history[session_id])
             if message.role == "assistant" and message.turn_id == terminal.turn_id
         )
         artifacts = tuple(
@@ -633,21 +635,21 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
     def _read_session(
         self, session_id: str
     ) -> (
-        TextSessionReadActive[ContextT]
-        | TextSessionReadExpired
-        | TextSessionReadUnknown
+        SessionReadActive[ContextT]
+        | SessionReadExpired
+        | SessionReadUnknown
     ):
         now = self._now()
         session = self._sessions.get(session_id)
         self._discard_expired(now)
         if session is None:
-            return TextSessionReadUnknown("unknown", session_id)
+            return SessionReadUnknown("unknown", session_id)
         if now >= session.expires_at:
-            return TextSessionReadExpired("expired", session_id, session.expires_at)
-        messages = text_messages(self._history[session_id])
-        return TextSessionReadActive(
+            return SessionReadExpired("expired", session_id, session.expires_at)
+        messages = completed_text_messages(self._history[session_id])
+        return SessionReadActive(
             "active",
-            TextSessionSnapshot(
+            SessionSnapshot(
                 session_id,
                 session.expires_at,
                 len(messages),

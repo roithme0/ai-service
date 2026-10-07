@@ -17,7 +17,7 @@ from app.core.config import Settings
 from app.main import AgentLifespan
 from app.mcp.connection import MCPConnection
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
-from app.sessions.models.session import TextSessionCreation
+from app.sessions.models.session import SessionCreation
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from test_model_session_http import valid_request
 
@@ -96,7 +96,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                         },
                     }]
                 created = agents.kochwiki.agent.create(payload, owner="test:user")
-                assert isinstance(created, TextSessionCreation)
+                assert isinstance(created, SessionCreation)
                 agents.kochwiki.agent.append_user_message(created.session_id, "Call hello world")
                 turn = await agents.kochwiki.agent.execute_turn(created.session_id)
                 assert turn.kind == "completed"
@@ -123,7 +123,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                 assert isinstance(output["output"], str)
                 assert json.loads(output["output"])["structuredContent"] == {"message": "Hello World"}
                 assert agents.demo.agent is not None
-                assert isinstance(agents.demo.agent.create(None, owner="test:user"), TextSessionCreation)
+                assert isinstance(agents.demo.agent.create(None, owner="test:user"), SessionCreation)
             finally:
                 await agents.close()
             assert connection.instructions is None
@@ -215,7 +215,7 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
                 agent = agents.kochwiki.agent
                 assert agent is not None
                 created = agent.create(payload, owner="test:user")
-                assert isinstance(created, TextSessionCreation)
+                assert isinstance(created, SessionCreation)
                 agent.append_user_message(created.session_id, "Propose a change")
                 proposal_turn = await agent.execute_turn(created.session_id)
                 assert proposal_turn.kind == "completed"
@@ -306,7 +306,7 @@ def test_connection_failure_disables_only_owning_agent(
             try:
                 assert agents.kochwiki.agent is None
                 assert agents.demo.agent is not None
-                assert isinstance(agents.demo.agent.create(None, owner="test:user"), TextSessionCreation)
+                assert isinstance(agents.demo.agent.create(None, owner="test:user"), SessionCreation)
                 assert connection.tools == ()
                 assert connection.instructions is None
                 with pytest.raises(RuntimeError, match="not started"):

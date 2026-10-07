@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.sessions.models.conversation import ConversationSessionSettings
 from app.sessions.session_store import ConversationSessionStore
-from app.sessions.models.session import TextSessionCreation
+from app.sessions.models.session import SessionCreation
 
 SESSION_LIFETIME = timedelta(minutes=90)
 MAX_ARTIFACTS = 2
@@ -48,7 +48,7 @@ def new_demo_session_store(
     return ConversationSessionStore(lifetime=SESSION_LIFETIME, clock=clock)
 
 
-def create_demo_session(store: DemoSessionStore, owner: str) -> TextSessionCreation:
+def create_demo_session(store: DemoSessionStore, owner: str) -> SessionCreation:
     return store.create(
         DemoContext(), ConversationSessionSettings(max_artifacts=MAX_ARTIFACTS), owner
     )

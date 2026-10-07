@@ -8,7 +8,7 @@ from typing import Generic, TypeVar
 
 from app.sessions.models.conversation import ConversationReadActive
 from app.sessions.session_store import ConversationSessionStore
-from app.sessions.models.session import TextSessionReadExpired, TextSessionReadUnknown
+from app.sessions.models.session import SessionReadExpired, SessionReadUnknown
 
 ContextT = TypeVar("ContextT")
 ArtifactT = TypeVar("ArtifactT")
@@ -26,8 +26,8 @@ class SessionObservation(Generic[ContextT, ArtifactT]):
         self, session_id: str
     ) -> AsyncIterator[
         ConversationReadActive[ContextT, ArtifactT]
-        | TextSessionReadExpired
-        | TextSessionReadUnknown
+        | SessionReadExpired
+        | SessionReadUnknown
         | None
     ]:
         if not self.observation_available(session_id):
@@ -36,8 +36,8 @@ class SessionObservation(Generic[ContextT, ArtifactT]):
         self._observers[session_id] = self._observers.get(session_id, 0) + 1
         queue: asyncio.Queue[
             ConversationReadActive[ContextT, ArtifactT]
-            | TextSessionReadExpired
-            | TextSessionReadUnknown
+            | SessionReadExpired
+            | SessionReadUnknown
         ] = asyncio.Queue(maxsize=128)
         overflow = False
         loop = asyncio.get_running_loop()
@@ -45,8 +45,8 @@ class SessionObservation(Generic[ContextT, ArtifactT]):
         def enqueue(
             value: (
                 ConversationReadActive[ContextT, ArtifactT]
-                | TextSessionReadExpired
-                | TextSessionReadUnknown
+                | SessionReadExpired
+                | SessionReadUnknown
             ),
         ) -> None:
             nonlocal overflow

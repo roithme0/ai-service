@@ -8,7 +8,6 @@ from typing import Generic, TypeVar
 
 from app.agents.models.input import AgentInputAccepted, AgentInputRejected
 from app.sessions.models.conversation import (
-    ConversationMessageBusy,
     ConversationReadActive,
     ConversationSessionSettings,
     ConversationTurnReservation,
@@ -18,10 +17,10 @@ from app.sessions.session_store import ConversationSessionStore
 from app.sessions.models.history import TerminalRecord
 from app.sessions.observation import SessionObservation
 from app.sessions.models.session import (
-    TextSessionAppendOutcome,
-    TextSessionCreation,
-    TextSessionReadExpired,
-    TextSessionReadUnknown,
+    SessionMessageAppendOutcome,
+    SessionCreation,
+    SessionReadExpired,
+    SessionReadUnknown,
 )
 
 InputT = TypeVar("InputT")
@@ -53,7 +52,7 @@ class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):
 
     def create(
         self, session_input: InputT, owner: str
-    ) -> TextSessionCreation | AgentInputRejected[IssueT]:
+    ) -> SessionCreation | AgentInputRejected[IssueT]:
         validated = self._validate(session_input)
         if isinstance(validated, AgentInputRejected):
             return validated
@@ -66,14 +65,14 @@ class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):
         self, session_id: str
     ) -> (
         ConversationReadActive[ContextT, ArtifactT]
-        | TextSessionReadExpired
-        | TextSessionReadUnknown
+        | SessionReadExpired
+        | SessionReadUnknown
     ):
         return self._store.read(session_id)
 
     def append_user_message(
         self, session_id: str, text: str
-    ) -> TextSessionAppendOutcome | ConversationMessageBusy:
+    ) -> SessionMessageAppendOutcome:
         return self._store.append_user_message(session_id, text)
 
     async def execute_turn(self, session_id: str) -> ConversationTurnResult[ArtifactT]:
@@ -128,8 +127,8 @@ class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):
         self, session_id: str
     ) -> AsyncIterator[
         ConversationReadActive[ContextT, ArtifactT]
-        | TextSessionReadExpired
-        | TextSessionReadUnknown
+        | SessionReadExpired
+        | SessionReadUnknown
         | None
     ]:
         return self._observation.observe(session_id)
