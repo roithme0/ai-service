@@ -277,3 +277,6 @@ History and payloads expire together after 90 minutes or disappear on restart.
 Presentation
 has no domain save effect. The AI Service does not know frontend renderers or
 Kochwiki models, and MCP tool results remain independent of presentation.
+# Test artifacts
+
+Pytest stores its cache in `tests/.pytest_cache` and its `tmp_path` files in `tests/.pytest_tmp`. Both directories are disposable and ignored by Git and Docker. Pytest clears the base temporary directory at the start of each run; concurrent pytest runs in the same checkout can therefore interfere with each other.
