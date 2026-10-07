@@ -4,7 +4,7 @@ from typing import Never
 
 import pytest
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore
 from app.sessions.model_turns import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn

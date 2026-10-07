@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from typing import Literal
 from uuid import uuid4
 
-from app.models.agentic_generation import AgenticInputItem, AgenticOutputItem, AgenticToolCall
-from app.models.output_items import message_text
+from app.agents.agentic_generation import AgenticInputItem, AgenticOutputItem, AgenticToolCall
+from app.agents.output_items import message_text
 from app.sessions.text_sessions import TextMessage
 from app.sessions.turn_types import TerminalTurnKind
 

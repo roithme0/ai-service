@@ -5,7 +5,7 @@ from typing import Never
 
 import pytest
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.history import CallRecord, ContinuationRecord, HistoryRecord
 from app.sessions.tool_turns import run_tool_turn
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation

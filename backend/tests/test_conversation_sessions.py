@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.models.agentic_generation import AgenticToolCall
+from app.agents.agentic_generation import AgenticToolCall
 from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.tools import ToolExecution
 from app.sessions.conversation import (

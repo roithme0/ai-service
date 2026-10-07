@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import UTC, datetime
 
-from app.models.agentic_generation import AgenticToolCall
+from app.agents.agentic_generation import AgenticToolCall
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import GreetingsPayload, create_demo_session, new_demo_session_store

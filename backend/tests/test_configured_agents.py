@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from app.agents.demo import create_demo_agent, validate_demo_input
 from app.sessions.model_sessions import create_model_agent
 from app.demo.session import GreetingPayload, GreetingsPayload, new_demo_session_store
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
 from app.sessions.model_sessions import new_model_session_store
 from app.sessions.agent_service import AgentInputRejected
 from app.sessions.conversation import ConversationReadActive

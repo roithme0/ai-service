@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-from app.models.output_items import message_text
+from app.agents.output_items import message_text
 from app.sessions.text_sessions import SessionRole
 from app.sessions.history import (
     ArtifactRecord, CallRecord, ExecutionReportRecord, HistoryRecord, MessageRecord,

@@ -7,7 +7,7 @@ import logging
 from collections.abc import Callable
 from typing import Generic, TypeVar
 
-from app.models.agentic_generation import AgenticGenerator
+from app.agents.agentic_generation import AgenticGenerator
 from app.sessions.conversation import ConversationSessionStore, ConversationTurnReservation, ConversationTurnResult, TurnHistoryUnavailable
 from app.sessions.history import model_input
 from app.sessions.artifacts import ArtifactCandidate

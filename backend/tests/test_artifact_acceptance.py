@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation, TurnHistoryUnavailable
 from app.sessions.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ToolResultRecord, model_input

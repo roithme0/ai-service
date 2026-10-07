@@ -13,7 +13,7 @@ from app.sessions.model_sessions import ModelSessionStore, create_model_agent, n
 from app.sessions.presentation import PresentationPayload, presentation_tool_source
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation, ToolRegistry
 from app.sessions.text_sessions import TextSessionCreation
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 
 
 CAPABILITY = {"type": "example", "description": "An arbitrary consumer presentation",

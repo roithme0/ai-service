@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from openai import AsyncOpenAI
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.models.openai_agentic_generation import OpenAIAgenticGenerator
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.openai_agentic_generation import OpenAIAgenticGenerator
 from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore
 from app.sessions.history import ExecutionReportRecord, HostedToolRecord, ToolResultRecord, model_input
 from app.sessions.http import AgentTransport, _context_issue, get_agent_registry, router

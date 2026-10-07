@@ -8,14 +8,14 @@ from typing import cast
 
 from openai import AsyncOpenAI, omit
 
-from app.models.agentic_generation import (
+from app.agents.agentic_generation import (
     AgenticGenerationRequest,
     AgenticGenerationResponse,
     AgenticToolCall,
 )
 
 
-from app.models.output_items import final_response_text, validate_message_item
+from app.agents.output_items import final_response_text, validate_message_item
 
 
 OPENAI_REQUEST_TIMEOUT_SECONDS = 120.0

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Generic, Literal, TypeVar
 
-from app.models.output_items import MAX_MESSAGE_LENGTH as MAX_MESSAGE_LENGTH
+from app.agents.output_items import MAX_MESSAGE_LENGTH as MAX_MESSAGE_LENGTH
 
 
 MAX_MESSAGE_COUNT = 200

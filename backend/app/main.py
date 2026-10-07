@@ -7,6 +7,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from app.agents.wiring import get_configured_agents
+from app.core.root import router as root_router
 from app.sessions.http import ErrorResponse, ValidationDetail, ValidationErrorResponse, router as conversation_router
 
 
@@ -36,6 +37,10 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
 )
 app.include_router(conversation_router, responses={
+    405: {"model": ErrorResponse},
+    500: {"model": ErrorResponse},
+})
+app.include_router(root_router, responses={
     405: {"model": ErrorResponse},
     500: {"model": ErrorResponse},
 })
@@ -71,8 +76,3 @@ async def handle_request_validation(_request: Request, error: RequestValidationE
 async def handle_unexpected_exception(_request: Request, _error: Exception) -> JSONResponse:
     body = ErrorResponse(detail="Internal Server Error", kind="internal_error")
     return JSONResponse(status_code=500, content=body.model_dump(mode="json", exclude_none=True))
-
-
-@app.get("/", responses={405: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
-async def hello_world() -> dict[str, str]:
-    return {"message": "Hello World"}

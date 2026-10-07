@@ -18,7 +18,7 @@ from app.main import AgentLifespan
 from app.mcp.connection import MCPConnection
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.text_sessions import TextSessionCreation
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from test_model_session_http import valid_request
 
 

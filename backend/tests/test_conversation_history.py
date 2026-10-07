@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation
 from app.sessions.history import CallRecord, ExecutionReportRecord, ExecutionStartedRecord, MessageRecord, ContinuationRecord, TerminalRecord, ToolResultRecord, model_input, text_messages
 from app.sessions.model_turns import ModelTurnStrategy

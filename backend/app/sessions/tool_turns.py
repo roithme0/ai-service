@@ -8,8 +8,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem, AgenticToolCall
-from app.models.output_items import final_response_text, validate_message_item
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem, AgenticToolCall
+from app.agents.output_items import final_response_text, validate_message_item
 from app.sessions.history import CallRecord, HistoryRecord
 from app.sessions.tools import RegisteredTool, ToolExecution, ToolRegistry, ToolSource
 from app.sessions.turn_types import TurnExecutionKind

@@ -13,7 +13,7 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import TypeAdapter
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation
 from app.sessions.http import AgentTransport, StreamEvent, _context_issue, get_agent_registry, router

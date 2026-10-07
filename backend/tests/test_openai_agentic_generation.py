@@ -8,13 +8,13 @@ import pytest
 import httpx
 from openai import AsyncOpenAI
 
-from app.models.openai_agentic_generation import (
+from app.agents.openai_agentic_generation import (
     OPENAI_MAX_OUTPUT_TOKENS,
     OpenAIAgenticGenerator,
 )
 from typing import Never
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
 from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.history import CallRecord, ExecutionReportRecord, MessageRecord, ToolResultRecord, model_input
 from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore
@@ -250,7 +250,7 @@ def test_failed_stream_retains_complete_calls_without_executing_them(ending: str
 
 @pytest.mark.parametrize("cancel", [False, True])
 def test_deadline_and_cancellation_close_stream_without_restart(monkeypatch: pytest.MonkeyPatch, cancel: bool) -> None:
-    monkeypatch.setattr("app.models.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr("app.agents.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.05)
     body = EventStream(response_events([message("Partial.")], "missing"), delay=0.005, repeat=True)
     requests = 0
 
@@ -356,7 +356,7 @@ def test_completed_event_does_not_bypass_failure_or_output_validation(invalid: s
 
 
 def test_deadline_includes_stream_establishment(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("app.models.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr("app.agents.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.01)
     requests = 0
 
     async def respond(request: httpx.Request) -> httpx.Response:
@@ -406,7 +406,7 @@ def test_completed_items_are_retained_before_stream_finishes_and_replayed(
     requests: list[dict[str, object]] = []
     invocations: list[ToolInvocation] = []
     if ending == "timeout":
-        monkeypatch.setattr("app.models.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.05)
+        monkeypatch.setattr("app.agents.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.05)
 
     def respond(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)

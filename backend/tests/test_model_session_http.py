@@ -11,7 +11,7 @@ from app.sessions.model_sessions import ModelAgent, create_model_agent
 from app.agents.wiring import configure_agents
 from app.core.config import Settings
 from app.main import app
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.http import (
     AgentTransport, ConversationTransport, _demo_issue,
     _context_issue, get_agent_registry,

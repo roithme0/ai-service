@@ -11,12 +11,12 @@ from threading import RLock
 from typing import Generic, Literal, TypeVar, cast
 from uuid import uuid4
 
-from app.models.agentic_generation import (
+from app.agents.agentic_generation import (
     AgenticGenerationResponse,
     AgenticToolCall,
     message_phase,
 )
-from app.models.output_items import validate_message_item
+from app.agents.output_items import validate_message_item
 from app.sessions.history import (
     ArtifactRecord,
     CallRecord,

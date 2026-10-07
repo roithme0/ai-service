@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from app.models.agentic_generation import AgenticGenerator
+from app.agents.agentic_generation import AgenticGenerator
 from app.sessions.agent_service import ConfiguredAgentService
 from app.sessions.context import ContextIssue, SessionContext, format_session_context, validate_context_input
 from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore

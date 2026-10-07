@@ -2,7 +2,7 @@
 
 from typing import cast
 
-from app.models.agentic_generation import AgenticGenerationResponse, AgenticInputItem, message_phase
+from app.agents.agentic_generation import AgenticGenerationResponse, AgenticInputItem, message_phase
 
 
 MAX_MESSAGE_LENGTH = 16_000
