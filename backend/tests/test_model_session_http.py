@@ -16,7 +16,7 @@ from app.sessions.http import (
     AgentTransport, ConversationTransport, _demo_issue,
     _context_issue, get_agent_registry,
 )
-from app.agents.demo import create_demo_agent
+from app.demo.agent import create_demo_agent
 from app.sessions.model_sessions import new_model_session_store
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.context import MAX_CONTEXT_LENGTH

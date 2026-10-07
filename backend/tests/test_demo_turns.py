@@ -6,7 +6,7 @@ from app.agents.agentic_generation import AgenticToolCall
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import GreetingsPayload, create_demo_session, new_demo_session_store
-from app.agents.demo import create_demo_agent
+from app.demo.agent import create_demo_agent
 from app.demo.turns import COMPLETE_REPLY, FIRST_REPLY, SECOND_REPLY
 from app.sessions.conversation import (
     ConversationReadActive,

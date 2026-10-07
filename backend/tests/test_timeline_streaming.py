@@ -160,7 +160,7 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
 
 def test_atomic_subscription_preserves_every_tool_transition_and_bounded_overflow() -> None:
     async def exercise() -> None:
-        from app.agents.demo import create_demo_agent
+        from app.demo.agent import create_demo_agent
         from app.demo.session import new_demo_session_store
         store = new_demo_session_store()
         agent = create_demo_agent(store, delay_seconds=0)
@@ -202,7 +202,7 @@ def test_atomic_subscription_preserves_every_tool_transition_and_bounded_overflo
 
 def test_background_task_cancelled_before_first_step_releases_reserved_turn() -> None:
     async def exercise() -> None:
-        from app.agents.demo import create_demo_agent
+        from app.demo.agent import create_demo_agent
         agent = create_demo_agent(delay_seconds=1)
         session = agent.create({}, owner="test:user").session_id
         agent.append_user_message(session, 'Hello')
@@ -219,7 +219,7 @@ def test_records_arriving_after_initial_capture_before_first_delivery_are_not_lo
     async def exercise() -> None:
         from collections.abc import Callable
         from unittest.mock import patch
-        from app.agents.demo import create_demo_agent
+        from app.demo.agent import create_demo_agent
         from app.demo.session import new_demo_session_store
         store = new_demo_session_store()
         agent = create_demo_agent(store, delay_seconds=0)
@@ -256,7 +256,7 @@ def test_records_arriving_after_initial_capture_before_first_delivery_are_not_lo
 def test_observer_capacity_and_expiry_release_resources_without_extending_lifetime() -> None:
     async def exercise() -> None:
         from datetime import UTC, datetime
-        from app.agents.demo import create_demo_agent
+        from app.demo.agent import create_demo_agent
         from app.demo.session import new_demo_session_store
         from app.sessions.text_sessions import TextSessionReadUnknown
         now = datetime(2026, 10, 4, tzinfo=UTC)

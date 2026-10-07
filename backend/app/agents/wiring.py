@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 from openai import AsyncOpenAI
 
-from app.agents.demo import DemoAgent, create_demo_agent
+from app.demo.agent import DemoAgent, create_demo_agent
 from app.sessions.model_sessions import ModelAgent, create_model_agent
 from app.agents.runtime import AgentRuntime
 from app.core.config import Settings, get_settings

@@ -1,7 +1,7 @@
 import asyncio
 from datetime import UTC, datetime
 
-from app.agents.demo import create_demo_agent, validate_demo_input
+from app.demo.agent import create_demo_agent, validate_demo_input
 from app.sessions.model_sessions import create_model_agent
 from app.demo.session import GreetingPayload, GreetingsPayload, new_demo_session_store
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
