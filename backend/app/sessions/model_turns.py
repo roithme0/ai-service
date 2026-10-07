@@ -7,14 +7,14 @@ import logging
 from collections.abc import Callable
 from typing import Generic, TypeVar
 
-from app.agents.interfaces.generation import AgenticGenerator
+from app.agents.protocols.generation import AgenticGenerator
 from app.sessions.conversation import ConversationSessionStore, TurnHistoryUnavailable
 from app.sessions.models.conversation import ConversationTurnReservation, ConversationTurnResult
 from app.agents.history_projection import model_input
 from app.sessions.models.artifacts import ArtifactCandidate
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.agents.tool_turns import run_tool_turn
-from app.agents.interfaces.tools import ToolSource
+from app.agents.protocols.tools import ToolSource
 from app.sessions.web_search import WebSearchConfig
 
 

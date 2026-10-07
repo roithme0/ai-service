@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Annotated, Generic, Literal, Protocol, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
 
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -36,6 +36,7 @@ from app.sessions.models.http import (
     ValidationErrorKind,
     ValidationErrorResponse,
 )
+from app.sessions.protocols.http import ConversationTransport
 from app.sessions.identity import require_application_user
 from app.agents.models.input import AgentInputRejected
 from app.agents.service import ConfiguredAgentService
@@ -83,24 +84,6 @@ IssueT = TypeVar("IssueT")
 
 class EventStreamResponse(StreamingResponse):
     media_type = "text/event-stream"
-
-
-class ConversationTransport(Protocol):
-    def create(
-        self, value: object, owner: str
-    ) -> SessionCreationResponse | JSONResponse: ...
-    def read(
-        self, session_id: str, owner: str
-    ) -> SessionSnapshotResponse | JSONResponse: ...
-    def append(
-        self, session_id: str, text: str, owner: str
-    ) -> UserMessageResponse | JSONResponse: ...
-    def turn(
-        self, session_id: str, owner: str
-    ) -> AcceptedTurnResponse | JSONResponse: ...
-    def observe(
-        self, session_id: str, turn_id: str, owner: str
-    ) -> StreamingResponse | JSONResponse: ...
 
 
 @dataclass(frozen=True)

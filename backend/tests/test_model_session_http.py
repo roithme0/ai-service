@@ -12,7 +12,8 @@ from app.agents.wiring import configure_agents
 from app.core.config import Settings
 from app.main import app
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.http import AgentTransport, ConversationTransport, _demo_issue, _context_issue, get_agent_registry
+from app.sessions.protocols.http import ConversationTransport
+from app.sessions.http import AgentTransport, _demo_issue, _context_issue, get_agent_registry
 from app.demo.agent import create_demo_agent
 from app.sessions.model_sessions import new_model_session_store
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
