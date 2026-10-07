@@ -1,7 +1,7 @@
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from app.sessions.conversation import ConversationSessionStore
+from app.sessions.session_store import ConversationSessionStore
 from app.sessions.models.conversation import ConversationTurnReservation, ConversationTurnResult
 
 

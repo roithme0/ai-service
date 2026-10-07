@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Generic, TypeVar
 
 from app.agents.protocols.generation import AgenticGenerator
-from app.sessions.conversation import ConversationSessionStore, TurnHistoryUnavailable
+from app.sessions.session_store import ConversationSessionStore, TurnHistoryUnavailable
 from app.sessions.models.conversation import ConversationTurnReservation, ConversationTurnResult
 from app.agents.history_projection import model_input
 from app.sessions.models.artifacts import ArtifactCandidate

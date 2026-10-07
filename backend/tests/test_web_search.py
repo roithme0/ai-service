@@ -12,12 +12,12 @@ from openai import AsyncOpenAI
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.agents.openai_agentic_generation import OpenAIAgenticGenerator
 from app.sessions.models.conversation import ConversationSessionSettings
-from app.sessions.conversation import ConversationSessionStore
+from app.sessions.session_store import ConversationSessionStore
 from app.sessions.models.history import ExecutionReportRecord, HostedToolRecord, ToolResultRecord
 from app.agents.history_projection import model_input
 from app.sessions.http import AgentTransport, _context_issue, get_agent_registry, router
 from app.sessions.model_sessions import create_model_agent
-from app.sessions.model_turns import ModelTurnStrategy
+from app.sessions.model_turn_execution import ModelTurnStrategy
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
 from app.sessions.models.execution import ToolExecution

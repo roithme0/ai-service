@@ -10,7 +10,7 @@ from app.sessions.models.conversation import (
     ConversationSessionSettings,
     ConversationTurnReservation,
 )
-from app.sessions.conversation import ConversationSessionStore
+from app.sessions.session_store import ConversationSessionStore
 from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 from app.sessions.models.session import (
     TextSessionAppendAccepted,

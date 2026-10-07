@@ -16,7 +16,7 @@ from pydantic import TypeAdapter
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
-from app.sessions.conversation import ConversationSessionStore
+from app.sessions.session_store import ConversationSessionStore
 from app.sessions.http import AgentTransport, _context_issue, get_agent_registry, router
 from app.sessions.models.http import StreamEvent
 from app.sessions.model_sessions import create_model_agent

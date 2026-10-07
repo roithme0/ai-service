@@ -13,7 +13,7 @@ from app.sessions.models.conversation import (
     ConversationSessionSettings,
     ConversationTurnReservation,
 )
-from app.sessions.conversation import (
+from app.sessions.session_store import (
     ConversationSessionStore,
     TurnHistoryUnavailable,
 )

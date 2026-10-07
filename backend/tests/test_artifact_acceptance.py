@@ -10,10 +10,10 @@ import pytest
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
-from app.sessions.conversation import ConversationSessionStore, TurnHistoryUnavailable
+from app.sessions.session_store import ConversationSessionStore, TurnHistoryUnavailable
 from app.sessions.models.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ToolResultRecord
 from app.agents.history_projection import model_input
-from app.sessions.model_turns import ModelTurnStrategy
+from app.sessions.model_turn_execution import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
@@ -69,7 +69,7 @@ def test_acceptance_assigns_identity_atomically_and_failure_retains_capacity() -
     assert isinstance(next_turn, ConversationTurnReservation)
     next_call = start(store, session_id, next_turn)
     assert next_call.execution_id != call.execution_id
-    with patch("app.sessions.conversation.uuid4", side_effect=AssertionError("must not allocate")):
+    with patch("app.sessions.session_store.uuid4", side_effect=AssertionError("must not allocate")):
         rejected = store.record_result(session_id, next_call, candidate("overflow"))
     assert json.loads(output_text(rejected)) == {"kind": "limit_reached"}
     assert rejected.artifact is None
@@ -242,8 +242,8 @@ def test_copy_failure_is_atomic_and_does_not_allocate_identity(copy_number: int)
             if copies == copy_number:
                 raise ValueError("payload copy failed")
         return deepcopy(value)
-    with patch("app.sessions.conversation.deepcopy", side_effect=fail_copy), patch(
-        "app.sessions.conversation.uuid4", side_effect=AssertionError("must not allocate")):
+    with patch("app.sessions.session_store.deepcopy", side_effect=fail_copy), patch(
+        "app.sessions.session_store.uuid4", side_effect=AssertionError("must not allocate")):
         with pytest.raises(ValueError, match="payload copy failed"):
             store.record_result(session_id, call, candidate())
     assert store.history(session_id) == before
@@ -259,7 +259,7 @@ def test_expiry_between_acceptance_check_and_timestamp_allocates_no_identity() -
     assert isinstance(turn, ConversationTurnReservation)
     call = start(store, created.session_id, turn)
     with patch.object(store, "_clock", side_effect=[now, created.expires_at]), patch(
-        "app.sessions.conversation.uuid4", side_effect=AssertionError("must not allocate")):
+        "app.sessions.session_store.uuid4", side_effect=AssertionError("must not allocate")):
         with pytest.raises(TurnHistoryUnavailable) as error:
             store.record_result(created.session_id, call, candidate())
     assert error.value.kind == "expired"

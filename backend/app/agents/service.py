@@ -14,7 +14,7 @@ from app.sessions.models.conversation import (
     ConversationTurnReservation,
     ConversationTurnResult,
 )
-from app.sessions.conversation import ConversationSessionStore
+from app.sessions.session_store import ConversationSessionStore
 from app.sessions.models.history import TerminalRecord
 from app.sessions.observation import SessionObservation
 from app.sessions.models.session import (
