@@ -6,8 +6,8 @@ import pytest
 from mcp.types import CallToolResult, TextContent, Tool
 
 from app.agents.runtime import AgentRuntime
-from app.mcp_connection import MCPConnection
-from app.mcp_tools import MCPToolset
+from app.mcp.connection import MCPConnection
+from app.mcp.tools import MCPToolset
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.tool_turns import run_tool_turn
 from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation, ToolRegistry

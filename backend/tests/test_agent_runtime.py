@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from app.agents.runtime import AgentRuntime
-from app.mcp_connection import MCPConnection
+from app.mcp.connection import MCPConnection
 
 
 class RecordedConnection(MCPConnection):

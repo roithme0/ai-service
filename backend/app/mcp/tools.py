@@ -6,7 +6,7 @@ import re
 from collections.abc import Awaitable, Callable
 from typing import Never
 
-from app.mcp_connection import MCPConnection
+from app.mcp.connection import MCPConnection
 from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation
 
 

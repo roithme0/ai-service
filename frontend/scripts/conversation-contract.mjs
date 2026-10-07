@@ -36,7 +36,7 @@ if (process.argv.length > 3 || (process.argv[2] && !check)) {
 
 const temporary = await mkdtemp(join(tmpdir(), 'ai-service-contract-'));
 try {
-  const document = execFileSync(process.env.PYTHON ?? 'python', ['-m', 'app.export_openapi'], {
+  const document = execFileSync(process.env.PYTHON ?? 'python', ['-m', 'scripts.export_openapi'], {
     cwd: backend,
     encoding: 'utf8',
   });

@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from app.agents.wiring import configure_agents, get_configured_agents
 from app.core.config import Settings
 from app.main import AgentLifespan
-from app.mcp_connection import MCPConnection
+from app.mcp.connection import MCPConnection
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.text_sessions import TextSessionCreation
 from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
@@ -69,7 +69,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                 assert url == "http://localhost/mcp/"
                 return Client(streamable_http_client(url, http_client=http), read_timeout_seconds=read_timeout_seconds)
 
-            monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+            monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
             agents = configure_agents(configured_settings())
             assert agents.kochwiki.agent is not None
             assert agents.demo.mcp_connections == ()
@@ -208,7 +208,7 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
             def client_for_url(url: str, *, read_timeout_seconds: float) -> Client:
                 return Client(streamable_http_client(url, http_client=http), read_timeout_seconds=read_timeout_seconds)
 
-            monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+            monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
             agents = configure_agents(configured_settings())
             await agents.start()
             try:
@@ -264,7 +264,7 @@ def test_discovery_consumes_all_pages(monkeypatch: pytest.MonkeyPatch) -> None:
         def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
             return Client(server, read_timeout_seconds=read_timeout_seconds)
 
-        monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
         monkeypatch.setattr(Client, "list_tools", list_tools)
         connection = MCPConnection("paged", "http://localhost/mcp/")
         await connection.start()
@@ -296,7 +296,7 @@ def test_connection_failure_disables_only_owning_agent(
             async def broken_list(self: Client, *, cursor: str | None = None) -> ListToolsResult:
                 raise RuntimeError("discovery failure")
 
-            monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+            monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
             if fail_discovery:
                 monkeypatch.setattr(Client, "list_tools", broken_list)
             agents = configure_agents(configured_settings())
@@ -324,7 +324,7 @@ def test_application_lifespan_owns_connection_and_clears_agent_cache(monkeypatch
         def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
             return Client(server, read_timeout_seconds=read_timeout_seconds)
 
-        monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
         monkeypatch.setattr("app.agents.wiring.get_settings", configured_settings)
         get_configured_agents.cache_clear()
         async with AgentLifespan(FastAPI()):

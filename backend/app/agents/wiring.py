@@ -15,7 +15,7 @@ from app.sessions.model_sessions import ModelAgent, create_model_agent
 from app.agents.runtime import AgentRuntime
 from app.core.config import Settings, get_settings
 from app.models.openai_agentic_generation import OpenAIAgenticGenerator
-from app.mcp_connection import MCPConnection
+from app.mcp.connection import MCPConnection
 from app.sessions.web_search import WebSearchConfig
 
 
