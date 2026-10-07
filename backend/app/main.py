@@ -7,7 +7,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from app.agents.wiring import get_configured_agents
-from app.core.root import router as root_router
+from app.core.http import router as core_router
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
 from app.sessions.http import router as conversation_router
 
@@ -41,7 +41,7 @@ app.include_router(conversation_router, responses={
     405: {"model": HttpErrorResponse},
     500: {"model": HttpErrorResponse},
 })
-app.include_router(root_router, responses={
+app.include_router(core_router, responses={
     405: {"model": HttpErrorResponse},
     500: {"model": HttpErrorResponse},
 })
