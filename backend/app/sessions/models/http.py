@@ -36,7 +36,9 @@ SessionErrorKind = Literal[
 ]
 
 ErrorKind = Literal[HttpErrorKind, SessionErrorKind]
-ValidationErrorKind = Literal["invalid_input", "invalid_message", RequestValidationErrorKind]
+InputValidationErrorKind = Literal["invalid_input", "invalid_message"]
+ValidationErrorKind = Literal[InputValidationErrorKind, RequestValidationErrorKind]
+StreamErrorReason = Literal["unavailable", "observation_limit"]
 
 
 class ErrorResponse(ErrorEnvelope[ErrorKind]):
@@ -154,7 +156,7 @@ class StreamTerminal(BaseModel):
 class StreamError(BaseModel):
     kind: Literal["error"]
     turn_id: str
-    reason: Literal["unavailable", "observation_limit"]
+    reason: StreamErrorReason
 
 
 class StreamEvent(

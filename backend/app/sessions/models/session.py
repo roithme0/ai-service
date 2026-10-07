@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Generic, Literal, TypeVar
 
 SessionRole = Literal["user", "assistant"]
+SessionUnavailableKind = Literal["unknown", "expired"]
 InvalidMessageReason = Literal["blank_text", "text_too_long"]
 T = TypeVar("T")
 

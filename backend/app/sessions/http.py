@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from typing import Annotated, Generic, Literal, TypeVar
+from typing import Annotated, Generic, TypeVar
 
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -21,6 +21,7 @@ from app.sessions.models.http import (
     EmptyTurnRequest,
     ErrorResponse,
     InputIssue,
+    InputValidationErrorKind,
     SessionCreationRequest,
     SessionCreationResponse,
     SessionErrorKind,
@@ -528,7 +529,7 @@ def _validation_error(
 
 def _input_error(
     issues: tuple[InputIssue, ...],
-    kind: Literal["invalid_input", "invalid_message"] = "invalid_input",
+    kind: InputValidationErrorKind = "invalid_input",
 ) -> JSONResponse:
     return _validation_error(
         kind,

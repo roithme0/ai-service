@@ -8,7 +8,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from threading import RLock
-from typing import Generic, Literal, TypeVar, cast
+from typing import Generic, TypeVar, cast
 from uuid import uuid4
 
 from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
@@ -39,6 +39,7 @@ from app.sessions.models.turns import (
 from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 from app.sessions.models.session import (
     InvalidMessageReason,
+    SessionUnavailableKind,
     TextMessage,
     TextSessionAppendAccepted,
     TextSessionAppendExpired,
@@ -78,7 +79,7 @@ def _invalid_text_reason(text: object) -> InvalidMessageReason | None:
 
 
 class TurnHistoryUnavailable(ValueError):
-    def __init__(self, kind: Literal["unknown", "expired"]) -> None:
+    def __init__(self, kind: SessionUnavailableKind) -> None:
         super().__init__("session turn is no longer active")
         self.kind = kind
 

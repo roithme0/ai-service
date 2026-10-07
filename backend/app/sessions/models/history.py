@@ -10,11 +10,16 @@ from app.agents.models.generation import AgenticInputItem, AgenticOutputItem, Ag
 from app.sessions.models.turns import TerminalTurnKind
 
 
+MessageRecordKind = Literal["user", "intermediate", "final", "unspecified"]
+HostedToolStatus = Literal["completed", "failed"]
+ExecutionReportState = Literal["not_executed", "outcome_unknown"]
+
+
 @dataclass(frozen=True)
 class MessageRecord:
     turn_id: str
     item: AgenticInputItem
-    kind: Literal["user", "intermediate", "final", "unspecified"]
+    kind: MessageRecordKind
     message_id: str = field(default_factory=lambda: str(uuid4()))
 
 
@@ -49,7 +54,7 @@ class HostedToolRecord:
     turn_id: str
     execution_id: str
     item: AgenticOutputItem
-    status: Literal["completed", "failed"]
+    status: HostedToolStatus
 
 
 @dataclass(frozen=True)
@@ -66,7 +71,7 @@ class ExecutionReportRecord:
     turn_id: str
     execution_id: str
     call_id: str
-    state: Literal["not_executed", "outcome_unknown"]
+    state: ExecutionReportState
     provenance: Literal["service"] = "service"
 
 
