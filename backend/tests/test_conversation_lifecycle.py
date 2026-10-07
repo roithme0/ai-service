@@ -5,10 +5,12 @@ from threading import Event
 
 import pytest
 
-from app.sessions.conversation import (
-    ConversationReadActive, ConversationSessionSettings, ConversationSessionStore,
+from app.sessions.models.conversation import (
+    ConversationReadActive,
+    ConversationSessionSettings,
     ConversationTurnReservation,
 )
+from app.sessions.conversation import ConversationSessionStore
 from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 from app.sessions.models.session import (
     TextSessionAppendAccepted,

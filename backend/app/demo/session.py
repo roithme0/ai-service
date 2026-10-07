@@ -9,10 +9,8 @@ from typing import Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict
 
-from app.sessions.conversation import (
-    ConversationSessionSettings,
-    ConversationSessionStore,
-)
+from app.sessions.models.conversation import ConversationSessionSettings
+from app.sessions.conversation import ConversationSessionStore
 from app.sessions.models.session import TextSessionCreation
 
 SESSION_LIFETIME = timedelta(minutes=90)

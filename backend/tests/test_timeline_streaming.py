@@ -15,10 +15,12 @@ from pydantic import TypeAdapter
 
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
-from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation
-from app.sessions.http import AgentTransport, StreamEvent, _context_issue, get_agent_registry, router
+from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
+from app.sessions.conversation import ConversationSessionStore
+from app.sessions.http import AgentTransport, _context_issue, get_agent_registry, router
+from app.sessions.models.http import StreamEvent
 from app.sessions.model_sessions import create_model_agent
-from app.sessions.presentation import PresentationPayload
+from app.sessions.models.presentation import PresentationPayload
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.tools import LocalToolSource
 from app.sessions.models.execution import ToolExecution

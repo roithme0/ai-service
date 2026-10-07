@@ -5,7 +5,8 @@ from datetime import timedelta
 import pytest
 
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation
+from app.sessions.models.conversation import ConversationSessionSettings, ConversationTurnReservation
+from app.sessions.conversation import ConversationSessionStore
 from app.sessions.models.history import CallRecord, ExecutionReportRecord, ExecutionStartedRecord, MessageRecord, ContinuationRecord, TerminalRecord, ToolResultRecord
 from app.agents.history import model_input
 from app.sessions.history import text_messages

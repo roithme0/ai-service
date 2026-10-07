@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
-from app.sessions.presentation import ArtifactCapability
+from app.sessions.models.presentation import ArtifactCapability
 
 
 @dataclass(frozen=True)

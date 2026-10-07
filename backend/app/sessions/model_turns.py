@@ -8,11 +8,12 @@ from collections.abc import Callable
 from typing import Generic, TypeVar
 
 from app.agents.agentic_generation import AgenticGenerator
-from app.sessions.conversation import ConversationSessionStore, ConversationTurnReservation, ConversationTurnResult, TurnHistoryUnavailable
+from app.sessions.conversation import ConversationSessionStore, TurnHistoryUnavailable
+from app.sessions.models.conversation import ConversationTurnReservation, ConversationTurnResult
 from app.agents.history import model_input
 from app.sessions.models.artifacts import ArtifactCandidate
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
-from app.sessions.tool_turns import run_tool_turn
+from app.agents.tool_turns import run_tool_turn
 from app.agents.models.tools import ToolSource
 from app.sessions.web_search import WebSearchConfig
 

@@ -7,7 +7,7 @@ import pytest
 
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.history import CallRecord, ContinuationRecord, HistoryRecord
-from app.sessions.tool_turns import run_tool_turn
+from app.agents.tool_turns import run_tool_turn
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.tools import LocalToolSource
 from app.sessions.models.execution import ToolExecution

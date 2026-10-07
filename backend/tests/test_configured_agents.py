@@ -7,7 +7,7 @@ from app.demo.session import GreetingPayload, GreetingsPayload, new_demo_session
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
 from app.sessions.model_sessions import new_model_session_store
 from app.agents.service import AgentInputRejected
-from app.sessions.conversation import ConversationReadActive
+from app.sessions.models.conversation import ConversationReadActive
 
 from test_model_session_http import valid_request
 

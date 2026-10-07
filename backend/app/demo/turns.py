@@ -12,7 +12,8 @@ from app.demo.tools import DemoToolFactory
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import DemoContext, DemoPayload, DemoSessionStore
-from app.sessions.conversation import ConversationTurnReservation, ConversationTurnResult, TurnHistoryUnavailable
+from app.sessions.models.conversation import ConversationTurnReservation, ConversationTurnResult
+from app.sessions.conversation import TurnHistoryUnavailable
 from app.agents.tools import ToolRegistry
 
 

@@ -6,7 +6,8 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Generic, TypeVar
 
-from app.sessions.conversation import ConversationReadActive, ConversationSessionStore
+from app.sessions.models.conversation import ConversationReadActive
+from app.sessions.conversation import ConversationSessionStore
 from app.sessions.models.session import TextSessionReadExpired, TextSessionReadUnknown
 
 ContextT = TypeVar("ContextT")

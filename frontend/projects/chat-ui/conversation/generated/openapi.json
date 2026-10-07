@@ -94,6 +94,9 @@
           "kind": {
             "enum": [
               "not_found",
+              "method_not_allowed",
+              "http_error",
+              "internal_error",
               "unknown_configuration",
               "agent_unavailable",
               "unknown",
@@ -102,10 +105,7 @@
               "not_ready",
               "conflict",
               "limit_reached",
-              "generation_failed",
-              "method_not_allowed",
-              "http_error",
-              "internal_error"
+              "generation_failed"
             ],
             "title": "Kind",
             "type": "string"
@@ -127,6 +127,32 @@
           "kind"
         ],
         "title": "ErrorResponse",
+        "type": "object"
+      },
+      "HttpErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "not_found",
+              "method_not_allowed",
+              "http_error",
+              "internal_error"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "kind"
+        ],
+        "title": "HttpErrorResponse",
         "type": "object"
       },
       "SessionCreationResponse": {
@@ -786,7 +812,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -796,7 +822,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -876,7 +902,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -896,7 +922,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -981,7 +1007,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -1011,7 +1037,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -1117,7 +1143,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -1157,7 +1183,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -1255,7 +1281,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -1295,7 +1321,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -1400,7 +1426,7 @@
             "content": {
               "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },
@@ -1440,7 +1466,7 @@
             "content": {
               "text/event-stream": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HttpErrorResponse"
                 }
               }
             },

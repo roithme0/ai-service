@@ -79,11 +79,25 @@ export type ErrorResponse = {
     /**
      * Kind
      */
-    kind: 'not_found' | 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed' | 'method_not_allowed' | 'http_error' | 'internal_error';
+    kind: 'not_found' | 'method_not_allowed' | 'http_error' | 'internal_error' | 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed';
     /**
      * Turn Id
      */
     turn_id?: string | null;
+};
+
+/**
+ * HttpErrorResponse
+ */
+export type HttpErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Kind
+     */
+    kind: 'not_found' | 'method_not_allowed' | 'http_error' | 'internal_error';
 };
 
 /**
@@ -442,11 +456,11 @@ export type HelloWorldGetErrors = {
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
 };
 
 export type HelloWorldGetError = HelloWorldGetErrors[keyof HelloWorldGetErrors];
@@ -498,7 +512,7 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostErrors = {
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Unprocessable Content
      */
@@ -506,7 +520,7 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostErrors = {
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
     /**
      * Service Unavailable
      */
@@ -554,7 +568,7 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors = {
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Gone
      */
@@ -566,7 +580,7 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors = {
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
     /**
      * Service Unavailable
      */
@@ -622,7 +636,7 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostEr
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Conflict
      */
@@ -638,7 +652,7 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostEr
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
     /**
      * Service Unavailable
      */
@@ -691,7 +705,7 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors 
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Conflict
      */
@@ -707,7 +721,7 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors 
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
     /**
      * Bad Gateway
      */
@@ -763,7 +777,7 @@ export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEvent
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Conflict
      */
@@ -779,7 +793,7 @@ export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEvent
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
 };
 
 export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetError = ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors[keyof ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors];

@@ -5,8 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from copy import deepcopy
-from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem, AgenticToolCall
 from app.agents.output_items import final_response_text, validate_message_item
@@ -14,18 +13,11 @@ from app.sessions.models.history import CallRecord, HistoryRecord
 from app.agents.models.tools import RegisteredTool, ToolSource
 from app.agents.tools import ToolRegistry
 from app.sessions.models.execution import ToolExecution
-from app.sessions.turn_types import TurnExecutionKind
+from app.agents.models.turns import ToolTurnResult
 from app.sessions.web_search import WebSearchConfig
 
 
 ArtifactT = TypeVar("ArtifactT")
-
-
-@dataclass(frozen=True)
-class ToolTurnResult(Generic[ArtifactT]):
-    kind: TurnExecutionKind
-    text: str | None
-    artifacts: tuple[ArtifactT, ...]
 
 
 def combine_tool_inputs(

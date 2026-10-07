@@ -11,7 +11,8 @@ from openai import AsyncOpenAI
 
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.agents.openai_agentic_generation import OpenAIAgenticGenerator
-from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore
+from app.sessions.models.conversation import ConversationSessionSettings
+from app.sessions.conversation import ConversationSessionStore
 from app.sessions.models.history import ExecutionReportRecord, HostedToolRecord, ToolResultRecord
 from app.agents.history import model_input
 from app.sessions.http import AgentTransport, _context_issue, get_agent_registry, router

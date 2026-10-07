@@ -4,34 +4,46 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Generic, Literal, Protocol, TypeVar
 
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    RootModel,
-    ValidationError,
-    field_serializer,
-)
+from pydantic import BaseModel, ValidationError
 
 from app.agents.wiring import get_configured_agents
+from app.core.models import ValidationDetail
 from app.sessions.models.context import ContextIssue
+from app.sessions.models.http import (
+    AcceptedTurnResponse,
+    ArtifactResponse,
+    AssistantMessageResponse,
+    EmptyTurnRequest,
+    ErrorResponse,
+    InputIssue,
+    SessionCreationRequest,
+    SessionCreationResponse,
+    SessionErrorKind,
+    SessionSnapshotResponse,
+    StreamClosing,
+    StreamError,
+    StreamEvent,
+    StreamSnapshot,
+    StreamTerminal,
+    StreamUpsert,
+    UserMessageRequest,
+    UserMessageResponse,
+    ValidationErrorKind,
+    ValidationErrorResponse,
+)
 from app.sessions.identity import require_application_user
 from app.agents.service import AgentInputRejected, ConfiguredAgentService
-from app.sessions.conversation import (
-    ActiveTurnStatus,
+from app.sessions.models.conversation import (
     ConversationMessageBusy,
     ConversationReadActive,
-    PublishedArtifact,
-    TurnKind,
 )
+from app.sessions.models.artifacts import PublishedArtifact
 from app.sessions.models.timeline import TimelineItem, TimelineMessage
-from app.sessions.turn_types import TerminalTurnKind
 from app.sessions.models.session import (
     TextMessage,
     TextSessionAppendAccepted,
@@ -66,180 +78,6 @@ InputT = TypeVar("InputT")
 ContextT = TypeVar("ContextT")
 PayloadT = TypeVar("PayloadT", bound=BaseModel)
 IssueT = TypeVar("IssueT")
-
-
-class InputIssue(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    location: tuple[str | int, ...]
-    message: str
-
-
-SessionErrorKind = Literal[
-    "unknown_configuration",
-    "agent_unavailable",
-    "unknown",
-    "expired",
-    "busy",
-    "not_ready",
-    "conflict",
-    "limit_reached",
-    "generation_failed",
-]
-
-ErrorKind = Literal[
-    "not_found",
-    SessionErrorKind,
-    "method_not_allowed",
-    "http_error",
-    "internal_error",
-]
-
-ValidationErrorKind = Literal["invalid_input", "invalid_message", "request_validation"]
-
-
-class ErrorResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    detail: str = Field(min_length=1)
-    kind: ErrorKind
-    turn_id: str | None = None
-
-
-class ValidationDetail(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    loc: tuple[str | int, ...] = Field(min_length=1)
-    msg: str = Field(min_length=1)
-    type: str = Field(min_length=1)
-
-
-class ValidationErrorResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    detail: list[ValidationDetail] = Field(min_length=1)
-    kind: ValidationErrorKind
-
-
-class SessionCreationRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    input: object = None
-
-
-class UserMessageRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    text: str
-
-
-class EmptyTurnRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-
-class UserMessageResponse(BaseModel):
-    role: Literal["user"]
-    text: str
-    turn_id: None
-
-
-class AssistantMessageResponse(BaseModel):
-    role: Literal["assistant"]
-    text: str
-    turn_id: str
-
-
-MessageResponse = Annotated[
-    UserMessageResponse | AssistantMessageResponse, Field(discriminator="role")
-]
-
-
-class ArtifactResponse(BaseModel):
-    artifact_id: str
-    type: str
-    created_at: datetime
-    order: int
-    turn_id: str
-    payload: dict[str, object]
-
-    @field_serializer("created_at")
-    def serialize_created_at(self, value: datetime) -> str:
-        return value.isoformat()
-
-
-class SessionCreationResponse(BaseModel):
-    session_id: str
-    expires_at: datetime
-
-    @field_serializer("expires_at")
-    def serialize_expires_at(self, value: datetime) -> str:
-        return value.isoformat()
-
-
-class SessionSnapshotResponse(BaseModel):
-    session_id: str
-    expires_at: datetime
-    messages: list[MessageResponse]
-    artifacts: list[ArtifactResponse]
-    terminal_turn_id: str | None
-    terminal_turn_kind: TurnKind | None
-    timeline: list[Annotated[TimelineItem, Field(discriminator="kind")]]
-    active_turn_id: str | None
-    active_turn_status: ActiveTurnStatus | None
-    sequence: int = Field(ge=0)
-
-    @field_serializer("expires_at")
-    def serialize_expires_at(self, value: datetime) -> str:
-        return value.isoformat()
-
-
-class AcceptedTurnResponse(BaseModel):
-    kind: Literal["accepted"]
-    turn_id: str
-
-
-class StreamSnapshot(BaseModel):
-    kind: Literal["snapshot"]
-    turn_id: str
-    snapshot: SessionSnapshotResponse
-
-
-class StreamUpsert(BaseModel):
-    kind: Literal["upsert"]
-    turn_id: str
-    identity: str
-    order: int = Field(ge=0)
-    sequence: int = Field(ge=0)
-    item: Annotated[TimelineItem, Field(discriminator="kind")]
-    artifact: ArtifactResponse | None = None
-
-
-class StreamClosing(BaseModel):
-    kind: Literal["closing"]
-    turn_id: str
-    sequence: int = Field(ge=0)
-
-
-class StreamTerminal(BaseModel):
-    kind: Literal["terminal"]
-    turn_id: str
-    sequence: int = Field(ge=0)
-    outcome: TerminalTurnKind
-
-
-class StreamError(BaseModel):
-    kind: Literal["error"]
-    turn_id: str
-    reason: Literal["unavailable", "observation_limit"]
-
-
-class StreamEvent(
-    RootModel[
-        Annotated[
-            StreamSnapshot
-            | StreamUpsert
-            | StreamClosing
-            | StreamTerminal
-            | StreamError,
-            Field(discriminator="kind"),
-        ]
-    ]
-):
-    pass
 
 
 class EventStreamResponse(StreamingResponse):

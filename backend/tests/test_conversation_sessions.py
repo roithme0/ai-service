@@ -7,12 +7,14 @@ import pytest
 from app.agents.agentic_generation import AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.execution import ToolExecution
-from app.sessions.conversation import (
+from app.sessions.models.conversation import (
     ConversationMessageBusy,
     ConversationReadActive,
     ConversationSessionSettings,
-    ConversationSessionStore,
     ConversationTurnReservation,
+)
+from app.sessions.conversation import (
+    ConversationSessionStore,
     TurnHistoryUnavailable,
 )
 from app.sessions.models.session import TextSessionAppendAccepted

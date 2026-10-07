@@ -18,10 +18,11 @@ from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGener
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.history import CallRecord, ExecutionReportRecord, MessageRecord, ToolResultRecord
 from app.agents.history import model_input
-from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore
+from app.sessions.models.conversation import ConversationSessionSettings
+from app.sessions.conversation import ConversationSessionStore
 from app.sessions.model_turns import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
-from app.sessions.tool_turns import run_tool_turn
+from app.agents.tool_turns import run_tool_turn
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.tools import LocalToolSource
 from app.sessions.models.execution import ToolExecution

@@ -7,14 +7,14 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from app.sessions.conversation import (
+from app.sessions.models.conversation import (
     ConversationMessageBusy,
     ConversationReadActive,
     ConversationSessionSettings,
-    ConversationSessionStore,
     ConversationTurnReservation,
     ConversationTurnResult,
 )
+from app.sessions.conversation import ConversationSessionStore
 from app.sessions.models.history import TerminalRecord
 from app.sessions.observation import SessionObservation
 from app.sessions.models.session import (

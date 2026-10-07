@@ -8,7 +8,7 @@ from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import GreetingsPayload, create_demo_session, new_demo_session_store
 from app.demo.agent import create_demo_agent
 from app.demo.turns import COMPLETE_REPLY, FIRST_REPLY, SECOND_REPLY
-from app.sessions.conversation import (
+from app.sessions.models.conversation import (
     ConversationReadActive,
     ConversationTurnReservation,
 )

@@ -9,9 +9,10 @@ from app.sessions.models.artifacts import ArtifactCandidate
 from app.agents.service import AgentInputAccepted
 from app.agents.context import validate_context_input
 from app.sessions.models.context import SessionContext
-from app.sessions.conversation import ConversationSessionSettings, ConversationTurnReservation
+from app.sessions.models.conversation import ConversationSessionSettings, ConversationTurnReservation
 from app.sessions.model_sessions import ModelSessionStore, create_model_agent, new_model_session_store
-from app.sessions.presentation import PresentationPayload, presentation_tool_source
+from app.sessions.models.presentation import PresentationPayload
+from app.agents.presentation import presentation_tool_source
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.tools import LocalToolSource, ToolRegistry
 from app.sessions.models.execution import ToolExecution
