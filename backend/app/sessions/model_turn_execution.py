@@ -15,7 +15,7 @@ from app.sessions.models.artifacts import ArtifactCandidate
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.agents.tool_turns import run_tool_turn
 from app.agents.protocols.tools import ToolSource
-from app.sessions.web_search import WebSearchConfig
+from app.agents.models.web_search import WebSearchConfig
 
 
 ContextT = TypeVar("ContextT")

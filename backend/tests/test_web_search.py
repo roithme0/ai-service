@@ -21,7 +21,7 @@ from app.sessions.model_turn_execution import ModelTurnStrategy
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
 from app.sessions.models.execution import ToolExecution
-from app.sessions.web_search import WebSearchConfig
+from app.agents.models.web_search import WebSearchConfig
 from reserved_turn import execute_reserved_turn
 from test_openai_agentic_generation import EventStream, message, response_events
 

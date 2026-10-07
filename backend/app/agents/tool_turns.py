@@ -16,7 +16,7 @@ from app.agents.models.tools import RegisteredTool
 from app.agents.tool_registry import ToolRegistry
 from app.sessions.models.execution import ToolExecution
 from app.agents.models.turns import ToolTurnResult
-from app.sessions.web_search import WebSearchConfig
+from app.agents.models.web_search import WebSearchConfig
 
 
 ArtifactT = TypeVar("ArtifactT")

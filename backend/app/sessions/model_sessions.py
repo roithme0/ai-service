@@ -17,7 +17,7 @@ from app.sessions.model_turn_execution import MAX_PROVIDER_RESPONSES, MAX_TOOL_A
 from app.agents.protocols.tools import ToolSource
 from app.sessions.models.presentation import PresentationPayload
 from app.agents.presentation_tool import presentation_tool_source
-from app.sessions.web_search import WebSearchConfig
+from app.agents.models.web_search import WebSearchConfig
 
 ModelAgent = ConfiguredAgentService[object, SessionContext, PresentationPayload, ContextIssue]
 ModelSessionStore = ConversationSessionStore[SessionContext, PresentationPayload]

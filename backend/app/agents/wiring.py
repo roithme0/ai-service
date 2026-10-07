@@ -15,7 +15,7 @@ from app.agents.runtime import AgentRuntime
 from app.core.config import Settings, get_settings
 from app.agents.openai_agentic_generation import OpenAIAgenticGenerator
 from app.mcp.connection import MCPConnection
-from app.sessions.web_search import WebSearchConfig
+from app.agents.models.web_search import WebSearchConfig
 
 
 logger = logging.getLogger(__name__)
