@@ -3,7 +3,9 @@ import json
 
 import pytest
 
-from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation, ToolRegistry
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.tools import ToolRegistry
+from app.sessions.models.execution import ToolExecution
 
 
 def test_direct_invocation_returns_typed_result_and_forwards_arguments() -> None:

@@ -17,36 +17,25 @@ from app.agents.agentic_generation import (
     message_phase,
 )
 from app.agents.output_items import validate_message_item
-from app.sessions.history import (
-    ArtifactRecord,
-    CallRecord,
-    ExecutionReportRecord,
-    ExecutionStartedRecord,
-    HostedToolRecord,
-    ContinuationRecord,
-    HistoryRecord,
-    MessageRecord,
-    TerminalRecord,
-    ToolResultRecord,
-    text_messages,
-)
-from app.sessions.artifacts import (
+from app.sessions.models.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord, HostedToolRecord, ContinuationRecord, HistoryRecord, MessageRecord, TerminalRecord, ToolResultRecord
+from app.sessions.history import text_messages
+from app.sessions.models.artifacts import (
     ArtifactCandidate,
     ArtifactEnvelope,
     ArtifactToolOutput,
     PublishedArtifact,
 )
-from app.sessions.tools import ToolExecution
-from app.sessions.timeline import TimelineItem, timeline
+from app.sessions.models.execution import ToolExecution
+from app.sessions.models.timeline import TimelineItem
+from app.sessions.timeline import timeline
 from app.sessions.turn_types import (
     ActiveTurnStatus as ActiveTurnStatus,
     TerminalTurnKind,
     TurnExecutionKind,
     TurnKind as TurnKind,
 )
-from app.sessions.text_sessions import (
-    MAX_MESSAGE_COUNT,
-    MAX_MESSAGE_LENGTH,
+from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
+from app.sessions.models.session import (
     InvalidMessageReason,
     TextMessage,
     TextSessionAppendAccepted,

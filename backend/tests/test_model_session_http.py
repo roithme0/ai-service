@@ -19,8 +19,8 @@ from app.sessions.http import (
 from app.demo.agent import create_demo_agent
 from app.sessions.model_sessions import new_model_session_store
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
-from app.sessions.context import MAX_CONTEXT_LENGTH
-from app.sessions.text_sessions import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
+from app.agents.context import MAX_CONTEXT_LENGTH
+from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 
 
 RECIPE_VERSION_UUID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"

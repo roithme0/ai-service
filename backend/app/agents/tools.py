@@ -1,4 +1,4 @@
-"""Provider-independent registration and invocation of session tools."""
+"""Provider-independent agent tool registration and invocation."""
 
 from __future__ import annotations
 
@@ -6,41 +6,12 @@ import inspect
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Generic, Protocol, TypeVar
+from typing import Generic, TypeVar
 
-from app.sessions.artifacts import ArtifactToolOutput
-
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.sessions.models.execution import ToolExecution
 
 ArtifactT = TypeVar("ArtifactT", covariant=True)
-
-
-@dataclass(frozen=True)
-class ToolInvocation:
-    name: str
-    arguments: str
-
-
-@dataclass(frozen=True)
-class ToolExecution(Generic[ArtifactT]):
-    output: str | ArtifactToolOutput
-    artifact: ArtifactT | None = None
-    failed: bool = False
-
-
-@dataclass(frozen=True)
-class RegisteredTool(Generic[ArtifactT]):
-    name: str
-    schema: dict[str, object]
-    execute: Callable[
-        [ToolInvocation], ToolExecution[ArtifactT] | Awaitable[ToolExecution[ArtifactT]]
-    ]
-
-
-class ToolSource(Protocol[ArtifactT]):
-    def registered_tools(self) -> tuple[RegisteredTool[ArtifactT], ...]: ...
-
-    @property
-    def instructions(self) -> str: ...
 
 
 @dataclass(frozen=True)

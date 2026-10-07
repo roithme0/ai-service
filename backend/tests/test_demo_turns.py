@@ -12,10 +12,12 @@ from app.sessions.conversation import (
     ConversationReadActive,
     ConversationTurnReservation,
 )
-from app.sessions.tools import ToolRegistry, RegisteredTool, ToolExecution, ToolInvocation
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.tools import ToolRegistry
+from app.sessions.models.execution import ToolExecution
 from app.demo.session import DemoPayload
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
-from app.sessions.history import ArtifactRecord, CallRecord, ToolResultRecord, ExecutionReportRecord
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.models.history import ArtifactRecord, CallRecord, ToolResultRecord, ExecutionReportRecord
 
 
 async def no_delay(seconds: float) -> None:

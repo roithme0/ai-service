@@ -1,59 +1,27 @@
 """Safe ordered UI projection of retained conversation activity."""
 
-from dataclasses import dataclass
-from typing import Literal
-
 from app.agents.output_items import message_text
-from app.sessions.text_sessions import SessionRole
-from app.sessions.history import (
-    ArtifactRecord, CallRecord, ExecutionReportRecord, HistoryRecord, MessageRecord,
-    TerminalRecord, ToolResultRecord, ExecutionStartedRecord, HostedToolRecord,
+from app.sessions.models.history import (
+    ArtifactRecord,
+    CallRecord,
+    ExecutionReportRecord,
+    ExecutionStartedRecord,
+    HistoryRecord,
+    HostedToolRecord,
+    MessageRecord,
+    TerminalRecord,
+    ToolResultRecord,
 )
-
-
-TimelineToolStatus = Literal["requested", "running", "completed", "failed", "not_executed", "outcome_unknown"]
-
-
-@dataclass(frozen=True)
-class TimelineMessage:
-    turn_id: str
-    id: str
-    role: SessionRole
-    text: str
-    kind: Literal["message"]
-
-
-@dataclass(frozen=True)
-class TimelineIntermediateMessage:
-    turn_id: str
-    id: str
-    text: str
-    kind: Literal["intermediate"]
-
-
-@dataclass(frozen=True)
-class TimelineTool:
-    turn_id: str
-    execution_id: str
-    name: str
-    status: TimelineToolStatus
-    kind: Literal["tool"]
-
-
-@dataclass(frozen=True)
-class TimelineArtifact:
-    turn_id: str
-    artifact_id: str
-    kind: Literal["artifact"]
-
-
-@dataclass(frozen=True)
-class TimelineFailure:
-    turn_id: str
-    kind: Literal["failure"]
-
-
-type TimelineItem = TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure
+from app.sessions.models.session import SessionRole
+from app.sessions.models.timeline import (
+    TimelineArtifact,
+    TimelineFailure,
+    TimelineIntermediateMessage,
+    TimelineItem,
+    TimelineMessage,
+    TimelineTool,
+    TimelineToolStatus,
+)
 
 
 def timeline(history: tuple[HistoryRecord, ...]) -> tuple[TimelineItem, ...]:
@@ -62,7 +30,7 @@ def timeline(history: tuple[HistoryRecord, ...]) -> tuple[TimelineItem, ...]:
                if isinstance(record, (ToolResultRecord, ExecutionReportRecord))}
     user_index = 0
     items: list[TimelineItem] = []
-    for history_index, record in enumerate(history):
+    for record in history:
         if isinstance(record, MessageRecord):
             if record.kind == "intermediate":
                 items.append(TimelineIntermediateMessage(record.turn_id, f"message-{record.message_id}",

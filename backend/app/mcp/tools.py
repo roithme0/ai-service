@@ -7,7 +7,8 @@ from collections.abc import Awaitable, Callable
 from typing import Never
 
 from app.mcp.connection import MCPConnection
-from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.sessions.models.execution import ToolExecution
 
 
 logger = logging.getLogger(__name__)

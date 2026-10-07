@@ -10,8 +10,10 @@ from typing import Generic, TypeVar
 
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerator, AgenticInputItem, AgenticToolCall
 from app.agents.output_items import final_response_text, validate_message_item
-from app.sessions.history import CallRecord, HistoryRecord
-from app.sessions.tools import RegisteredTool, ToolExecution, ToolRegistry, ToolSource
+from app.sessions.models.history import CallRecord, HistoryRecord
+from app.agents.models.tools import RegisteredTool, ToolSource
+from app.agents.tools import ToolRegistry
+from app.sessions.models.execution import ToolExecution
 from app.sessions.turn_types import TurnExecutionKind
 from app.sessions.web_search import WebSearchConfig
 

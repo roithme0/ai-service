@@ -15,13 +15,16 @@ from app.agents.openai_agentic_generation import (
 from typing import Never
 
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
-from app.sessions.history import CallRecord, ExecutionReportRecord, MessageRecord, ToolResultRecord, model_input
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.models.history import CallRecord, ExecutionReportRecord, MessageRecord, ToolResultRecord
+from app.agents.history import model_input
 from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore
 from app.sessions.model_turns import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
 from app.sessions.tool_turns import run_tool_turn
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
 from tool_turn_recorder import ToolTurnRecorder
 
 
@@ -397,7 +400,7 @@ class PausedItemStream(EventStream):
 def test_completed_items_are_retained_before_stream_finishes_and_replayed(
     monkeypatch: pytest.MonkeyPatch, ending: str,
 ) -> None:
-    from app.sessions.history import ContinuationRecord, TerminalRecord
+    from app.sessions.models.history import ContinuationRecord, TerminalRecord
     output = [message("Checking.", "commentary"), function_call(),
               {"id": "rs_1", "type": "reasoning", "status": "completed", "summary": [],
                "encrypted_content": "opaque"}]

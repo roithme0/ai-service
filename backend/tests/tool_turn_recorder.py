@@ -3,8 +3,8 @@
 from copy import deepcopy
 
 from app.agents.agentic_generation import AgenticOutputItem, message_phase
-from app.sessions.history import CallRecord, ContinuationRecord, HistoryRecord, MessageRecord
-from app.sessions.tools import ToolExecution
+from app.sessions.models.history import CallRecord, ContinuationRecord, HistoryRecord, MessageRecord
+from app.sessions.models.execution import ToolExecution
 
 
 class ToolTurnRecorder[ArtifactT]:

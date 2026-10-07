@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 
 from app.demo.session import DemoPayload, GreetingPayload
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
-from app.sessions.tools import RegisteredTool, ToolExecution, ToolInvocation
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.sessions.models.execution import ToolExecution
 
 
 CREATE_GREETING_SCHEMA: dict[str, object] = {

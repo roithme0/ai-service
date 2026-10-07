@@ -20,7 +20,7 @@ from pydantic import (
 )
 
 from app.agents.wiring import get_configured_agents
-from app.sessions.context import ContextIssue
+from app.sessions.models.context import ContextIssue
 from app.sessions.identity import require_application_user
 from app.agents.service import AgentInputRejected, ConfiguredAgentService
 from app.sessions.conversation import (
@@ -30,9 +30,9 @@ from app.sessions.conversation import (
     PublishedArtifact,
     TurnKind,
 )
-from app.sessions.timeline import TimelineItem, TimelineMessage
+from app.sessions.models.timeline import TimelineItem, TimelineMessage
 from app.sessions.turn_types import TerminalTurnKind
-from app.sessions.text_sessions import (
+from app.sessions.models.session import (
     TextMessage,
     TextSessionAppendAccepted,
     TextSessionAppendExpired,

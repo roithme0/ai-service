@@ -14,12 +14,14 @@ from fastapi import FastAPI
 from pydantic import TypeAdapter
 
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation
 from app.sessions.http import AgentTransport, StreamEvent, _context_issue, get_agent_registry, router
 from app.sessions.model_sessions import create_model_agent
 from app.sessions.presentation import PresentationPayload
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
 
 
 @contextmanager
@@ -258,7 +260,7 @@ def test_observer_capacity_and_expiry_release_resources_without_extending_lifeti
         from datetime import UTC, datetime
         from app.demo.agent import create_demo_agent
         from app.demo.session import new_demo_session_store
-        from app.sessions.text_sessions import TextSessionReadUnknown
+        from app.sessions.models.session import TextSessionReadUnknown
         now = datetime(2026, 10, 4, tzinfo=UTC)
         store = new_demo_session_store(clock=lambda: now)
         agent = create_demo_agent(store, delay_seconds=0)

@@ -13,7 +13,7 @@ from app.sessions.conversation import (
     ConversationSessionSettings,
     ConversationSessionStore,
 )
-from app.sessions.text_sessions import TextSessionCreation
+from app.sessions.models.session import TextSessionCreation
 
 SESSION_LIFETIME = timedelta(minutes=90)
 MAX_ARTIFACTS = 2

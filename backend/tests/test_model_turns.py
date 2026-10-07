@@ -8,7 +8,9 @@ from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGener
 from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore
 from app.sessions.model_turns import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
 
 
 @pytest.mark.parametrize("cancel", [False, True])

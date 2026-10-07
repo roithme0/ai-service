@@ -6,11 +6,15 @@ import pytest
 
 from app.agents.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation
-from app.sessions.history import CallRecord, ExecutionReportRecord, ExecutionStartedRecord, MessageRecord, ContinuationRecord, TerminalRecord, ToolResultRecord, model_input, text_messages
+from app.sessions.models.history import CallRecord, ExecutionReportRecord, ExecutionStartedRecord, MessageRecord, ContinuationRecord, TerminalRecord, ToolResultRecord
+from app.agents.history import model_input
+from app.sessions.history import text_messages
 from app.sessions.model_turns import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
-from app.sessions.timeline import TimelineIntermediateMessage, TimelineMessage
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
+from app.sessions.models.timeline import TimelineIntermediateMessage, TimelineMessage
 
 
 def call_response(*calls: AgenticToolCall) -> AgenticGenerationResponse:

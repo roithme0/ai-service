@@ -9,10 +9,14 @@ from app.sessions.conversation import (
     ConversationReadActive, ConversationSessionSettings, ConversationSessionStore,
     ConversationTurnReservation,
 )
-from app.sessions.text_sessions import (
-    MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH, TextSessionAppendAccepted,
-    TextSessionAppendExpired, TextSessionAppendInvalidMessage, TextSessionAppendLimitReached,
-    TextSessionReadExpired, TextSessionReadUnknown,
+from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
+from app.sessions.models.session import (
+    TextSessionAppendAccepted,
+    TextSessionAppendExpired,
+    TextSessionAppendInvalidMessage,
+    TextSessionAppendLimitReached,
+    TextSessionReadExpired,
+    TextSessionReadUnknown,
 )
 
 

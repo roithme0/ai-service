@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from typing import Generic, TypeVar
 
 from app.sessions.conversation import ConversationReadActive, ConversationSessionStore
-from app.sessions.text_sessions import TextSessionReadExpired, TextSessionReadUnknown
+from app.sessions.models.session import TextSessionReadExpired, TextSessionReadUnknown
 
 ContextT = TypeVar("ContextT")
 ArtifactT = TypeVar("ArtifactT")

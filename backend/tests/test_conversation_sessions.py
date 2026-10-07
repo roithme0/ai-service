@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.agents.agentic_generation import AgenticToolCall
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
-from app.sessions.tools import ToolExecution
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.models.execution import ToolExecution
 from app.sessions.conversation import (
     ConversationMessageBusy,
     ConversationReadActive,
@@ -15,7 +15,7 @@ from app.sessions.conversation import (
     ConversationTurnReservation,
     TurnHistoryUnavailable,
 )
-from app.sessions.text_sessions import TextSessionAppendAccepted
+from app.sessions.models.session import TextSessionAppendAccepted
 
 
 @dataclass(frozen=True)

@@ -3,9 +3,7 @@
 from typing import cast
 
 from app.agents.agentic_generation import AgenticGenerationResponse, AgenticInputItem, message_phase
-
-
-MAX_MESSAGE_LENGTH = 16_000
+from app.sessions.limits import MAX_MESSAGE_LENGTH
 
 
 def final_response_text(response: AgenticGenerationResponse) -> str | None:

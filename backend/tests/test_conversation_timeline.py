@@ -2,11 +2,11 @@ import json
 from datetime import timedelta
 
 from app.agents.agentic_generation import AgenticGenerationResponse, AgenticToolCall
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation
-from app.sessions.history import model_input
-from app.sessions.timeline import TimelineArtifact, TimelineFailure, TimelineMessage, TimelineTool
-from app.sessions.tools import ToolExecution
+from app.agents.history import model_input
+from app.sessions.models.timeline import TimelineArtifact, TimelineFailure, TimelineMessage, TimelineTool
+from app.sessions.models.execution import ToolExecution
 
 
 def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> None:

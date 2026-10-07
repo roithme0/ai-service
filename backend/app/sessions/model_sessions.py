@@ -7,12 +7,13 @@ from datetime import UTC, datetime, timedelta
 
 from app.agents.agentic_generation import AgenticGenerator
 from app.agents.service import ConfiguredAgentService
-from app.sessions.context import ContextIssue, SessionContext, format_session_context, validate_context_input
+from app.agents.context import format_session_context, validate_context_input
+from app.sessions.models.context import ContextIssue, SessionContext
 from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore
-from app.sessions.artifacts import ArtifactCandidate
+from app.sessions.models.artifacts import ArtifactCandidate
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.model_turns import MAX_PROVIDER_RESPONSES, MAX_TOOL_ATTEMPTS, ModelTurnStrategy
-from app.sessions.tools import ToolSource
+from app.agents.models.tools import ToolSource
 from app.sessions.presentation import PresentationPayload, presentation_tool_source
 from app.sessions.web_search import WebSearchConfig
 

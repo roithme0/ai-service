@@ -1,16 +1,10 @@
-"""Shared message projections and session operation contracts."""
+"""Shared message, snapshot, and session operation contracts."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Generic, Literal, TypeVar
-
-from app.agents.output_items import MAX_MESSAGE_LENGTH as MAX_MESSAGE_LENGTH
-
-
-MAX_MESSAGE_COUNT = 200
-
 
 SessionRole = Literal["user", "assistant"]
 InvalidMessageReason = Literal["blank_text", "text_too_long"]

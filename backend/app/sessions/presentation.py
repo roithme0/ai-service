@@ -13,8 +13,10 @@ from referencing.jsonschema import DRAFT202012
 from referencing.exceptions import Unresolvable
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, field_validator
 
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
 
 
 class ArtifactCapability(BaseModel):

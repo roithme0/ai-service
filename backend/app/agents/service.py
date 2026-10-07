@@ -15,9 +15,9 @@ from app.sessions.conversation import (
     ConversationTurnReservation,
     ConversationTurnResult,
 )
-from app.sessions.history import TerminalRecord
+from app.sessions.models.history import TerminalRecord
 from app.sessions.observation import SessionObservation
-from app.sessions.text_sessions import (
+from app.sessions.models.session import (
     TextSessionAppendOutcome,
     TextSessionCreation,
     TextSessionReadExpired,
