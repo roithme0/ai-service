@@ -275,6 +275,54 @@ def test_deadline_and_cancellation_close_stream_without_restart(monkeypatch: pyt
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("mismatch", [None, "identity", "summary", "text", "arguments", "order", "missing"])
+def test_reasoning_ciphertext_changes_do_not_mask_output_mismatches(mismatch: str | None) -> None:
+    output: list[dict[str, object]] = [
+        {"id": "rs_1", "type": "reasoning", "status": "completed", "summary": [],
+         "encrypted_content": "item-completion-token"},
+        message("I will adjust the eggs.", "commentary"),
+        function_call(),
+    ]
+    events = response_events(output)
+    final_output: list[dict[str, object]] = json.loads(json.dumps(output))
+    final_output[0]["encrypted_content"] = "response-completion-token"
+    if mismatch == "identity":
+        final_output[0]["id"] = "rs_other"
+    elif mismatch == "summary":
+        final_output[0]["summary"] = [{"type": "summary_text", "text": "Different summary"}]
+    elif mismatch == "text":
+        final_output[1] = message("Different message.", "commentary")
+    elif mismatch == "arguments":
+        final_output[2]["arguments"] = '{"eggs": 4}'
+    elif mismatch == "order":
+        final_output.reverse()
+    elif mismatch == "missing":
+        final_output.pop()
+    final = events[-1]["response"]
+    assert isinstance(final, dict)
+    final["output"] = final_output
+    body = EventStream(events)
+    retained: list[dict[str, object]] = []
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, stream=body)
+        )) as http_client:
+            async with AsyncOpenAI(api_key="test", http_client=http_client, max_retries=0) as client:
+                request = AgenticGenerationRequest((), "Instructions", (), on_output_item=retained.append)
+                if mismatch is not None:
+                    with pytest.raises(ValueError, match="disagrees with recorded items"):
+                        await OpenAIAgenticGenerator("gpt-5.6-sol", client).generate(request)
+                else:
+                    result = await OpenAIAgenticGenerator("gpt-5.6-sol", client).generate(request)
+                    assert result.output_items == tuple(retained)
+                    assert result.output_items[0]["encrypted_content"] == "item-completion-token"
+                    assert result.tool_calls[0].arguments == "{}"
+        assert body.closed
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("invalid", ["status", "error", "output", "malformed", "late_error"])
 def test_completed_event_does_not_bypass_failure_or_output_validation(invalid: str) -> None:
     events = response_events([message("Finished.")])
