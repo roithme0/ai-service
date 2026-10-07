@@ -4,7 +4,7 @@ import json
 import pytest
 
 from app.agents.models.tools import RegisteredTool, ToolInvocation
-from app.agents.tools import ToolRegistry
+from app.agents.tool_registry import ToolRegistry
 from app.sessions.models.execution import ToolExecution
 
 

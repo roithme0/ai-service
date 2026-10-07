@@ -12,8 +12,8 @@ from typing import Generic, Literal, TypeVar, cast
 from uuid import uuid4
 
 from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
-from app.agents.output_items import message_phase
-from app.agents.output_items import validate_message_item
+from app.agents.generation_messages import message_phase
+from app.agents.generation_messages import validate_message_item
 from app.sessions.models.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord, HostedToolRecord, ContinuationRecord, HistoryRecord, MessageRecord, TerminalRecord, ToolResultRecord
 from app.sessions.history import text_messages
 from app.sessions.models.artifacts import (

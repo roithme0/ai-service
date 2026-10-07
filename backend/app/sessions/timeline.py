@@ -1,6 +1,6 @@
 """Safe ordered UI projection of retained conversation activity."""
 
-from app.agents.output_items import message_text
+from app.agents.generation_messages import message_text
 from app.sessions.models.history import (
     ArtifactRecord,
     CallRecord,

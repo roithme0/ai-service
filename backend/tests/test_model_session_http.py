@@ -16,7 +16,7 @@ from app.sessions.http import AgentTransport, ConversationTransport, _demo_issue
 from app.demo.agent import create_demo_agent
 from app.sessions.model_sessions import new_model_session_store
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
-from app.agents.context import MAX_CONTEXT_LENGTH
+from app.agents.context_preparation import MAX_CONTEXT_LENGTH
 from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 
 

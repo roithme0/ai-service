@@ -13,7 +13,7 @@ from app.sessions.models.conversation import (
     ConversationTurnReservation,
 )
 from app.agents.models.tools import RegisteredTool, ToolInvocation
-from app.agents.tools import ToolRegistry
+from app.agents.tool_registry import ToolRegistry
 from app.sessions.models.execution import ToolExecution
 from app.demo.session import DemoPayload
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput

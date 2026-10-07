@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Generic, Protocol, TypeVar
+from typing import Generic, TypeVar
 
 from app.sessions.models.execution import ToolExecution
 
@@ -24,13 +24,6 @@ class RegisteredTool(Generic[ArtifactT]):
     execute: Callable[
         [ToolInvocation], ToolExecution[ArtifactT] | Awaitable[ToolExecution[ArtifactT]]
     ]
-
-
-class ToolSource(Protocol[ArtifactT]):
-    def registered_tools(self) -> tuple[RegisteredTool[ArtifactT], ...]: ...
-
-    @property
-    def instructions(self) -> str: ...
 
 
 @dataclass(frozen=True)

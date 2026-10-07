@@ -3,7 +3,7 @@ import json
 import pytest
 
 from app.agents.models.input import AgentInputAccepted, AgentInputRejected
-from app.agents.context import CONTEXT_PREFIX, MAX_CONTEXT_LENGTH, validate_context_input
+from app.agents.context_preparation import CONTEXT_PREFIX, MAX_CONTEXT_LENGTH, validate_context_input
 
 
 def test_retains_json_values_without_domain_validation_or_shared_mutable_state() -> None:

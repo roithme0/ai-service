@@ -8,7 +8,7 @@ from app.agents.models.generation import AgenticGenerationRequest, AgenticGenera
 from app.sessions.models.conversation import ConversationSessionSettings, ConversationTurnReservation
 from app.sessions.conversation import ConversationSessionStore
 from app.sessions.models.history import CallRecord, ExecutionReportRecord, ExecutionStartedRecord, MessageRecord, ContinuationRecord, TerminalRecord, ToolResultRecord
-from app.agents.history import model_input
+from app.agents.history_projection import model_input
 from app.sessions.history import text_messages
 from app.sessions.model_turns import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn

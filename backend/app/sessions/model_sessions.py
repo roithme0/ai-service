@@ -5,18 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from app.agents.agentic_generation import AgenticGenerator
+from app.agents.interfaces.generation import AgenticGenerator
 from app.agents.service import ConfiguredAgentService
-from app.agents.context import format_session_context, validate_context_input
+from app.agents.context_preparation import format_session_context, validate_context_input
 from app.sessions.models.context import ContextIssue, SessionContext
 from app.sessions.models.conversation import ConversationSessionSettings
 from app.sessions.conversation import ConversationSessionStore
 from app.sessions.models.artifacts import ArtifactCandidate
 from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.model_turns import MAX_PROVIDER_RESPONSES, MAX_TOOL_ATTEMPTS, ModelTurnStrategy
-from app.agents.models.tools import ToolSource
+from app.agents.interfaces.tools import ToolSource
 from app.sessions.models.presentation import PresentationPayload
-from app.agents.presentation import presentation_tool_source
+from app.agents.presentation_tool import presentation_tool_source
 from app.sessions.web_search import WebSearchConfig
 
 ModelAgent = ConfiguredAgentService[object, SessionContext, PresentationPayload, ContextIssue]

@@ -5,7 +5,7 @@ from app.agents.models.generation import AgenticGenerationResponse, AgenticToolC
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
 from app.sessions.conversation import ConversationSessionStore
-from app.agents.history import model_input
+from app.agents.history_projection import model_input
 from app.sessions.models.timeline import TimelineArtifact, TimelineFailure, TimelineMessage, TimelineTool
 from app.sessions.models.execution import ToolExecution
 

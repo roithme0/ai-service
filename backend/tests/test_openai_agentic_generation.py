@@ -17,7 +17,7 @@ from typing import Never
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.history import CallRecord, ExecutionReportRecord, MessageRecord, ToolResultRecord
-from app.agents.history import model_input
+from app.agents.history_projection import model_input
 from app.sessions.models.conversation import ConversationSessionSettings
 from app.sessions.conversation import ConversationSessionStore
 from app.sessions.model_turns import ModelTurnStrategy

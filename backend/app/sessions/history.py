@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.agents.output_items import message_text
+from app.agents.generation_messages import message_text
 from app.sessions.models.history import HistoryRecord, MessageRecord, TerminalRecord
 from app.sessions.models.session import TextMessage
 

@@ -12,7 +12,7 @@ from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
 from app.sessions.conversation import ConversationSessionStore, TurnHistoryUnavailable
 from app.sessions.models.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ToolResultRecord
-from app.agents.history import model_input
+from app.agents.history_projection import model_input
 from app.sessions.model_turns import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
 from app.agents.models.tools import RegisteredTool, ToolInvocation

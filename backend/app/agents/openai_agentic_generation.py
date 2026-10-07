@@ -11,7 +11,7 @@ from openai import AsyncOpenAI, omit
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 
 
-from app.agents.output_items import final_response_text, validate_message_item
+from app.agents.generation_messages import final_response_text, validate_message_item
 
 
 OPENAI_REQUEST_TIMEOUT_SECONDS = 120.0

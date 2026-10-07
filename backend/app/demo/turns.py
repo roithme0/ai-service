@@ -14,7 +14,7 @@ from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import DemoContext, DemoPayload, DemoSessionStore
 from app.sessions.models.conversation import ConversationTurnReservation, ConversationTurnResult
 from app.sessions.conversation import TurnHistoryUnavailable
-from app.agents.tools import ToolRegistry
+from app.agents.tool_registry import ToolRegistry
 
 
 TURN_DELAY_SECONDS = 1.5
