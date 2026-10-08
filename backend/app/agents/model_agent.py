@@ -1,0 +1,63 @@
+"""Construction of model-backed agents with caller-provided context."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from datetime import UTC, datetime
+
+from app.agents.protocols.generation import AgenticGenerator
+from app.agents.service import ConfiguredAgentService
+from app.agents.context_preparation import format_session_context, validate_context_input
+from app.agents.models.context import ContextIssue
+from app.sessions.models.context import SessionContext
+from app.sessions.config import DEFAULT_SESSION_LIFETIME
+from app.sessions.models.conversation import ConversationSessionSettings
+from app.sessions.session_store import ConversationSessionStore
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactPayload
+from app.agents.instructions import CONVERSATION_INSTRUCTIONS
+from app.agents.model_turn_execution import MAX_PROVIDER_RESPONSES, MAX_TOOL_ATTEMPTS, ModelTurnStrategy
+from app.agents.protocols.tools import ToolSource
+from app.agents.artifact_tool import artifact_tool_source
+from app.agents.models.web_search import WebSearchConfig
+
+ModelAgent = ConfiguredAgentService[object, SessionContext, ArtifactPayload, ContextIssue]
+ModelSessionStore = ConversationSessionStore[SessionContext, ArtifactPayload]
+MAX_ARTIFACTS = 100
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def new_model_session_store(clock: Callable[[], datetime] = _utc_now) -> ModelSessionStore:
+    return ConversationSessionStore(lifetime=DEFAULT_SESSION_LIFETIME, clock=clock)
+
+
+def create_model_agent(
+    generator: AgenticGenerator,
+    store: ModelSessionStore | None = None,
+    *,
+    instructions: str = CONVERSATION_INSTRUCTIONS,
+    max_artifacts: int = MAX_ARTIFACTS,
+    max_tool_attempts: int = MAX_TOOL_ATTEMPTS,
+    max_provider_responses: int = MAX_PROVIDER_RESPONSES,
+    tool_sources: tuple[ToolSource[ArtifactCandidate[ArtifactPayload]], ...] = (),
+    web_search: WebSearchConfig | None = None,
+) -> ModelAgent:
+    owned_store = store if store is not None else new_model_session_store()
+
+    def session_tools(context: SessionContext, session_id: str, turn_id: str) -> tuple[ToolSource[ArtifactCandidate[ArtifactPayload]], ...]:
+        if not context.artifact_capabilities:
+            return ()
+        return (artifact_tool_source(context.artifact_capabilities),)
+
+    return ConfiguredAgentService(
+        owned_store, validate_context_input,
+        ModelTurnStrategy(
+            owned_store, generator, format_session_context, tool_sources,
+            session_tool_sources=session_tools, instructions=instructions, max_attempts=max_tool_attempts,
+            max_provider_responses=max_provider_responses,
+            web_search=web_search,
+        ),
+        ConversationSessionSettings(max_artifacts=max_artifacts),
+    )

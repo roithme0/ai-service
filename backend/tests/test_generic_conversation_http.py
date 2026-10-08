@@ -11,13 +11,18 @@ from turn_observation import observe_turn
 from pydantic import ValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.agents.demo import create_demo_agent
-from app.sessions.agent_service import ConfiguredAgentService
-from app.sessions.model_sessions import create_model_agent
+from app.demo.agent import create_demo_agent
+from app.agents.service import ConfiguredAgentService
+from app.agents.model_agent import create_model_agent
 from app.main import app, handle_http_exception, handle_request_validation
-from app.sessions.http import (
-    AgentConfiguration, AgentTransport, ConversationTransport, ErrorResponse, SessionErrorKind,
-    ValidationErrorResponse, _demo_issue, _error, _context_issue, get_agent_registry,
+from app.agents.protocols.http import ConversationTransport
+from app.agents.enums.configuration import AgentConfiguration
+from app.agents.http import AgentTransport, _demo_issue, _context_issue, get_agent_registry
+from app.agents.http_responses import session_error_response
+from app.agents.models.http_responses import (
+    ErrorResponse,
+    SessionErrorKind,
+    ValidationErrorResponse,
 )
 from test_model_session_http import FakeGenerator, valid_request
 
@@ -118,7 +123,7 @@ def test_other_owner_cannot_access_or_change_conversation(
 
 def test_every_session_error_kind_has_a_valid_response() -> None:
     for kind in cast(tuple[SessionErrorKind, ...], get_args(SessionErrorKind)):
-        response = _error(kind)
+        response = session_error_response(kind)
         body = ErrorResponse.model_validate_json(response.body)
         assert response.status_code >= 400
         assert body.kind == kind
@@ -347,18 +352,18 @@ def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClien
     for path in (base, f"{base}/{{session_id}}/messages", f"{base}/{{session_id}}/turns"):
         assert paths[path]["post"]["responses"]["422"]["description"] == "Unprocessable Content"
     expected = {
-        base: {404: "ErrorResponse", 405: "ErrorResponse", 422: "ValidationErrorResponse", 500: "ErrorResponse", 503: "ErrorResponse"},
+        base: {404: "ErrorResponse", 405: "HttpErrorResponse", 422: "ValidationErrorResponse", 500: "HttpErrorResponse", 503: "ErrorResponse"},
         f"{base}/{{session_id}}": {
-            404: "ErrorResponse", 405: "ErrorResponse", 410: "ErrorResponse", 422: "ValidationErrorResponse",
-            500: "ErrorResponse", 503: "ErrorResponse",
+            404: "ErrorResponse", 405: "HttpErrorResponse", 410: "ErrorResponse", 422: "ValidationErrorResponse",
+            500: "HttpErrorResponse", 503: "ErrorResponse",
         },
         f"{base}/{{session_id}}/messages": {
-            404: "ErrorResponse", 405: "ErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
-            422: "ValidationErrorResponse", 500: "ErrorResponse", 503: "ErrorResponse",
+            404: "ErrorResponse", 405: "HttpErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
+            422: "ValidationErrorResponse", 500: "HttpErrorResponse", 503: "ErrorResponse",
         },
         f"{base}/{{session_id}}/turns": {
-            404: "ErrorResponse", 405: "ErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
-            422: "ValidationErrorResponse", 500: "ErrorResponse", 502: "ErrorResponse", 503: "ErrorResponse",
+            404: "ErrorResponse", 405: "HttpErrorResponse", 409: "ErrorResponse", 410: "ErrorResponse",
+            422: "ValidationErrorResponse", 500: "HttpErrorResponse", 502: "ErrorResponse", 503: "ErrorResponse",
         },
     }
     for path, responses in expected.items():
@@ -374,7 +379,7 @@ def test_error_schemas_are_published_and_reject_invalid_bodies(client: TestClien
     assert {"method_not_allowed", "http_error", "internal_error"} <= set(error_schema["properties"]["kind"]["enum"])
     for status in (405, 500):
         assert paths["/"]["get"]["responses"][str(status)]["content"]["application/json"]["schema"]["$ref"] == (
-            "#/components/schemas/ErrorResponse"
+            "#/components/schemas/HttpErrorResponse"
         )
     validation_schema = document["components"]["schemas"]["ValidationErrorResponse"]
     item_schema = document["components"]["schemas"]["ValidationDetail"]

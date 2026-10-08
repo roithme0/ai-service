@@ -8,20 +8,24 @@ import pytest
 import httpx
 from openai import AsyncOpenAI
 
-from app.models.openai_agentic_generation import (
+from app.agents.openai_agentic_generation import (
     OPENAI_MAX_OUTPUT_TOKENS,
     OpenAIAgenticGenerator,
 )
 from typing import Never
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
-from app.sessions.history import CallRecord, ExecutionReportRecord, MessageRecord, ToolResultRecord, model_input
-from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore
-from app.sessions.model_turns import ModelTurnStrategy
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.models.history import CallRecord, ExecutionReportRecord, MessageRecord, ToolResultRecord
+from app.agents.history_projection import model_input
+from app.sessions.models.conversation import ConversationSessionSettings
+from app.sessions.session_store import ConversationSessionStore
+from app.agents.model_turn_execution import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
-from app.sessions.tool_turns import run_tool_turn
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from app.agents.tool_turns import run_tool_turn
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.models.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
 from tool_turn_recorder import ToolTurnRecorder
 
 
@@ -250,7 +254,7 @@ def test_failed_stream_retains_complete_calls_without_executing_them(ending: str
 
 @pytest.mark.parametrize("cancel", [False, True])
 def test_deadline_and_cancellation_close_stream_without_restart(monkeypatch: pytest.MonkeyPatch, cancel: bool) -> None:
-    monkeypatch.setattr("app.models.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr("app.agents.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.05)
     body = EventStream(response_events([message("Partial.")], "missing"), delay=0.005, repeat=True)
     requests = 0
 
@@ -356,7 +360,7 @@ def test_completed_event_does_not_bypass_failure_or_output_validation(invalid: s
 
 
 def test_deadline_includes_stream_establishment(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("app.models.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr("app.agents.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.01)
     requests = 0
 
     async def respond(request: httpx.Request) -> httpx.Response:
@@ -397,7 +401,7 @@ class PausedItemStream(EventStream):
 def test_completed_items_are_retained_before_stream_finishes_and_replayed(
     monkeypatch: pytest.MonkeyPatch, ending: str,
 ) -> None:
-    from app.sessions.history import ContinuationRecord, TerminalRecord
+    from app.sessions.models.history import ContinuationRecord, TerminalRecord
     output = [message("Checking.", "commentary"), function_call(),
               {"id": "rs_1", "type": "reasoning", "status": "completed", "summary": [],
                "encrypted_content": "opaque"}]
@@ -406,7 +410,7 @@ def test_completed_items_are_retained_before_stream_finishes_and_replayed(
     requests: list[dict[str, object]] = []
     invocations: list[ToolInvocation] = []
     if ending == "timeout":
-        monkeypatch.setattr("app.models.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.05)
+        monkeypatch.setattr("app.agents.openai_agentic_generation.OPENAI_REQUEST_TIMEOUT_SECONDS", 0.05)
 
     def respond(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)

@@ -4,18 +4,20 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.models.agentic_generation import AgenticToolCall
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
-from app.sessions.tools import ToolExecution
-from app.sessions.conversation import (
-    ConversationMessageBusy,
+from app.agents.generation_history import record_tool_call
+from app.agents.models.generation import AgenticToolCall
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.models.execution import ToolExecution
+from app.sessions.models.conversation import (
     ConversationReadActive,
     ConversationSessionSettings,
-    ConversationSessionStore,
     ConversationTurnReservation,
+)
+from app.sessions.session_store import (
+    ConversationSessionStore,
     TurnHistoryUnavailable,
 )
-from app.sessions.text_sessions import TextSessionAppendAccepted
+from app.sessions.models.session import SessionMessageAppendAccepted, SessionMessageBusy
 
 
 @dataclass(frozen=True)
@@ -45,7 +47,7 @@ def create(conversation: ConversationSessionStore[Context, Artifact], limit: int
 
 
 def reserve(conversation: ConversationSessionStore[Context, Artifact], session_id: str) -> ConversationTurnReservation[Context, Artifact]:
-    assert isinstance(conversation.append_user_message(session_id, "Continue"), TextSessionAppendAccepted)
+    assert isinstance(conversation.append_user_message(session_id, "Continue"), SessionMessageAppendAccepted)
     reserved = conversation.reserve_turn(session_id)
     assert isinstance(reserved, ConversationTurnReservation)
     return reserved
@@ -58,7 +60,7 @@ def test_stale_completion_does_not_end_newer_active_turn() -> None:
     assert conversation.fail_turn(session_id, first).kind == "generation_failed"
     second = reserve(conversation, session_id)
     assert conversation.complete_turn(session_id, first, "completed", "Stale").kind == "conflict"
-    assert isinstance(conversation.append_user_message(session_id, "Busy"), ConversationMessageBusy)
+    assert isinstance(conversation.append_user_message(session_id, "Busy"), SessionMessageBusy)
     assert conversation.complete_turn(session_id, second, "completed", "Current").kind == "completed"
 
 
@@ -66,9 +68,9 @@ def test_concurrent_user_appends_are_recorded_once_with_derived_revision() -> No
     conversation = store(Clock())
     session_id = create(conversation)
 
-    def append(index: int) -> TextSessionAppendAccepted:
+    def append(index: int) -> SessionMessageAppendAccepted:
         result = conversation.append_user_message(session_id, str(index))
-        assert isinstance(result, TextSessionAppendAccepted)
+        assert isinstance(result, SessionMessageAppendAccepted)
         return result
 
     with ThreadPoolExecutor(max_workers=4) as executor:
@@ -85,7 +87,7 @@ def test_opportunistic_eviction_clears_stale_turn_bookkeeping() -> None:
     conversation = store(clock)
     session_ids = tuple(create(conversation) for _ in range(4))
     turns = tuple(reserve(conversation, session_id) for session_id in session_ids)
-    calls = tuple(conversation.record_call(session_id, turn.turn_id,
+    calls = tuple(record_tool_call(conversation, session_id, turn.turn_id,
         AgenticToolCall("same", "present", "{}")) for session_id, turn in zip(session_ids, turns))
     for session_id, call in zip(session_ids, calls):
         conversation.start_execution(session_id, call)
@@ -101,4 +103,4 @@ def test_opportunistic_eviction_clears_stale_turn_bookkeeping() -> None:
         assert error.value.kind == "unknown"
         assert conversation.fail_turn(session_id, turn).kind == "unknown"
         assert conversation.history(session_id) == ()
-    assert conversation._sessions == conversation._history == conversation._artifacts == conversation._active_turns == {}
+    assert conversation._sessions == {}

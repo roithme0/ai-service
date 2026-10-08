@@ -1,4 +1,4 @@
-"""Process lifetime and availability for configured agents."""
+"""Construction, shared lifecycle, and cached access for configured agents."""
 
 from __future__ import annotations
 
@@ -10,13 +10,13 @@ from urllib.parse import urlparse
 
 from openai import AsyncOpenAI
 
-from app.agents.demo import DemoAgent, create_demo_agent
-from app.sessions.model_sessions import ModelAgent, create_model_agent
+from app.demo.agent import DemoAgent, create_demo_agent
+from app.agents.model_agent import ModelAgent, create_model_agent
 from app.agents.runtime import AgentRuntime
 from app.core.config import Settings, get_settings
-from app.models.openai_agentic_generation import OpenAIAgenticGenerator
-from app.mcp_connection import MCPConnection
-from app.sessions.web_search import WebSearchConfig
+from app.agents.openai_agentic_generation import OpenAIAgenticGenerator
+from app.mcp.connection import MCPConnection
+from app.agents.models.web_search import WebSearchConfig
 
 
 logger = logging.getLogger(__name__)

@@ -4,8 +4,8 @@ import logging
 from contextlib import AsyncExitStack
 from typing import Generic, Protocol, TypeVar, runtime_checkable
 
-from app.mcp_connection import MCPConnection
-from app.mcp_tools import MCPToolset
+from app.mcp.connection import MCPConnection
+from app.mcp.tools import MCPToolset
 
 
 logger = logging.getLogger(__name__)

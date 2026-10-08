@@ -4,13 +4,19 @@ from datetime import timedelta
 
 import pytest
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.conversation import ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation
-from app.sessions.history import CallRecord, ExecutionReportRecord, ExecutionStartedRecord, MessageRecord, ContinuationRecord, TerminalRecord, ToolResultRecord, model_input, text_messages
-from app.sessions.model_turns import ModelTurnStrategy
+from app.agents.generation_history import record_generation_item, record_generation_response
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.sessions.models.conversation import ConversationSessionSettings, ConversationTurnReservation
+from app.sessions.session_store import ConversationSessionStore
+from app.sessions.models.history import CallRecord, ExecutionReportRecord, ExecutionStartedRecord, MessageRecord, ContinuationRecord, TerminalRecord, ToolResultRecord
+from app.agents.history_projection import model_input
+from app.sessions.message_projection import completed_text_messages
+from app.agents.model_turn_execution import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
-from app.sessions.timeline import TimelineIntermediateMessage, TimelineMessage
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.models.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
+from app.sessions.models.timeline import TimelineIntermediateMessage, TimelineMessage
 
 
 def call_response(*calls: AgenticToolCall) -> AgenticGenerationResponse:
@@ -58,12 +64,12 @@ def test_commentary_only_continues_and_remains_visible_without_becoming_final(en
     assert commentary in model_input(history)
     if ending == "final":
         assert result.text == "The answer is 42."
-        assert [message.text for message in text_messages(history)] == ["Check", "The answer is 42."]
+        assert [message.text for message in completed_text_messages(history)] == ["Check", "The answer is 42."]
         assert [item.kind for item in read.snapshot.timeline] == ["message", "intermediate", "intermediate", "message"]
         assert isinstance(read.snapshot.timeline[-1], TimelineMessage)
     else:
         assert result.text is None
-        assert [message.text for message in text_messages(history)] == ["Check"]
+        assert [message.text for message in completed_text_messages(history)] == ["Check"]
         assert read.snapshot.timeline[-1].kind == "failure"
 
 
@@ -247,13 +253,13 @@ def test_individual_records_preserve_provider_order_and_derive_both_message_view
     intermediate = dict(final_response("Working").output_items[0], phase="commentary")
     reasoning = {"type": "reasoning", "encrypted_content": "opaque", "summary": []}
     response = AgenticGenerationResponse((intermediate, reasoning, call_item), (call,), "Working")
-    recorded = store.record_provider_response(session_id, reservation.turn_id, response)[0]
-    assert recorded.call == call
+    recorded = record_generation_response(store, session_id, reservation.turn_id, response)[0]
+    assert (recorded.call_id, recorded.name, recorded.arguments) == (call.call_id, call.name, call.arguments)
     store.start_execution(session_id, recorded)
     store.record_result(session_id, recorded, ToolExecution("result"))
     first_final = dict(final_response("Hello ").output_items[0], phase="final_answer")
     second_final = dict(final_response("world").output_items[0], id="reply-2", phase="final_answer")
-    store.record_provider_response(session_id, reservation.turn_id,
+    record_generation_response(store, session_id, reservation.turn_id,
         AgenticGenerationResponse((first_final, second_final), (), "Hello world"))
     assert len(store.read(session_id).snapshot.session.messages) == 1
     store.complete_turn(session_id, reservation, "completed", "Hello world")
@@ -267,7 +273,7 @@ def test_individual_records_preserve_provider_order_and_derive_both_message_view
         {"type": "function_call_output", "call_id": call.call_id, "output": "result"},
         first_final, second_final,
     )
-    messages = text_messages(history)
+    messages = completed_text_messages(history)
     assert [(message.role, message.text) for message in messages] == [
         ("user", "first"), ("assistant", "Hello "),
     ]
@@ -285,11 +291,11 @@ def test_history_drives_revision_terminal_status_and_repeated_failure_response()
     assert reservation.snapshot.revision == 1
     response = call_response(AgenticToolCall("call", "sample", "{}"))
     intermediate = dict(final_response("Working").output_items[0], phase="commentary")
-    call = store.record_provider_response(session_id, reservation.turn_id,
+    call = record_generation_response(store, session_id, reservation.turn_id,
         AgenticGenerationResponse((intermediate, *response.output_items), response.tool_calls, "Working"))[0]
     store.start_execution(session_id, call)
     store.record_result(session_id, call, ToolExecution("result"))
-    store.record_provider_response(session_id, reservation.turn_id, final_response("Done"))
+    record_generation_response(store, session_id, reservation.turn_id, final_response("Done"))
     assert store.read(session_id).snapshot.session.revision == 1
     completed = store.complete_turn(session_id, reservation, "completed", "Done")
     read = store.read(session_id).snapshot
@@ -345,6 +351,7 @@ def test_message_phase_is_immutable_through_turn_outcome(phase: str | None, fail
     assert history[:len(snapshots[0])] == snapshots[0]
     first = history[1]
     assert isinstance(first, MessageRecord)
+    assert first.item is not None
     assert first.item.get("phase") == phase
     if phase is None:
         assert "phase" not in first.item and first.kind == "unspecified"
@@ -370,10 +377,10 @@ def test_invalid_message_item_fails_before_retention(phase: str | None, text: st
     reservation = store.reserve_turn(session_id)
     assert isinstance(reservation, ConversationTurnReservation)
     valid = dict(final_response("Working").output_items[0], phase="commentary")
-    store.record_provider_item(session_id, reservation.turn_id, valid)
+    record_generation_item(store, session_id, reservation.turn_id, valid)
     before = store.history(session_id)
     with pytest.raises(ValueError, match="assistant message"):
-        store.record_provider_item(session_id, reservation.turn_id,
+        record_generation_item(store, session_id, reservation.turn_id,
             dict(final_response(text).output_items[0], phase=phase))
     assert store.history(session_id) == before
     assert model_input(before)[-1] == valid

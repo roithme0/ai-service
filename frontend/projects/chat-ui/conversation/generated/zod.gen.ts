@@ -38,6 +38,9 @@ export const zErrorResponse = z.object({
     detail: z.string().min(1),
     kind: z.enum([
         'not_found',
+        'method_not_allowed',
+        'http_error',
+        'internal_error',
         'unknown_configuration',
         'agent_unavailable',
         'unknown',
@@ -46,12 +49,22 @@ export const zErrorResponse = z.object({
         'not_ready',
         'conflict',
         'limit_reached',
-        'generation_failed',
+        'generation_failed'
+    ]),
+    turn_id: z.string().nullish()
+});
+
+/**
+ * HttpErrorResponse
+ */
+export const zHttpErrorResponse = z.object({
+    detail: z.string().min(1),
+    kind: z.enum([
+        'not_found',
         'method_not_allowed',
         'http_error',
         'internal_error'
-    ]),
-    turn_id: z.string().nullish()
+    ])
 });
 
 /**

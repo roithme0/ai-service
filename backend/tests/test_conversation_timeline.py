@@ -1,12 +1,14 @@
 import json
 from datetime import timedelta
 
-from app.models.agentic_generation import AgenticGenerationResponse, AgenticToolCall
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
-from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation
-from app.sessions.history import model_input
-from app.sessions.timeline import TimelineArtifact, TimelineFailure, TimelineMessage, TimelineTool
-from app.sessions.tools import ToolExecution
+from app.agents.generation_history import record_generation_response, record_tool_call
+from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
+from app.sessions.session_store import ConversationSessionStore
+from app.agents.history_projection import model_input
+from app.sessions.models.timeline import TimelineArtifact, TimelineFailure, TimelineMessage, TimelineTool
+from app.sessions.models.execution import ToolExecution
 
 
 def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> None:
@@ -15,10 +17,10 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
     store.append_user_message(session_id, "Show results")
     turn = store.reserve_turn(session_id)
     assert isinstance(turn, ConversationTurnReservation)
-    store.record_provider_response(session_id, turn.turn_id, AgenticGenerationResponse((
+    record_generation_response(store, session_id, turn.turn_id, AgenticGenerationResponse((
         {"type": "message", "role": "assistant", "phase": "commentary", "content": "Checking results."},
     ), (), "Checking results."))
-    first = store.record_call(session_id, turn.turn_id, AgenticToolCall("same", "present", '{"secret":"argument"}'))
+    first = record_tool_call(store, session_id, turn.turn_id, AgenticToolCall("same", "present", '{"secret":"argument"}'))
     store.start_execution(session_id, first)
     accepted = store.record_result(session_id, first, ToolExecution(
         ArtifactToolOutput("presented"), ArtifactCandidate("example", "retained content")))
@@ -33,7 +35,7 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
         {"type": "reasoning", "encrypted_content": "secret reasoning"},
         *({"type": "function_call", "call_id": call.call_id, "name": call.name, "arguments": call.arguments} for call in calls),
     ), calls, None)
-    failed, ordinary, uncertain, never_started = store.record_provider_response(session_id, turn.turn_id, response)
+    failed, ordinary, uncertain, never_started = record_generation_response(store, session_id, turn.turn_id, response)
     store.start_execution(session_id, failed)
     store.record_result(session_id, failed, ToolExecution("explicit error detail", failed=True))
     store.start_execution(session_id, ordinary)

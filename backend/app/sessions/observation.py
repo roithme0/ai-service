@@ -1,0 +1,95 @@
+"""Bounded observation of session snapshots and lifecycle changes."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import AsyncIterator
+from typing import Generic, TypeVar
+
+from app.sessions.config import (
+    MAX_OBSERVERS_PER_SESSION,
+    MAX_PENDING_OBSERVATION_UPDATES,
+    OBSERVATION_REFRESH_INTERVAL_SECONDS,
+)
+from app.sessions.models.conversation import ConversationReadActive
+from app.sessions.session_store import ConversationSessionStore
+from app.sessions.models.session import SessionReadExpired, SessionReadUnknown
+
+ContextT = TypeVar("ContextT")
+ArtifactT = TypeVar("ArtifactT")
+
+
+class SessionObservation(Generic[ContextT, ArtifactT]):
+    def __init__(self, store: ConversationSessionStore[ContextT, ArtifactT]) -> None:
+        self._store = store
+        self._observers: dict[str, int] = {}
+
+    def observation_available(self, session_id: str) -> bool:
+        return self._observers.get(session_id, 0) < MAX_OBSERVERS_PER_SESSION
+
+    async def observe(
+        self, session_id: str
+    ) -> AsyncIterator[
+        ConversationReadActive[ContextT, ArtifactT]
+        | SessionReadExpired
+        | SessionReadUnknown
+        | None
+    ]:
+        if not self.observation_available(session_id):
+            yield None
+            return
+        self._observers[session_id] = self._observers.get(session_id, 0) + 1
+        queue: asyncio.Queue[
+            ConversationReadActive[ContextT, ArtifactT]
+            | SessionReadExpired
+            | SessionReadUnknown
+        ] = asyncio.Queue(maxsize=MAX_PENDING_OBSERVATION_UPDATES)
+        overflow = False
+        loop = asyncio.get_running_loop()
+
+        def enqueue(
+            value: (
+                ConversationReadActive[ContextT, ArtifactT]
+                | SessionReadExpired
+                | SessionReadUnknown
+            ),
+        ) -> None:
+            nonlocal overflow
+            if queue.full():
+                overflow = True
+            elif not overflow:
+                queue.put_nowait(value)
+
+        def notify() -> None:
+            value = self._store.read(session_id)
+            try:
+                same_loop = asyncio.get_running_loop() is loop
+            except RuntimeError:
+                same_loop = False
+            if same_loop:
+                enqueue(value)
+            else:
+                loop.call_soon_threadsafe(enqueue, value)
+
+        detach = self._store.subscribe(session_id, notify)
+        try:
+            while True:
+                if overflow:
+                    yield None
+                    return
+                try:
+                    value = await asyncio.wait_for(
+                        queue.get(), timeout=OBSERVATION_REFRESH_INTERVAL_SECONDS
+                    )
+                except TimeoutError:
+                    value = self._store.read(session_id)
+                yield value
+                if not isinstance(value, ConversationReadActive):
+                    return
+        finally:
+            detach()
+            count = self._observers[session_id] - 1
+            if count:
+                self._observers[session_id] = count
+            else:
+                self._observers.pop(session_id, None)

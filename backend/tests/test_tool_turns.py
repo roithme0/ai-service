@@ -5,10 +5,12 @@ from typing import Never
 
 import pytest
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.history import CallRecord, ContinuationRecord, HistoryRecord
-from app.sessions.tool_turns import run_tool_turn
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.sessions.models.history import CallRecord, ContinuationRecord, HistoryRecord
+from app.agents.tool_turns import run_tool_turn
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.models.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
 from tool_turn_recorder import ToolTurnRecorder
 
 
@@ -38,7 +40,7 @@ def test_advertised_tools_dispatch_by_name_with_shared_limits() -> None:
     invoked: list[str] = []
 
     def first(call: ToolInvocation) -> ToolExecution[str]:
-        assert [record.call.call_id for record in recorder.calls] == ["call-a", "call-b", "call-x"]
+        assert [record.call_id for record in recorder.calls] == ["call-a", "call-b", "call-x"]
         assert recorder.started == [recorder.calls[0]]
         invoked.append("first")
         return ToolExecution("accepted", "artifact")
@@ -184,7 +186,7 @@ def test_mismatched_recorded_calls_fail_before_execution(omit: bool) -> None:
         recorded = recorder.record_item(item)
         if isinstance(recorded, CallRecord):
             return ContinuationRecord("test-turn", item) if omit else CallRecord("test-turn", recorded.execution_id,
-                {**item, "name": "different"})
+                {**item, "name": "different"}, recorded.call_id, "different", recorded.arguments)
         return recorded
 
     def execute(call: ToolInvocation) -> ToolExecution[str]:

@@ -145,13 +145,17 @@ finalized tool result and artifact reference in history while storing the full
 artifact in a session-owned map, atomically under the same lock. History alone
 determines order and publication; the map holds content and expires with history.
 There is no staging/publication step.
+`agents/generation_history.py` interprets generation output as turn-history records.
+The session store admits those records under its lock and owns lifecycle checks,
+history updates, and notifications.
 The conversation store retains no second text-message list or terminal-response
 cache. Messages, message revision, and current terminal state are projected from
 history; repeated failed-turn responses are reconstructed from terminal records.
 Session metadata holds only expiry, initialization context, and settings, while
 active reservations coordinate execution under the store lock.
-`sessions/text_sessions.py` contains shared types and limits only; the former
-standalone text store and its conditional-append contract have been removed.
+`sessions/models/session.py` defines shared session and text-message contracts;
+`sessions/config.py` defines message limits, observation settings, and the default session lifetime. The former standalone text store and
+its conditional-append contract have been removed.
 Unresolved calls receive explicitly service-generated reports distinguishing
 execution never started from an unknown outcome; an unknown outcome may already
 have completed and requires investigation before repeating a state-changing action.
@@ -277,3 +281,6 @@ History and payloads expire together after 90 minutes or disappear on restart.
 Presentation
 has no domain save effect. The AI Service does not know frontend renderers or
 Kochwiki models, and MCP tool results remain independent of presentation.
+# Test artifacts
+
+Pytest stores its cache in `tests/.pytest_cache` and its `tmp_path` files in `tests/.pytest_tmp`. Both directories are disposable and ignored by Git and Docker. Pytest clears the base temporary directory at the start of each run; concurrent pytest runs in the same checkout can therefore interfere with each other.

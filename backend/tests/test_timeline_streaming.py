@@ -1,4 +1,5 @@
-﻿from __future__ import annotations
+﻿from __future__ import annotations
+
 
 import asyncio
 import json
@@ -13,13 +14,20 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import TypeAdapter
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.artifacts import ArtifactCandidate, ArtifactToolOutput
-from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore, ConversationTurnReservation
-from app.sessions.http import AgentTransport, StreamEvent, _context_issue, get_agent_registry, router
-from app.sessions.model_sessions import create_model_agent
-from app.sessions.presentation import PresentationPayload
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from app.agents.generation_history import record_generation_item, record_tool_call
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
+from app.sessions.session_store import ConversationSessionStore
+from app.agents.http import AgentTransport, _context_issue, get_agent_registry
+from app.agents.enums.configuration import AgentConfiguration
+from app.agents.http import create_session_router
+from app.agents.models.http_streaming import StreamEvent
+from app.agents.model_agent import create_model_agent
+from app.sessions.models.artifacts import ArtifactPayload
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.models.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
 
 
 @contextmanager
@@ -79,16 +87,18 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
             request.on_output_item({'type': 'message', 'role': 'assistant', 'phase': 'final_answer', 'content': 'Retained final'})
             await asyncio.to_thread(final_release.wait)
             raise RuntimeError('failure after accepted output')
-    async def execute(_invocation: ToolInvocation) -> ToolExecution[ArtifactCandidate[PresentationPayload]]:
+    async def execute(_invocation: ToolInvocation) -> ToolExecution[ArtifactCandidate[ArtifactPayload]]:
         nonlocal tool_calls
         tool_calls += 1
         tool_entered.set()
         await asyncio.to_thread(tool_release.wait)
-        return ToolExecution(ArtifactToolOutput('presented'), ArtifactCandidate('json', PresentationPayload(title='Data', payload={'value': 42})))
+        return ToolExecution(ArtifactToolOutput('presented'), ArtifactCandidate('json', ArtifactPayload(title='Data', payload={'value': 42})))
     source = LocalToolSource((RegisteredTool('publish', {'type': 'function', 'name': 'publish'}, execute),))
     agent = create_model_agent(Generator(), tool_sources=(source,))
     application = FastAPI()
-    application.include_router(router)
+    application.include_router(create_session_router(
+        get_agent_registry, tuple(configuration.value for configuration in AgentConfiguration),
+    ))
     application.dependency_overrides[get_agent_registry] = lambda: {'kochwiki': AgentTransport(agent, lambda value: value, _context_issue)}
     try:
         with socket_server(application) as address, httpx.Client(base_url=address, timeout=5, headers={"X-Application-User": "test:user"}) as client:
@@ -160,7 +170,7 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
 
 def test_atomic_subscription_preserves_every_tool_transition_and_bounded_overflow() -> None:
     async def exercise() -> None:
-        from app.agents.demo import create_demo_agent
+        from app.demo.agent import create_demo_agent
         from app.demo.session import new_demo_session_store
         store = new_demo_session_store()
         agent = create_demo_agent(store, delay_seconds=0)
@@ -171,7 +181,7 @@ def test_atomic_subscription_preserves_every_tool_transition_and_bounded_overflo
         observer = agent.observe(session)
         first = await anext(observer)
         assert isinstance(first, ConversationReadActive)
-        call = store.record_call(session, reservation.turn_id, AgenticToolCall('call', 'safe', '{}'))
+        call = record_tool_call(store, session, reservation.turn_id, AgenticToolCall('call', 'safe', '{}'))
         store.start_execution(session, call)
         store.record_result(session, call, ToolExecution('private'))
         store.fail_turn(session, reservation)
@@ -191,7 +201,7 @@ def test_atomic_subscription_preserves_every_tool_transition_and_bounded_overflo
         slow = agent.observe(session)
         await anext(slow)
         for index in range(129):
-            store.record_provider_item(session, reservation.turn_id, {'type': 'message', 'role': 'assistant', 'content': str(index)})
+            record_generation_item(store, session, reservation.turn_id, {'type': 'message', 'role': 'assistant', 'content': str(index)})
         assert await anext(slow) is None
         await slow.aclose()
         assert store._listeners == {}
@@ -202,7 +212,7 @@ def test_atomic_subscription_preserves_every_tool_transition_and_bounded_overflo
 
 def test_background_task_cancelled_before_first_step_releases_reserved_turn() -> None:
     async def exercise() -> None:
-        from app.agents.demo import create_demo_agent
+        from app.demo.agent import create_demo_agent
         agent = create_demo_agent(delay_seconds=1)
         session = agent.create({}, owner="test:user").session_id
         agent.append_user_message(session, 'Hello')
@@ -219,7 +229,7 @@ def test_records_arriving_after_initial_capture_before_first_delivery_are_not_lo
     async def exercise() -> None:
         from collections.abc import Callable
         from unittest.mock import patch
-        from app.agents.demo import create_demo_agent
+        from app.demo.agent import create_demo_agent
         from app.demo.session import new_demo_session_store
         store = new_demo_session_store()
         agent = create_demo_agent(store, delay_seconds=0)
@@ -230,7 +240,7 @@ def test_records_arriving_after_initial_capture_before_first_delivery_are_not_lo
         subscribe = store.subscribe
         def racing_subscribe(session_id: str, listener: Callable[[], None]) -> Callable[[], None]:
             detach = subscribe(session_id, listener)
-            store.record_provider_item(session_id, turn.turn_id, {'type': 'message', 'role': 'assistant', 'content': 'During attachment'})
+            record_generation_item(store, session_id, turn.turn_id, {'type': 'message', 'role': 'assistant', 'content': 'During attachment'})
             store.fail_turn(session_id, turn)
             return detach
         with patch.object(store, 'subscribe', racing_subscribe):
@@ -256,9 +266,9 @@ def test_records_arriving_after_initial_capture_before_first_delivery_are_not_lo
 def test_observer_capacity_and_expiry_release_resources_without_extending_lifetime() -> None:
     async def exercise() -> None:
         from datetime import UTC, datetime
-        from app.agents.demo import create_demo_agent
+        from app.demo.agent import create_demo_agent
         from app.demo.session import new_demo_session_store
-        from app.sessions.text_sessions import TextSessionReadUnknown
+        from app.sessions.models.session import SessionReadUnknown
         now = datetime(2026, 10, 4, tzinfo=UTC)
         store = new_demo_session_store(clock=lambda: now)
         agent = create_demo_agent(store, delay_seconds=0)
@@ -273,8 +283,8 @@ def test_observer_capacity_and_expiry_release_resources_without_extending_lifeti
         await refused.aclose()
         now = created.expires_at
         store.read(created.session_id)
-        assert isinstance(await anext(observers[0]), TextSessionReadUnknown)
+        assert isinstance(await anext(observers[0]), SessionReadUnknown)
         for observer in observers: await observer.aclose()
-        assert store._listeners == {} and agent._observers == {}
+        assert store._listeners == {} and agent.observation_available(created.session_id)
         await agent.close()
     asyncio.run(exercise())

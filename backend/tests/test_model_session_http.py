@@ -7,20 +7,18 @@ import pytest
 from fastapi.testclient import TestClient
 from turn_observation import observe_turn
 
-from app.sessions.model_sessions import ModelAgent, create_model_agent
+from app.agents.model_agent import ModelAgent, create_model_agent
 from app.agents.wiring import configure_agents
 from app.core.config import Settings
 from app.main import app
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.http import (
-    AgentTransport, ConversationTransport, _demo_issue,
-    _context_issue, get_agent_registry,
-)
-from app.agents.demo import create_demo_agent
-from app.sessions.model_sessions import new_model_session_store
-from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
-from app.sessions.context import MAX_CONTEXT_LENGTH
-from app.sessions.text_sessions import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.agents.protocols.http import ConversationTransport
+from app.agents.http import AgentTransport, _demo_issue, _context_issue, get_agent_registry
+from app.demo.agent import create_demo_agent
+from app.agents.model_agent import new_model_session_store
+from app.agents.instructions import CONVERSATION_INSTRUCTIONS
+from app.agents.config import MAX_CONTEXT_LENGTH
+from app.sessions.config import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 
 
 RECIPE_VERSION_UUID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"
@@ -702,7 +700,7 @@ def test_completed_turn_separates_commentary_from_standalone_answer(client: Test
     assert [item["text"] for item in snapshot["messages"]] == ["Check", "Complete answer."]
 
 
-def test_no_capabilities_means_no_presentation_tool(client: TestClient, fake_generator: FakeGenerator) -> None:
+def test_no_capabilities_means_no_artifact_tool(client: TestClient, fake_generator: FakeGenerator) -> None:
     created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {"context": {}}})
     base = "/api/v1/agents/kochwiki/sessions/" + created.json()["session_id"]
     client.post(base + "/messages", json={"text": "Hi"})
@@ -724,3 +722,17 @@ def test_invalid_capabilities_reject_session_creation(client: TestClient, capabi
     }})
     assert response.status_code == 422
     assert response.json()["detail"][0]["loc"][:3] == ["body", "input", "artifactCapabilities"]
+
+
+@pytest.mark.parametrize("field", ["description", "titleDescription", "subtitleDescription"])
+@pytest.mark.parametrize("value", ["", "   ", "\t\n"])
+def test_blank_capability_descriptions_reject_session_creation(
+    client: TestClient, field: str, value: str,
+) -> None:
+    response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
+        "context": {}, "artifactCapabilities": [{**JSON_CAPABILITY, field: value}],
+    }})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == [
+        "body", "input", "artifactCapabilities", 0, field,
+    ]

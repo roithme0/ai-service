@@ -4,11 +4,14 @@ from typing import Never
 
 import pytest
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore
-from app.sessions.model_turns import ModelTurnStrategy
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings
+from app.sessions.session_store import ConversationSessionStore
+from app.agents.model_turn_execution import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.models.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
 
 
 @pytest.mark.parametrize("cancel", [False, True])

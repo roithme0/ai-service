@@ -1,19 +1,20 @@
 """Scripted turn selection over the shared conversation lifecycle."""
 
 from __future__ import annotations
-
 import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
 
-from app.models.agentic_generation import AgenticGenerationResponse, AgenticToolCall
+from app.agents.generation_history import record_generation_item, record_generation_response, record_tool_call
+from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
 from app.demo.tools import DemoToolFactory
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
 from app.demo.session import DemoContext, DemoPayload, DemoSessionStore
-from app.sessions.conversation import ConversationTurnReservation, ConversationTurnResult, TurnHistoryUnavailable
-from app.sessions.tools import ToolRegistry
+from app.sessions.models.conversation import ConversationTurnReservation, ConversationTurnResult
+from app.sessions.session_store import TurnHistoryUnavailable
+from app.agents.tool_registry import ToolRegistry
 
 
 TURN_DELAY_SECONDS = 1.5
@@ -49,52 +50,52 @@ async def run_demo_turn(
                 single_greeting_tool_factory(),
                 greeting_list_tool_factory(),
             ))
-            store.record_provider_response(session_id, reservation.turn_id, AgenticGenerationResponse((
+            record_generation_response(store, session_id, reservation.turn_id, AgenticGenerationResponse((
                 {"type": "message", "role": "assistant", "phase": "commentary", "content": FIRST_TOOL_UPDATE},
             ), (), FIRST_TOOL_UPDATE))
-            call = store.record_call(session_id, reservation.turn_id,
+            call = record_tool_call(store, session_id, reservation.turn_id,
                                      AgenticToolCall("greeting", "create_greeting", '{"name":"World"}'))
             await pause(delay_seconds)
             store.start_execution(session_id, call)
             await pause(delay_seconds)
-            greeting = await registry.invoke(call.call.name, call.call.arguments)
+            greeting = await registry.invoke(call.name, call.arguments)
             greeting = store.record_result(session_id, call, greeting)
             if greeting.artifact is None:
                 return store.fail_turn(session_id, reservation)
-            store.record_provider_response(session_id, reservation.turn_id, AgenticGenerationResponse((
+            record_generation_response(store, session_id, reservation.turn_id, AgenticGenerationResponse((
                 {"type": "message", "role": "assistant", "phase": "commentary", "content": SECOND_TOOL_UPDATE},
             ), (), SECOND_TOOL_UPDATE))
-            call = store.record_call(session_id, reservation.turn_id, AgenticToolCall(
+            call = record_tool_call(store, session_id, reservation.turn_id, AgenticToolCall(
                 "greetings", "create_greetings", json.dumps({"names": [f"Visitor {index}" for index in range(1, 31)]})))
             await pause(delay_seconds)
             store.start_execution(session_id, call)
             await pause(delay_seconds)
-            greetings = await registry.invoke(call.call.name, call.call.arguments)
+            greetings = await registry.invoke(call.name, call.arguments)
             greetings = store.record_result(session_id, call, greetings)
             if greetings.artifact is None:
                 return store.fail_turn(session_id, reservation)
-            store.record_provider_response(session_id, reservation.turn_id, AgenticGenerationResponse((
+            record_generation_response(store, session_id, reservation.turn_id, AgenticGenerationResponse((
                 {"type": "message", "role": "assistant", "phase": "commentary", "content": FAILED_TOOL_UPDATE},
             ), (), FAILED_TOOL_UPDATE))
-            call = store.record_call(session_id, reservation.turn_id,
+            call = record_tool_call(store, session_id, reservation.turn_id,
                                      AgenticToolCall("invalid-greeting", "create_greeting", '{"name":""}'))
             await pause(delay_seconds)
             store.start_execution(session_id, call)
             await pause(delay_seconds)
-            rejected = await registry.invoke(call.call.name, call.call.arguments)
+            rejected = await registry.invoke(call.name, call.arguments)
             rejected = store.record_result(session_id, call, rejected)
             if not rejected.failed or rejected.artifact is not None:
                 return store.fail_turn(session_id, reservation)
             reply = SECOND_REPLY
         elif completed_count == 2 and reservation.snapshot.messages[-2].role == "assistant":
-            store.record_provider_response(session_id, reservation.turn_id, AgenticGenerationResponse((
+            record_generation_response(store, session_id, reservation.turn_id, AgenticGenerationResponse((
                 {"type": "message", "role": "assistant", "phase": "commentary", "content": FAILED_GENERATION_UPDATE},
             ), (), FAILED_GENERATION_UPDATE))
             await pause(delay_seconds)
             return store.fail_turn(session_id, reservation)
         else:
             reply = COMPLETE_REPLY
-        store.record_provider_item(session_id, reservation.turn_id, {"type": "message", "role": "assistant", "phase": "final_answer", "content": reply})
+        record_generation_item(store, session_id, reservation.turn_id, {"type": "message", "role": "assistant", "phase": "final_answer", "content": reply})
         await pause(delay_seconds)
         return store.complete_turn(session_id, reservation, "completed", reply)
     except TurnHistoryUnavailable as error:

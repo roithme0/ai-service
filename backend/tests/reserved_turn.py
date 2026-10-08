@@ -1,7 +1,8 @@
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from app.sessions.conversation import ConversationSessionStore, ConversationTurnReservation, ConversationTurnResult
+from app.sessions.session_store import ConversationSessionStore
+from app.sessions.models.conversation import ConversationTurnReservation, ConversationTurnResult
 
 
 ContextT = TypeVar("ContextT")
