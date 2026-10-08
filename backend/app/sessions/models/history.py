@@ -20,7 +20,7 @@ ExecutionReportState = Literal["not_executed", "outcome_unknown"]
 @dataclass(frozen=True)
 class MessageRecord:
     turn_id: str
-    item: HistoryPayload
+    item: HistoryPayload | None
     text: str
     kind: MessageRecordKind
     message_id: str = field(default_factory=lambda: str(uuid4()))

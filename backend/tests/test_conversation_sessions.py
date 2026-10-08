@@ -103,4 +103,4 @@ def test_opportunistic_eviction_clears_stale_turn_bookkeeping() -> None:
         assert error.value.kind == "unknown"
         assert conversation.fail_turn(session_id, turn).kind == "unknown"
         assert conversation.history(session_id) == ()
-    assert conversation._sessions == conversation._history == conversation._artifacts == conversation._active_turns == {}
+    assert conversation._sessions == {}

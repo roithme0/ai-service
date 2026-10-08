@@ -7,7 +7,9 @@ from app.agents.generation_history import record_generation_item, record_generat
 from app.agents.history_projection import generation_tool_call, model_input
 from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.conversation import ConversationSessionSettings, ConversationTurnReservation
-from app.sessions.models.history import CallRecord, MessageRecord, TerminalRecord, TurnActivityRecord
+from app.sessions.models.history import (
+    CallRecord, MessageRecord, MessageRecordKind, TerminalRecord, TurnActivityRecord,
+)
 from app.sessions.session_store import ConversationSessionStore, TurnHistoryUnavailable
 
 
@@ -20,16 +22,54 @@ def reserved() -> tuple[ConversationSessionStore[str, str], str, ConversationTur
     return store, session_id, turn
 
 
+def test_session_created_messages_have_no_replay_payload_and_project_for_generation() -> None:
+    store, session_id, turn = reserved()
+    result = store.complete_turn(session_id, turn, "completed", "Done")
+    assert result.kind == "completed" and result.text == "Done"
+    history = store.history(session_id)
+    messages = [record for record in history if isinstance(record, MessageRecord)]
+    assert [(record.kind, record.text, record.item) for record in messages] == [
+        ("user", "Run", None), ("final", "Done", None),
+    ]
+    assert model_input(history) == (
+        {"role": "user", "content": "Run"},
+        {"type": "message", "role": "assistant", "content": "Done", "phase": "final_answer"},
+    )
+
+
+@pytest.mark.parametrize("kind,phase", [("intermediate", "commentary"), ("unspecified", None)])
+def test_native_assistant_messages_project_their_kind(
+    kind: MessageRecordKind, phase: str | None,
+) -> None:
+    projected = model_input((MessageRecord("turn", None, "Working", kind),))[0]
+    assert projected["role"] == "assistant" and projected["content"] == "Working"
+    if phase is None:
+        assert "phase" not in projected
+    else:
+        assert projected["phase"] == phase
+
+
+@pytest.mark.parametrize("item", [{}, {"opaque": ["provider metadata"]}])
+def test_message_replay_payload_is_preserved_even_when_empty(item: dict[str, object]) -> None:
+    record = MessageRecord("turn", item, "Native text", "final")
+    projected = model_input((record,))[0]
+    assert projected == item
+    projected["added"] = True
+    assert "added" not in item
+
+
 def test_history_admission_copies_input_and_returned_records() -> None:
     store, session_id, turn = reserved()
     item: dict[str, object] = {"role": "assistant", "content": "Working"}
     record = MessageRecord(turn.turn_id, item, "Working", "intermediate")
     accepted = store.record_turn_history(session_id, turn.turn_id, (record,))[0]
     assert isinstance(accepted, MessageRecord)
+    assert accepted.item is not None
     item["content"] = "Changed input"
     accepted.item["content"] = "Changed return"
     retained = store.history(session_id)[-1]
     assert isinstance(retained, MessageRecord)
+    assert retained.item is not None
     assert retained.item["content"] == "Working"
 
 
@@ -95,6 +135,7 @@ def test_invalid_later_output_preserves_previously_admitted_activity() -> None:
     assert len(retained) == 2
     assert isinstance(retained[-1], MessageRecord)
     assert retained[-1].kind == "intermediate"
+    assert retained[-1].item is not None
     assert retained[-1].item["content"] == "Working"
 
 

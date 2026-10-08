@@ -154,7 +154,7 @@ history; repeated failed-turn responses are reconstructed from terminal records.
 Session metadata holds only expiry, initialization context, and settings, while
 active reservations coordinate execution under the store lock.
 `sessions/models/session.py` defines shared session and text-message contracts;
-`sessions/limits.py` defines message limits. The former standalone text store and
+`sessions/config.py` defines message limits, observation settings, and the default session lifetime. The former standalone text store and
 its conditional-append contract have been removed.
 Unresolved calls receive explicitly service-generated reports distinguishing
 execution never started from an unknown outcome; an unknown outcome may already

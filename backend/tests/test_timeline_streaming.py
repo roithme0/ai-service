@@ -22,7 +22,7 @@ from app.sessions.session_store import ConversationSessionStore
 from app.agents.http import AgentTransport, _context_issue, get_agent_registry
 from app.agents.enums.configuration import AgentConfiguration
 from app.agents.http import create_session_router
-from app.sessions.models.http import StreamEvent
+from app.agents.models.http_streaming import StreamEvent
 from app.agents.model_agent import create_model_agent
 from app.sessions.models.presentation import PresentationPayload
 from app.agents.models.tools import RegisteredTool, ToolInvocation

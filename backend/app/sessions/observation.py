@@ -6,6 +6,11 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Generic, TypeVar
 
+from app.sessions.config import (
+    MAX_OBSERVERS_PER_SESSION,
+    MAX_PENDING_OBSERVATION_UPDATES,
+    OBSERVATION_REFRESH_INTERVAL_SECONDS,
+)
 from app.sessions.models.conversation import ConversationReadActive
 from app.sessions.session_store import ConversationSessionStore
 from app.sessions.models.session import SessionReadExpired, SessionReadUnknown
@@ -20,7 +25,7 @@ class SessionObservation(Generic[ContextT, ArtifactT]):
         self._observers: dict[str, int] = {}
 
     def observation_available(self, session_id: str) -> bool:
-        return self._observers.get(session_id, 0) < 8
+        return self._observers.get(session_id, 0) < MAX_OBSERVERS_PER_SESSION
 
     async def observe(
         self, session_id: str
@@ -38,7 +43,7 @@ class SessionObservation(Generic[ContextT, ArtifactT]):
             ConversationReadActive[ContextT, ArtifactT]
             | SessionReadExpired
             | SessionReadUnknown
-        ] = asyncio.Queue(maxsize=128)
+        ] = asyncio.Queue(maxsize=MAX_PENDING_OBSERVATION_UPDATES)
         overflow = False
         loop = asyncio.get_running_loop()
 
@@ -73,7 +78,9 @@ class SessionObservation(Generic[ContextT, ArtifactT]):
                     yield None
                     return
                 try:
-                    value = await asyncio.wait_for(queue.get(), timeout=10)
+                    value = await asyncio.wait_for(
+                        queue.get(), timeout=OBSERVATION_REFRESH_INTERVAL_SECONDS
+                    )
                 except TimeoutError:
                     value = self._store.read(session_id)
                 yield value

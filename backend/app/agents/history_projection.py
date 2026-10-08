@@ -21,6 +21,19 @@ def generation_tool_call(record: CallRecord) -> AgenticToolCall:
     return AgenticToolCall(record.call_id, record.name, record.arguments)
 
 
+def _generation_message(record: MessageRecord) -> AgenticInputItem:
+    if record.item is not None:
+        return deepcopy(record.item)
+    if record.kind == "user":
+        return {"role": "user", "content": record.text}
+    item: AgenticInputItem = {"type": "message", "role": "assistant", "content": record.text}
+    if record.kind == "final":
+        item["phase"] = "final_answer"
+    elif record.kind == "intermediate":
+        item["phase"] = "commentary"
+    return item
+
+
 def _execution_report_output(record: ExecutionReportRecord) -> str:
     detail = (
         "Execution never started."
@@ -36,7 +49,7 @@ def model_input(history: tuple[HistoryRecord, ...]) -> tuple[AgenticInputItem, .
     items: list[AgenticInputItem] = []
     for record in history:
         if isinstance(record, MessageRecord):
-            items.append(deepcopy(record.item))
+            items.append(_generation_message(record))
         elif isinstance(record, CallRecord):
             item = deepcopy(record.item)
             item.update(call_id=record.call_id, name=record.name, arguments=record.arguments)

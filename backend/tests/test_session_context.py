@@ -3,7 +3,8 @@ import json
 import pytest
 
 from app.agents.models.input import AgentInputAccepted, AgentInputRejected
-from app.agents.context_preparation import CONTEXT_PREFIX, MAX_CONTEXT_LENGTH, validate_context_input
+from app.agents.config import MAX_ARTIFACT_CAPABILITIES, MAX_CONTEXT_LENGTH
+from app.agents.context_preparation import CONTEXT_PREFIX, validate_context_input
 
 
 def test_retains_json_values_without_domain_validation_or_shared_mutable_state() -> None:
@@ -43,6 +44,29 @@ def test_capabilities_are_detached_from_the_callers_mutable_schema() -> None:
     assert isinstance(outcome, AgentInputAccepted)
     schema["properties"]["name"]["type"] = "number"
     assert outcome.context.artifact_capabilities[0].payload_schema["properties"] == {"name": {"type": "string"}}
+
+
+@pytest.mark.parametrize("count", [MAX_ARTIFACT_CAPABILITIES, MAX_ARTIFACT_CAPABILITIES + 1])
+def test_agent_enforces_capability_count_at_input_admission(count: int) -> None:
+    capabilities = [
+        {"type": f"example-{index}", "description": "Show an example", "payloadSchema": {}}
+        for index in range(count)
+    ]
+    outcome = validate_context_input({"context": {}, "artifactCapabilities": capabilities})
+    if count == MAX_ARTIFACT_CAPABILITIES:
+        assert isinstance(outcome, AgentInputAccepted)
+        assert len(outcome.context.artifact_capabilities) == count
+    else:
+        assert isinstance(outcome, AgentInputRejected)
+        assert outcome.issues[0].location == ("artifactCapabilities",)
+
+
+def test_agent_rejects_duplicate_capability_types() -> None:
+    capability = {"type": "example", "description": "Show an example", "payloadSchema": {}}
+    outcome = validate_context_input({"context": {}, "artifactCapabilities": [capability, capability]})
+    assert isinstance(outcome, AgentInputRejected)
+    assert outcome.issues[0].location == ("artifactCapabilities",)
+    assert "must be unique" in outcome.issues[0].message
 
 
 @pytest.mark.parametrize("field", ["titleDescription", "subtitleDescription"])

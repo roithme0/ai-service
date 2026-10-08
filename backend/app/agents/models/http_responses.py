@@ -1,20 +1,17 @@
-"""Session HTTP requests, responses, and streamed event contracts."""
+"""Responses and errors for the agent conversation HTTP API."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from app.core.models import (
-    ErrorEnvelope,
-    HttpErrorKind,
-    RequestValidationErrorKind,
-    ValidationErrorEnvelope,
+    ErrorEnvelope, HttpErrorKind, RequestValidationErrorKind, ValidationErrorEnvelope,
 )
 from app.sessions.models.timeline import TimelineItem
-from app.sessions.models.turns import ActiveTurnStatus, TerminalTurnKind, TurnKind
+from app.sessions.models.turns import ActiveTurnStatus, TurnKind
 
 
 class InputIssue(BaseModel):
@@ -38,7 +35,6 @@ SessionErrorKind = Literal[
 ErrorKind = Literal[HttpErrorKind, SessionErrorKind]
 InputValidationErrorKind = Literal["invalid_input", "invalid_message"]
 ValidationErrorKind = Literal[InputValidationErrorKind, RequestValidationErrorKind]
-StreamErrorReason = Literal["unavailable", "observation_limit"]
 
 
 class ErrorResponse(ErrorEnvelope[ErrorKind]):
@@ -47,20 +43,6 @@ class ErrorResponse(ErrorEnvelope[ErrorKind]):
 
 class ValidationErrorResponse(ValidationErrorEnvelope[ValidationErrorKind]):
     pass
-
-
-class SessionCreationRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    input: object = None
-
-
-class UserMessageRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    text: str
-
-
-class EmptyTurnRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
 
 
 class UserMessageResponse(BaseModel):
@@ -122,53 +104,3 @@ class SessionSnapshotResponse(BaseModel):
 class AcceptedTurnResponse(BaseModel):
     kind: Literal["accepted"]
     turn_id: str
-
-
-class StreamSnapshot(BaseModel):
-    kind: Literal["snapshot"]
-    turn_id: str
-    snapshot: SessionSnapshotResponse
-
-
-class StreamUpsert(BaseModel):
-    kind: Literal["upsert"]
-    turn_id: str
-    identity: str
-    order: int = Field(ge=0)
-    sequence: int = Field(ge=0)
-    item: Annotated[TimelineItem, Field(discriminator="kind")]
-    artifact: ArtifactResponse | None = None
-
-
-class StreamClosing(BaseModel):
-    kind: Literal["closing"]
-    turn_id: str
-    sequence: int = Field(ge=0)
-
-
-class StreamTerminal(BaseModel):
-    kind: Literal["terminal"]
-    turn_id: str
-    sequence: int = Field(ge=0)
-    outcome: TerminalTurnKind
-
-
-class StreamError(BaseModel):
-    kind: Literal["error"]
-    turn_id: str
-    reason: StreamErrorReason
-
-
-class StreamEvent(
-    RootModel[
-        Annotated[
-            StreamSnapshot
-            | StreamUpsert
-            | StreamClosing
-            | StreamTerminal
-            | StreamError,
-            Field(discriminator="kind"),
-        ]
-    ]
-):
-    pass

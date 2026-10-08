@@ -3,7 +3,7 @@
 from typing import cast
 
 from app.agents.models.generation import AgenticGenerationResponse, AgenticInputItem, AssistantMessagePhase
-from app.sessions.limits import MAX_MESSAGE_LENGTH
+from app.sessions.config import MAX_MESSAGE_LENGTH
 
 
 def message_phase(item: AgenticInputItem) -> AssistantMessagePhase | None:

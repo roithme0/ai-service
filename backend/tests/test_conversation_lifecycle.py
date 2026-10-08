@@ -11,7 +11,7 @@ from app.sessions.models.conversation import (
     ConversationTurnReservation,
 )
 from app.sessions.session_store import ConversationSessionStore
-from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
+from app.sessions.config import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 from app.sessions.models.session import (
     SessionMessageAppendAccepted,
     SessionMessageAppendExpired,

@@ -12,24 +12,35 @@ from app.agents.enums.configuration import AgentConfiguration
 from app.agents.models.input import AgentInputRejected
 from app.agents.service import ConfiguredAgentService
 from app.agents.wiring import get_configured_agents
-from app.sessions.identity import require_application_user
-from app.sessions.models.context import ContextIssue
+from app.agents.http_identity import require_application_user
+from app.agents.models.context import ContextIssue
 from app.sessions.models.conversation import ConversationReadActive
-from app.sessions.models.http import (
-    AcceptedTurnResponse, EmptyTurnRequest, ErrorResponse, InputIssue,
-    SessionCreationRequest, SessionCreationResponse, SessionSnapshotResponse,
-    StreamEvent, UserMessageRequest, UserMessageResponse, ValidationErrorResponse,
+from app.agents.models.http_responses import (
+    AcceptedTurnResponse,
+    ErrorResponse,
+    InputIssue,
+    SessionCreationResponse,
+    SessionSnapshotResponse,
+    UserMessageResponse,
+    ValidationErrorResponse,
 )
+from app.agents.models.http_requests import (
+    EmptyTurnRequest,
+    SessionCreationRequest,
+    UserMessageRequest,
+)
+from app.agents.models.http_streaming import StreamEvent
 from app.sessions.models.session import (
     SessionMessageAppendAccepted, SessionMessageAppendExpired,
     SessionMessageAppendInvalidMessage, SessionMessageAppendLimitReached,
     SessionMessageBusy, SessionReadExpired,
 )
-from app.sessions.protocols.http import ConversationTransport
-from app.sessions.http_responses import (
+from app.agents.protocols.http import ConversationTransport
+from app.agents.http_streaming import turn_event_stream
+from app.agents.http_responses import (
     input_error_response, model_validation_details, session_error_response, snapshot_response,
     validation_error_response,
-    turn_event_stream, user_message_response,
+    user_message_response,
 )
 
 InputT = TypeVar("InputT")

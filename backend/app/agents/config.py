@@ -1,0 +1,4 @@
+"""Shared agent input limits."""
+
+MAX_CONTEXT_LENGTH = 64_000
+MAX_ARTIFACT_CAPABILITIES = 20

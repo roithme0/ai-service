@@ -1,10 +1,10 @@
-"""HTTP transport contract consumed by the session router."""
+"""HTTP transport contract consumed by the agent conversation router."""
 
 from typing import Protocol
 
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.sessions.models.http import (
+from app.agents.models.http_responses import (
     AcceptedTurnResponse,
     SessionCreationResponse,
     SessionSnapshotResponse,

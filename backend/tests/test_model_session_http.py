@@ -12,13 +12,13 @@ from app.agents.wiring import configure_agents
 from app.core.config import Settings
 from app.main import app
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.protocols.http import ConversationTransport
+from app.agents.protocols.http import ConversationTransport
 from app.agents.http import AgentTransport, _demo_issue, _context_issue, get_agent_registry
 from app.demo.agent import create_demo_agent
 from app.agents.model_agent import new_model_session_store
 from app.agents.instructions import CONVERSATION_INSTRUCTIONS
-from app.agents.context_preparation import MAX_CONTEXT_LENGTH
-from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
+from app.agents.config import MAX_CONTEXT_LENGTH
+from app.sessions.config import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 
 
 RECIPE_VERSION_UUID = "3fa85f64-5717-4562-b3fc-2c963f66afa6"

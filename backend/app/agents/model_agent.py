@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from app.agents.protocols.generation import AgenticGenerator
 from app.agents.service import ConfiguredAgentService
 from app.agents.context_preparation import format_session_context, validate_context_input
-from app.sessions.models.context import ContextIssue, SessionContext
+from app.agents.models.context import ContextIssue
+from app.sessions.models.context import SessionContext
+from app.sessions.config import DEFAULT_SESSION_LIFETIME
 from app.sessions.models.conversation import ConversationSessionSettings
 from app.sessions.session_store import ConversationSessionStore
 from app.sessions.models.artifacts import ArtifactCandidate
@@ -21,7 +23,6 @@ from app.agents.models.web_search import WebSearchConfig
 
 ModelAgent = ConfiguredAgentService[object, SessionContext, PresentationPayload, ContextIssue]
 ModelSessionStore = ConversationSessionStore[SessionContext, PresentationPayload]
-SESSION_LIFETIME = timedelta(minutes=90)
 MAX_ARTIFACTS = 100
 
 
@@ -30,7 +31,7 @@ def _utc_now() -> datetime:
 
 
 def new_model_session_store(clock: Callable[[], datetime] = _utc_now) -> ModelSessionStore:
-    return ConversationSessionStore(lifetime=SESSION_LIFETIME, clock=clock)
+    return ConversationSessionStore(lifetime=DEFAULT_SESSION_LIFETIME, clock=clock)
 
 
 def create_model_agent(

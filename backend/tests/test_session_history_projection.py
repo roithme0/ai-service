@@ -1,4 +1,4 @@
-from app.sessions.history import completed_text_messages
+from app.sessions.message_projection import completed_text_messages
 from app.sessions.models.history import HistoryRecord, MessageRecord, TerminalRecord
 from app.sessions.timeline import timeline
 

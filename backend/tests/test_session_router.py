@@ -5,13 +5,13 @@ from fastapi.responses import StreamingResponse
 from fastapi.testclient import TestClient
 
 from app.agents.http import create_session_router
-from app.sessions.models.http import (
+from app.agents.models.http_responses import (
     AcceptedTurnResponse,
     SessionCreationResponse,
     SessionSnapshotResponse,
     UserMessageResponse,
 )
-from app.sessions.protocols.http import ConversationTransport
+from app.agents.protocols.http import ConversationTransport
 
 
 class CustomTransport:

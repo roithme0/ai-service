@@ -214,9 +214,7 @@ def test_expiry_removes_artifact_map_and_rejects_late_acceptance() -> None:
         store.record_result(created.session_id, late, candidate())
     assert error.value.kind == "expired"
     assert store.history(created.session_id) == ()
-    assert created.session_id not in store._history
-    assert created.session_id not in store._artifacts
-    assert created.session_id not in store._active_turns
+    assert created.session_id not in store._sessions
 
 
 def test_invalid_candidate_outcome_does_not_append_partial_result() -> None:
@@ -226,7 +224,7 @@ def test_invalid_candidate_outcome_does_not_append_partial_result() -> None:
     with pytest.raises(ValueError):
         store.record_result(session_id, call, ToolExecution("arbitrary domain output", ArtifactCandidate("example", ["data"])))
     assert store.history(session_id) == before
-    assert store._artifacts[session_id] == {}
+    assert store._sessions[session_id].artifacts == {}
 
 
 @pytest.mark.parametrize("copy_number", [1, 2])
@@ -248,7 +246,7 @@ def test_copy_failure_is_atomic_and_does_not_allocate_identity(copy_number: int)
         with pytest.raises(ValueError, match="payload copy failed"):
             store.record_result(session_id, call, candidate())
     assert store.history(session_id) == before
-    assert store._artifacts[session_id] == {}
+    assert store._sessions[session_id].artifacts == {}
 
 
 def test_expiry_between_acceptance_check_and_timestamp_allocates_no_identity() -> None:
