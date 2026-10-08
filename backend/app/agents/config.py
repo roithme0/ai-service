@@ -1,4 +1,5 @@
-"""Shared agent input limits."""
+"""Shared agent settings and input limits."""
 
+ALLOW_MULTIPLE_TOOL_CALLS = True
 MAX_CONTEXT_LENGTH = 64_000
 MAX_ARTIFACT_CAPABILITIES = 20

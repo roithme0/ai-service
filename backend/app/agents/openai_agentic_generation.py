@@ -9,6 +9,7 @@ from typing import cast
 from openai import AsyncOpenAI, omit
 from openai.types.responses import ResponseCompletedEvent, ResponseOutputItemDoneEvent
 
+from app.agents import config
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 
 
@@ -34,7 +35,7 @@ class OpenAIAgenticGenerator:
                 instructions=request.instructions,
                 tools=list(request.tools),
                 include=["reasoning.encrypted_content"],
-                parallel_tool_calls=False,
+                parallel_tool_calls=config.ALLOW_MULTIPLE_TOOL_CALLS,
                 max_output_tokens=OPENAI_MAX_OUTPUT_TOKENS,
                 max_tool_calls=request.max_hosted_tool_calls if request.max_hosted_tool_calls is not None else omit,
                 store=False,
