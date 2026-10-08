@@ -22,6 +22,10 @@ artifact, and completion. Refresh the page to restart with a new empty session.
 Docker Compose reads `deployment/.env`. To enable Kochwiki turns in the
 container, add `OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`, and `KOCHWIKI_MCP_URL`.
 That file is ignored by Git. The variables are forwarded only to the backend.
+Optionally set `KOCHWIKI_OPENAI_REASONING_EFFORT` alongside the model name;
+all three Compose environments forward it to the backend. Blank or unset
+keeps the model's default. See [backend configuration](../backend/README.md#mcp-connections-and-tool-execution)
+for accepted values and model-specific restrictions.
 When Kochwiki runs directly on the host, use
 `http://host.docker.internal:<port>/mcp/`; `localhost` inside the backend
 container refers to that container itself. `KOCHWIKI_BASE_URL` is no longer used.

@@ -7,6 +7,7 @@ import pytest
 
 import httpx
 from openai import AsyncOpenAI
+from openai.types.shared import ReasoningEffort
 
 from app.agents.openai_agentic_generation import (
     OPENAI_MAX_OUTPUT_TOKENS,
@@ -111,7 +112,8 @@ def function_call() -> dict[str, object]:
             "name": "sample", "arguments": "{}", "status": "completed"}
 
 
-def test_openai_replays_function_call_and_result_without_storage() -> None:
+@pytest.mark.parametrize("reasoning_effort", [None, "low", "medium", "high", "xhigh", "max", "none", "minimal"])
+def test_openai_replays_function_call_and_result_without_storage(reasoning_effort: ReasoningEffort) -> None:
     requests: list[dict[str, object]] = []
 
     def respond(request: httpx.Request) -> httpx.Response:
@@ -147,7 +149,7 @@ def test_openai_replays_function_call_and_result_without_storage() -> None:
         async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http_client:
             async with AsyncOpenAI(api_key="test-key", http_client=http_client, max_retries=0) as client:
                 result = await run_tool_turn(
-                    OpenAIAgenticGenerator("gpt-5.6-sol", client),
+                    OpenAIAgenticGenerator("gpt-5.6-sol", client, reasoning_effort=reasoning_effort),
                     ({"role": "user", "content": "Try it"},), "Caller context", "Instructions",
                     (LocalToolSource((RegisteredTool("sample", {
                         "type": "function", "name": "sample", "parameters": {"type": "object"},
@@ -165,6 +167,10 @@ def test_openai_replays_function_call_and_result_without_storage() -> None:
     assert all(request["store"] is False and request["parallel_tool_calls"] is True for request in requests)
     assert all(request["max_output_tokens"] == OPENAI_MAX_OUTPUT_TOKENS for request in requests)
     assert all(request["include"] == ["reasoning.encrypted_content"] for request in requests)
+    if reasoning_effort is None:
+        assert all("reasoning" not in request for request in requests)
+    else:
+        assert all(request["reasoning"] == {"effort": reasoning_effort} for request in requests)
     assert requests[0]["input"] == [
         {"role": "user", "content": "Caller context"},
         {"role": "user", "content": "Try it"},

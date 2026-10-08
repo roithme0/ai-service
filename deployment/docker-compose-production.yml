@@ -8,6 +8,7 @@ services:
       KOCHWIKI_MCP_URL: "${KOCHWIKI_MCP_URL:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       KOCHWIKI_OPENAI_MODEL: "${KOCHWIKI_OPENAI_MODEL:-}"
+      KOCHWIKI_OPENAI_REASONING_EFFORT: "${KOCHWIKI_OPENAI_REASONING_EFFORT:-}"
 
   frontend:
     image: roithme0/ai-service-frontend:latest
