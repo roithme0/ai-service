@@ -23,6 +23,8 @@ test = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+cache_dir = "tests/.pytest_cache"
+addopts = "--basetemp=tests/.pytest_tmp"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

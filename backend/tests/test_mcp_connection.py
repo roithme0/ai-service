@@ -10,15 +10,16 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ListToolsResult, Tool
 from pydantic import SecretStr
+from openai.types.shared import ReasoningEffort
 from fastapi import FastAPI
 
 from app.agents.wiring import configure_agents, get_configured_agents
 from app.core.config import Settings
 from app.main import AgentLifespan
-from app.mcp_connection import MCPConnection
-from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
-from app.sessions.text_sessions import TextSessionCreation
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.mcp.connection import MCPConnection
+from app.agents.instructions import CONVERSATION_INSTRUCTIONS
+from app.sessions.models.session import SessionCreation
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from test_model_session_http import valid_request
 
 
@@ -26,6 +27,7 @@ def configured_settings() -> Settings:
     return Settings.model_construct(
         openai_api_key=SecretStr("test-key"),
         kochwiki_openai_model="test-model",
+        kochwiki_openai_reasoning_effort="high",
         kochwiki_mcp_url="http://localhost/mcp/",
     )
 
@@ -46,9 +48,10 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                         ({"type": "function_call", "call_id": call.call_id,
                           "name": call.name, "arguments": call.arguments},), (call,), None,
                     )
-                return AgenticGenerationResponse((), (), "Hello World received")
+                return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Hello World received"},), (), "Hello World received")
 
-        def generator_factory(*, model: str, client: object) -> Generator:
+        def generator_factory(*, model: str, client: object, reasoning_effort: ReasoningEffort) -> Generator:
+            assert reasoning_effort == "high"
             return Generator()
 
         monkeypatch.setattr("app.agents.wiring.OpenAIAgenticGenerator", generator_factory)
@@ -69,7 +72,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                 assert url == "http://localhost/mcp/"
                 return Client(streamable_http_client(url, http_client=http), read_timeout_seconds=read_timeout_seconds)
 
-            monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+            monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
             agents = configure_agents(configured_settings())
             assert agents.kochwiki.agent is not None
             assert agents.demo.mcp_connections == ()
@@ -95,16 +98,18 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                             "required": ["name"], "additionalProperties": False,
                         },
                     }]
-                created = agents.kochwiki.agent.create(payload)
-                assert isinstance(created, TextSessionCreation)
+                created = agents.kochwiki.agent.create(payload, owner="test:user")
+                assert isinstance(created, SessionCreation)
                 agents.kochwiki.agent.append_user_message(created.session_id, "Call hello world")
                 turn = await agents.kochwiki.agent.execute_turn(created.session_id)
                 assert turn.kind == "completed"
                 assert turn.text == "Hello World received"
                 assert turn.artifacts == ()
-                assert [tool["name"] for tool in requests[0].tools] == [
+                assert [tool["name"] for tool in requests[0].tools if tool["type"] == "function"] == [
                     "kochwiki__hello_world",
                 ] + (["present_artifact"] if with_presentation else [])
+                assert {"type": "web_search"} in requests[0].tools
+                assert requests[0].max_hosted_tool_calls == 16
                 instructions = requests[0].instructions
                 assert instructions.count("Server-owned domain guidance") == 1
                 assert "hello_world -> kochwiki__hello_world" in instructions
@@ -121,7 +126,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                 assert isinstance(output["output"], str)
                 assert json.loads(output["output"])["structuredContent"] == {"message": "Hello World"}
                 assert agents.demo.agent is not None
-                assert isinstance(agents.demo.agent.create(None), TextSessionCreation)
+                assert isinstance(agents.demo.agent.create(None, owner="test:user"), SessionCreation)
             finally:
                 await agents.close()
             assert connection.instructions is None
@@ -171,14 +176,15 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
                 result = json.loads(output)
                 if len(requests) == 2:
                     assert result["structuredContent"]["proposalId"] == proposal_id
-                    return AgenticGenerationResponse((), (), f"Proposal {proposal_id}: Adjusted oats.")
+                    return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": f"Proposal {proposal_id}: Adjusted oats."},), (), f"Proposal {proposal_id}: Adjusted oats.")
                 if save_fails:
                     assert result["isError"] is True
-                    return AgenticGenerationResponse((), (), "Saving failed; no draft was saved.")
+                    return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Saving failed; no draft was saved."},), (), "Saving failed; no draft was saved.")
                 assert result["structuredContent"]["id"] == version_id
-                return AgenticGenerationResponse((), (), f"Saved draft {version_id}.")
+                return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": f"Saved draft {version_id}."},), (), f"Saved draft {version_id}.")
 
-        def generator_factory(*, model: str, client: object) -> Generator:
+        def generator_factory(*, model: str, client: object, reasoning_effort: ReasoningEffort) -> Generator:
+            assert reasoning_effort == "high"
             return Generator()
 
         monkeypatch.setattr("app.agents.wiring.OpenAIAgenticGenerator", generator_factory)
@@ -206,14 +212,14 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
             def client_for_url(url: str, *, read_timeout_seconds: float) -> Client:
                 return Client(streamable_http_client(url, http_client=http), read_timeout_seconds=read_timeout_seconds)
 
-            monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+            monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
             agents = configure_agents(configured_settings())
             await agents.start()
             try:
                 agent = agents.kochwiki.agent
                 assert agent is not None
-                created = agent.create(payload)
-                assert isinstance(created, TextSessionCreation)
+                created = agent.create(payload, owner="test:user")
+                assert isinstance(created, SessionCreation)
                 agent.append_user_message(created.session_id, "Propose a change")
                 proposal_turn = await agent.execute_turn(created.session_id)
                 assert proposal_turn.kind == "completed"
@@ -227,7 +233,7 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
                                           else f"Saved draft {version_id}.")
                 assert created_proposals == [candidate]
                 assert saved_ids == [proposal_id]
-                assert {tool["name"] for tool in requests[0].tools} == {
+                assert {tool["name"] for tool in requests[0].tools if tool["type"] == "function"} == {
                     "kochwiki__create_recipe_proposal", "kochwiki__save_recipe_proposal",
                 }
                 assert "register_recipe_proposal" not in requests[0].instructions
@@ -262,7 +268,7 @@ def test_discovery_consumes_all_pages(monkeypatch: pytest.MonkeyPatch) -> None:
         def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
             return Client(server, read_timeout_seconds=read_timeout_seconds)
 
-        monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
         monkeypatch.setattr(Client, "list_tools", list_tools)
         connection = MCPConnection("paged", "http://localhost/mcp/")
         await connection.start()
@@ -294,7 +300,7 @@ def test_connection_failure_disables_only_owning_agent(
             async def broken_list(self: Client, *, cursor: str | None = None) -> ListToolsResult:
                 raise RuntimeError("discovery failure")
 
-            monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+            monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
             if fail_discovery:
                 monkeypatch.setattr(Client, "list_tools", broken_list)
             agents = configure_agents(configured_settings())
@@ -304,7 +310,7 @@ def test_connection_failure_disables_only_owning_agent(
             try:
                 assert agents.kochwiki.agent is None
                 assert agents.demo.agent is not None
-                assert isinstance(agents.demo.agent.create(None), TextSessionCreation)
+                assert isinstance(agents.demo.agent.create(None, owner="test:user"), SessionCreation)
                 assert connection.tools == ()
                 assert connection.instructions is None
                 with pytest.raises(RuntimeError, match="not started"):
@@ -322,7 +328,7 @@ def test_application_lifespan_owns_connection_and_clears_agent_cache(monkeypatch
         def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
             return Client(server, read_timeout_seconds=read_timeout_seconds)
 
-        monkeypatch.setattr("app.mcp_connection.Client", client_for_url)
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
         monkeypatch.setattr("app.agents.wiring.get_settings", configured_settings)
         get_configured_agents.cache_clear()
         async with AgentLifespan(FastAPI()):

@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from openai.types.shared import ReasoningEffort
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,6 +14,7 @@ BACKEND_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     kochwiki_openai_model: str | None = None
+    kochwiki_openai_reasoning_effort: ReasoningEffort = None
     kochwiki_mcp_url: str | None = None
 
     model_config = SettingsConfigDict(
@@ -22,7 +24,8 @@ class Settings(BaseSettings):
     )
 
     @field_validator(
-        "openai_api_key", "kochwiki_openai_model", "kochwiki_mcp_url", mode="before"
+        "openai_api_key", "kochwiki_openai_model", "kochwiki_openai_reasoning_effort",
+        "kochwiki_mcp_url", mode="before"
     )
     @classmethod
     def empty_strings_are_unset(cls, value: object) -> object:

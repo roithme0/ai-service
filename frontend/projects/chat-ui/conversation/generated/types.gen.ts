@@ -5,6 +5,20 @@ export type ClientOptions = {
 };
 
 /**
+ * AcceptedTurnResponse
+ */
+export type AcceptedTurnResponse = {
+    /**
+     * Kind
+     */
+    kind: 'accepted';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
  * ArtifactResponse
  */
 export type ArtifactResponse = {
@@ -55,25 +69,6 @@ export type AssistantMessageResponse = {
 };
 
 /**
- * CompletedTurnResponse
- */
-export type CompletedTurnResponse = {
-    /**
-     * Artifacts
-     */
-    artifacts: Array<ArtifactResponse>;
-    /**
-     * Kind
-     */
-    kind: 'completed';
-    message: AssistantMessageResponse;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
  * ErrorResponse
  */
 export type ErrorResponse = {
@@ -84,11 +79,25 @@ export type ErrorResponse = {
     /**
      * Kind
      */
-    kind: 'not_found' | 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed' | 'method_not_allowed' | 'http_error' | 'internal_error';
+    kind: 'not_found' | 'method_not_allowed' | 'http_error' | 'internal_error' | 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed';
     /**
      * Turn Id
      */
     turn_id?: string | null;
+};
+
+/**
+ * HttpErrorResponse
+ */
+export type HttpErrorResponse = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Kind
+     */
+    kind: 'not_found' | 'method_not_allowed' | 'http_error' | 'internal_error';
 };
 
 /**
@@ -110,6 +119,14 @@ export type SessionCreationResponse = {
  */
 export type SessionSnapshotResponse = {
     /**
+     * Active Turn Id
+     */
+    active_turn_id: string | null;
+    /**
+     * Active Turn Status
+     */
+    active_turn_status: 'in_progress' | 'closing' | null;
+    /**
      * Artifacts
      */
     artifacts: Array<ArtifactResponse>;
@@ -122,6 +139,10 @@ export type SessionSnapshotResponse = {
      */
     messages: Array<UserMessageResponse | AssistantMessageResponse>;
     /**
+     * Sequence
+     */
+    sequence: number;
+    /**
      * Session Id
      */
     session_id: string;
@@ -133,6 +154,245 @@ export type SessionSnapshotResponse = {
      * Terminal Turn Kind
      */
     terminal_turn_kind: 'completed' | 'generation_failed' | 'unknown' | 'expired' | 'not_ready' | 'limit_reached' | 'conflict' | 'busy' | null;
+    /**
+     * Timeline
+     */
+    timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
+};
+
+/**
+ * StreamClosing
+ */
+export type StreamClosing = {
+    /**
+     * Kind
+     */
+    kind: 'closing';
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * StreamError
+ */
+export type StreamError = {
+    /**
+     * Kind
+     */
+    kind: 'error';
+    /**
+     * Reason
+     */
+    reason: 'unavailable' | 'observation_limit';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * StreamEvent
+ */
+export type StreamEvent = ({
+    kind: 'snapshot';
+} & StreamSnapshot) | ({
+    kind: 'upsert';
+} & StreamUpsert) | ({
+    kind: 'closing';
+} & StreamClosing) | ({
+    kind: 'terminal';
+} & StreamTerminal) | ({
+    kind: 'error';
+} & StreamError);
+
+/**
+ * StreamSnapshot
+ */
+export type StreamSnapshot = {
+    /**
+     * Kind
+     */
+    kind: 'snapshot';
+    snapshot: SessionSnapshotResponse;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * StreamTerminal
+ */
+export type StreamTerminal = {
+    /**
+     * Kind
+     */
+    kind: 'terminal';
+    /**
+     * Outcome
+     */
+    outcome: 'completed' | 'generation_failed' | 'conflict';
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * StreamUpsert
+ */
+export type StreamUpsert = {
+    artifact?: ArtifactResponse | null;
+    /**
+     * Identity
+     */
+    identity: string;
+    /**
+     * Item
+     */
+    item: ({
+        kind: 'message';
+    } & TimelineMessage) | ({
+        kind: 'intermediate';
+    } & TimelineIntermediateMessage) | ({
+        kind: 'tool';
+    } & TimelineTool) | ({
+        kind: 'artifact';
+    } & TimelineArtifact) | ({
+        kind: 'failure';
+    } & TimelineFailure);
+    /**
+     * Kind
+     */
+    kind: 'upsert';
+    /**
+     * Order
+     */
+    order: number;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * TimelineArtifact
+ */
+export type TimelineArtifact = {
+    /**
+     * Artifact Id
+     */
+    artifact_id: string;
+    /**
+     * Kind
+     */
+    kind: 'artifact';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * TimelineFailure
+ */
+export type TimelineFailure = {
+    /**
+     * Kind
+     */
+    kind: 'failure';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * TimelineIntermediateMessage
+ */
+export type TimelineIntermediateMessage = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'intermediate';
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * TimelineMessage
+ */
+export type TimelineMessage = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'message';
+    /**
+     * Role
+     */
+    role: 'user' | 'assistant';
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+};
+
+/**
+ * TimelineTool
+ */
+export type TimelineTool = {
+    /**
+     * Execution Id
+     */
+    execution_id: string;
+    /**
+     * Kind
+     */
+    kind: 'tool';
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: 'requested' | 'running' | 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
 };
 
 /**
@@ -196,11 +456,11 @@ export type HelloWorldGetErrors = {
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
 };
 
 export type HelloWorldGetError = HelloWorldGetErrors[keyof HelloWorldGetErrors];
@@ -228,6 +488,12 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostData = {
          */
         input?: unknown;
     };
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
+    };
     path: {
         /**
          * Configuration
@@ -246,7 +512,7 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostErrors = {
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Unprocessable Content
      */
@@ -254,7 +520,7 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostErrors = {
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
     /**
      * Service Unavailable
      */
@@ -274,6 +540,12 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostResponse = CreateSe
 
 export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetData = {
     body?: never;
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
+    };
     path: {
         /**
          * Configuration
@@ -296,7 +568,7 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors = {
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Gone
      */
@@ -308,7 +580,7 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors = {
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
     /**
      * Service Unavailable
      */
@@ -336,6 +608,12 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostDa
          */
         text: string;
     };
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
+    };
     path: {
         /**
          * Configuration
@@ -358,7 +636,7 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostEr
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Conflict
      */
@@ -374,7 +652,7 @@ export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostEr
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
     /**
      * Service Unavailable
      */
@@ -399,6 +677,12 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostData = 
     body?: {
         [key: string]: never;
     };
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
+    };
     path: {
         /**
          * Configuration
@@ -421,7 +705,7 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors 
     /**
      * Method Not Allowed
      */
-    405: ErrorResponse;
+    405: HttpErrorResponse;
     /**
      * Conflict
      */
@@ -437,7 +721,7 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors 
     /**
      * Internal Server Error
      */
-    500: ErrorResponse;
+    500: HttpErrorResponse;
     /**
      * Bad Gateway
      */
@@ -454,7 +738,71 @@ export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostRespons
     /**
      * Successful Response
      */
-    201: CompletedTurnResponse;
+    202: AcceptedTurnResponse;
 };
 
 export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponse = ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponses[keyof ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponses];
+
+export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetData = {
+    body?: never;
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
+    };
+    path: {
+        /**
+         * Configuration
+         */
+        configuration: 'demo' | 'kochwiki';
+        /**
+         * Session Id
+         */
+        session_id: string;
+        /**
+         * Turn Id
+         */
+        turn_id: string;
+    };
+    query?: never;
+    url: '/api/v1/agents/{configuration}/sessions/{session_id}/turns/{turn_id}/events';
+};
+
+export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors = {
+    /**
+     * Not Found
+     */
+    404: ErrorResponse;
+    /**
+     * Method Not Allowed
+     */
+    405: HttpErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+    /**
+     * Gone
+     */
+    410: ErrorResponse;
+    /**
+     * Unprocessable Content
+     */
+    422: ValidationErrorResponse;
+    /**
+     * Internal Server Error
+     */
+    500: HttpErrorResponse;
+};
+
+export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetError = ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors[keyof ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors];
+
+export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: StreamEvent;
+};
+
+export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponse = ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponses[keyof ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponses];

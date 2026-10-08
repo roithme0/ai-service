@@ -1,1 +1,0 @@
-"""Provider-neutral model contracts."""

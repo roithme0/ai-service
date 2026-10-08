@@ -26,7 +26,7 @@ globalThis.fetch = async (url, options) => {
 };
 try {
   const controller = new conversation.ConversationController(
-    new conversation.HttpConversationTransport('/ai/api/v1/', conversation.AgentConfiguration.demo),
+    new conversation.HttpConversationTransport('/ai/api/v1/', conversation.AgentConfiguration.demo, 'demo:default'),
     () => {},
   );
   await controller.start();
@@ -36,6 +36,7 @@ try {
   for (const request of requests) {
     assert.equal(request.url, '/ai/api/v1/agents/demo/sessions');
     assert.deepEqual(JSON.parse(request.options.body), { input: {} });
+    assert.equal(request.options.headers['X-Application-User'], 'demo:default');
   }
 } finally {
   globalThis.fetch = originalFetch;
@@ -59,12 +60,14 @@ import * as Root from '@roithme0/chat-ui';
 const emptyRoot: keyof typeof Root extends never ? true : false = true;
 const config: Configuration = AgentConfiguration.demo;
 const publish = (state: ConversationViewState): void => { const content: readonly ChatContent[] = state.content; };
-const transport: ConversationTransport = new HttpConversationTransport('/api/v1', config);
+const transport: ConversationTransport = new HttpConversationTransport('/api/v1', config, 'demo:default');
 const controller = new ConversationController(transport, publish);
 const mapper: ArtifactMapper = (artifact) => presentJsonArtifact(artifact);
-new ConversationController(new HttpConversationTransport('/ai/api/v1/', AgentConfiguration.kochwiki, { source: {} }), publish, mapper);
+new ConversationController(new HttpConversationTransport('/ai/api/v1/', AgentConfiguration.kochwiki, 'kochwiki:42', { source: {} }), publish, mapper);
 // @ts-expect-error Arbitrary agent keys are not public configuration.
-new HttpConversationTransport('/api/v1', 'arbitrary');
+new HttpConversationTransport('/api/v1', 'arbitrary', 'demo:default');
+// @ts-expect-error Application identity is required.
+new HttpConversationTransport('/api/v1', config);
 // @ts-expect-error Root compatibility exports must be absent.
 Root.ChatUiComponent;
 // @ts-expect-error Internal parsing is not public API.

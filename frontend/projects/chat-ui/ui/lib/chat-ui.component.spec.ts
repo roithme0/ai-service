@@ -63,6 +63,53 @@ describe('ChatUiComponent', () => {
     );
   });
 
+  it('renders intermediate Markdown with secondary styling in conversation order', () => {
+    const fixture = createFixture([
+      { kind: 'intermediate', id: 'update', text: '**Checking** <script>alert(1)</script>' },
+      { kind: 'tool', id: 'tool', name: 'check', status: 'completed' },
+      { kind: 'text', id: 'final', role: 'assistant', text: 'Standalone result.' },
+    ]);
+    const element = fixture.nativeElement as HTMLElement;
+    const rows = [...element.querySelector('.messages')!.children];
+    expect(rows[0].classList.contains('message--intermediate')).toBe(true);
+    expect(rows[0].getAttribute('aria-label')).toBe('Zwischenmeldung des Assistenten');
+    expect(rows[0].querySelector('strong')?.textContent).toBe('Checking');
+    expect(rows[0].querySelector('script')).toBeNull();
+    expect(rows[1].classList.contains('tool-call')).toBe(true);
+    expect(rows[2].classList.contains('message--assistant')).toBe(true);
+  });
+
+  it('renders compact tool rows and artifacts in host order with all four status labels', () => {
+    const fixture = createFixture([
+      { kind: 'text', id: 'user', role: 'user', text: 'Show' },
+      { kind: 'tool', id: 'tool-1', name: '<b>present</b>', status: 'completed' },
+      { kind: 'artifact', id: 'artifact', type: 'json', headline: 'Result', payload: { value: 1 } },
+      { kind: 'tool', id: 'tool-2', name: 'save', status: 'failed' },
+      { kind: 'tool', id: 'tool-3', name: 'update', status: 'outcome_unknown' },
+      { kind: 'tool', id: 'tool-4', name: 'check', status: 'not_executed' },
+      { kind: 'failure', id: 'failure', text: 'Die Antwort konnte nicht erstellt werden.' },
+    ]);
+    const element = fixture.nativeElement as HTMLElement;
+    expect([...element.querySelector('.messages')!.children].map(child => child.tagName)).toEqual([
+      'ARTICLE', 'ARTICLE', 'AI-CHAT-ARTIFACT-CARD', 'ARTICLE', 'ARTICLE', 'ARTICLE', 'ARTICLE',
+    ]);
+    const rows = [...element.querySelectorAll('.tool-call')];
+    expect(rows.map(row => row.querySelector('.tool-call__status')?.textContent?.trim())).toEqual([
+      'Abgeschlossen', 'Fehlgeschlagen', 'Ergebnis unklar', 'Nicht ausgeführt',
+    ]);
+    expect(rows.every(row => row.querySelector('mat-icon')?.getAttribute('svgIcon') === 'ai-chat:tool')).toBe(true);
+    expect(rows[0].textContent).toContain('<b>present</b>');
+    expect(rows[0].querySelector('b')).toBeNull();
+    fixture.componentRef.setInput('conversationStatus', { kind: 'error', placement: 'assistant', message: 'Current failure' });
+    fixture.detectChanges();
+    expect(element.querySelectorAll('.status--error')).toHaveLength(1);
+    fixture.componentRef.setInput('content', [...fixture.componentInstance.content(),
+      { kind: 'text', id: 'next-user', role: 'user', text: 'Continue' }]);
+    fixture.componentRef.setInput('conversationStatus', null);
+    fixture.detectChanges();
+    expect(element.querySelectorAll('.status--error')).toHaveLength(1);
+  });
+
   it('uses a matching renderer and renders explicit JSON safely', () => {
     const templateFixture = TestBed.createComponent(RendererTemplateHost);
     templateFixture.detectChanges();
@@ -279,7 +326,7 @@ describe('ChatUiComponent', () => {
     createFixture([]);
     const registry = TestBed.inject(MatIconRegistry);
 
-    for (const name of ['send', 'retry', 'tts', 'add-file']) {
+    for (const name of ['send', 'retry', 'tts', 'add-file', 'tool']) {
       const icon = await firstValueFrom(registry.getNamedSvgIcon(name, 'ai-chat'));
       expect(icon.getAttribute('viewBox')).toBe('0 0 24 24');
     }

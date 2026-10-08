@@ -2,16 +2,17 @@
 
 import logging
 from contextlib import AsyncExitStack
-from typing import Generic, Protocol, TypeVar
+from typing import Generic, Protocol, TypeVar, runtime_checkable
 
-from app.mcp_connection import MCPConnection
-from app.mcp_tools import MCPToolset
+from app.mcp.connection import MCPConnection
+from app.mcp.tools import MCPToolset
 
 
 logger = logging.getLogger(__name__)
 AgentT = TypeVar("AgentT")
 
 
+@runtime_checkable
 class AsyncCloseable(Protocol):
     async def close(self) -> None: ...
 
@@ -52,9 +53,12 @@ class AgentRuntime(Generic[AgentT]):
         if self._closed:
             return
         self._closed = True
+        agent = self.agent
         self.agent = None
         async with AsyncExitStack() as resources:
             if self._model_client is not None:
                 resources.push_async_callback(self._model_client.close)
             for connection in self.mcp_connections:
                 resources.push_async_callback(connection.close)
+            if isinstance(agent, AsyncCloseable):
+                resources.push_async_callback(agent.close)

@@ -1,13 +1,13 @@
 import asyncio
 from datetime import UTC, datetime
 
-from app.agents.demo import create_demo_agent, validate_demo_input
-from app.sessions.model_sessions import create_model_agent
+from app.demo.agent import create_demo_agent, validate_demo_input
+from app.agents.model_agent import create_model_agent
 from app.demo.session import GreetingPayload, GreetingsPayload, new_demo_session_store
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse
-from app.sessions.model_sessions import new_model_session_store
-from app.sessions.agent_service import AgentInputRejected
-from app.sessions.conversation import ConversationReadActive
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse
+from app.agents.model_agent import new_model_session_store
+from app.agents.models.input import AgentInputRejected
+from app.sessions.models.conversation import ConversationReadActive
 
 from test_model_session_http import valid_request
 
@@ -18,14 +18,14 @@ class ReplyGenerator:
 
     async def generate(self, request: AgenticGenerationRequest) -> AgenticGenerationResponse:
         self.requests.append(request)
-        return AgenticGenerationResponse((), (), "Configured reply")
+        return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Configured reply"},), (), "Configured reply")
 
 
 def test_direct_model_session_retains_detached_json_and_rejects_invalid_input() -> None:
     store = new_model_session_store()
     agent = create_model_agent(ReplyGenerator(), store)
     request = valid_request()
-    created = agent.create(request)
+    created = agent.create(request, owner="test:user")
     assert not isinstance(created, AgentInputRejected)
     read = agent.read(created.session_id)
     assert isinstance(read, ConversationReadActive)
@@ -33,10 +33,10 @@ def test_direct_model_session_retains_detached_json_and_rejects_invalid_input() 
     request.clear()
     assert '"amount":125.75' in read.snapshot.session.payload.model_context
 
-    invalid = agent.create({"context": []})
+    invalid = agent.create({"context": []}, owner="test:user")
     assert isinstance(invalid, AgentInputRejected)
     assert invalid.issues[0].location[0] == "context"
-    assert len(store._settings) == 1
+    assert len(store._sessions) == 1
 
 
 def test_demo_validation_and_configured_sequence_without_model() -> None:
@@ -48,15 +48,16 @@ def test_demo_validation_and_configured_sequence_without_model() -> None:
     agent = create_demo_agent(delay_seconds=0.2, pause=pause)
     assert not isinstance(validate_demo_input(None), AgentInputRejected)
     assert not isinstance(validate_demo_input({}), AgentInputRejected)
-    assert isinstance(agent.create({"unexpected": True}), AgentInputRejected)
-    created = agent.create(None)
+    assert isinstance(agent.create({"unexpected": True}, owner="test:user"), AgentInputRejected)
+    created = agent.create(None, owner="test:user")
     assert not isinstance(created, AgentInputRejected)
     agent.append_user_message(created.session_id, "first")
     first = asyncio.run(agent.execute_turn(created.session_id))
     agent.append_user_message(created.session_id, "second")
     second = asyncio.run(agent.execute_turn(created.session_id))
     assert first.kind == second.kind == "completed"
-    assert pauses == [0.2, 0.2]
+    assert len(pauses) > 2
+    assert all(pause == 0.2 for pause in pauses)
     assert len(second.artifacts) == 2
     assert second.artifacts[0].type == "demo.greeting"
     assert isinstance(second.artifacts[0].payload, GreetingPayload)
@@ -64,11 +65,13 @@ def test_demo_validation_and_configured_sequence_without_model() -> None:
     assert second.artifacts[1].type == "demo.greetings"
     assert isinstance(second.artifacts[1].payload, GreetingsPayload)
     assert len(second.artifacts[1].payload.messages) == 30
+    before_failure = len(pauses)
     agent.append_user_message(created.session_id, "third")
     third = asyncio.run(agent.execute_turn(created.session_id))
     assert third.kind == "generation_failed"
     assert third.artifacts == ()
-    assert pauses == [0.2] * 3
+    assert len(pauses) > before_failure
+    assert all(pause == 0.2 for pause in pauses)
 
 
 def test_instances_own_sessions_and_turns_are_isolated() -> None:
@@ -84,8 +87,8 @@ def test_instances_own_sessions_and_turns_are_isolated() -> None:
         store = new_demo_session_store(clock=lambda: datetime(2026, 9, 25, tzinfo=UTC))
         first_agent = create_demo_agent(store, delay_seconds=0.1, pause=pause)
         second_agent = create_demo_agent(delay_seconds=0)
-        first = first_agent.create(None)
-        second = first_agent.create(None)
+        first = first_agent.create(None, owner="test:user")
+        second = first_agent.create(None, owner="test:user")
         assert not isinstance(first, AgentInputRejected)
         assert not isinstance(second, AgentInputRejected)
         assert second_agent.read(first.session_id).kind == "unknown"
@@ -111,8 +114,8 @@ def test_recipe_instances_bind_distinct_instructions_and_sessions() -> None:
     first_agent = create_model_agent(first_generator, instructions="First instructions")
     second_agent = create_model_agent(second_generator, instructions="Second instructions")
     request = valid_request()
-    first = first_agent.create(request)
-    second = second_agent.create(request)
+    first = first_agent.create(request, owner="test:user")
+    second = second_agent.create(request, owner="test:user")
     assert not isinstance(first, AgentInputRejected)
     assert not isinstance(second, AgentInputRejected)
     assert first_agent.read(second.session_id).kind == "unknown"

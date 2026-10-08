@@ -24,6 +24,8 @@ app-root {
 
 app-root {
   height: 100dvh;
+  max-width: 30rem;
+  margin: auto;
 }
 
 body {

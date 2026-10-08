@@ -23,6 +23,7 @@ import type {
   ChatContent,
   ChatConversationStatus,
   ChatSubmission,
+  ChatToolStatus,
 } from './chat-message';
 
 @Component({
@@ -56,6 +57,14 @@ export class ChatUiComponent {
 
   protected readonly draft = signal('');
   protected readonly renderAssistantMarkdown = renderAssistantMarkdown;
+  protected readonly toolStatusLabels: Record<ChatToolStatus, string> = {
+    completed: 'Abgeschlossen',
+    failed: 'Fehlgeschlagen',
+    not_executed: 'Nicht ausgeführt',
+    outcome_unknown: 'Ergebnis unklar',
+    requested: 'Angefragt',
+    running: 'Wird ausgeführt',
+  };
   private readonly revealedStatus = signal<ChatConversationStatus | null>(null);
   protected readonly statusVisible = computed(() => {
     const status = this.conversationStatus();

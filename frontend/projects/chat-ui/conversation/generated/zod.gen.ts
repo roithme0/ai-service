@@ -3,6 +3,14 @@
 import * as z from 'zod';
 
 /**
+ * AcceptedTurnResponse
+ */
+export const zAcceptedTurnResponse = z.object({
+    kind: z.literal('accepted'),
+    turn_id: z.string()
+});
+
+/**
  * ArtifactResponse
  */
 export const zArtifactResponse = z.object({
@@ -24,22 +32,15 @@ export const zAssistantMessageResponse = z.object({
 });
 
 /**
- * CompletedTurnResponse
- */
-export const zCompletedTurnResponse = z.object({
-    artifacts: z.array(zArtifactResponse),
-    kind: z.literal('completed'),
-    message: zAssistantMessageResponse,
-    turn_id: z.string()
-});
-
-/**
  * ErrorResponse
  */
 export const zErrorResponse = z.object({
     detail: z.string().min(1),
     kind: z.enum([
         'not_found',
+        'method_not_allowed',
+        'http_error',
+        'internal_error',
         'unknown_configuration',
         'agent_unavailable',
         'unknown',
@@ -48,12 +49,22 @@ export const zErrorResponse = z.object({
         'not_ready',
         'conflict',
         'limit_reached',
-        'generation_failed',
+        'generation_failed'
+    ]),
+    turn_id: z.string().nullish()
+});
+
+/**
+ * HttpErrorResponse
+ */
+export const zHttpErrorResponse = z.object({
+    detail: z.string().min(1),
+    kind: z.enum([
+        'not_found',
         'method_not_allowed',
         'http_error',
         'internal_error'
-    ]),
-    turn_id: z.string().nullish()
+    ])
 });
 
 /**
@@ -62,6 +73,113 @@ export const zErrorResponse = z.object({
 export const zSessionCreationResponse = z.object({
     expires_at: z.string(),
     session_id: z.string()
+});
+
+/**
+ * StreamClosing
+ */
+export const zStreamClosing = z.object({
+    kind: z.literal('closing'),
+    sequence: z.int().gte(0),
+    turn_id: z.string()
+});
+
+/**
+ * StreamError
+ */
+export const zStreamError = z.object({
+    kind: z.literal('error'),
+    reason: z.enum(['unavailable', 'observation_limit']),
+    turn_id: z.string()
+});
+
+/**
+ * StreamTerminal
+ */
+export const zStreamTerminal = z.object({
+    kind: z.literal('terminal'),
+    outcome: z.enum([
+        'completed',
+        'generation_failed',
+        'conflict'
+    ]),
+    sequence: z.int().gte(0),
+    turn_id: z.string()
+});
+
+/**
+ * TimelineArtifact
+ */
+export const zTimelineArtifact = z.object({
+    artifact_id: z.string(),
+    kind: z.literal('artifact'),
+    turn_id: z.string()
+});
+
+/**
+ * TimelineFailure
+ */
+export const zTimelineFailure = z.object({
+    kind: z.literal('failure'),
+    turn_id: z.string()
+});
+
+/**
+ * TimelineIntermediateMessage
+ */
+export const zTimelineIntermediateMessage = z.object({
+    id: z.string(),
+    kind: z.literal('intermediate'),
+    text: z.string(),
+    turn_id: z.string()
+});
+
+/**
+ * TimelineMessage
+ */
+export const zTimelineMessage = z.object({
+    id: z.string(),
+    kind: z.literal('message'),
+    role: z.enum(['user', 'assistant']),
+    text: z.string(),
+    turn_id: z.string()
+});
+
+/**
+ * TimelineTool
+ */
+export const zTimelineTool = z.object({
+    execution_id: z.string(),
+    kind: z.literal('tool'),
+    name: z.string(),
+    status: z.enum([
+        'requested',
+        'running',
+        'completed',
+        'failed',
+        'not_executed',
+        'outcome_unknown'
+    ]),
+    turn_id: z.string()
+});
+
+/**
+ * StreamUpsert
+ */
+export const zStreamUpsert = z.object({
+    artifact: zArtifactResponse.nullish(),
+    identity: z.string(),
+    item: z.discriminatedUnion('kind', [
+        zTimelineMessage,
+        zTimelineIntermediateMessage,
+        zTimelineTool,
+        zTimelineArtifact,
+        zTimelineFailure
+    ]),
+    kind: z.literal('upsert'),
+    order: z.int().gte(0),
+    sequence: z.int().gte(0),
+    turn_id: z.string()
 });
 
 /**
@@ -77,9 +195,12 @@ export const zUserMessageResponse = z.object({
  * SessionSnapshotResponse
  */
 export const zSessionSnapshotResponse = z.object({
+    active_turn_id: z.string().nullable(),
+    active_turn_status: z.enum(['in_progress', 'closing']).nullable(),
     artifacts: z.array(zArtifactResponse),
     expires_at: z.string(),
     messages: z.array(z.union([zUserMessageResponse, zAssistantMessageResponse])),
+    sequence: z.int().gte(0),
     session_id: z.string(),
     terminal_turn_id: z.string().nullable(),
     terminal_turn_kind: z.enum([
@@ -91,8 +212,35 @@ export const zSessionSnapshotResponse = z.object({
         'limit_reached',
         'conflict',
         'busy'
-    ]).nullable()
+    ]).nullable(),
+    timeline: z.array(z.union([
+        zTimelineMessage,
+        zTimelineIntermediateMessage,
+        zTimelineTool,
+        zTimelineArtifact,
+        zTimelineFailure
+    ]))
 });
+
+/**
+ * StreamSnapshot
+ */
+export const zStreamSnapshot = z.object({
+    kind: z.literal('snapshot'),
+    snapshot: zSessionSnapshotResponse,
+    turn_id: z.string()
+});
+
+/**
+ * StreamEvent
+ */
+export const zStreamEvent = z.discriminatedUnion('kind', [
+    zStreamSnapshot,
+    zStreamUpsert,
+    zStreamClosing,
+    zStreamTerminal,
+    zStreamError
+]);
 
 /**
  * ValidationDetail
@@ -129,6 +277,10 @@ export const zCreateSessionApiV1AgentsConfigurationSessionsPostBody = z.object({
     input: z.unknown().optional()
 });
 
+export const zCreateSessionApiV1AgentsConfigurationSessionsPostHeaders = z.object({
+    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+});
+
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostPath = z.object({
     configuration: z.enum(['demo', 'kochwiki'])
 });
@@ -137,6 +289,10 @@ export const zCreateSessionApiV1AgentsConfigurationSessionsPostPath = z.object({
  * Successful Response
  */
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostResponse = zSessionCreationResponse;
+
+export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetHeaders = z.object({
+    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+});
 
 export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetPath = z.object({
     configuration: z.enum(['demo', 'kochwiki']),
@@ -155,6 +311,10 @@ export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPost
     text: z.string()
 });
 
+export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostHeaders = z.object({
+    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+});
+
 export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostPath = z.object({
     configuration: z.enum(['demo', 'kochwiki']),
     session_id: z.string()
@@ -170,6 +330,10 @@ export const zAppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPost
  */
 export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostBody = z.record(z.string(), z.never());
 
+export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostHeaders = z.object({
+    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+});
+
 export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostPath = z.object({
     configuration: z.enum(['demo', 'kochwiki']),
     session_id: z.string()
@@ -178,4 +342,19 @@ export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostPath 
 /**
  * Successful Response
  */
-export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponse = zCompletedTurnResponse;
+export const zExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponse = zAcceptedTurnResponse;
+
+export const zObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetHeaders = z.object({
+    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+});
+
+export const zObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetPath = z.object({
+    configuration: z.enum(['demo', 'kochwiki']),
+    session_id: z.string(),
+    turn_id: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponse = zStreamEvent;

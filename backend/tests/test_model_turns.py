@@ -4,10 +4,14 @@ from typing import Never
 
 import pytest
 
-from app.models.agentic_generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
-from app.sessions.conversation import ConversationReadActive, ConversationSessionSettings, ConversationSessionStore
-from app.sessions.model_turns import ModelTurnStrategy
-from app.sessions.tools import LocalToolSource, RegisteredTool, ToolExecution, ToolInvocation
+from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
+from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings
+from app.sessions.session_store import ConversationSessionStore
+from app.agents.model_turn_execution import ModelTurnStrategy
+from reserved_turn import execute_reserved_turn
+from app.agents.models.tools import RegisteredTool, ToolInvocation
+from app.agents.models.tools import LocalToolSource
+from app.sessions.models.execution import ToolExecution
 
 
 @pytest.mark.parametrize("cancel", [False, True])
@@ -24,18 +28,18 @@ def test_failed_or_cancelled_model_turn_releases_session_without_replay(cancel: 
                     entered.set()
                     await release.wait()
                     raise RuntimeError("provider failure")
-                return AgenticGenerationResponse((), (), "Reply")
+                return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Reply"},), (), "Reply")
 
         store = ConversationSessionStore[str, Never](timedelta(minutes=90))
         strategy = ModelTurnStrategy(store, Generator(), lambda context: context, ())
-        first = store.create("Snapshot", ConversationSessionSettings(20))
-        second = store.create("Independent", ConversationSessionSettings(20))
+        first = store.create("Snapshot", ConversationSessionSettings(20), owner="test:user")
+        second = store.create("Independent", ConversationSessionSettings(20), owner="test:user")
         store.append_user_message(first.session_id, "first")
         store.append_user_message(second.session_id, "second")
-        task = asyncio.create_task(strategy(first.session_id))
+        task = asyncio.create_task(execute_reserved_turn(store, strategy, first.session_id))
         await entered.wait()
-        assert (await strategy(first.session_id)).kind == "busy"
-        assert (await strategy(second.session_id)).kind == "completed"
+        assert (await execute_reserved_turn(store, strategy, first.session_id)).kind == "busy"
+        assert (await execute_reserved_turn(store, strategy, second.session_id)).kind == "completed"
         if cancel:
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -44,14 +48,14 @@ def test_failed_or_cancelled_model_turn_releases_session_without_replay(cancel: 
             release.set()
             assert (await task).kind == "generation_failed"
         count = len(requests)
-        assert (await strategy(first.session_id)).kind == "generation_failed"
+        assert (await execute_reserved_turn(store, strategy, first.session_id)).kind == "generation_failed"
         assert len(requests) == count
         read = store.read(first.session_id)
         assert isinstance(read, ConversationReadActive)
         assert read.snapshot.artifacts == ()
         assert [message.text for message in read.snapshot.session.messages] == ["first"]
         assert store.append_user_message(first.session_id, "recover").kind == "accepted"
-        assert (await strategy(first.session_id)).kind == "completed"
+        assert (await execute_reserved_turn(store, strategy, first.session_id)).kind == "completed"
 
     asyncio.run(exercise())
 
@@ -71,7 +75,7 @@ def test_artifact_free_turn_enforces_attempt_and_provider_budgets(provider_budge
                 requests.append(request)
                 if len(requests) == 8:
                     assert "limit_reached" in str(request.input_items[-1]["output"])
-                    return AgenticGenerationResponse((), (), "Finished")
+                    return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Finished"},), (), "Finished")
                 call = AgenticToolCall(str(len(requests)), "sample", "{}")
                 return AgenticGenerationResponse(({
                     "type": "function_call", "call_id": call.call_id,
@@ -85,9 +89,9 @@ def test_artifact_free_turn_enforces_attempt_and_provider_budgets(provider_budge
             max_provider_responses=provider_budget,
             max_attempts=6,
         )
-        created = store.create("Snapshot", ConversationSessionSettings(20))
+        created = store.create("Snapshot", ConversationSessionSettings(20), owner="test:user")
         store.append_user_message(created.session_id, "Run")
-        result = await strategy(created.session_id)
+        result = await execute_reserved_turn(store, strategy, created.session_id)
         assert result.kind == ("generation_failed" if provider_budget == 2 else "completed")
         assert result.artifacts == ()
         assert len(requests) == provider_budget

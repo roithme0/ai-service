@@ -1,5 +1,6 @@
 .git
-.pytest_cache
+tests/.pytest_cache
+tests/.pytest_tmp
 .venv
 __pycache__
 *.egg-info

@@ -89,6 +89,44 @@ p {
   line-height: 1.6;
 }
 
+.tool-call {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  color: var(--ai-chat-muted-text, #c6b4bb);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.message--intermediate {
+  color: var(--ai-chat-muted-text, #c6b4bb);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.tool-call mat-icon {
+  width: 1rem;
+  height: 1rem;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.tool-call__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.tool-call__name {
+  min-width: 0;
+}
+
+.tool-call__status {
+  font-size: 0.75rem;
+}
+
 .status {
   display: flex;
   align-items: center;
