@@ -86,6 +86,11 @@ supplies locally registered tools, including artifact-producing tools, while
 Each source contributes tools and instructions; an MCP source can itself contain
 multiple connections. All tools share the existing call limits. Collisions across
 sources or with local tool names are rejected before model generation.
+Multiple function calls per model response are controlled by
+`ALLOW_MULTIPLE_TOOL_CALLS` in `app/agents/config.py`, enabled by default. The service
+executes them sequentially in response order under the shared limits, then returns
+all results together in the next model request. Calls that need earlier tool
+results to determine their arguments require separate model responses.
 Server instructions include explicit mappings to model-facing tool names.
 Source instructions appear once in configured source order, followed by local
 agent instructions, which take precedence where they conflict. The Kochwiki

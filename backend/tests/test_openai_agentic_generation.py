@@ -162,7 +162,7 @@ def test_openai_replays_function_call_and_result_without_storage() -> None:
     assert recorder.items[-1].item["phase"] == "final_answer"
     assert len(requests) == 2
     assert all(request["stream"] is True for request in requests)
-    assert all(request["store"] is False and request["parallel_tool_calls"] is False for request in requests)
+    assert all(request["store"] is False and request["parallel_tool_calls"] is True for request in requests)
     assert all(request["max_output_tokens"] == OPENAI_MAX_OUTPUT_TOKENS for request in requests)
     assert all(request["include"] == ["reasoning.encrypted_content"] for request in requests)
     assert requests[0]["input"] == [
@@ -180,14 +180,85 @@ def test_openai_replays_function_call_and_result_without_storage() -> None:
     assert json.loads(replay[4]["output"]) == {"kind": "rejected", "reason": "invalid_arguments"}
 
 
-def test_fragmented_messages_preserve_order_and_phases() -> None:
+@pytest.mark.parametrize("ending", ["response.completed", "response.incomplete"])
+def test_multi_call_stream_executes_sequentially_and_replays_all_results(ending: str) -> None:
+    calls = [function_call(), dict(function_call(), id="fc_2", call_id="call_2", arguments='{"value":2}')]
+    requests: list[dict[str, object]] = []
+    bodies: list[EventStream] = []
+    executions: list[tuple[str, str]] = []
+    recorder = ToolTurnRecorder[Never]()
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        payload: object = json.loads(request.content)
+        assert isinstance(payload, dict)
+        requests.append(payload)
+        body = EventStream(response_events(calls, ending) if len(requests) == 1
+                           else response_events([message("Finished.")]))
+        bodies.append(body)
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=body)
+
+    async def execute(call: ToolInvocation) -> ToolExecution[Never]:
+        assert bodies[0].closed
+        assert len(recorder.calls) == 2
+        assert len(executions) % 2 == 0
+        executions.append(("started", call.arguments))
+        await asyncio.sleep(0)
+        executions.append(("finished", call.arguments))
+        return ToolExecution("result: " + call.arguments)
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http_client:
+            async with AsyncOpenAI(api_key="test", http_client=http_client, max_retries=0) as client:
+                turn = run_tool_turn(
+                    OpenAIAgenticGenerator("model", client), (), "Context", "Instructions",
+                    (LocalToolSource((RegisteredTool("sample", {
+                        "type": "function", "name": "sample", "parameters": {"type": "object"},
+                    }, execute),)),), 2, None, 2,
+                    record_item=recorder.record_item, start_execution=recorder.start_execution,
+                    record_result=recorder.record_result,
+                )
+                if ending == "response.incomplete":
+                    with pytest.raises(ValueError, match="stream failed"):
+                        await turn
+                else:
+                    result = await turn
+                    assert result.kind == "completed" and result.text == "Finished."
+
+    asyncio.run(run())
+    assert all(request["parallel_tool_calls"] is True for request in requests)
+    assert [call.call_id for call in recorder.calls] == ["call_1", "call_2"]
+    assert all(body.closed for body in bodies)
+    if ending == "response.incomplete":
+        assert len(requests) == 1
+        assert executions == recorder.started == recorder.results == []
+    else:
+        assert len(requests) == 2
+        assert executions == [(state, arguments) for arguments in ("{}", '{"value":2}')
+                              for state in ("started", "finished")]
+        assert requests[1]["input"] == [
+            {"role": "user", "content": "Context"},
+            *({key: value for key, value in call.items() if key != "status"} for call in calls),
+            *({"type": "function_call_output", "call_id": call["call_id"],
+               "output": "result: " + str(call["arguments"])} for call in calls),
+        ]
+
+
+@pytest.mark.parametrize("allow_multiple_tool_calls", [False, True])
+def test_fragmented_messages_preserve_order_and_phases(
+    monkeypatch: pytest.MonkeyPatch, allow_multiple_tool_calls: bool,
+) -> None:
+    monkeypatch.setattr("app.agents.config.ALLOW_MULTIPLE_TOOL_CALLS", allow_multiple_tool_calls)
     output = [message("Checking.", "commentary"), message("Finished.")]
     body = EventStream(response_events(output))
 
+    def respond(request: httpx.Request) -> httpx.Response:
+        payload: object = json.loads(request.content)
+        assert isinstance(payload, dict)
+        assert payload["parallel_tool_calls"] is allow_multiple_tool_calls
+        return httpx.Response(200, stream=body)
+
     async def run() -> None:
-        async with httpx.AsyncClient(transport=httpx.MockTransport(
-            lambda request: httpx.Response(200, stream=body)
-        )) as http_client:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http_client:
             async with AsyncOpenAI(api_key="test", http_client=http_client, max_retries=0) as client:
                 result = await OpenAIAgenticGenerator("gpt-5.6-sol", client).generate(
                     AgenticGenerationRequest((), "Instructions", ()))
