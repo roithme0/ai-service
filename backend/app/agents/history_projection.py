@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 
-from app.agents.models.generation import AgenticInputItem
+from app.agents.models.generation import AgenticInputItem, AgenticToolCall
 from app.sessions.models.history import (
     CallRecord,
     ContinuationRecord,
@@ -15,6 +15,10 @@ from app.sessions.models.history import (
     MessageRecord,
     ToolResultRecord,
 )
+
+
+def generation_tool_call(record: CallRecord) -> AgenticToolCall:
+    return AgenticToolCall(record.call_id, record.name, record.arguments)
 
 
 def _execution_report_output(record: ExecutionReportRecord) -> str:
@@ -33,7 +37,11 @@ def model_input(history: tuple[HistoryRecord, ...]) -> tuple[AgenticInputItem, .
     for record in history:
         if isinstance(record, MessageRecord):
             items.append(deepcopy(record.item))
-        elif isinstance(record, (ContinuationRecord, CallRecord, HostedToolRecord)):
+        elif isinstance(record, CallRecord):
+            item = deepcopy(record.item)
+            item.update(call_id=record.call_id, name=record.name, arguments=record.arguments)
+            items.append(item)
+        elif isinstance(record, (ContinuationRecord, HostedToolRecord)):
             items.append(deepcopy(record.item))
         elif isinstance(record, (ToolResultRecord, ExecutionReportRecord)):
             items.append({"type": "function_call_output", "call_id": record.call_id,

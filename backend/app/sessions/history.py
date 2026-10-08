@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.agents.generation_messages import message_text
 from app.sessions.models.history import HistoryRecord, MessageRecord, TerminalRecord
 from app.sessions.models.session import TextMessage
 
@@ -16,8 +15,8 @@ def completed_text_messages(history: tuple[HistoryRecord, ...]) -> tuple[TextMes
         if not isinstance(record, MessageRecord):
             continue
         if record.kind == "user":
-            messages.append(TextMessage("user", message_text(record.item)))
+            messages.append(TextMessage("user", record.text))
         elif record.kind == "final" and record.turn_id in completed and record.turn_id not in emitted:
-            messages.append(TextMessage("assistant", message_text(record.item), record.turn_id))
+            messages.append(TextMessage("assistant", record.text, record.turn_id))
             emitted.add(record.turn_id)
     return tuple(messages)

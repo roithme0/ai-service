@@ -1,4 +1,4 @@
-"""Configuration of model-backed sessions with caller-provided context."""
+"""Construction of model-backed agents with caller-provided context."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from app.sessions.models.context import ContextIssue, SessionContext
 from app.sessions.models.conversation import ConversationSessionSettings
 from app.sessions.session_store import ConversationSessionStore
 from app.sessions.models.artifacts import ArtifactCandidate
-from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
-from app.sessions.model_turn_execution import MAX_PROVIDER_RESPONSES, MAX_TOOL_ATTEMPTS, ModelTurnStrategy
+from app.agents.instructions import CONVERSATION_INSTRUCTIONS
+from app.agents.model_turn_execution import MAX_PROVIDER_RESPONSES, MAX_TOOL_ATTEMPTS, ModelTurnStrategy
 from app.agents.protocols.tools import ToolSource
 from app.sessions.models.presentation import PresentationPayload
 from app.agents.presentation_tool import presentation_tool_source
@@ -22,6 +22,7 @@ from app.agents.models.web_search import WebSearchConfig
 ModelAgent = ConfiguredAgentService[object, SessionContext, PresentationPayload, ContextIssue]
 ModelSessionStore = ConversationSessionStore[SessionContext, PresentationPayload]
 SESSION_LIFETIME = timedelta(minutes=90)
+MAX_ARTIFACTS = 100
 
 
 def _utc_now() -> datetime:
@@ -37,7 +38,7 @@ def create_model_agent(
     store: ModelSessionStore | None = None,
     *,
     instructions: str = CONVERSATION_INSTRUCTIONS,
-    max_artifacts: int = 100,
+    max_artifacts: int = MAX_ARTIFACTS,
     max_tool_attempts: int = MAX_TOOL_ATTEMPTS,
     max_provider_responses: int = MAX_PROVIDER_RESPONSES,
     tool_sources: tuple[ToolSource[ArtifactCandidate[PresentationPayload]], ...] = (),

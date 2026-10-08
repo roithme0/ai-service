@@ -1,4 +1,4 @@
-"""HTTP transport interface for configured conversation agents."""
+"""HTTP transport contract consumed by the session router."""
 
 from typing import Protocol
 

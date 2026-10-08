@@ -15,9 +15,11 @@ from app.sessions.models.conversation import ConversationSessionSettings
 from app.sessions.session_store import ConversationSessionStore
 from app.sessions.models.history import ExecutionReportRecord, HostedToolRecord, ToolResultRecord
 from app.agents.history_projection import model_input
-from app.sessions.http import AgentTransport, _context_issue, get_agent_registry, router
-from app.sessions.model_sessions import create_model_agent
-from app.sessions.model_turn_execution import ModelTurnStrategy
+from app.agents.http import AgentTransport, _context_issue, get_agent_registry
+from app.agents.enums.configuration import AgentConfiguration
+from app.agents.http import create_session_router
+from app.agents.model_agent import create_model_agent
+from app.agents.model_turn_execution import ModelTurnStrategy
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
 from app.sessions.models.execution import ToolExecution
@@ -113,7 +115,9 @@ def test_search_survives_later_provider_failure_in_reads_and_sse(status: str) ->
 
     agent = create_model_agent(Generator(), web_search=WebSearchConfig())
     application = FastAPI()
-    application.include_router(router)
+    application.include_router(create_session_router(
+        get_agent_registry, tuple(configuration.value for configuration in AgentConfiguration),
+    ))
     application.dependency_overrides[get_agent_registry] = lambda: {"test": AgentTransport(agent, lambda value: value, _context_issue)}
     with TestClient(application, headers={"X-Application-User": "test:user"}) as client:
         base = "/api/v1/agents/test/sessions"

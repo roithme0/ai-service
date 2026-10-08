@@ -20,7 +20,7 @@ from app.sessions.models.history import CallRecord, ExecutionReportRecord, Messa
 from app.agents.history_projection import model_input
 from app.sessions.models.conversation import ConversationSessionSettings
 from app.sessions.session_store import ConversationSessionStore
-from app.sessions.model_turn_execution import ModelTurnStrategy
+from app.agents.model_turn_execution import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
 from app.agents.tool_turns import run_tool_turn
 from app.agents.models.tools import RegisteredTool, ToolInvocation

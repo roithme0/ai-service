@@ -145,6 +145,9 @@ finalized tool result and artifact reference in history while storing the full
 artifact in a session-owned map, atomically under the same lock. History alone
 determines order and publication; the map holds content and expires with history.
 There is no staging/publication step.
+`agents/generation_history.py` interprets generation output as turn-history records.
+The session store admits those records under its lock and owns lifecycle checks,
+history updates, and notifications.
 The conversation store retains no second text-message list or terminal-response
 cache. Messages, message revision, and current terminal state are projected from
 history; repeated failed-turn responses are reconstructed from terminal records.

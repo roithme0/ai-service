@@ -10,6 +10,7 @@ from typing import TypeVar
 from app.agents.protocols.generation import AgenticGenerator
 from app.agents.models.generation import AgenticGenerationRequest, AgenticInputItem, AgenticToolCall
 from app.agents.generation_messages import final_response_text, validate_message_item
+from app.agents.history_projection import generation_tool_call
 from app.sessions.models.history import CallRecord, HistoryRecord
 from app.agents.protocols.tools import ToolSource
 from app.agents.models.tools import RegisteredTool
@@ -116,7 +117,7 @@ async def run_tool_turn(
 
         text = final_response_text(response)
         recorded_calls = tuple(record for record in records if isinstance(record, CallRecord))
-        if tuple(record.call for record in recorded_calls) != response.tool_calls:
+        if tuple(generation_tool_call(record) for record in recorded_calls) != response.tool_calls:
             raise ValueError("recorded calls must match requested calls in order")
 
         input_items.extend(response.output_items)

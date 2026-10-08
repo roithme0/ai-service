@@ -7,13 +7,14 @@ from unittest.mock import patch
 
 import pytest
 
+from app.agents.generation_history import record_tool_call
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
 from app.sessions.session_store import ConversationSessionStore, TurnHistoryUnavailable
 from app.sessions.models.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ToolResultRecord
 from app.agents.history_projection import model_input
-from app.sessions.model_turn_execution import ModelTurnStrategy
+from app.agents.model_turn_execution import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
@@ -36,7 +37,7 @@ def setup(limit: int = 2) -> tuple[ConversationSessionStore[str, list[str]], str
 
 def start(store: ConversationSessionStore[str, list[str]], session_id: str,
           turn: ConversationTurnReservation[str, list[str]], call_id: str = "same") -> CallRecord:
-    call = store.record_call(session_id, turn.turn_id, AgenticToolCall(call_id, "present", "{}"))
+    call = record_tool_call(store, session_id, turn.turn_id, AgenticToolCall(call_id, "present", "{}"))
     store.start_execution(session_id, call)
     return call
 

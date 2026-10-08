@@ -7,7 +7,7 @@ import pytest
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings
 from app.sessions.session_store import ConversationSessionStore
-from app.sessions.model_turn_execution import ModelTurnStrategy
+from app.agents.model_turn_execution import ModelTurnStrategy
 from reserved_turn import execute_reserved_turn
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource

@@ -1,4 +1,5 @@
-﻿from __future__ import annotations
+﻿from __future__ import annotations
+
 
 import asyncio
 import json
@@ -13,13 +14,16 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import TypeAdapter
 
+from app.agents.generation_history import record_generation_item, record_tool_call
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.conversation import ConversationReadActive, ConversationSessionSettings, ConversationTurnReservation
 from app.sessions.session_store import ConversationSessionStore
-from app.sessions.http import AgentTransport, _context_issue, get_agent_registry, router
+from app.agents.http import AgentTransport, _context_issue, get_agent_registry
+from app.agents.enums.configuration import AgentConfiguration
+from app.agents.http import create_session_router
 from app.sessions.models.http import StreamEvent
-from app.sessions.model_sessions import create_model_agent
+from app.agents.model_agent import create_model_agent
 from app.sessions.models.presentation import PresentationPayload
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
@@ -92,7 +96,9 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
     source = LocalToolSource((RegisteredTool('publish', {'type': 'function', 'name': 'publish'}, execute),))
     agent = create_model_agent(Generator(), tool_sources=(source,))
     application = FastAPI()
-    application.include_router(router)
+    application.include_router(create_session_router(
+        get_agent_registry, tuple(configuration.value for configuration in AgentConfiguration),
+    ))
     application.dependency_overrides[get_agent_registry] = lambda: {'kochwiki': AgentTransport(agent, lambda value: value, _context_issue)}
     try:
         with socket_server(application) as address, httpx.Client(base_url=address, timeout=5, headers={"X-Application-User": "test:user"}) as client:
@@ -175,7 +181,7 @@ def test_atomic_subscription_preserves_every_tool_transition_and_bounded_overflo
         observer = agent.observe(session)
         first = await anext(observer)
         assert isinstance(first, ConversationReadActive)
-        call = store.record_call(session, reservation.turn_id, AgenticToolCall('call', 'safe', '{}'))
+        call = record_tool_call(store, session, reservation.turn_id, AgenticToolCall('call', 'safe', '{}'))
         store.start_execution(session, call)
         store.record_result(session, call, ToolExecution('private'))
         store.fail_turn(session, reservation)
@@ -195,7 +201,7 @@ def test_atomic_subscription_preserves_every_tool_transition_and_bounded_overflo
         slow = agent.observe(session)
         await anext(slow)
         for index in range(129):
-            store.record_provider_item(session, reservation.turn_id, {'type': 'message', 'role': 'assistant', 'content': str(index)})
+            record_generation_item(store, session, reservation.turn_id, {'type': 'message', 'role': 'assistant', 'content': str(index)})
         assert await anext(slow) is None
         await slow.aclose()
         assert store._listeners == {}
@@ -234,7 +240,7 @@ def test_records_arriving_after_initial_capture_before_first_delivery_are_not_lo
         subscribe = store.subscribe
         def racing_subscribe(session_id: str, listener: Callable[[], None]) -> Callable[[], None]:
             detach = subscribe(session_id, listener)
-            store.record_provider_item(session_id, turn.turn_id, {'type': 'message', 'role': 'assistant', 'content': 'During attachment'})
+            record_generation_item(store, session_id, turn.turn_id, {'type': 'message', 'role': 'assistant', 'content': 'During attachment'})
             store.fail_turn(session_id, turn)
             return detach
         with patch.object(store, 'subscribe', racing_subscribe):

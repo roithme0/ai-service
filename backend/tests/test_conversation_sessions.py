@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from app.agents.generation_history import record_tool_call
 from app.agents.models.generation import AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
 from app.sessions.models.execution import ToolExecution
@@ -86,7 +87,7 @@ def test_opportunistic_eviction_clears_stale_turn_bookkeeping() -> None:
     conversation = store(clock)
     session_ids = tuple(create(conversation) for _ in range(4))
     turns = tuple(reserve(conversation, session_id) for session_id in session_ids)
-    calls = tuple(conversation.record_call(session_id, turn.turn_id,
+    calls = tuple(record_tool_call(conversation, session_id, turn.turn_id,
         AgenticToolCall("same", "present", "{}")) for session_id, turn in zip(session_ids, turns))
     for session_id, call in zip(session_ids, calls):
         conversation.start_execution(session_id, call)

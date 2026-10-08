@@ -2,6 +2,7 @@ import asyncio
 import json
 from datetime import UTC, datetime
 
+from app.agents.generation_history import record_tool_call
 from app.agents.models.generation import AgenticToolCall
 from app.demo.tools.greeting import create_greeting_tool
 from app.demo.tools.greetings import create_greetings_tool
@@ -107,7 +108,7 @@ def test_greeting_tool_validates_arguments_and_returns_local_candidate() -> None
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == ()
-    call = store.record_call(session_id, reservation.turn_id, AgenticToolCall("create", "create", "{}"))
+    call = record_tool_call(store, session_id, reservation.turn_id, AgenticToolCall("create", "create", "{}"))
     finalized = store.record_result(session_id, call, accepted)
     published = store.complete_turn(session_id, reservation, "completed", "Created").artifacts
     assert len(published) == 1
@@ -137,7 +138,7 @@ def test_greetings_tool_validates_list_and_candidate_acceptance() -> None:
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
     assert read.snapshot.artifacts == ()
-    call = store.record_call(session_id, reservation.turn_id, AgenticToolCall("create", "create", "{}"))
+    call = record_tool_call(store, session_id, reservation.turn_id, AgenticToolCall("create", "create", "{}"))
     finalized = store.record_result(session_id, call, accepted)
     published = store.complete_turn(session_id, reservation, "completed", "Created").artifacts
     assert len(published) == 1

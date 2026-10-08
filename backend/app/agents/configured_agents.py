@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from app.agents.runtime import AgentRuntime
 from app.demo.agent import DemoAgent
-from app.sessions.model_sessions import ModelAgent
+from app.agents.model_agent import ModelAgent
 
 
 @dataclass(frozen=True)

@@ -16,7 +16,7 @@ from app.agents.wiring import configure_agents, get_configured_agents
 from app.core.config import Settings
 from app.main import AgentLifespan
 from app.mcp.connection import MCPConnection
-from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
+from app.agents.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.models.session import SessionCreation
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from test_model_session_http import valid_request

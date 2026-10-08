@@ -1,18 +1,18 @@
 """Model turns with optional session-specific tools over the conversation lifecycle."""
 
 from __future__ import annotations
-
 import asyncio
 import logging
 from collections.abc import Callable
 from typing import Generic, TypeVar
 
+from app.agents.generation_history import record_generation_item
 from app.agents.protocols.generation import AgenticGenerator
 from app.sessions.session_store import ConversationSessionStore, TurnHistoryUnavailable
 from app.sessions.models.conversation import ConversationTurnReservation, ConversationTurnResult
 from app.agents.history_projection import model_input
 from app.sessions.models.artifacts import ArtifactCandidate
-from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
+from app.agents.instructions import CONVERSATION_INSTRUCTIONS
 from app.agents.tool_turns import run_tool_turn
 from app.agents.protocols.tools import ToolSource
 from app.agents.models.web_search import WebSearchConfig
@@ -64,7 +64,7 @@ class ModelTurnStrategy(Generic[ContextT, ArtifactT]):
                 self._context(reservation.snapshot.payload), self._instructions,
                 (*self._tool_sources, *session_sources), self._max_attempts,
                 max_successes=None, max_provider_responses=self._max_provider_responses,
-                record_item=lambda item: self._store.record_provider_item(session_id, reservation.turn_id, item),
+                record_item=lambda item: record_generation_item(self._store, session_id, reservation.turn_id, item),
                 start_execution=lambda call: self._store.start_execution(session_id, call),
                 record_result=lambda call, execution: self._store.record_result(session_id, call, execution),
                 web_search=self._web_search,

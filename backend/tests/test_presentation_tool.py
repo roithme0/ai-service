@@ -5,12 +5,13 @@ from typing import Never
 import pytest
 from pydantic import JsonValue
 
+from app.agents.generation_history import record_tool_call
 from app.sessions.models.artifacts import ArtifactCandidate
 from app.agents.models.input import AgentInputAccepted
 from app.agents.context_preparation import validate_context_input
 from app.sessions.models.context import SessionContext
 from app.sessions.models.conversation import ConversationSessionSettings, ConversationTurnReservation
-from app.sessions.model_sessions import ModelSessionStore, create_model_agent, new_model_session_store
+from app.agents.model_agent import ModelSessionStore, create_model_agent, new_model_session_store
 from app.sessions.models.presentation import PresentationPayload
 from app.agents.presentation_tool import presentation_tool_source
 from app.agents.models.tools import RegisteredTool, ToolInvocation
@@ -84,7 +85,7 @@ def test_metadata_is_validated_and_retained_separately_from_display_data() -> No
         "type": "example", "title": "Data", "payload": {"name": "Oats"}, "metadata": metadata,
     })))
     assert result.artifact is not None
-    call = store.record_call(session_id, reservation.turn_id, AgenticToolCall("present", tool.name, "{}"))
+    call = record_tool_call(store, session_id, reservation.turn_id, AgenticToolCall("present", tool.name, "{}"))
     store.record_result(session_id, call, result)
     completed = store.complete_turn(session_id, reservation, "completed", "Finished")
     assert completed.artifacts[0].payload.metadata == metadata
@@ -108,10 +109,10 @@ def test_local_schema_references_and_session_artifact_limit() -> None:
         arguments = json.dumps({"type": "example", "title": "Foodstuff", "payload": {"name": "Oats"}})
         first = await registry.invoke(tool.name, arguments)
         assert first.artifact is not None
-        call = store.record_call(session_id, reservation.turn_id, AgenticToolCall("first", tool.name, arguments))
+        call = record_tool_call(store, session_id, reservation.turn_id, AgenticToolCall("first", tool.name, arguments))
         store.record_result(session_id, call, first)
         second = await registry.invoke(tool.name, arguments)
-        call = store.record_call(session_id, reservation.turn_id, AgenticToolCall("second", tool.name, arguments))
+        call = record_tool_call(store, session_id, reservation.turn_id, AgenticToolCall("second", tool.name, arguments))
         second = store.record_result(session_id, call, second)
         assert json.loads(output_text(second))["kind"] == "limit_reached"
         assert second.artifact is None
@@ -126,7 +127,7 @@ def test_optional_subtitle_is_retained(subtitle: str | None) -> None:
     tool, store, session_id, reservation = tool_for_session()
     arguments = json.dumps({"type": "example", "title": "Oats", "subtitle": subtitle, "payload": {"name": "Oats"}})
     candidate = asyncio.run(ToolRegistry((tool,)).invoke(tool.name, arguments))
-    call = store.record_call(session_id, reservation.turn_id, AgenticToolCall("present", tool.name, arguments))
+    call = record_tool_call(store, session_id, reservation.turn_id, AgenticToolCall("present", tool.name, arguments))
     store.record_result(session_id, call, candidate)
     completed = store.complete_turn(session_id, reservation, "completed", "Finished")
     assert completed.artifacts[0].payload.subtitle == subtitle

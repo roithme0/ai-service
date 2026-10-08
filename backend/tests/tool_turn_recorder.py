@@ -3,7 +3,7 @@
 from copy import deepcopy
 
 from app.agents.models.generation import AgenticOutputItem
-from app.agents.generation_messages import message_phase
+from app.agents.generation_messages import message_phase, message_text
 from app.sessions.models.history import CallRecord, ContinuationRecord, HistoryRecord, MessageRecord
 from app.sessions.models.execution import ToolExecution
 
@@ -18,11 +18,14 @@ class ToolTurnRecorder[ArtifactT]:
     def record_item(self, item: AgenticOutputItem) -> HistoryRecord:
         record: HistoryRecord
         if item.get("type") == "function_call":
-            record = CallRecord("test-turn", str(len(self.calls)), deepcopy(item))
+            record = CallRecord(
+                "test-turn", str(len(self.calls)), deepcopy(item),
+                str(item["call_id"]), str(item["name"]), str(item["arguments"]),
+            )
             self.calls.append(record)
         elif item.get("type") == "message":
             phase = message_phase(item)
-            record = MessageRecord("test-turn", deepcopy(item), "intermediate" if phase == "commentary" else
+            record = MessageRecord("test-turn", deepcopy(item), message_text(item), "intermediate" if phase == "commentary" else
                                    "final" if phase == "final_answer" else "unspecified")
         else:
             record = ContinuationRecord("test-turn", deepcopy(item))

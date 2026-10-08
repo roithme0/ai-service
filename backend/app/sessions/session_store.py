@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from app.sessions.models.session import SessionMessageBusy
-
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -13,10 +11,7 @@ from threading import RLock
 from typing import Generic, TypeVar, cast
 from uuid import uuid4
 
-from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
-from app.agents.generation_messages import message_phase
-from app.agents.generation_messages import validate_message_item
-from app.sessions.models.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord, HostedToolRecord, ContinuationRecord, HistoryRecord, MessageRecord, TerminalRecord, ToolResultRecord
+from app.sessions.models.history import ArtifactRecord, CallRecord, ExecutionReportRecord, ExecutionStartedRecord, HostedToolRecord, ContinuationRecord, HistoryRecord, MessageRecord, TerminalRecord, ToolResultRecord, TurnActivityRecord
 from app.sessions.history import completed_text_messages
 from app.sessions.models.artifacts import (
     ArtifactCandidate,
@@ -210,7 +205,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             self._append_history(
                 session_id,
                 MessageRecord(
-                    str(uuid4()), {"role": "user", "content": accepted_text}, "user"
+                    str(uuid4()), {"role": "user", "content": accepted_text}, accepted_text, "user"
                 ),
             )
             return SessionMessageAppendAccepted(
@@ -304,6 +299,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                                 "content": text,
                                 "phase": "final_answer",
                             },
+                            text,
                             "final",
                         )
                         self._append_history(session_id, message)
@@ -359,86 +355,29 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 return ()
             return deepcopy(self._history[session_id])
 
-    def record_provider_response(
+    def record_turn_history(
         self,
         session_id: str,
         turn_id: str,
-        response: AgenticGenerationResponse,
-    ) -> tuple[CallRecord, ...]:
+        records: Iterable[TurnActivityRecord],
+    ) -> tuple[TurnActivityRecord, ...]:
         with self._lock:
             self._require_turn(session_id, turn_id)
-            provider_calls = tuple(
-                AgenticToolCall(
-                    str(item.get("call_id")),
-                    str(item.get("name")),
-                    str(item.get("arguments")),
-                )
-                for item in response.output_items
-                if item.get("type") == "function_call"
-            )
-            if provider_calls != response.tool_calls:
-                raise ValueError(
-                    "provider output and requested calls must match in order"
-                )
-            records = tuple(
-                self.record_provider_item(session_id, turn_id, item)
-                for item in response.output_items
-            )
-            return tuple(record for record in records if isinstance(record, CallRecord))
-
-    def record_provider_item(
-        self, session_id: str, turn_id: str, item: dict[str, object]
-    ) -> HistoryRecord:
-        with self._lock:
-            self._require_turn(session_id, turn_id)
-            validate_message_item(item)
-            copied = deepcopy(item)
-            if copied.get("phase") is None:
-                copied.pop("phase", None)
-            record: HistoryRecord
-            if item.get("type") == "function_call":
-                record = CallRecord(turn_id, str(uuid4()), copied)
-            elif item.get("type") == "web_search_call":
-                status = item.get("status")
-                if (
-                    status not in ("completed", "failed")
-                    or not isinstance(item.get("id"), str)
-                    or not item["id"]
-                ):
-                    raise ValueError("invalid hosted search activity")
-                record = HostedToolRecord(turn_id, str(uuid4()), copied, status)
-            elif item.get("type") == "message":
-                phase = message_phase(item)
-                record = MessageRecord(
-                    turn_id,
-                    copied,
-                    (
-                        "intermediate"
-                        if phase == "commentary"
-                        else "final" if phase == "final_answer" else "unspecified"
-                    ),
-                )
-            else:
-                record = ContinuationRecord(turn_id, copied)
-            self._append_history(session_id, record)
-            return deepcopy(record)
-
-    def record_call(
-        self, session_id: str, turn_id: str, call: AgenticToolCall
-    ) -> CallRecord:
-        response = AgenticGenerationResponse(
-            (
-                {
-                    "type": "function_call",
-                    "call_id": call.call_id,
-                    "name": call.name,
-                    "arguments": call.arguments,
-                },
-            ),
-            (call,),
-            None,
-        )
-        return self.record_provider_response(session_id, turn_id, response)[0]
+            accepted: list[TurnActivityRecord] = []
+            for record in records:
+                self._require_turn(session_id, turn_id)
+                if not isinstance(record, (MessageRecord, CallRecord, HostedToolRecord, ContinuationRecord)):
+                    raise ValueError("only turn activity can be admitted to history")
+                if record.turn_id != turn_id:
+                    raise ValueError("history record must belong to the active turn")
+                if isinstance(record, MessageRecord) and record.kind == "user":
+                    raise ValueError("user messages must use message admission")
+                if isinstance(record, MessageRecord) and _invalid_text_reason(record.text) is not None:
+                    raise ValueError("assistant message must be nonblank and within the message length limit")
+                retained = deepcopy(record)
+                self._append_history(session_id, retained)
+                accepted.append(deepcopy(retained))
+            return tuple(accepted)
 
     def start_execution(self, session_id: str, call: CallRecord) -> None:
         with self._lock:
@@ -482,7 +421,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                     result = ToolResultRecord(
                         call.turn_id,
                         call.execution_id,
-                        call.call.call_id,
+                        call.call_id,
                         rejection,
                         True,
                     )
@@ -504,7 +443,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 result = ToolResultRecord(
                     call.turn_id,
                     call.execution_id,
-                    call.call.call_id,
+                    call.call_id,
                     rendered,
                     execution.failed,
                 )
@@ -533,7 +472,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 ToolResultRecord(
                     call.turn_id,
                     call.execution_id,
-                    call.call.call_id,
+                    call.call_id,
                     output,
                     execution.failed,
                 ),
@@ -597,7 +536,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 self._append_history(
                     session_id,
                     ExecutionReportRecord(
-                        turn_id, record.execution_id, record.call.call_id, state
+                        turn_id, record.execution_id, record.call_id, state
                     ),
                 )
 

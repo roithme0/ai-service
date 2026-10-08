@@ -6,8 +6,10 @@ from dataclasses import dataclass, field
 from typing import Literal
 from uuid import uuid4
 
-from app.agents.models.generation import AgenticInputItem, AgenticOutputItem, AgenticToolCall
 from app.sessions.models.turns import TerminalTurnKind
+
+
+type HistoryPayload = dict[str, object]
 
 
 MessageRecordKind = Literal["user", "intermediate", "final", "unspecified"]
@@ -18,7 +20,8 @@ ExecutionReportState = Literal["not_executed", "outcome_unknown"]
 @dataclass(frozen=True)
 class MessageRecord:
     turn_id: str
-    item: AgenticInputItem
+    item: HistoryPayload
+    text: str
     kind: MessageRecordKind
     message_id: str = field(default_factory=lambda: str(uuid4()))
 
@@ -26,21 +29,17 @@ class MessageRecord:
 @dataclass(frozen=True)
 class ContinuationRecord:
     turn_id: str
-    item: AgenticOutputItem
+    item: HistoryPayload
 
 
 @dataclass(frozen=True)
 class CallRecord:
     turn_id: str
     execution_id: str
-    item: AgenticOutputItem
-
-    @property
-    def call(self) -> AgenticToolCall:
-        call_id, name, arguments = (self.item.get(key) for key in ("call_id", "name", "arguments"))
-        if not isinstance(call_id, str) or not isinstance(name, str) or not isinstance(arguments, str):
-            raise ValueError("invalid recorded tool call")
-        return AgenticToolCall(call_id, name, arguments)
+    item: HistoryPayload
+    call_id: str
+    name: str
+    arguments: str
 
 
 @dataclass(frozen=True)
@@ -53,7 +52,7 @@ class ExecutionStartedRecord:
 class HostedToolRecord:
     turn_id: str
     execution_id: str
-    item: AgenticOutputItem
+    item: HistoryPayload
     status: HostedToolStatus
 
 
@@ -86,6 +85,9 @@ class ArtifactRecord:
 class TerminalRecord:
     turn_id: str
     kind: TerminalTurnKind
+
+
+type TurnActivityRecord = MessageRecord | ContinuationRecord | CallRecord | HostedToolRecord
 
 
 type HistoryRecord = (

@@ -9,7 +9,8 @@ from starlette.requests import Request
 from app.agents.wiring import get_configured_agents
 from app.core.http import router as core_router
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
-from app.sessions.http import router as conversation_router
+from app.agents.enums.configuration import AgentConfiguration
+from app.agents.http import create_session_router, get_agent_registry
 
 
 class AgentLifespan:
@@ -37,7 +38,9 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
 )
-app.include_router(conversation_router, responses={
+app.include_router(create_session_router(
+    get_agent_registry, tuple(configuration.value for configuration in AgentConfiguration),
+), responses={
     405: {"model": HttpErrorResponse},
     500: {"model": HttpErrorResponse},
 })

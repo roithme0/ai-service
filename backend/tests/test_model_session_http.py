@@ -7,16 +7,16 @@ import pytest
 from fastapi.testclient import TestClient
 from turn_observation import observe_turn
 
-from app.sessions.model_sessions import ModelAgent, create_model_agent
+from app.agents.model_agent import ModelAgent, create_model_agent
 from app.agents.wiring import configure_agents
 from app.core.config import Settings
 from app.main import app
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from app.sessions.protocols.http import ConversationTransport
-from app.sessions.http import AgentTransport, _demo_issue, _context_issue, get_agent_registry
+from app.agents.http import AgentTransport, _demo_issue, _context_issue, get_agent_registry
 from app.demo.agent import create_demo_agent
-from app.sessions.model_sessions import new_model_session_store
-from app.sessions.instructions import CONVERSATION_INSTRUCTIONS
+from app.agents.model_agent import new_model_session_store
+from app.agents.instructions import CONVERSATION_INSTRUCTIONS
 from app.agents.context_preparation import MAX_CONTEXT_LENGTH
 from app.sessions.limits import MAX_MESSAGE_COUNT, MAX_MESSAGE_LENGTH
 
