@@ -10,6 +10,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ListToolsResult, Tool
 from pydantic import SecretStr
+from openai.types.shared import ReasoningEffort
 from fastapi import FastAPI
 
 from app.agents.wiring import configure_agents, get_configured_agents
@@ -26,6 +27,7 @@ def configured_settings() -> Settings:
     return Settings.model_construct(
         openai_api_key=SecretStr("test-key"),
         kochwiki_openai_model="test-model",
+        kochwiki_openai_reasoning_effort="high",
         kochwiki_mcp_url="http://localhost/mcp/",
     )
 
@@ -48,7 +50,8 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
                     )
                 return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": "Hello World received"},), (), "Hello World received")
 
-        def generator_factory(*, model: str, client: object) -> Generator:
+        def generator_factory(*, model: str, client: object, reasoning_effort: ReasoningEffort) -> Generator:
+            assert reasoning_effort == "high"
             return Generator()
 
         monkeypatch.setattr("app.agents.wiring.OpenAIAgenticGenerator", generator_factory)
@@ -180,7 +183,8 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
                 assert result["structuredContent"]["id"] == version_id
                 return AgenticGenerationResponse(({"type": "message", "role": "assistant", "phase": "final_answer", "content": f"Saved draft {version_id}."},), (), f"Saved draft {version_id}.")
 
-        def generator_factory(*, model: str, client: object) -> Generator:
+        def generator_factory(*, model: str, client: object, reasoning_effort: ReasoningEffort) -> Generator:
+            assert reasoning_effort == "high"
             return Generator()
 
         monkeypatch.setattr("app.agents.wiring.OpenAIAgenticGenerator", generator_factory)

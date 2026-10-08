@@ -50,6 +50,14 @@ The Kochwiki agent's model setting is `KOCHWIKI_OPENAI_MODEL`, replacing
 `RECIPE_IMPROVEMENT_OPENAI_MODEL`. Rename that key in existing environment
 configuration; the old name is no longer read.
 
+Set optional `KOCHWIKI_OPENAI_REASONING_EFFORT` alongside the model name to
+send `reasoning.effort` on every OpenAI response request. Leave it blank or
+unset to use the selected model's default. The SDK accepts `none`, `minimal`,
+`low`, `medium`, `high`, `xhigh`, and `max`; the selected model must support
+the chosen value. For the example `gpt-6.1-sol` model, use `low`, `medium`,
+`high`, `xhigh`, or `max` (default: `medium`). Unknown values fail settings
+validation; model-specific unsupported values are rejected by OpenAI.
+
 The `kochwiki` agent owns a generic MCP connection using the official Python
 SDK (`mcp==2.2.0`). Set `KOCHWIKI_MCP_URL` to the complete Streamable HTTP
 endpoint, for example `http://localhost:8002/mcp/` for a backend running on the

@@ -18,7 +18,6 @@ from app.agents.openai_agentic_generation import OpenAIAgenticGenerator
 from app.mcp.connection import MCPConnection
 from app.agents.models.web_search import WebSearchConfig
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -49,16 +48,25 @@ def configure_kochwiki_agent(settings: Settings) -> AgentRuntime[ModelAgent]:
     if mcp_url is None or not _valid_http_url(mcp_url):
         missing.append("KOCHWIKI_MCP_URL")
     if missing:
-        logger.warning("Kochwiki agent unavailable: invalid or missing configuration: %s", ", ".join(missing))
+        logger.warning(
+            "Kochwiki agent unavailable: invalid or missing configuration: %s",
+            ", ".join(missing),
+        )
         return AgentRuntime("kochwiki", None)
     assert key is not None and model is not None and mcp_url is not None
     client = AsyncOpenAI(api_key=key.get_secret_value(), max_retries=0)
     runtime: AgentRuntime[ModelAgent] = AgentRuntime(
-        "kochwiki", None, model_client=client,
+        "kochwiki",
+        None,
+        model_client=client,
         mcp_connections=(MCPConnection("kochwiki", mcp_url),),
     )
     runtime.agent = create_model_agent(
-        OpenAIAgenticGenerator(model=model, client=client),
+        OpenAIAgenticGenerator(
+            model=model,
+            client=client,
+            reasoning_effort=settings.kochwiki_openai_reasoning_effort,
+        ),
         tool_sources=(runtime.mcp_tools,),
         web_search=WebSearchConfig(),
     )
@@ -83,8 +91,11 @@ def _valid_http_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
         return (
-            parsed.scheme in ("http", "https") and bool(parsed.hostname)
-            and parsed.port != 0 and not parsed.username and not parsed.password
+            parsed.scheme in ("http", "https")
+            and bool(parsed.hostname)
+            and parsed.port != 0
+            and not parsed.username
+            and not parsed.password
         )
     except ValueError:
         return False
