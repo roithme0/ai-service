@@ -20,16 +20,9 @@ class MCPConnection:
             raise RuntimeError("MCP connection already started")
         async with AsyncExitStack() as resources:
             client = await resources.enter_async_context(Client(self._url, read_timeout_seconds=60))
-            tools: list[Tool] = []
-            cursor: str | None = None
-            while True:
-                page = await client.list_tools(cursor=cursor)
-                tools.extend(page.tools)
-                cursor = page.next_cursor
-                if cursor is None:
-                    break
+            tools = await self._discover_tools(client)
             self.instructions = client.instructions
-            self.tools = tuple(tools)
+            self.tools = tools
             self._client = client
             self._resources = resources.pop_all()
 
@@ -37,6 +30,25 @@ class MCPConnection:
         if self._resources is None or self._client is None:
             raise RuntimeError("MCP connection is not started")
         return await self._client.call_tool(name, arguments)
+
+    async def discover_tools(self) -> tuple[Tool, ...]:
+        if self._client is None:
+            raise RuntimeError("MCP connection is not started")
+        return await self._discover_tools(self._client)
+
+    async def _discover_tools(self, client: Client) -> tuple[Tool, ...]:
+        tools: list[Tool] = []
+        cursor: str | None = None
+        cursors: set[str] = set()
+        while True:
+            page = await client.list_tools(cursor=cursor, cache_mode="bypass")
+            tools.extend(page.tools)
+            cursor = page.next_cursor
+            if cursor is None:
+                return tuple(tools)
+            if cursor in cursors:
+                raise ValueError("Repeated MCP catalogue cursor")
+            cursors.add(cursor)
 
     async def close(self) -> None:
         resources = self._resources

@@ -2,7 +2,7 @@
 
 ## Status
 
-Evolving concept as of 2026-10-08. Slice 1, runtime-owned initial connection recovery, is implemented. Automatic catalogue refresh is the next slice. Reconnection after an established connection fails remains conditional on a small, safe extension of the same lifecycle.
+Evolving concept as of 2026-10-08. Slice 1, runtime-owned initial connection recovery, and slice 2, automatic catalogue refresh, are implemented. Reconnection after an established connection fails remains conditional on a small, safe extension of the same lifecycle. Automatic server-instruction refresh must be discussed in a subsequent slice.
 
 Scheduled catalogue polling every five minutes is agreed for the first version. Server notifications are deferred. A fixed 30-second startup retry delay and consolidated runtime status are agreed and delivered.
 
@@ -10,7 +10,7 @@ Scheduled catalogue polling every five minutes is agreed for the first version. 
 
 `backend/app/agents/wiring.py` constructs agent-owned MCP connections from server configuration. FastAPI startup starts each `AgentRuntime`; `MCPConnection.start()` enters the SDK client, fetches all tool pages and retains server instructions. `MCPToolset` validates and maps tool names to model functions. Connections are shared across conversations, and the tool loop builds its registry and instructions once per turn.
 
-The runtime now retries recognized startup transport failures while retaining its agent and model client. Tool discovery still happens once after successful initialization; catalogue changes require an AI Service restart. Tool-call exceptions become generic failures, without application-managed reconnection. The demo has no MCP dependency and remains independent.
+The runtime retries recognized startup transport failures while retaining its agent and model client. After successful connection it polls tool catalogues every five minutes, including while unavailable after a catalogue failure. Tool-call exceptions become generic failures, without application-managed reconnection. Negotiated instruction changes still require a restart. The demo has no MCP dependency and remains independent.
 
 ## Goal
 
@@ -34,11 +34,11 @@ Keep retry and refresh intervals as positive application settings, preferably in
 
 Use scheduled polling every five minutes while connected. Always perform full discovery after connecting or reconnecting. Poll all tool pages using the SDK's explicit cache refresh or bypass mode; otherwise its default catalogue cache may hide server changes.
 
-Build a complete candidate catalogue before publishing it. Validate model-facing names, duplicates and collisions with other sources. Publish a validated catalogue atomically; retain the previous valid catalogue if discovery or validation fails. Successful deletion of every tool is a valid empty catalogue. Record refresh failures and retry later; validation errors alone do not justify reconnecting a healthy transport.
+Build a complete candidate catalogue before publishing it. Validate model-facing names and duplicates across configured connections. Publish a validated catalogue atomically. Anything other than complete successful discovery and validation clears the affected published catalogue and marks the runtime unavailable; do not retain its previous valid catalogue as a fallback. This includes timeouts, failure on a later page and invalid tool names. Continue polling so a corrected catalogue can restore readiness without a restart. Successful deletion of every tool is a valid empty catalogue, distinct from a catalogue cleared because validation failed. Validation errors alone do not justify reconnecting a healthy transport. Collisions with session-specific local tools remain checked during turn assembly.
 
 Each turn must capture one consistent snapshot of tools, mappings and instructions. A catalogue published during an active turn applies to subsequent turns, including those in existing sessions. Do not change the registry halfway through a model/tool loop. Concurrent sessions can therefore use different catalogue generations temporarily. A removed or changed server tool may still reject a call from an older turn; snapshotting cannot preserve the server's previous implementation.
 
-Tool refresh and instruction refresh are separate concerns. The current adapter obtains instructions from connection negotiation. Polling `tools/list` must not promise to update arbitrary server instructions; retrieve current instructions on reconnect, and require a restart for instruction-only changes in the initial scope unless a verified SDK/server mechanism is available.
+Slice 2 refreshes tool definitions and generated tool-name mappings only. The current adapter obtains server instructions from connection negotiation; polling `tools/list` does not refresh those instructions. Discuss automatic instruction refresh explicitly in a subsequent slice, including its coordination with catalogue updates: server instructions may change alongside tools. Reconnection retrieves current instructions, but the ongoing instruction-refresh mechanism has not yet been chosen.
 
 ### Scheduled or Triggered?
 
@@ -67,7 +67,7 @@ Include this feature only if SDK error classification, async context ownership a
 - `AgentRuntime` now distinguishes dependency readiness from final closure. A failed MCP attempt no longer calls the permanent runtime shutdown path. It owns the repair routine and will own future polling and reconnect coordination.
 - `MCPConnection` retains start, call and close operations, with fresh clients on repeated starts. Enter and exit SDK contexts in the runtime's owning task; avoid moving task-bound cleanup between request and background tasks. Complete catalogue generations belong to slice 2.
 - `MCPToolset` and turn input assembly must capture tools and matching instructions from the same generation. Across multiple connections, new turns require all configured dependencies to be ready; one failure must not close unrelated healthy connections.
-- The HTTP registry currently hides the entire agent when unavailable. Preserve session reads and SSE observation during a temporary outage; gate new sessions and new turn admission using the existing `503 agent_unavailable` response. Existing history must remain accessible, and recovery must reuse the same agent and session store.
+- The HTTP registry retains the agent transport while unavailable. Slice 2 preserves session reads and SSE observation during a temporary outage; session creation, message appends and new turns check current readiness at admission and return the existing `503 agent_unavailable` response when unavailable. Existing history remains accessible with unchanged ownership checks, and recovery reuses the same agent and session store.
 - Shutdown must stop admission and recovery scheduling, settle active turns, then close transports and the model client. Background tasks must be tracked and awaited; cancellation must interrupt retry waits and ongoing attempts.
 
 No new public status endpoint or frontend recovery feature is proposed. The host can retry a rejected request later; an existing failed turn is not automatically resumed. Any eventual API contract change must ship with this repo's frontend contract.
@@ -81,8 +81,10 @@ Cover shared, server-configured MCP connections. Do not add MCP authentication, 
 Use this concept as the evolving direction. Discuss one slice's observable behavior and boundaries, record the agreed details here, implement and validate that slice, then return to discussion of the next slice. The details below are proposed until agreed; they do not authorize delivery of every slice at once.
 
 1. **Delivered: initial startup recovery:** background connection attempts, explicit readiness and reliable shutdown. Establish the lifecycle needed by later slices without changing established connections.
-2. **Scheduled catalogue refresh:** five-minute polling, complete validated updates and consistent turn snapshots. Preserve the last valid catalogue on refresh failure. Address SDK caching explicitly.
+2. **Delivered: scheduled catalogue refresh:** five-minute polling, complete validated updates and consistent turn snapshots. Clear catalogues after any refresh failure, mark the runtime unavailable and allow recovery through later valid discovery. Preserve history reads while blocking session creation, message appends and new turns. Bypass SDK caching explicitly.
 3. **Conditional reconnect:** assess error classification and concurrent-call coordination using the delivered lifecycle. Implement only if the change remains narrow; otherwise record why it is deferred. Never replay a failed tool call automatically.
+
+Automatic server-instruction refresh must be discussed in a subsequent slice, alongside or separately from reconnect, because instructions can change together with tools.
 
 ### Slice 1: Initial Startup Recovery
 
@@ -100,7 +102,7 @@ Delivered behavior:
 - Missing or invalid local configuration starts no retry task. Unsupported or duplicate discovered tool names leave the agent unavailable and produce a distinct logged validation failure. Rechecking such catalogues is deferred to slice 2 rather than treating validation errors as transient network failures.
 - Shutdown stops admission, interrupts pending attempts or retry delays, settles active turns, and requests connection closure through the owner tasks before closing the model client. Cleanup is awaited; tasks cannot outlive application lifespan.
 
-This slice does not detect or recover failures after initial readiness, poll tools, or change tool-result uncertainty semantics. Because it only handles initial connection, there are no existing sessions before readiness; preserving session reads during a later outage belongs to slice 3. Avoid introducing new API fields or frontend recovery controls for this slice.
+This slice does not detect or recover failures after initial readiness, poll tools, or change tool-result uncertainty semantics. Because it only handles initial connection, there are no existing sessions before readiness; preserving session reads during a later outage is introduced in slice 2. Avoid introducing new API fields or frontend recovery controls for this slice.
 
 Acceptance evidence should cover startup returning while a connection attempt is blocked, demo availability and Kochwiki's existing 503 response, failed-attempt cleanup followed by successful recovery, no overlapping attempts, full catalogue validation before readiness, missing configuration without retries, shutdown during both an attempt and a retry wait, and normal tool execution and shutdown after recovery. Tests should control timing rather than wait 30 real seconds.
 
@@ -108,13 +110,29 @@ The background-first startup behavior, 30-second retry setting in `backend/app/m
 
 Regression coverage exercises background startup, HTTP 503-to-ready recovery, independent demo availability, a fresh SDK client after failed discovery, retention of healthy dependencies, catalogue rejection, real SDK context cleanup, cancellation during discovery or retry waits, and complete configured-agent tool turns. Existing startup tests now await readiness explicitly because startup intentionally returns before remote discovery completes.
 
+### Slice 2: Automatic Catalogue Updates
+
+**Status:** agreed and implemented.
+
+The runtime schedules full catalogue polling every five minutes on established connections, measured after initialization or the previous polling pass completes. Attempts do not overlap. `MCPConnection.discover_tools()` returns a complete candidate without publishing it and uses `cache_mode="bypass"` on every page. `MCPToolset` retains its identity and reads the current published connection catalogues when assembling a turn. Validate complete candidates before publishing them; never expose intermediate pages.
+
+Anything other than complete successful discovery and validation clears the affected connection's published tools and makes the entire runtime unavailable because every configured connection is mandatory. Keep unrelated healthy connection catalogues and transports. Continue polling, including after initial catalogue validation failure, and restore readiness only when every required catalogue is valid. Initial aggregate validation failure clears the initial catalogues and requires polling validation before readiness. An empty successful catalogue remains valid; readiness tracks validation success separately from tool count.
+
+While unavailable, allow existing session history reads and SSE observation. Block new sessions, message appends and new turn starts. Already-running turns retain their captured definitions and may finish; clearing published tools does not rewrite their snapshots or replay failed calls. Server-side changes can still make their calls fail.
+
+Server instructions remain those obtained at connection negotiation for this slice. Generated mappings follow each published tool catalogue. Automatic server-instruction refresh is explicitly required for discussion in a later slice.
+
+Regression coverage should establish complete paginated publication, invalid-catalogue clearing and loss of readiness, recovery after a corrected catalogue, valid empty catalogues, initial validation recovery, consistent active-turn snapshots, retained session reads and observation, blocked writes and turn admission, and shutdown during polling.
+
+Delivered regression coverage exercises those boundaries with controlled polling intervals and real SDK contexts. Shutdown settles active turns before cancelling pending discovery and closing SDK contexts in their owning task. No new public response fields or frontend recovery controls are introduced.
+
 ## Risks and Validation
 
 Background discovery must not block tool calls behind an agent-wide lock. Connection replacement must not close a transport underneath another session's active invocation. Polling detects some idle outages but is not a complete health guarantee, and refresh traffic grows with the number of backend processes and configured connections.
 
-Meaningful regression coverage should establish late-server recovery, independent demo availability, cancellation during retry, clean shutdown, complete paginated refresh, invalid-update retention, consistent active-turn snapshots and session retention across outages. Conditional reconnect needs concurrent-call coverage and proof that a failed mutation is never automatically invoked again.
+Meaningful regression coverage should establish late-server recovery, independent demo availability, cancellation during retry, clean shutdown, complete paginated refresh, invalid-update clearing and recovery, consistent active-turn snapshots and session retention across outages. Conditional reconnect needs concurrent-call coverage and proof that a failed mutation is never automatically invoked again.
 
 ## Open Questions
 
-- Decide whether instruction-only changes also need automatic refresh. This is separate from the requested tool catalogue refresh.
+- Discuss and choose automatic server-instruction refresh in a subsequent slice, accounting for instructions changing alongside tools.
 - Verify SDK exception classification and task ownership before deciding whether reconnect meets the user's simplicity condition.

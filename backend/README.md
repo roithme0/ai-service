@@ -71,27 +71,37 @@ and shutdown to those runtimes. Conversation services handle sessions and turns;
 they do not own external connections. Runtime status is `created`, `connecting`,
 `ready`, `unavailable`, `closing`, or `closed`, with a separate issue describing
 the failure and whether it is retryable. All configured MCP connections are
-mandatory; HTTP access returns the existing `503 agent_unavailable` until the
-runtime is ready. Startup does not wait for remote initialization, so a healthy
+mandatory; session creation, message appends and new turns return the existing
+`503 agent_unavailable` until the runtime is ready. Existing session reads and
+SSE observation remain accessible with the same ownership checks. Startup does
+not wait for remote initialization, so a healthy
 MCP server can still have a brief initial unavailable window.
 
 The runtime owns a background repair task. Recognized transport and timeout
 failures retry after `INITIAL_RETRY_SECONDS` in `app/mcp/config.py` (30 seconds),
 measured after failed-attempt cleanup. Each attempt uses a fresh SDK client;
 healthy connections, the agent and model client are retained. Missing local
-configuration, invalid catalogues and unclassified initialization errors do not
-retry. Shutdown cancels pending attempts or retry waits and settles backend-owned
-turns before closing ready connections in reverse order and then the model client.
+configuration and unclassified initialization errors do not retry. Invalid initial
+catalogues are cleared and rechecked on the catalogue polling schedule. Shutdown
+settles backend-owned turns, then cancels pending attempts, polling or waits before
+closing connections in reverse order and then the model client.
 SDK contexts are entered and closed by their background owner task. Every cleanup
 is attempted even if another fails.
 
 Background initialization retrieves server instructions
-and all pages of tool definitions. The connection stays open until shutdown;
-discovery is performed once, so restart the AI Service after changing tool
-definitions or instructions. SDK requests use a 60-second read timeout.
-Initialization/discovery failures are logged and make only the Kochwiki agent
-unavailable. Initial connection retry is implemented; reconnect after readiness
-and automatic catalogue refresh remain deferred.
+and all pages of tool definitions. The connection stays open until shutdown.
+The runtime polls complete catalogues after `CATALOGUE_REFRESH_SECONDS` in
+`app/mcp/config.py` (five minutes), measured after initialization or the previous
+poll finishes. Polling bypasses the SDK response cache. Validated updates are
+published atomically; active turns keep their captured tools and mappings, and
+subsequent turns use the updated catalogue. A successful empty catalogue is valid.
+Any discovery or validation failure clears the affected catalogue and makes its
+runtime unavailable. Polling continues and restores readiness once every required
+catalogue is valid. Other connections and the session store are retained.
+SDK requests use a 60-second read timeout. Refresh does not update negotiated
+server instructions; instruction changes still require a restart until instruction
+refresh is implemented. Reconnect after readiness remains deferred; a broken
+transport may consequently remain unavailable despite continued polling.
 
 Each agent can own multiple MCP connections. Their configured names must be
 unique within that agent. Every MCP tool is exposed to the model as

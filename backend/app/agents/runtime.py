@@ -75,44 +75,20 @@ class AgentRuntime(Generic[AgentT]):
             return
         if config.INITIAL_RETRY_SECONDS <= 0:
             raise ValueError("MCP retry interval must be positive")
+        if config.CATALOGUE_REFRESH_SECONDS <= 0:
+            raise ValueError("MCP catalogue refresh interval must be positive")
         self.status = RuntimeStatus.CONNECTING
         self._connection_task = asyncio.create_task(self._repair(), name=f"mcp:{self.name}")
 
     async def _repair(self) -> None:
-        initialized: set[MCPConnection] = set()
         try:
-            while not self._stop.is_set():
-                self.status = RuntimeStatus.CONNECTING
-                failed_connection: str | None = None
-                try:
-                    for connection in self.mcp_connections:
-                        if connection not in initialized:
-                            failed_connection = connection.name
-                            await connection.start()
-                            initialized.add(connection)
-                    failed_connection = None
-                    self.mcp_tools.validate()
-                except Exception as error:
-                    retryable = _retryable(error)
-                    self.issue = RuntimeIssue(
-                        "connection" if retryable else ("catalogue" if failed_connection is None else "initialization"),
-                        failed_connection, retryable,
-                    )
-                    self.status = RuntimeStatus.UNAVAILABLE
-                    logger.warning("Agent %s unavailable: MCP initialization failed (%s), retryable=%s",
-                                   self.name, type(error).__name__, retryable)
-                    if not retryable:
-                        await self._stop.wait()
-                        return
-                    try:
-                        await asyncio.wait_for(self._stop.wait(), timeout=config.INITIAL_RETRY_SECONDS)
-                    except TimeoutError:
-                        continue
-                    return
-                self.issue = None
-                self.status = RuntimeStatus.READY
+            if not await self._initialize_connections():
+                return
+            if self.status == RuntimeStatus.CLOSING:
                 await self._stop.wait()
                 return
+            valid = self._validate_initial_catalogues()
+            await self._poll_catalogues(valid)
         finally:
             if self.status not in (RuntimeStatus.CLOSING, RuntimeStatus.CLOSED):
                 self.status = RuntimeStatus.UNAVAILABLE
@@ -122,14 +98,97 @@ class AgentRuntime(Generic[AgentT]):
                 for connection in self.mcp_connections:
                     resources.push_async_callback(connection.close)
 
+    async def _initialize_connections(self) -> bool:
+        initialized: set[MCPConnection] = set()
+        while not self._stop.is_set():
+            if self.status == RuntimeStatus.CLOSING:
+                await self._stop.wait()
+                return False
+            self.status = RuntimeStatus.CONNECTING
+            for connection in self.mcp_connections:
+                if connection in initialized:
+                    continue
+                try:
+                    await connection.start()
+                except Exception as error:
+                    if self.status == RuntimeStatus.CLOSING:
+                        await self._stop.wait()
+                        return False
+                    retryable = _retryable(error)
+                    self.issue = RuntimeIssue(
+                        "connection" if retryable else "initialization", connection.name, retryable,
+                    )
+                    self.status = RuntimeStatus.UNAVAILABLE
+                    logger.warning("Agent %s unavailable: MCP initialization failed (%s), retryable=%s",
+                                   self.name, type(error).__name__, retryable)
+                    if not retryable:
+                        await self._stop.wait()
+                        return False
+                    if await self._wait_or_stop(config.INITIAL_RETRY_SECONDS):
+                        return False
+                    break
+                initialized.add(connection)
+            else:
+                return True
+        return False
+
+    def _validate_initial_catalogues(self) -> set[MCPConnection]:
+        try:
+            self.mcp_tools.validate()
+        except Exception as error:
+            for connection in self.mcp_connections:
+                connection.tools = ()
+            self.issue = RuntimeIssue("catalogue", retryable=True)
+            self.status = RuntimeStatus.UNAVAILABLE
+            logger.warning("Agent %s unavailable: invalid initial MCP catalogue (%s)",
+                           self.name, type(error).__name__)
+            return set()
+        self.issue = None
+        self.status = RuntimeStatus.READY
+        return set(self.mcp_connections)
+
+    async def _wait_or_stop(self, seconds: float) -> bool:
+        try:
+            await asyncio.wait_for(self._stop.wait(), timeout=seconds)
+        except TimeoutError:
+            if self.status != RuntimeStatus.CLOSING:
+                return False
+            await self._stop.wait()
+        return True
+
+    async def _poll_catalogues(self, valid: set[MCPConnection]) -> None:
+        issues: dict[MCPConnection, RuntimeIssue] = {
+            connection: RuntimeIssue("catalogue", connection.name, True)
+            for connection in self.mcp_connections if connection not in valid
+        }
+        while not self._stop.is_set():
+            if await self._wait_or_stop(config.CATALOGUE_REFRESH_SECONDS):
+                return
+            for connection in self.mcp_connections:
+                try:
+                    candidate = await connection.discover_tools()
+                    self.mcp_tools.validate({connection: candidate})
+                except Exception as error:
+                    connection.tools = ()
+                    valid.discard(connection)
+                    issues[connection] = RuntimeIssue("catalogue", connection.name, True)
+                    logger.warning("Agent %s unavailable: MCP catalogue refresh failed (%s/%s)",
+                                   self.name, connection.name, type(error).__name__)
+                else:
+                    connection.tools = candidate
+                    valid.add(connection)
+                    issues.pop(connection, None)
+                if self.status in (RuntimeStatus.CLOSING, RuntimeStatus.CLOSED):
+                    await self._stop.wait()
+                    return
+                self.issue = next(iter(issues.values()), None)
+                self.status = RuntimeStatus.READY if len(valid) == len(self.mcp_connections) else RuntimeStatus.UNAVAILABLE
+
     async def close(self) -> None:
         async with self._close_lock:
             if self.status == RuntimeStatus.CLOSED:
                 return
-            previous = self.status
             self.status = RuntimeStatus.CLOSING
-            if self._connection_task is not None and previous != RuntimeStatus.READY and not self._connection_task.done():
-                self._connection_task.cancel()
             agent = self.agent
             self.agent = None
             try:
@@ -145,6 +204,8 @@ class AgentRuntime(Generic[AgentT]):
     async def _close_connections(self) -> None:
         self._stop.set()
         if self._connection_task is not None:
+            if not self._connection_task.done():
+                self._connection_task.cancel()
             try:
                 await self._connection_task
             except asyncio.CancelledError:

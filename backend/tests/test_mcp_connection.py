@@ -16,6 +16,8 @@ from openai.types.shared import ReasoningEffort
 from fastapi import FastAPI
 
 from app.agents.wiring import configure_agents, get_configured_agents
+from app.agents.runtime import AgentRuntime
+from mcp.client.caching import CacheMode
 from app.agents.enums.runtime import RuntimeStatus
 from app.core.config import Settings
 from app.main import AgentLifespan, app as service_app
@@ -161,14 +163,16 @@ def test_background_recovery_uses_fresh_sdk_clients_and_http_readiness(monkeypat
             clients.append(client)
             return client
 
-        async def initial_failure(self: Client, *, cursor: str | None = None) -> ListToolsResult:
+        async def initial_failure(
+            self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+        ) -> ListToolsResult:
             nonlocal attempts
             attempts += 1
             if attempts == 1:
                 entered.set()
                 await release.wait()
                 raise ConnectionError("server not ready")
-            return await original_list(self, cursor=cursor)
+            return await original_list(self, cursor=cursor, cache_mode=cache_mode)
 
         monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
         monkeypatch.setattr(Client, "list_tools", initial_failure)
@@ -217,7 +221,9 @@ def test_shutdown_cancels_discovery_inside_sdk_context(monkeypatch: pytest.Monke
         def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
             return Client(server, read_timeout_seconds=read_timeout_seconds)
 
-        async def pending_list(self: Client, *, cursor: str | None = None) -> ListToolsResult:
+        async def pending_list(
+            self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+        ) -> ListToolsResult:
             entered.set()
             try:
                 await asyncio.Event().wait()
@@ -358,7 +364,10 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
 def test_discovery_consumes_all_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     cursors: list[str | None] = []
 
-    async def list_tools(self: Client, *, cursor: str | None = None) -> ListToolsResult:
+    async def list_tools(
+        self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+    ) -> ListToolsResult:
+        assert cache_mode == "bypass"
         cursors.append(cursor)
         name = "first" if cursor is None else "second"
         return ListToolsResult(
@@ -385,6 +394,155 @@ def test_discovery_consumes_all_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize("fail_later_page", [False, True])
+def test_refresh_bypasses_cache_and_never_publishes_partial_pages(
+    monkeypatch: pytest.MonkeyPatch, fail_later_page: bool,
+) -> None:
+    async def exercise() -> None:
+        server = MCPServer("Refresh")
+        pages: list[tuple[str | None, CacheMode]] = []
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            return Client(server, read_timeout_seconds=read_timeout_seconds)
+
+        async def list_tools(
+            self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+        ) -> ListToolsResult:
+            pages.append((cursor, cache_mode))
+            assert cache_mode == "bypass"
+            if len(pages) == 1:
+                return ListToolsResult(tools=[Tool(name="old", input_schema={"type": "object"})])
+            if cursor is not None:
+                entered.set()
+                await release.wait()
+                if fail_later_page:
+                    raise TimeoutError("page failed")
+            return ListToolsResult(
+                tools=[Tool(name="first" if cursor is None else "second", input_schema={"type": "object"})],
+                next_cursor="page-two" if cursor is None else None,
+            )
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr(Client, "list_tools", list_tools)
+        connection = MCPConnection("server", "http://localhost/mcp/")
+        await connection.start()
+        discovery = asyncio.create_task(connection.discover_tools())
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+            assert [tool.name for tool in connection.tools] == ["old"]
+            release.set()
+            if fail_later_page:
+                with pytest.raises(TimeoutError):
+                    await discovery
+            else:
+                assert [tool.name for tool in await discovery] == ["first", "second"]
+            assert [tool.name for tool in connection.tools] == ["old"]
+            assert pages == [(None, "bypass"), (None, "bypass"), ("page-two", "bypass")]
+        finally:
+            release.set()
+            await connection.close()
+
+    asyncio.run(exercise())
+
+
+def test_shutdown_interrupts_refresh_inside_sdk_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def exercise() -> None:
+        server = MCPServer("Polling shutdown")
+        entered = asyncio.Event()
+        settled = asyncio.Event()
+        clients: list[Client] = []
+        original_list = Client.list_tools
+        attempts = 0
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            client = Client(server, read_timeout_seconds=read_timeout_seconds)
+            clients.append(client)
+            return client
+
+        async def list_tools(
+            self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+        ) -> ListToolsResult:
+            nonlocal attempts
+            attempts += 1
+            assert cache_mode == "bypass"
+            if attempts == 1:
+                return await original_list(self, cursor=cursor, cache_mode=cache_mode)
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                settled.set()
+            raise AssertionError("unreachable")
+
+        monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr(Client, "list_tools", list_tools)
+        runtime = AgentRuntime("test", object(), mcp_connections=(MCPConnection("server", "http://localhost/mcp/"),))
+        await runtime.start()
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+        finally:
+            await asyncio.wait_for(runtime.close(), 2)
+        assert settled.is_set() and runtime.status == RuntimeStatus.CLOSED
+        with pytest.raises((RuntimeError, MCPError)):
+            await original_list(clients[0])
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("during_start", [False, True])
+def test_discovery_rejects_repeated_cursors_without_publishing(
+    monkeypatch: pytest.MonkeyPatch, during_start: bool,
+) -> None:
+    async def exercise() -> None:
+        server = MCPServer("Repeated cursor")
+        clients: list[Client] = []
+        original_list = Client.list_tools
+        cursors: list[str | None] = []
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            client = Client(server, read_timeout_seconds=read_timeout_seconds)
+            clients.append(client)
+            return client
+
+        async def repeated_page(
+            self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+        ) -> ListToolsResult:
+            assert cache_mode == "bypass"
+            cursors.append(cursor)
+            return ListToolsResult(tools=[Tool(name="partial", input_schema={"type": "object"})],
+                                   next_cursor="same-page")
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        connection = MCPConnection("server", "http://localhost/mcp/")
+        if not during_start:
+            await connection.start()
+        monkeypatch.setattr(Client, "list_tools", repeated_page)
+        try:
+            if during_start:
+                with pytest.RaisesGroup(
+                    pytest.RaisesExc(ValueError, match="Repeated MCP catalogue cursor"), flatten_subgroups=True,
+                ):
+                    await connection.start()
+            else:
+                with pytest.raises(ValueError, match="Repeated MCP catalogue cursor"):
+                    await connection.discover_tools()
+            assert cursors == [None, "same-page"]
+            assert connection.tools == ()
+            if during_start:
+                assert connection.instructions is None
+                with pytest.raises(RuntimeError, match="not started"):
+                    await connection.call_tool("partial", {})
+                with pytest.raises((RuntimeError, MCPError)):
+                    await original_list(clients[0])
+        finally:
+            await connection.close()
+
+    asyncio.run(exercise())
+
+
 @pytest.mark.parametrize("fail_discovery", [False, True])
 def test_connection_failure_disables_only_owning_agent(
     monkeypatch: pytest.MonkeyPatch, fail_discovery: bool,
@@ -401,7 +559,9 @@ def test_connection_failure_disables_only_owning_agent(
                     read_timeout_seconds=read_timeout_seconds,
                 )
 
-            async def broken_list(self: Client, *, cursor: str | None = None) -> ListToolsResult:
+            async def broken_list(
+                self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+            ) -> ListToolsResult:
                 raise RuntimeError("discovery failure")
 
             monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
