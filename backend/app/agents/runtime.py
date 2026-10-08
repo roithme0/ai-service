@@ -9,11 +9,12 @@ from typing import Generic, Literal, Protocol, TypeVar, runtime_checkable
 import anyio
 import httpx2
 from mcp.shared.exceptions import MCPError
-from mcp.types import CONNECTION_CLOSED, REQUEST_TIMEOUT
+from mcp.types import REQUEST_TIMEOUT
 
 from app.agents.enums.runtime import RuntimeStatus
 from app.mcp import config
 from app.mcp.connection import MCPConnection, MCPConnectionConfig
+from app.mcp.errors import connection_lost
 from app.mcp.tools import MCPToolset
 
 
@@ -32,7 +33,7 @@ def _retryable(error: BaseException) -> bool:
     if isinstance(error, BaseExceptionGroup):
         return all(_retryable(child) for child in error.exceptions)
     if isinstance(error, MCPError):
-        return error.code in (CONNECTION_CLOSED, REQUEST_TIMEOUT)
+        return connection_lost(error) or error.code == REQUEST_TIMEOUT
     if isinstance(error, httpx2.HTTPStatusError):
         return error.response.status_code >= 500 or error.response.status_code in (408, 429)
     return isinstance(error, (httpx2.TransportError, ConnectionError, TimeoutError,
@@ -97,6 +98,34 @@ class AgentRuntime(Generic[AgentT]):
 
     async def _repair(self) -> None:
         reconnecting = False
+        while not self._stop.is_set():
+            try:
+                await self._maintain_connections(reconnecting=reconnecting)
+                return
+            except Exception as error:
+                if not connection_lost(error):
+                    logger.error("Agent %s MCP repair stopped unexpectedly (%s)", self.name, type(error).__name__)
+                    raise
+                if not await self._reconnect_after_transport_failure(error):
+                    return
+                reconnecting = True
+
+    async def _reconnect_after_transport_failure(self, error: BaseException) -> bool:
+        if self.status in (RuntimeStatus.CLOSING, RuntimeStatus.CLOSED):
+            return False
+        self.status = RuntimeStatus.UNAVAILABLE
+        if self.issue is None or self.issue.kind != "connection":
+            self.issue = RuntimeIssue("connection", retryable=True)
+        for connection in self.mcp_connections:
+            connection.tools = ()
+            connection.instructions = None
+        logger.warning("Agent %s unavailable: MCP connection lost in transport task (%s)",
+                       self.name, type(error).__name__)
+        logger.info("Agent %s scheduling MCP reconnect in %s seconds",
+                    self.name, config.INITIAL_RETRY_SECONDS)
+        return not await self._wait_or_stop(config.INITIAL_RETRY_SECONDS)
+
+    async def _maintain_connections(self, *, reconnecting: bool) -> None:
         try:
             while not self._stop.is_set():
                 self._repair_requested.clear()
@@ -120,9 +149,6 @@ class AgentRuntime(Generic[AgentT]):
                             self.name, config.INITIAL_RETRY_SECONDS)
                 if await self._wait_or_stop(config.INITIAL_RETRY_SECONDS):
                     return
-        except Exception as error:
-            logger.error("Agent %s MCP repair stopped unexpectedly (%s)", self.name, type(error).__name__)
-            raise
         finally:
             if self.status not in (RuntimeStatus.CLOSING, RuntimeStatus.CLOSED):
                 self.status = RuntimeStatus.UNAVAILABLE

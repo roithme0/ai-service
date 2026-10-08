@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import logging
 
 from mcp import Client
+from mcp.shared.exceptions import MCPError
 from mcp.types import CallToolResult, DiscoverResult, Tool
 
 from app.mcp.errors import connection_lost
@@ -74,7 +75,11 @@ class MCPConnection:
             raise
 
     def _report_failure(self, client: Client, error: BaseException) -> None:
-        if client is self._client and not self._broken and connection_lost(error):
+        reconnect = client is self._client and not self._broken and connection_lost(error)
+        logger.warning("MCP request failed (%s/%s), mcp_code=%s, reconnect_requested=%s",
+                       self.name, type(error).__name__, error.code if isinstance(error, MCPError) else None,
+                       reconnect)
+        if reconnect:
             self._broken = True
             if self._on_connection_lost is not None:
                 self._on_connection_lost(self)
