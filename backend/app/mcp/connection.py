@@ -5,11 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
+import logging
 
 from mcp import Client
 from mcp.types import CallToolResult, DiscoverResult, Tool
 
 from app.mcp.errors import connection_lost
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -108,4 +111,9 @@ class MCPConnection:
         self.instructions = None
         self.tools = ()
         if resources is not None:
-            await resources.aclose()
+            try:
+                await resources.aclose()
+            except Exception as error:
+                logger.error("MCP connection cleanup failed (%s/%s)", self.name, type(error).__name__)
+                raise
+            logger.info("MCP connection closed (%s)", self.name)

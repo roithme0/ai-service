@@ -96,10 +96,11 @@ class AgentRuntime(Generic[AgentT]):
         self._connection_task = asyncio.create_task(self._repair(), name=f"mcp:{self.name}")
 
     async def _repair(self) -> None:
+        reconnecting = False
         try:
             while not self._stop.is_set():
                 self._repair_requested.clear()
-                if not await self._initialize_connections():
+                if not await self._initialize_connections(reconnecting=reconnecting):
                     return
                 if self.status == RuntimeStatus.CLOSING:
                     await self._stop.wait()
@@ -112,9 +113,16 @@ class AgentRuntime(Generic[AgentT]):
                 if self.status == RuntimeStatus.CLOSING:
                     await self._stop.wait()
                     return
+                logger.info("Agent %s resetting MCP connections for recovery", self.name)
                 await self._reset_connections()
+                reconnecting = True
+                logger.info("Agent %s scheduling MCP reconnect in %s seconds",
+                            self.name, config.INITIAL_RETRY_SECONDS)
                 if await self._wait_or_stop(config.INITIAL_RETRY_SECONDS):
                     return
+        except Exception as error:
+            logger.error("Agent %s MCP repair stopped unexpectedly (%s)", self.name, type(error).__name__)
+            raise
         finally:
             if self.status not in (RuntimeStatus.CLOSING, RuntimeStatus.CLOSED):
                 self.status = RuntimeStatus.UNAVAILABLE
@@ -127,8 +135,9 @@ class AgentRuntime(Generic[AgentT]):
             for connection in self.mcp_connections:
                 resources.push_async_callback(connection.close)
 
-    async def _initialize_connections(self) -> bool:
+    async def _initialize_connections(self, *, reconnecting: bool = False) -> bool:
         initialized: set[MCPConnection] = set()
+        attempts: dict[MCPConnection, int] = {}
         while not self._stop.is_set():
             if self.status == RuntimeStatus.CLOSING:
                 await self._stop.wait()
@@ -139,6 +148,9 @@ class AgentRuntime(Generic[AgentT]):
             for connection in self.mcp_connections:
                 if connection in initialized:
                     continue
+                attempts[connection] = attempts.get(connection, 0) + 1
+                logger.info("Agent %s attempting MCP %s (%s), attempt=%s", self.name,
+                            "reconnect" if reconnecting else "connection", connection.name, attempts[connection])
                 try:
                     await connection.start()
                 except Exception as error:
@@ -152,15 +164,22 @@ class AgentRuntime(Generic[AgentT]):
                         "connection" if retryable else "initialization", connection.name, retryable,
                     )
                     self.status = RuntimeStatus.UNAVAILABLE
-                    logger.warning("Agent %s unavailable: MCP initialization failed (%s), retryable=%s",
-                                   self.name, type(error).__name__, retryable)
+                    logger.warning("Agent %s unavailable: MCP connection failed (%s/%s), retryable=%s",
+                                   self.name, connection.name, type(error).__name__, retryable)
                     if not retryable:
+                        logger.error("Agent %s MCP retries stopped: nonretryable failure (%s)",
+                                     self.name, connection.name)
                         await self._stop.wait()
                         return False
+                    logger.info("Agent %s scheduling MCP connection retry (%s) in %s seconds",
+                                self.name, connection.name, config.INITIAL_RETRY_SECONDS)
                     if await self._wait_or_stop(config.INITIAL_RETRY_SECONDS):
                         return False
                     break
                 initialized.add(connection)
+                logger.info("Agent %s MCP %s succeeded (%s), tools=%s, instructions_present=%s",
+                            self.name, "reconnect" if reconnecting else "connection", connection.name,
+                            len(connection.tools), bool(connection.instructions))
             else:
                 return True
         return False
@@ -179,6 +198,7 @@ class AgentRuntime(Generic[AgentT]):
             return set()
         self.issue = None
         self.status = RuntimeStatus.READY
+        logger.info("Agent %s ready: all MCP connections and catalogues validated", self.name)
         return set(self.mcp_connections)
 
     async def _wait_or_stop(self, seconds: float) -> bool:
@@ -207,7 +227,7 @@ class AgentRuntime(Generic[AgentT]):
                     connection.instructions = None
                     valid.discard(connection)
                     issues[connection] = RuntimeIssue("catalogue", connection.name, True)
-                    logger.warning("Agent %s unavailable: MCP catalogue refresh failed (%s/%s)",
+                    logger.warning("Agent %s unavailable: MCP catalogue and instructions refresh failed (%s/%s)",
                                    self.name, connection.name, type(error).__name__)
                 else:
                     if not self._repair_requested.is_set():
@@ -215,13 +235,19 @@ class AgentRuntime(Generic[AgentT]):
                         connection.instructions = candidate.instructions
                         valid.add(connection)
                         issues.pop(connection, None)
+                        logger.info("Agent %s MCP catalogue and instructions refreshed (%s), tools=%s, "
+                                    "instructions_present=%s", self.name, connection.name,
+                                    len(candidate.tools), bool(candidate.instructions))
                 if self.status in (RuntimeStatus.CLOSING, RuntimeStatus.CLOSED):
                     await self._stop.wait()
                     return
                 if self._repair_requested.is_set():
                     return
                 self.issue = next(iter(issues.values()), None)
+                was_ready = self.status == RuntimeStatus.READY
                 self.status = RuntimeStatus.READY if len(valid) == len(self.mcp_connections) else RuntimeStatus.UNAVAILABLE
+                if not was_ready and self.status == RuntimeStatus.READY:
+                    logger.info("Agent %s ready: MCP catalogue and instructions recovered", self.name)
 
     async def _wait_for_refresh(self) -> bool:
         stop = asyncio.create_task(self._stop.wait())

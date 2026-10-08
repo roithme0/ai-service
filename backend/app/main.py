@@ -1,3 +1,4 @@
+import logging
 from types import TracebackType
 
 from fastapi import FastAPI
@@ -15,7 +16,18 @@ from app.agents.http import create_session_router, get_agent_registry
 
 class AgentLifespan:
     def __init__(self, _application: FastAPI) -> None:
+        self._configure_logging()
         self._agents = get_configured_agents()
+
+    @staticmethod
+    def _configure_logging() -> None:
+        application_logger = logging.getLogger("app")
+        if application_logger.level == logging.NOTSET:
+            application_logger.setLevel(logging.INFO)
+        if not application_logger.hasHandlers():
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+            application_logger.addHandler(handler)
 
     async def __aenter__(self) -> None:
         await self._agents.start()

@@ -73,6 +73,8 @@ SDK contexts entered in one task nest in connection order and must close in reve
 
 No new public status endpoint or frontend recovery feature is proposed. The host can retry a rejected request later; an existing failed turn is not automatically resumed. Any eventual API contract change must ship with this repo's frontend contract.
 
+Log connection and reconnect attempts, attempt failures and retryability, retry delays, successful discovery, validated catalogue/instruction publication, readiness recovery, transport closure and cleanup failures. Routine lifecycle events use INFO; failures use WARNING or ERROR. Include agent and connection names, tool counts and instruction presence without recording URLs, tool arguments, catalogue bodies or instruction text. Application startup supplies an INFO-level application logger and a stream handler when no handler is configured; third-party logger levels are unaffected.
+
 ## Scope Boundaries
 
 Cover shared, server-configured MCP connections. Do not add MCP authentication, user-specific connections, resource/prompt discovery, persistent sessions, tool-call retries, mutation deduplication, rollback, or browser/SSE reconnection. Keep sequential execution of grouped model tool calls and existing turn budgets.
