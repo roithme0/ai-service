@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ValidationError
 
 from app.agents.enums.configuration import AgentConfiguration
+from app.agents.enums.runtime import RuntimeStatus
 from app.agents.models.input import AgentInputRejected
 from app.agents.service import ConfiguredAgentService
 from app.agents.wiring import get_configured_agents
@@ -143,12 +144,12 @@ def get_agent_registry() -> dict[str, ConversationTransport | None]:
     demo_agent = agents.demo.agent
     kochwiki: ConversationTransport | None = (
         AgentTransport(kochwiki_agent, lambda value: value, _context_issue)
-        if kochwiki_agent
+        if kochwiki_agent and agents.kochwiki.status == RuntimeStatus.READY
         else None
     )
     demo: ConversationTransport | None = (
         AgentTransport(demo_agent, lambda value: value, _demo_issue)
-        if demo_agent
+        if demo_agent and agents.demo.status == RuntimeStatus.READY
         else None
     )
     return {AgentConfiguration.KOCHWIKI: kochwiki, AgentConfiguration.DEMO: demo}

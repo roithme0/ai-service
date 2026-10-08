@@ -9,7 +9,8 @@ from mcp.types import CallToolResult, Tool
 class MCPConnection:
     def __init__(self, name: str, url: str) -> None:
         self.name = name
-        self._client = Client(url, read_timeout_seconds=60)
+        self._url = url
+        self._client: Client | None = None
         self._resources: AsyncExitStack | None = None
         self.instructions: str | None = None
         self.tools: tuple[Tool, ...] = ()
@@ -18,7 +19,7 @@ class MCPConnection:
         if self._resources is not None:
             raise RuntimeError("MCP connection already started")
         async with AsyncExitStack() as resources:
-            client = await resources.enter_async_context(self._client)
+            client = await resources.enter_async_context(Client(self._url, read_timeout_seconds=60))
             tools: list[Tool] = []
             cursor: str | None = None
             while True:
@@ -29,16 +30,18 @@ class MCPConnection:
                     break
             self.instructions = client.instructions
             self.tools = tuple(tools)
+            self._client = client
             self._resources = resources.pop_all()
 
     async def call_tool(self, name: str, arguments: dict[str, object]) -> CallToolResult:
-        if self._resources is None:
+        if self._resources is None or self._client is None:
             raise RuntimeError("MCP connection is not started")
         return await self._client.call_tool(name, arguments)
 
     async def close(self) -> None:
         resources = self._resources
         self._resources = None
+        self._client = None
         self.instructions = None
         self.tools = ()
         if resources is not None:

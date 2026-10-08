@@ -6,6 +6,8 @@ import pytest
 from mcp.types import CallToolResult, TextContent, Tool
 
 from app.agents.runtime import AgentRuntime
+from app.agents.enums.runtime import RuntimeStatus
+from runtime_wait import wait_for_status
 from app.mcp.connection import MCPConnection
 from app.mcp.tools import MCPToolset
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
@@ -188,7 +190,12 @@ def test_bad_discovered_names_disable_owner_and_close_resources(connections: tup
     async def exercise() -> None:
         runtime = AgentRuntime("test", object(), mcp_connections=connections)
         await runtime.start()
-        assert runtime.agent is None
+        try:
+            await wait_for_status(runtime, RuntimeStatus.UNAVAILABLE)
+            assert runtime.agent is not None
+            assert runtime.issue is not None and runtime.issue.kind == "catalogue"
+        finally:
+            await runtime.close()
         assert all(isinstance(connection, Connection) and connection.closed for connection in connections)
 
     asyncio.run(exercise())

@@ -2,8 +2,10 @@ import asyncio
 import json
 
 import httpx2
+import httpx
 import pytest
 from mcp import Client
+from mcp.shared.exceptions import MCPError
 from mcp.client.streamable_http import streamable_http_client
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -14,13 +16,15 @@ from openai.types.shared import ReasoningEffort
 from fastapi import FastAPI
 
 from app.agents.wiring import configure_agents, get_configured_agents
+from app.agents.enums.runtime import RuntimeStatus
 from app.core.config import Settings
-from app.main import AgentLifespan
+from app.main import AgentLifespan, app as service_app
 from app.mcp.connection import MCPConnection
 from app.agents.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.models.session import SessionCreation
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from test_model_session_http import valid_request
+from runtime_wait import wait_for_status
 
 
 def configured_settings() -> Settings:
@@ -80,6 +84,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
             assert connection.tools == ()
             await agents.start()
             try:
+                await wait_for_status(agents.kochwiki, RuntimeStatus.READY)
                 assert agents.kochwiki.agent is not None
                 assert connection.instructions == "Server-owned domain guidance"
                 assert [tool.name for tool in connection.tools] == ["hello_world"]
@@ -134,6 +139,104 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
             with pytest.raises(RuntimeError, match="not started"):
                 await connection.call_tool("hello_world", {})
             await connection.close()
+
+    asyncio.run(exercise())
+
+
+def test_background_recovery_uses_fresh_sdk_clients_and_http_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def exercise() -> None:
+        clients: list[Client] = []
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        original_list = Client.list_tools
+        attempts = 0
+        server = MCPServer("Recover", instructions="Recovered guidance")
+
+        @server.tool()
+        def hello_world() -> str:
+            return "hello"
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            client = Client(server, read_timeout_seconds=read_timeout_seconds)
+            clients.append(client)
+            return client
+
+        async def initial_failure(self: Client, *, cursor: str | None = None) -> ListToolsResult:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                entered.set()
+                await release.wait()
+                raise ConnectionError("server not ready")
+            return await original_list(self, cursor=cursor)
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr(Client, "list_tools", initial_failure)
+        monkeypatch.setattr("app.mcp.config.INITIAL_RETRY_SECONDS", 0.01)
+        agents = configure_agents(configured_settings())
+        original_agent = agents.kochwiki.agent
+        monkeypatch.setattr("app.agents.http.get_configured_agents", lambda: agents)
+        await agents.start()
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=service_app), base_url="http://service",
+                headers={"X-Application-User": "test:user"},
+            ) as http:
+                unavailable = await http.post("/api/v1/agents/kochwiki/sessions", json={"input": {"context": {}}})
+                assert unavailable.status_code == 503
+                assert unavailable.json()["kind"] == "agent_unavailable"
+                demo = await http.post("/api/v1/agents/demo/sessions", json={})
+                assert demo.status_code == 201
+                release.set()
+                await wait_for_status(agents.kochwiki, RuntimeStatus.READY)
+                recovered = await http.post("/api/v1/agents/kochwiki/sessions", json={"input": {"context": {}}})
+                assert recovered.status_code == 201
+            assert agents.kochwiki.agent is original_agent
+            assert len(clients) == 2 and clients[0] is not clients[1]
+            with pytest.raises((RuntimeError, MCPError)):
+                await clients[0].list_tools()
+            connection, = agents.kochwiki.mcp_connections
+            assert connection.instructions == "Recovered guidance"
+            assert not (await connection.call_tool("hello_world", {})).is_error
+        finally:
+            await agents.close()
+        for client in clients:
+            with pytest.raises((RuntimeError, MCPError)):
+                await client.list_tools()
+
+    asyncio.run(exercise())
+
+
+def test_shutdown_cancels_discovery_inside_sdk_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def exercise() -> None:
+        entered = asyncio.Event()
+        settled = asyncio.Event()
+        server = MCPServer("Pending discovery")
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            return Client(server, read_timeout_seconds=read_timeout_seconds)
+
+        async def pending_list(self: Client, *, cursor: str | None = None) -> ListToolsResult:
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                settled.set()
+            raise AssertionError("unreachable")
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr(Client, "list_tools", pending_list)
+        agents = configure_agents(configured_settings())
+        await agents.start()
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+        finally:
+            await asyncio.wait_for(agents.close(), 2)
+        assert settled.is_set()
+        assert agents.kochwiki.status == RuntimeStatus.CLOSED
+        connection, = agents.kochwiki.mcp_connections
+        assert connection.tools == ()
 
     asyncio.run(exercise())
 
@@ -216,6 +319,7 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
             agents = configure_agents(configured_settings())
             await agents.start()
             try:
+                await wait_for_status(agents.kochwiki, RuntimeStatus.READY)
                 agent = agents.kochwiki.agent
                 assert agent is not None
                 created = agent.create(payload, owner="test:user")
@@ -308,7 +412,8 @@ def test_connection_failure_disables_only_owning_agent(
             connection, = agents.kochwiki.mcp_connections
             await agents.start()
             try:
-                assert agents.kochwiki.agent is None
+                await wait_for_status(agents.kochwiki, RuntimeStatus.UNAVAILABLE)
+                assert agents.kochwiki.agent is not None
                 assert agents.demo.agent is not None
                 assert isinstance(agents.demo.agent.create(None, owner="test:user"), SessionCreation)
                 assert connection.tools == ()
@@ -333,6 +438,7 @@ def test_application_lifespan_owns_connection_and_clears_agent_cache(monkeypatch
         get_configured_agents.cache_clear()
         async with AgentLifespan(FastAPI()):
             agents = get_configured_agents()
+            await wait_for_status(agents.kochwiki, RuntimeStatus.READY)
             assert agents.kochwiki.agent is not None
             connection, = agents.kochwiki.mcp_connections
             assert connection.instructions == "Guidance"
