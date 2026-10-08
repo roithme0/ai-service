@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ValidationError
 
 from app.agents.enums.configuration import AgentConfiguration
+from app.agents.enums.runtime import RuntimeStatus
 from app.agents.models.input import AgentInputRejected
 from app.agents.service import ConfiguredAgentService
 from app.agents.wiring import get_configured_agents
@@ -54,10 +55,13 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
     agent: ConfiguredAgentService[InputT, ContextT, PayloadT, IssueT]
     input_from_json: Callable[[object], InputT]
     issue_from_domain: Callable[[IssueT], InputIssue]
+    available: Callable[[], bool] = lambda: True
 
     def create(
         self, value: object, owner: str
     ) -> SessionCreationResponse | JSONResponse:
+        if not self.available():
+            return session_error_response("agent_unavailable")
         outcome = self.agent.create(self.input_from_json(value), owner)
         if isinstance(outcome, AgentInputRejected):
             return input_error_response(tuple(map(self.issue_from_domain, outcome.issues)))
@@ -81,6 +85,8 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
     def append(
         self, session_id: str, text: str, owner: str
     ) -> UserMessageResponse | JSONResponse:
+        if not self.available():
+            return session_error_response("agent_unavailable")
         if not self.agent.belongs_to(session_id, owner):
             return session_error_response("unknown")
         outcome = self.agent.append_user_message(session_id, text)
@@ -100,6 +106,8 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
         return session_error_response("unknown")
 
     def turn(self, session_id: str, owner: str) -> AcceptedTurnResponse | JSONResponse:
+        if not self.available():
+            return session_error_response("agent_unavailable")
         if not self.agent.belongs_to(session_id, owner):
             return session_error_response("unknown")
         outcome = self.agent.start_turn(session_id)
@@ -142,12 +150,14 @@ def get_agent_registry() -> dict[str, ConversationTransport | None]:
     kochwiki_agent = agents.kochwiki.agent
     demo_agent = agents.demo.agent
     kochwiki: ConversationTransport | None = (
-        AgentTransport(kochwiki_agent, lambda value: value, _context_issue)
+        AgentTransport(kochwiki_agent, lambda value: value, _context_issue,
+                       lambda: agents.kochwiki.status == RuntimeStatus.READY)
         if kochwiki_agent
         else None
     )
     demo: ConversationTransport | None = (
-        AgentTransport(demo_agent, lambda value: value, _demo_issue)
+        AgentTransport(demo_agent, lambda value: value, _demo_issue,
+                       lambda: agents.demo.status == RuntimeStatus.READY)
         if demo_agent
         else None
     )

@@ -68,15 +68,43 @@ connections and remains available independently.
 Each configured agent has an `AgentRuntime` that owns availability, MCP
 connections and its optional model client. `ConfiguredAgents` delegates startup
 and shutdown to those runtimes. Conversation services handle sessions and turns;
-they do not own external connections. A failed MCP startup disables the owning
-agent and closes its resources. Shutdown first cancels and settles backend-owned turns with append-only cleanup, then closes connections in reverse order before the model client, attempting every cleanup even if one fails.
+they do not own external connections. Runtime status is `created`, `connecting`,
+`ready`, `unavailable`, `closing`, or `closed`, with a separate issue describing
+the failure and whether it is retryable. All configured MCP connections are
+mandatory; session creation, message appends and new turns return the existing
+`503 agent_unavailable` until the runtime is ready. Existing session reads and
+SSE observation remain accessible with the same ownership checks. Startup does
+not wait for remote initialization, so a healthy
+MCP server can still have a brief initial unavailable window.
 
-Application startup initializes the connection and retrieves server instructions
-and all pages of tool definitions. The connection stays open until shutdown;
-discovery is performed once, so restart the AI Service after changing tool
-definitions or instructions. SDK requests use a 60-second read timeout.
-Initialization/discovery failures are logged and make only the Kochwiki agent
-unavailable. There is no automatic reconnect or catalogue refresh in this slice.
+The runtime owns a background repair task. Recognized transport and timeout
+failures retry after `INITIAL_RETRY_SECONDS` in `app/mcp/config.py` (30 seconds),
+measured after failed-attempt cleanup. Each attempt uses a fresh SDK client;
+healthy connections, the agent and model client are retained. Missing local
+configuration and unclassified initialization errors do not retry. Invalid initial
+catalogues are cleared and rechecked on the catalogue polling schedule. Shutdown
+settles backend-owned turns, then cancels pending attempts, polling or waits before
+closing connections in reverse order and then the model client.
+SDK contexts are entered and closed by their background owner task. Every cleanup
+is attempted even if another fails.
+
+Background initialization retrieves server instructions
+and all pages of tool definitions. The connection stays open until shutdown.
+The runtime polls server instructions and complete catalogues after `CATALOGUE_REFRESH_SECONDS` in
+`app/mcp/config.py` (five minutes), measured after initialization or the previous
+poll finishes. Polling bypasses the SDK response cache. Validated updates are
+published together atomically; active turns keep their captured tools, instructions and mappings, and
+subsequent turns use the updated catalogue. A successful empty catalogue is valid.
+Any discovery or validation failure clears the affected catalogue and instructions and makes its
+runtime unavailable. Polling continues and restores readiness once every required
+catalogue is valid. Other connections and the session store are retained.
+Instruction refresh requires modern MCP discovery (currently `2026-07-28`). It
+sends a fresh `server/discover` request instead of using cached SDK instructions.
+Absent instructions are valid and remove previous guidance. Legacy instruction
+refresh is unsupported and makes polling fail. The SDK uses a 60-second read
+timeout for tools and its own discovery timeout for server metadata.
+Reconnect after readiness remains deferred; a broken
+transport may consequently remain unavailable despite continued polling.
 
 Each agent can own multiple MCP connections. Their configured names must be
 unique within that agent. Every MCP tool is exposed to the model as

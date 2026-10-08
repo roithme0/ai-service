@@ -2,9 +2,12 @@ import asyncio
 import json
 
 import httpx2
+import httpx
 import pytest
 from mcp import Client
+from mcp.shared.exceptions import MCPError
 from mcp.client.streamable_http import streamable_http_client
+from mcp.client.session import ClientSession
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
@@ -14,13 +17,104 @@ from openai.types.shared import ReasoningEffort
 from fastapi import FastAPI
 
 from app.agents.wiring import configure_agents, get_configured_agents
+from app.agents.runtime import AgentRuntime
+from mcp.client.caching import CacheMode
+from app.agents.enums.runtime import RuntimeStatus
 from app.core.config import Settings
-from app.main import AgentLifespan
-from app.mcp.connection import MCPConnection
+from app.main import AgentLifespan, app as service_app
+from app.mcp.connection import MCPConnection, MCPConnectionConfig
 from app.agents.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.models.session import SessionCreation
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from test_model_session_http import valid_request
+from runtime_wait import wait_for_status
+
+
+@pytest.mark.parametrize("instructions", ["Changed guidance", None])
+def test_polling_refreshes_or_removes_server_instructions(
+    monkeypatch: pytest.MonkeyPatch, instructions: str | None,
+) -> None:
+    async def exercise() -> None:
+        server = MCPServer("Instructions", instructions="Original guidance")
+
+        @server.tool()
+        def hello() -> str:
+            return "hello"
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            return Client(server, read_timeout_seconds=read_timeout_seconds)
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
+        runtime = AgentRuntime(
+            "test", object(), mcp_servers=(MCPConnectionConfig("server", "http://localhost/mcp/"),),
+        )
+        connection, = runtime.mcp_connections
+        await runtime.start()
+        try:
+            await wait_for_status(runtime, RuntimeStatus.READY)
+            server._lowlevel_server.instructions = instructions
+            async with asyncio.timeout(2):
+                while connection.instructions != instructions:
+                    await asyncio.sleep(0)
+            assert runtime.status == RuntimeStatus.READY
+            assert [tool.name for tool in connection.tools] == ["hello"]
+            assert "Original guidance" not in runtime.mcp_tools.instructions
+            if instructions is not None:
+                assert instructions in runtime.mcp_tools.instructions
+        finally:
+            await runtime.close()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("failure", ["timeout", "malformed", "version"])
+def test_instruction_discovery_failure_clears_both_and_recovers(
+    monkeypatch: pytest.MonkeyPatch, failure: str,
+) -> None:
+    async def exercise() -> None:
+        server = MCPServer("Instructions", instructions="Original guidance")
+
+        @server.tool()
+        def hello() -> str:
+            return "hello"
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            return Client(server, read_timeout_seconds=read_timeout_seconds)
+
+        original_discover = ClientSession.send_discover
+
+        async def failed_discover(self: ClientSession, version: str) -> dict[str, object]:
+            if failure == "timeout":
+                raise TimeoutError("metadata unavailable")
+            result = await original_discover(self, version)
+            if failure == "malformed":
+                result["instructions"] = {"invalid": "guidance"}
+            else:
+                result["supportedVersions"] = ["2099-01-01"]
+            return result
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
+        runtime = AgentRuntime(
+            "test", object(), mcp_servers=(MCPConnectionConfig("server", "http://localhost/mcp/"),),
+        )
+        connection, = runtime.mcp_connections
+        await runtime.start()
+        try:
+            await wait_for_status(runtime, RuntimeStatus.READY)
+            monkeypatch.setattr(ClientSession, "send_discover", failed_discover)
+            await wait_for_status(runtime, RuntimeStatus.UNAVAILABLE)
+            assert connection.tools == () and connection.instructions is None
+            monkeypatch.setattr(ClientSession, "send_discover", original_discover)
+            server._lowlevel_server.instructions = "Recovered guidance"
+            await wait_for_status(runtime, RuntimeStatus.READY)
+            assert connection.instructions == "Recovered guidance"
+            assert [tool.name for tool in connection.tools] == ["hello"]
+        finally:
+            await runtime.close()
+
+    asyncio.run(exercise())
 
 
 def configured_settings() -> Settings:
@@ -80,6 +174,7 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
             assert connection.tools == ()
             await agents.start()
             try:
+                await wait_for_status(agents.kochwiki, RuntimeStatus.READY)
                 assert agents.kochwiki.agent is not None
                 assert connection.instructions == "Server-owned domain guidance"
                 assert [tool.name for tool in connection.tools] == ["hello_world"]
@@ -134,6 +229,108 @@ def test_http_discovery_agent_isolation_invocation_and_shutdown(
             with pytest.raises(RuntimeError, match="not started"):
                 await connection.call_tool("hello_world", {})
             await connection.close()
+
+    asyncio.run(exercise())
+
+
+def test_background_recovery_uses_fresh_sdk_clients_and_http_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def exercise() -> None:
+        clients: list[Client] = []
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        original_list = Client.list_tools
+        attempts = 0
+        server = MCPServer("Recover", instructions="Recovered guidance")
+
+        @server.tool()
+        def hello_world() -> str:
+            return "hello"
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            client = Client(server, read_timeout_seconds=read_timeout_seconds)
+            clients.append(client)
+            return client
+
+        async def initial_failure(
+            self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+        ) -> ListToolsResult:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                entered.set()
+                await release.wait()
+                raise ConnectionError("server not ready")
+            return await original_list(self, cursor=cursor, cache_mode=cache_mode)
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr(Client, "list_tools", initial_failure)
+        monkeypatch.setattr("app.mcp.config.INITIAL_RETRY_SECONDS", 0.01)
+        agents = configure_agents(configured_settings())
+        original_agent = agents.kochwiki.agent
+        monkeypatch.setattr("app.agents.http.get_configured_agents", lambda: agents)
+        await agents.start()
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=service_app), base_url="http://service",
+                headers={"X-Application-User": "test:user"},
+            ) as http:
+                unavailable = await http.post("/api/v1/agents/kochwiki/sessions", json={"input": {"context": {}}})
+                assert unavailable.status_code == 503
+                assert unavailable.json()["kind"] == "agent_unavailable"
+                demo = await http.post("/api/v1/agents/demo/sessions", json={})
+                assert demo.status_code == 201
+                release.set()
+                await wait_for_status(agents.kochwiki, RuntimeStatus.READY)
+                recovered = await http.post("/api/v1/agents/kochwiki/sessions", json={"input": {"context": {}}})
+                assert recovered.status_code == 201
+            assert agents.kochwiki.agent is original_agent
+            assert len(clients) == 2 and clients[0] is not clients[1]
+            with pytest.raises((RuntimeError, MCPError)):
+                await clients[0].list_tools()
+            connection, = agents.kochwiki.mcp_connections
+            assert connection.instructions == "Recovered guidance"
+            assert not (await connection.call_tool("hello_world", {})).is_error
+        finally:
+            await agents.close()
+        for client in clients:
+            with pytest.raises((RuntimeError, MCPError)):
+                await client.list_tools()
+
+    asyncio.run(exercise())
+
+
+def test_shutdown_cancels_discovery_inside_sdk_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def exercise() -> None:
+        entered = asyncio.Event()
+        settled = asyncio.Event()
+        server = MCPServer("Pending discovery")
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            return Client(server, read_timeout_seconds=read_timeout_seconds)
+
+        async def pending_list(
+            self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+        ) -> ListToolsResult:
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                settled.set()
+            raise AssertionError("unreachable")
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr(Client, "list_tools", pending_list)
+        agents = configure_agents(configured_settings())
+        await agents.start()
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+        finally:
+            await asyncio.wait_for(agents.close(), 2)
+        assert settled.is_set()
+        assert agents.kochwiki.status == RuntimeStatus.CLOSED
+        connection, = agents.kochwiki.mcp_connections
+        assert connection.tools == ()
 
     asyncio.run(exercise())
 
@@ -216,6 +413,7 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
             agents = configure_agents(configured_settings())
             await agents.start()
             try:
+                await wait_for_status(agents.kochwiki, RuntimeStatus.READY)
                 agent = agents.kochwiki.agent
                 assert agent is not None
                 created = agent.create(payload, owner="test:user")
@@ -254,7 +452,10 @@ def test_configured_agent_creates_and_saves_mcp_proposal_across_turns(
 def test_discovery_consumes_all_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     cursors: list[str | None] = []
 
-    async def list_tools(self: Client, *, cursor: str | None = None) -> ListToolsResult:
+    async def list_tools(
+        self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+    ) -> ListToolsResult:
+        assert cache_mode == "bypass"
         cursors.append(cursor)
         name = "first" if cursor is None else "second"
         return ListToolsResult(
@@ -281,6 +482,159 @@ def test_discovery_consumes_all_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize("fail_later_page", [False, True])
+def test_refresh_bypasses_cache_and_never_publishes_partial_pages(
+    monkeypatch: pytest.MonkeyPatch, fail_later_page: bool,
+) -> None:
+    async def exercise() -> None:
+        server = MCPServer("Refresh", instructions="Original instructions")
+        pages: list[tuple[str | None, CacheMode]] = []
+        entered = asyncio.Event()
+        release = asyncio.Event()
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            return Client(server, read_timeout_seconds=read_timeout_seconds)
+
+        async def list_tools(
+            self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+        ) -> ListToolsResult:
+            pages.append((cursor, cache_mode))
+            assert cache_mode == "bypass"
+            if len(pages) == 1:
+                return ListToolsResult(tools=[Tool(name="old", input_schema={"type": "object"})])
+            if cursor is not None:
+                entered.set()
+                await release.wait()
+                if fail_later_page:
+                    raise TimeoutError("page failed")
+            return ListToolsResult(
+                tools=[Tool(name="first" if cursor is None else "second", input_schema={"type": "object"})],
+                next_cursor="page-two" if cursor is None else None,
+            )
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr(Client, "list_tools", list_tools)
+        connection = MCPConnection("server", "http://localhost/mcp/")
+        await connection.start()
+        server._lowlevel_server.instructions = "Updated instructions"
+        discovery = asyncio.create_task(connection.discover())
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+            assert [tool.name for tool in connection.tools] == ["old"]
+            release.set()
+            if fail_later_page:
+                with pytest.raises(TimeoutError):
+                    await discovery
+            else:
+                candidate = await discovery
+                assert [tool.name for tool in candidate.tools] == ["first", "second"]
+                assert candidate.instructions == "Updated instructions"
+            assert [tool.name for tool in connection.tools] == ["old"]
+            assert connection.instructions == "Original instructions"
+            assert pages == [(None, "bypass"), (None, "bypass"), ("page-two", "bypass")]
+        finally:
+            release.set()
+            await connection.close()
+
+    asyncio.run(exercise())
+
+
+def test_shutdown_interrupts_refresh_inside_sdk_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def exercise() -> None:
+        server = MCPServer("Polling shutdown")
+        entered = asyncio.Event()
+        settled = asyncio.Event()
+        clients: list[Client] = []
+        original_list = Client.list_tools
+        attempts = 0
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            client = Client(server, read_timeout_seconds=read_timeout_seconds)
+            clients.append(client)
+            return client
+
+        async def list_tools(
+            self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+        ) -> ListToolsResult:
+            nonlocal attempts
+            attempts += 1
+            assert cache_mode == "bypass"
+            if attempts == 1:
+                return await original_list(self, cursor=cursor, cache_mode=cache_mode)
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                settled.set()
+            raise AssertionError("unreachable")
+
+        monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr(Client, "list_tools", list_tools)
+        runtime = AgentRuntime("test", object(), mcp_servers=(MCPConnectionConfig("server", "http://localhost/mcp/"),))
+        await runtime.start()
+        try:
+            await asyncio.wait_for(entered.wait(), 2)
+        finally:
+            await asyncio.wait_for(runtime.close(), 2)
+        assert settled.is_set() and runtime.status == RuntimeStatus.CLOSED
+        with pytest.raises((RuntimeError, MCPError)):
+            await original_list(clients[0])
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("during_start", [False, True])
+def test_discovery_rejects_repeated_cursors_without_publishing(
+    monkeypatch: pytest.MonkeyPatch, during_start: bool,
+) -> None:
+    async def exercise() -> None:
+        server = MCPServer("Repeated cursor")
+        clients: list[Client] = []
+        original_list = Client.list_tools
+        cursors: list[str | None] = []
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            client = Client(server, read_timeout_seconds=read_timeout_seconds)
+            clients.append(client)
+            return client
+
+        async def repeated_page(
+            self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+        ) -> ListToolsResult:
+            assert cache_mode == "bypass"
+            cursors.append(cursor)
+            return ListToolsResult(tools=[Tool(name="partial", input_schema={"type": "object"})],
+                                   next_cursor="same-page")
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        connection = MCPConnection("server", "http://localhost/mcp/")
+        if not during_start:
+            await connection.start()
+        monkeypatch.setattr(Client, "list_tools", repeated_page)
+        try:
+            if during_start:
+                with pytest.RaisesGroup(
+                    pytest.RaisesExc(ValueError, match="Repeated MCP catalogue cursor"), flatten_subgroups=True,
+                ):
+                    await connection.start()
+            else:
+                with pytest.raises(ValueError, match="Repeated MCP catalogue cursor"):
+                    await connection.discover()
+            assert cursors == [None, "same-page"]
+            assert connection.tools == ()
+            if during_start:
+                assert connection.instructions is None
+                with pytest.raises(RuntimeError, match="not started"):
+                    await connection.call_tool("partial", {})
+                with pytest.raises((RuntimeError, MCPError)):
+                    await original_list(clients[0])
+        finally:
+            await connection.close()
+
+    asyncio.run(exercise())
+
+
 @pytest.mark.parametrize("fail_discovery", [False, True])
 def test_connection_failure_disables_only_owning_agent(
     monkeypatch: pytest.MonkeyPatch, fail_discovery: bool,
@@ -297,7 +651,9 @@ def test_connection_failure_disables_only_owning_agent(
                     read_timeout_seconds=read_timeout_seconds,
                 )
 
-            async def broken_list(self: Client, *, cursor: str | None = None) -> ListToolsResult:
+            async def broken_list(
+                self: Client, *, cursor: str | None = None, cache_mode: CacheMode = "use",
+            ) -> ListToolsResult:
                 raise RuntimeError("discovery failure")
 
             monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
@@ -308,7 +664,8 @@ def test_connection_failure_disables_only_owning_agent(
             connection, = agents.kochwiki.mcp_connections
             await agents.start()
             try:
-                assert agents.kochwiki.agent is None
+                await wait_for_status(agents.kochwiki, RuntimeStatus.UNAVAILABLE)
+                assert agents.kochwiki.agent is not None
                 assert agents.demo.agent is not None
                 assert isinstance(agents.demo.agent.create(None, owner="test:user"), SessionCreation)
                 assert connection.tools == ()
@@ -333,6 +690,7 @@ def test_application_lifespan_owns_connection_and_clears_agent_cache(monkeypatch
         get_configured_agents.cache_clear()
         async with AgentLifespan(FastAPI()):
             agents = get_configured_agents()
+            await wait_for_status(agents.kochwiki, RuntimeStatus.READY)
             assert agents.kochwiki.agent is not None
             connection, = agents.kochwiki.mcp_connections
             assert connection.instructions == "Guidance"
