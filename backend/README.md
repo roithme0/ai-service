@@ -90,17 +90,20 @@ is attempted even if another fails.
 
 Background initialization retrieves server instructions
 and all pages of tool definitions. The connection stays open until shutdown.
-The runtime polls complete catalogues after `CATALOGUE_REFRESH_SECONDS` in
+The runtime polls server instructions and complete catalogues after `CATALOGUE_REFRESH_SECONDS` in
 `app/mcp/config.py` (five minutes), measured after initialization or the previous
 poll finishes. Polling bypasses the SDK response cache. Validated updates are
-published atomically; active turns keep their captured tools and mappings, and
+published together atomically; active turns keep their captured tools, instructions and mappings, and
 subsequent turns use the updated catalogue. A successful empty catalogue is valid.
-Any discovery or validation failure clears the affected catalogue and makes its
+Any discovery or validation failure clears the affected catalogue and instructions and makes its
 runtime unavailable. Polling continues and restores readiness once every required
 catalogue is valid. Other connections and the session store are retained.
-SDK requests use a 60-second read timeout. Refresh does not update negotiated
-server instructions; instruction changes still require a restart until instruction
-refresh is implemented. Reconnect after readiness remains deferred; a broken
+Instruction refresh requires modern MCP discovery (currently `2026-07-28`). It
+sends a fresh `server/discover` request instead of using cached SDK instructions.
+Absent instructions are valid and remove previous guidance. Legacy instruction
+refresh is unsupported and makes polling fail. The SDK uses a 60-second read
+timeout for tools and its own discovery timeout for server metadata.
+Reconnect after readiness remains deferred; a broken
 transport may consequently remain unavailable despite continued polling.
 
 Each agent can own multiple MCP connections. Their configured names must be

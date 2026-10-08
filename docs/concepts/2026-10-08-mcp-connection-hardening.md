@@ -2,7 +2,7 @@
 
 ## Status
 
-Evolving concept as of 2026-10-08. Slice 1, runtime-owned initial connection recovery, and slice 2, automatic catalogue refresh, are implemented. Reconnection after an established connection fails remains conditional on a small, safe extension of the same lifecycle. Automatic server-instruction refresh must be discussed in a subsequent slice.
+Evolving concept as of 2026-10-08. Slice 1, runtime-owned initial connection recovery, and slice 2, automatic catalogue refresh, are implemented. Reconnection after an established connection fails remains conditional on a small, safe extension of the same lifecycle. Slice 3, automatic server-instruction refresh alongside tools for modern MCP servers, is implemented.
 
 Scheduled catalogue polling every five minutes is agreed for the first version. Server notifications are deferred. A fixed 30-second startup retry delay and consolidated runtime status are agreed and delivered.
 
@@ -10,7 +10,7 @@ Scheduled catalogue polling every five minutes is agreed for the first version. 
 
 `backend/app/agents/wiring.py` constructs agent-owned MCP connections from server configuration. FastAPI startup starts each `AgentRuntime`; `MCPConnection.start()` enters the SDK client, fetches all tool pages and retains server instructions. `MCPToolset` validates and maps tool names to model functions. Connections are shared across conversations, and the tool loop builds its registry and instructions once per turn.
 
-The runtime retries recognized startup transport failures while retaining its agent and model client. After successful connection it polls tool catalogues every five minutes, including while unavailable after a catalogue failure. Tool-call exceptions become generic failures, without application-managed reconnection. Negotiated instruction changes still require a restart. The demo has no MCP dependency and remains independent.
+The runtime retries recognized startup transport failures while retaining its agent and model client. After successful connection it polls tool catalogues every five minutes, including while unavailable after a catalogue failure. Tool-call exceptions become generic failures, without application-managed reconnection. Polling also retrieves fresh server instructions through modern discovery and publishes them with tools. The demo has no MCP dependency and remains independent.
 
 ## Goal
 
@@ -38,7 +38,7 @@ Build a complete candidate catalogue before publishing it. Validate model-facing
 
 Each turn must capture one consistent snapshot of tools, mappings and instructions. A catalogue published during an active turn applies to subsequent turns, including those in existing sessions. Do not change the registry halfway through a model/tool loop. Concurrent sessions can therefore use different catalogue generations temporarily. A removed or changed server tool may still reject a call from an older turn; snapshotting cannot preserve the server's previous implementation.
 
-Slice 2 refreshes tool definitions and generated tool-name mappings only. The current adapter obtains server instructions from connection negotiation; polling `tools/list` does not refresh those instructions. Discuss automatic instruction refresh explicitly in a subsequent slice, including its coordination with catalogue updates: server instructions may change alongside tools. Reconnection retrieves current instructions, but the ongoing instruction-refresh mechanism has not yet been chosen.
+Slice 2 originally refreshed tool definitions and generated mappings only. Slice 3 extends each polling pass to fetch fresh server instructions through modern `server/discover` before listing all tool pages. Publish instructions and tools together only after complete validation. Any failure clears both for the affected connection. Assume modern servers; legacy initialization-based instruction refresh is outside this delivery.
 
 ### Scheduled or Triggered?
 
@@ -82,9 +82,10 @@ Use this concept as the evolving direction. Discuss one slice's observable behav
 
 1. **Delivered: initial startup recovery:** background connection attempts, explicit readiness and reliable shutdown. Establish the lifecycle needed by later slices without changing established connections.
 2. **Delivered: scheduled catalogue refresh:** five-minute polling, complete validated updates and consistent turn snapshots. Clear catalogues after any refresh failure, mark the runtime unavailable and allow recovery through later valid discovery. Preserve history reads while blocking session creation, message appends and new turns. Bypass SDK caching explicitly.
-3. **Conditional reconnect:** assess error classification and concurrent-call coordination using the delivered lifecycle. Implement only if the change remains narrow; otherwise record why it is deferred. Never replay a failed tool call automatically.
+3. **Delivered: server-instruction refresh:** modern discovery on the same connection, combined publication and clearing of tools and instructions.
+4. **Conditional reconnect:** assess error classification and concurrent-call coordination using the delivered lifecycle. Implement only if the change remains narrow; otherwise record why it is deferred. Never replay a failed tool call automatically.
 
-Automatic server-instruction refresh must be discussed in a subsequent slice, alongside or separately from reconnect, because instructions can change together with tools.
+Server-instruction refresh is delivered separately from reconnect; modern discovery avoids replacing established connections.
 
 ### Slice 1: Initial Startup Recovery
 
@@ -114,17 +115,31 @@ Regression coverage exercises background startup, HTTP 503-to-ready recovery, in
 
 **Status:** agreed and implemented.
 
-The runtime schedules full catalogue polling every five minutes on established connections, measured after initialization or the previous polling pass completes. Attempts do not overlap. `MCPConnection.discover_tools()` returns a complete candidate without publishing it and uses `cache_mode="bypass"` on every page. `MCPToolset` retains its identity and reads the current published connection catalogues when assembling a turn. Validate complete candidates before publishing them; never expose intermediate pages.
+The runtime schedules full catalogue polling every five minutes on established connections, measured after initialization or the previous polling pass completes. Attempts do not overlap. `MCPConnection.discover()` returns a complete candidate without publishing it; its private `_discover_tools(client)` helper uses `cache_mode="bypass"` on every page and is shared with startup. `MCPToolset` retains its identity and reads the current published connection catalogues when assembling a turn. Validate complete candidates before publishing them; never expose intermediate pages.
 
 Anything other than complete successful discovery and validation clears the affected connection's published tools and makes the entire runtime unavailable because every configured connection is mandatory. Keep unrelated healthy connection catalogues and transports. Continue polling, including after initial catalogue validation failure, and restore readiness only when every required catalogue is valid. Initial aggregate validation failure clears the initial catalogues and requires polling validation before readiness. An empty successful catalogue remains valid; readiness tracks validation success separately from tool count.
 
 While unavailable, allow existing session history reads and SSE observation. Block new sessions, message appends and new turn starts. Already-running turns retain their captured definitions and may finish; clearing published tools does not rewrite their snapshots or replay failed calls. Server-side changes can still make their calls fail.
 
-Server instructions remain those obtained at connection negotiation for this slice. Generated mappings follow each published tool catalogue. Automatic server-instruction refresh is explicitly required for discussion in a later slice.
+Slice 2 initially retained connection-negotiated instructions. Slice 3 below extends refresh to include server instructions. Generated mappings continue to follow each published tool catalogue.
 
 Regression coverage should establish complete paginated publication, invalid-catalogue clearing and loss of readiness, recovery after a corrected catalogue, valid empty catalogues, initial validation recovery, consistent active-turn snapshots, retained session reads and observation, blocked writes and turn admission, and shutdown during polling.
 
 Delivered regression coverage exercises those boundaries with controlled polling intervals and real SDK contexts. Shutdown settles active turns before cancelling pending discovery and closing SDK contexts in their owning task. No new public response fields or frontend recovery controls are introduced.
+
+### Slice 3: Server Instructions Alongside Tools
+
+**Status:** agreed and implemented.
+
+Assume modern MCP servers for this delivery. The running configured KochWiki endpoint was verified to negotiate `2026-07-28` and return instructions through a fresh `server/discover` on its existing connection. Legacy instruction refresh and connection replacement are out of scope.
+
+Keep the existing five-minute schedule and runtime ownership. `MCPConnection.discover()` returns a typed candidate containing complete tools and optional instructions without publishing either. Send a fresh discovery request at the connected protocol version through the SDK's `send_discover()` method; `discover()` and `client.instructions` retain cached negotiation results and cannot provide freshness. Validate the discovery result and require continued support for the connected version. Do not adopt new negotiation state or change capabilities and protocol version underneath active calls.
+
+Fetch metadata first, then all uncached tool pages, and validate model-facing names before publishing both fields together without an intervening await. Missing or empty instructions are valid and remove previous guidance. A timeout, malformed metadata, incompatible version, pagination failure or invalid catalogue clears both published tools and instructions for the affected connection and makes the runtime unavailable. Initial aggregate catalogue validation failure also clears both. Continue polling for recovery while retaining healthy connections and session history.
+
+Active turns retain their captured instructions, definitions and mappings; subsequent turns in existing sessions receive the new combined update. Publication is atomic locally, but the protocol does not provide a common revision across metadata and paginated tools. A server changing during discovery can therefore produce a mixed server revision despite complete successful responses. No stronger server snapshot guarantee is claimed.
+
+Legacy connections cannot perform this refresh and fail it explicitly; no fallback retaining stale instructions is provided. Reconnection remains deferred. Regression coverage exercises updated and removed instructions, malformed metadata and timeout clearing, incompatible protocol versions, later-page failure without partial publication, recovery, active-turn snapshots and shutdown under the existing owner task.
 
 ## Risks and Validation
 
@@ -134,5 +149,4 @@ Meaningful regression coverage should establish late-server recovery, independen
 
 ## Open Questions
 
-- Discuss and choose automatic server-instruction refresh in a subsequent slice, accounting for instructions changing alongside tools.
 - Verify SDK exception classification and task ownership before deciding whether reconnect meets the user's simplicity condition.

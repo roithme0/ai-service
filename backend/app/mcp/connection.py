@@ -1,9 +1,16 @@
 """Agent-owned MCP transport and startup discovery."""
 
 from contextlib import AsyncExitStack
+from dataclasses import dataclass
 
 from mcp import Client
-from mcp.types import CallToolResult, Tool
+from mcp.types import CallToolResult, DiscoverResult, Tool
+
+
+@dataclass(frozen=True)
+class MCPDiscovery:
+    tools: tuple[Tool, ...]
+    instructions: str | None
 
 
 class MCPConnection:
@@ -31,10 +38,18 @@ class MCPConnection:
             raise RuntimeError("MCP connection is not started")
         return await self._client.call_tool(name, arguments)
 
-    async def discover_tools(self) -> tuple[Tool, ...]:
+    async def discover(self) -> MCPDiscovery:
         if self._client is None:
             raise RuntimeError("MCP connection is not started")
-        return await self._discover_tools(self._client)
+        session = self._client.session
+        version = session.protocol_version
+        if session.discover_result is None or version is None:
+            raise RuntimeError("MCP instruction refresh requires a modern server")
+        result = DiscoverResult.model_validate(await session.send_discover(version))
+        if version not in result.supported_versions:
+            raise ValueError("MCP server no longer supports the connected protocol version")
+        tools = await self._discover_tools(self._client)
+        return MCPDiscovery(tools, result.instructions)
 
     async def _discover_tools(self, client: Client) -> tuple[Tool, ...]:
         tools: list[Tool] = []

@@ -13,7 +13,7 @@ from app.agents.tool_turns import run_tool_turn
 from app.agents.wiring import ConfiguredAgents
 from app.demo.agent import create_demo_agent
 from app.main import app
-from app.mcp.connection import MCPConnection
+from app.mcp.connection import MCPConnection, MCPDiscovery
 from runtime_wait import wait_for_status
 from test_model_session_http import FakeGenerator
 from tool_turn_recorder import ToolTurnRecorder
@@ -38,13 +38,13 @@ class PollingConnection(MCPConnection):
     async def start(self) -> None:
         self.starts += 1
 
-    async def discover_tools(self) -> tuple[Tool, ...]:
+    async def discover(self) -> MCPDiscovery:
         self.polling.set()
         try:
             update = await self.updates.get()
             if isinstance(update, Exception):
                 raise update
-            return update
+            return MCPDiscovery(update, "Refreshed guidance")
         finally:
             self.settled.set()
 
@@ -73,6 +73,7 @@ def test_failed_refresh_clears_catalogue_and_recovers(
             connection.updates.put_nowait(failure)
             await wait_for_status(runtime, RuntimeStatus.UNAVAILABLE)
             assert connection.tools == ()
+            assert connection.instructions is None
             assert runtime.issue is not None and runtime.issue.connection == "server"
             assert source.registered_tools() == ()
             connection.updates.put_nowait(())
@@ -85,7 +86,7 @@ def test_failed_refresh_clears_catalogue_and_recovers(
                     await asyncio.sleep(0)
             assert [item.name for item in source.registered_tools()] == ["server__new"]
             assert "new -> server__new" in source.instructions
-            assert connection.instructions == "Negotiated guidance"
+            assert connection.instructions == "Refreshed guidance"
         finally:
             await asyncio.wait_for(runtime.close(), 2)
         assert connection.closed and connection.settled.is_set()
@@ -102,6 +103,7 @@ def test_invalid_initial_catalogue_recovers_by_polling(monkeypatch: pytest.Monke
         try:
             await wait_for_status(runtime, RuntimeStatus.UNAVAILABLE)
             assert connection.tools == ()
+            assert connection.instructions is None
             connection.updates.put_nowait((tool("fixed"),))
             await wait_for_status(runtime, RuntimeStatus.READY)
             assert connection.starts == 1
@@ -182,6 +184,8 @@ def test_active_turn_keeps_snapshot_across_refresh(monkeypatch: pytest.MonkeyPat
             assert requests[0].tools == requests[1].tools
             assert requests[0].instructions == requests[1].instructions
             assert requests[0].tools[0]["name"] == "server__old"
+            assert "Negotiated guidance" in requests[1].instructions
+            assert "Refreshed guidance" not in requests[1].instructions
             if refresh_fails:
                 connection.updates.put_nowait((tool("new"),))
                 await wait_for_status(runtime, RuntimeStatus.READY)
@@ -194,6 +198,8 @@ def test_active_turn_keeps_snapshot_across_refresh(monkeypatch: pytest.MonkeyPat
             )
             assert requests[2].tools[0]["name"] == "server__new"
             assert "new -> server__new" in requests[2].instructions
+            assert "Refreshed guidance" in requests[2].instructions
+            assert "Negotiated guidance" not in requests[2].instructions
         finally:
             release.set()
             await turn

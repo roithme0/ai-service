@@ -138,6 +138,7 @@ class AgentRuntime(Generic[AgentT]):
         except Exception as error:
             for connection in self.mcp_connections:
                 connection.tools = ()
+                connection.instructions = None
             self.issue = RuntimeIssue("catalogue", retryable=True)
             self.status = RuntimeStatus.UNAVAILABLE
             logger.warning("Agent %s unavailable: invalid initial MCP catalogue (%s)",
@@ -166,16 +167,18 @@ class AgentRuntime(Generic[AgentT]):
                 return
             for connection in self.mcp_connections:
                 try:
-                    candidate = await connection.discover_tools()
-                    self.mcp_tools.validate({connection: candidate})
+                    candidate = await connection.discover()
+                    self.mcp_tools.validate({connection: candidate.tools})
                 except Exception as error:
                     connection.tools = ()
+                    connection.instructions = None
                     valid.discard(connection)
                     issues[connection] = RuntimeIssue("catalogue", connection.name, True)
                     logger.warning("Agent %s unavailable: MCP catalogue refresh failed (%s/%s)",
                                    self.name, connection.name, type(error).__name__)
                 else:
-                    connection.tools = candidate
+                    connection.tools = candidate.tools
+                    connection.instructions = candidate.instructions
                     valid.add(connection)
                     issues.pop(connection, None)
                 if self.status in (RuntimeStatus.CLOSING, RuntimeStatus.CLOSED):

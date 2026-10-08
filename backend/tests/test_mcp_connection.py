@@ -7,6 +7,7 @@ import pytest
 from mcp import Client
 from mcp.shared.exceptions import MCPError
 from mcp.client.streamable_http import streamable_http_client
+from mcp.client.session import ClientSession
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
@@ -27,6 +28,89 @@ from app.sessions.models.session import SessionCreation
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 from test_model_session_http import valid_request
 from runtime_wait import wait_for_status
+
+
+@pytest.mark.parametrize("instructions", ["Changed guidance", None])
+def test_polling_refreshes_or_removes_server_instructions(
+    monkeypatch: pytest.MonkeyPatch, instructions: str | None,
+) -> None:
+    async def exercise() -> None:
+        server = MCPServer("Instructions", instructions="Original guidance")
+
+        @server.tool()
+        def hello() -> str:
+            return "hello"
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            return Client(server, read_timeout_seconds=read_timeout_seconds)
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
+        connection = MCPConnection("server", "http://localhost/mcp/")
+        runtime = AgentRuntime("test", object(), mcp_connections=(connection,))
+        await runtime.start()
+        try:
+            await wait_for_status(runtime, RuntimeStatus.READY)
+            server._lowlevel_server.instructions = instructions
+            async with asyncio.timeout(2):
+                while connection.instructions != instructions:
+                    await asyncio.sleep(0)
+            assert runtime.status == RuntimeStatus.READY
+            assert [tool.name for tool in connection.tools] == ["hello"]
+            assert "Original guidance" not in runtime.mcp_tools.instructions
+            if instructions is not None:
+                assert instructions in runtime.mcp_tools.instructions
+        finally:
+            await runtime.close()
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("failure", ["timeout", "malformed", "version"])
+def test_instruction_discovery_failure_clears_both_and_recovers(
+    monkeypatch: pytest.MonkeyPatch, failure: str,
+) -> None:
+    async def exercise() -> None:
+        server = MCPServer("Instructions", instructions="Original guidance")
+
+        @server.tool()
+        def hello() -> str:
+            return "hello"
+
+        def client_for_url(_url: str, *, read_timeout_seconds: float) -> Client:
+            return Client(server, read_timeout_seconds=read_timeout_seconds)
+
+        original_discover = ClientSession.send_discover
+
+        async def failed_discover(self: ClientSession, version: str) -> dict[str, object]:
+            if failure == "timeout":
+                raise TimeoutError("metadata unavailable")
+            result = await original_discover(self, version)
+            if failure == "malformed":
+                result["instructions"] = {"invalid": "guidance"}
+            else:
+                result["supportedVersions"] = ["2099-01-01"]
+            return result
+
+        monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
+        monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
+        connection = MCPConnection("server", "http://localhost/mcp/")
+        runtime = AgentRuntime("test", object(), mcp_connections=(connection,))
+        await runtime.start()
+        try:
+            await wait_for_status(runtime, RuntimeStatus.READY)
+            monkeypatch.setattr(ClientSession, "send_discover", failed_discover)
+            await wait_for_status(runtime, RuntimeStatus.UNAVAILABLE)
+            assert connection.tools == () and connection.instructions is None
+            monkeypatch.setattr(ClientSession, "send_discover", original_discover)
+            server._lowlevel_server.instructions = "Recovered guidance"
+            await wait_for_status(runtime, RuntimeStatus.READY)
+            assert connection.instructions == "Recovered guidance"
+            assert [tool.name for tool in connection.tools] == ["hello"]
+        finally:
+            await runtime.close()
+
+    asyncio.run(exercise())
 
 
 def configured_settings() -> Settings:
@@ -399,7 +483,7 @@ def test_refresh_bypasses_cache_and_never_publishes_partial_pages(
     monkeypatch: pytest.MonkeyPatch, fail_later_page: bool,
 ) -> None:
     async def exercise() -> None:
-        server = MCPServer("Refresh")
+        server = MCPServer("Refresh", instructions="Original instructions")
         pages: list[tuple[str | None, CacheMode]] = []
         entered = asyncio.Event()
         release = asyncio.Event()
@@ -428,7 +512,8 @@ def test_refresh_bypasses_cache_and_never_publishes_partial_pages(
         monkeypatch.setattr(Client, "list_tools", list_tools)
         connection = MCPConnection("server", "http://localhost/mcp/")
         await connection.start()
-        discovery = asyncio.create_task(connection.discover_tools())
+        server._lowlevel_server.instructions = "Updated instructions"
+        discovery = asyncio.create_task(connection.discover())
         try:
             await asyncio.wait_for(entered.wait(), 2)
             assert [tool.name for tool in connection.tools] == ["old"]
@@ -437,8 +522,11 @@ def test_refresh_bypasses_cache_and_never_publishes_partial_pages(
                 with pytest.raises(TimeoutError):
                     await discovery
             else:
-                assert [tool.name for tool in await discovery] == ["first", "second"]
+                candidate = await discovery
+                assert [tool.name for tool in candidate.tools] == ["first", "second"]
+                assert candidate.instructions == "Updated instructions"
             assert [tool.name for tool in connection.tools] == ["old"]
+            assert connection.instructions == "Original instructions"
             assert pages == [(None, "bypass"), (None, "bypass"), ("page-two", "bypass")]
         finally:
             release.set()
@@ -528,7 +616,7 @@ def test_discovery_rejects_repeated_cursors_without_publishing(
                     await connection.start()
             else:
                 with pytest.raises(ValueError, match="Repeated MCP catalogue cursor"):
-                    await connection.discover_tools()
+                    await connection.discover()
             assert cursors == [None, "same-page"]
             assert connection.tools == ()
             if during_start:
