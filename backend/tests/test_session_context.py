@@ -4,7 +4,8 @@ import pytest
 
 from app.agents.models.input import AgentInputAccepted, AgentInputRejected
 from app.agents.config import MAX_ARTIFACT_CAPABILITIES, MAX_CONTEXT_LENGTH
-from app.agents.context_preparation import CONTEXT_PREFIX, validate_context_input
+from app.agents.context_preparation import validate_context_input
+from app.agents.instructions import CONTEXT_PREFIX
 
 
 def test_retains_json_values_without_domain_validation_or_shared_mutable_state() -> None:

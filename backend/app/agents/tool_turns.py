@@ -10,6 +10,7 @@ from typing import TypeVar
 from app.agents.protocols.generation import AgenticGenerator
 from app.agents.models.generation import AgenticGenerationRequest, AgenticInputItem, AgenticToolCall
 from app.agents.generation_messages import final_response_text, validate_message_item
+from app.agents.generation_history import validate_response_tool_calls
 from app.agents.history_projection import generation_tool_call
 from app.sessions.models.history import CallRecord, HistoryRecord
 from app.agents.protocols.tools import ToolSource
@@ -105,10 +106,7 @@ async def run_tool_turn(
             on_output_item=receive_item,
             max_hosted_tool_calls=search_allowance if search_allowance > 0 else None,
         ))
-        provider_calls = tuple(AgenticToolCall(str(item.get("call_id")), str(item.get("name")), str(item.get("arguments")))
-                               for item in response.output_items if item.get("type") == "function_call")
-        if provider_calls != response.tool_calls:
-            raise ValueError("provider output and requested calls must match in order")
+        validate_response_tool_calls(response)
         if recorded_items and tuple(recorded_items) != response.output_items:
             raise ValueError("completed response disagrees with recorded output")
         if not recorded_items:

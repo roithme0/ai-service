@@ -7,6 +7,7 @@ from copy import deepcopy
 from typing import cast
 
 from openai import AsyncOpenAI, omit
+from openai.types.responses import ResponseCompletedEvent, ResponseOutputItemDoneEvent
 
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
 
@@ -45,28 +46,9 @@ class OpenAIAgenticGenerator:
                     if event.type in ("error", "response.failed", "response.incomplete"):
                         raise ValueError("OpenAI response stream failed")
                     if event.type == "response.output_item.done":
-                        if event.output_index != len(output_items):
-                            raise ValueError("OpenAI output item completion out of order")
-                        item = _completed_item(event.item.model_dump(mode="json"))
-                        identity = item["id"]
-                        if not isinstance(identity, str) or any(previous["id"] == identity for previous in output_items):
-                            raise ValueError("OpenAI duplicate output item")
-                        if item["type"] == "function_call":
-                            call_id = cast(str, item["call_id"])
-                            if any(previous.get("call_id") == call_id for previous in output_items
-                                   if previous["type"] == "function_call"):
-                                raise ValueError("OpenAI duplicate function call identity")
-                        output_items.append(item)
-                        if request.on_output_item is not None:
-                            request.on_output_item(deepcopy(item))
+                        _record_completed_item(event, output_items, request)
                     elif event.type == "response.completed":
-                        if event.response.status != "completed" or event.response.error is not None:
-                            raise ValueError("OpenAI response did not complete successfully")
-                        final_items = [_completed_item(item.model_dump(mode="json")) for item in event.response.output]
-                        if [_comparison_item(item) for item in final_items] != [
-                            _comparison_item(item) for item in output_items
-                        ]:
-                            raise ValueError("OpenAI completed response disagrees with recorded items")
+                        _validate_completed_response(event, output_items)
                         completed = True
                 if not completed:
                     raise ValueError("OpenAI response did not complete")
@@ -74,6 +56,39 @@ class OpenAIAgenticGenerator:
                       for item in output_items if item["type"] == "function_call")
         response = AgenticGenerationResponse(tuple(output_items), calls, None)
         return AgenticGenerationResponse(response.output_items, calls, final_response_text(response))
+
+
+def _record_completed_item(
+    event: ResponseOutputItemDoneEvent,
+    output_items: list[dict[str, object]],
+    request: AgenticGenerationRequest,
+) -> None:
+    if event.output_index != len(output_items):
+        raise ValueError("OpenAI output item completion out of order")
+    item = _completed_item(event.item.model_dump(mode="json"))
+    identity = item["id"]
+    if not isinstance(identity, str) or any(previous["id"] == identity for previous in output_items):
+        raise ValueError("OpenAI duplicate output item")
+    if item["type"] == "function_call":
+        call_id = cast(str, item["call_id"])
+        if any(previous.get("call_id") == call_id for previous in output_items
+               if previous["type"] == "function_call"):
+            raise ValueError("OpenAI duplicate function call identity")
+    output_items.append(item)
+    if request.on_output_item is not None:
+        request.on_output_item(deepcopy(item))
+
+
+def _validate_completed_response(
+    event: ResponseCompletedEvent, output_items: list[dict[str, object]],
+) -> None:
+    if event.response.status != "completed" or event.response.error is not None:
+        raise ValueError("OpenAI response did not complete successfully")
+    final_items = [_completed_item(item.model_dump(mode="json")) for item in event.response.output]
+    if [_comparison_item(item) for item in final_items] != [
+        _comparison_item(item) for item in output_items
+    ]:
+        raise ValueError("OpenAI completed response disagrees with recorded items")
 
 
 def _comparison_item(item: dict[str, object]) -> dict[str, object]:

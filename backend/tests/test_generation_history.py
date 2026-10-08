@@ -123,6 +123,23 @@ def test_response_call_mismatch_rejects_all_output_before_retention() -> None:
     assert store.history(session_id) == before
 
 
+@pytest.mark.parametrize("field", ["call_id", "name", "arguments"])
+def test_response_rejects_nonstring_call_fields_before_retaining_any_output(field: str) -> None:
+    store, session_id, turn = reserved()
+    item: dict[str, object] = {
+        "type": "function_call", "call_id": "call", "name": "tool", "arguments": "{}",
+    }
+    item[field] = 42
+    call_fields = {"call_id": "call", "name": "tool", "arguments": "{}", field: "42"}
+    response = AgenticGenerationResponse((
+        {"type": "message", "content": "Working", "phase": "commentary"}, item,
+    ), (AgenticToolCall(call_fields["call_id"], call_fields["name"], call_fields["arguments"]),), None)
+    before = store.history(session_id)
+    with pytest.raises(ValueError, match="invalid recorded tool call"):
+        record_generation_response(store, session_id, turn.turn_id, response)
+    assert store.history(session_id) == before
+
+
 def test_invalid_later_output_preserves_previously_admitted_activity() -> None:
     store, session_id, turn = reserved()
     response = AgenticGenerationResponse((

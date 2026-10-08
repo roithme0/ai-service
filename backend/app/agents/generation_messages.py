@@ -16,8 +16,10 @@ def message_phase(item: AgenticInputItem) -> AssistantMessagePhase | None:
 
 
 def final_response_text(response: AgenticGenerationResponse) -> str | None:
-    return next((message_text(item) for item in response.output_items
-                 if item.get("type") == "message" and message_phase(item) == "final_answer"), None)
+    for item in response.output_items:
+        if item.get("type") == "message" and message_phase(item) == "final_answer":
+            return message_text(item)
+    return None
 
 
 def message_text(item: AgenticInputItem) -> str:
@@ -36,7 +38,8 @@ def message_text(item: AgenticInputItem) -> str:
 
 
 def validate_message_item(item: AgenticInputItem) -> None:
-    if item.get("type") == "message":
-        text = message_text(item)
-        if not text.strip() or len(text) > MAX_MESSAGE_LENGTH:
-            raise ValueError("assistant message must be nonblank and within the message length limit")
+    if item.get("type") != "message":
+        return
+    text = message_text(item)
+    if not text.strip() or len(text) > MAX_MESSAGE_LENGTH:
+        raise ValueError("assistant message must be nonblank and within the message length limit")

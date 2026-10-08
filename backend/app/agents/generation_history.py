@@ -6,12 +6,15 @@ from typing import TypeVar
 from uuid import uuid4
 
 from app.agents.generation_messages import message_phase, message_text, validate_message_item
-from app.agents.models.generation import AgenticGenerationResponse, AgenticOutputItem, AgenticToolCall
+from app.agents.models.generation import (
+    AgenticGenerationResponse, AgenticOutputItem, AgenticToolCall, AssistantMessagePhase,
+)
 from app.sessions.models.history import (
     CallRecord,
     ContinuationRecord,
     HostedToolRecord,
     MessageRecord,
+    MessageRecordKind,
     TurnActivityRecord,
 )
 from app.sessions.session_store import ConversationSessionStore
@@ -20,30 +23,51 @@ ContextT = TypeVar("ContextT")
 ArtifactT = TypeVar("ArtifactT")
 
 
+def tool_call_from_output(item: AgenticOutputItem) -> AgenticToolCall:
+    call_id, name, arguments = (item.get(key) for key in ("call_id", "name", "arguments"))
+    if not isinstance(call_id, str) or not isinstance(name, str) or not isinstance(arguments, str):
+        raise ValueError("invalid recorded tool call")
+    return AgenticToolCall(call_id, name, arguments)
+
+
+def validate_response_tool_calls(response: AgenticGenerationResponse) -> None:
+    calls = tuple(
+        tool_call_from_output(item)
+        for item in response.output_items if item.get("type") == "function_call"
+    )
+    if calls != response.tool_calls:
+        raise ValueError("provider output and requested calls must match in order")
+
+
+def _message_kind(phase: AssistantMessagePhase | None) -> MessageRecordKind:
+    if phase == "commentary":
+        return "intermediate"
+    if phase == "final_answer":
+        return "final"
+    return "unspecified"
+
+
 def _generation_record(turn_id: str, item: AgenticOutputItem) -> TurnActivityRecord:
     validate_message_item(item)
     copied = deepcopy(item)
     if copied.get("phase") is None:
         copied.pop("phase", None)
     if item.get("type") == "function_call":
-        call_id, name, arguments = (item.get(key) for key in ("call_id", "name", "arguments"))
-        if not isinstance(call_id, str) or not isinstance(name, str) or not isinstance(arguments, str):
-            raise ValueError("invalid recorded tool call")
-        return CallRecord(turn_id, str(uuid4()), copied, call_id, name, arguments)
+        call = tool_call_from_output(item)
+        return CallRecord(turn_id, str(uuid4()), copied, call.call_id, call.name, call.arguments)
     if item.get("type") == "web_search_call":
         status = item.get("status")
+        search_id = item.get("id")
         if (
             status not in ("completed", "failed")
-            or not isinstance(item.get("id"), str)
-            or not item["id"]
+            or not isinstance(search_id, str)
+            or not search_id
         ):
             raise ValueError("invalid hosted search activity")
         return HostedToolRecord(turn_id, str(uuid4()), copied, status)
     if item.get("type") == "message":
-        phase = message_phase(item)
         return MessageRecord(
-            turn_id, copied, message_text(item),
-            "intermediate" if phase == "commentary" else "final" if phase == "final_answer" else "unspecified",
+            turn_id, copied, message_text(item), _message_kind(message_phase(item)),
         )
     return ContinuationRecord(turn_id, copied)
 
@@ -55,12 +79,7 @@ def record_generation_response(
     response: AgenticGenerationResponse,
 ) -> tuple[CallRecord, ...]:
     def records() -> Iterator[TurnActivityRecord]:
-        calls = tuple(
-            AgenticToolCall(str(item.get("call_id")), str(item.get("name")), str(item.get("arguments")))
-            for item in response.output_items if item.get("type") == "function_call"
-        )
-        if calls != response.tool_calls:
-            raise ValueError("provider output and requested calls must match in order")
+        validate_response_tool_calls(response)
         for item in response.output_items:
             yield _generation_record(turn_id, item)
 

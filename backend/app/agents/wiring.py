@@ -1,16 +1,17 @@
-"""Construction and cached access for configured agents."""
+"""Construction, shared lifecycle, and cached access for configured agents."""
 
 from __future__ import annotations
 
 import logging
+from contextlib import AsyncExitStack
+from dataclasses import dataclass
 from functools import lru_cache
 from urllib.parse import urlparse
 
 from openai import AsyncOpenAI
 
-from app.demo.agent import create_demo_agent
+from app.demo.agent import DemoAgent, create_demo_agent
 from app.agents.model_agent import ModelAgent, create_model_agent
-from app.agents.configured_agents import ConfiguredAgents
 from app.agents.runtime import AgentRuntime
 from app.core.config import Settings, get_settings
 from app.agents.openai_agentic_generation import OpenAIAgenticGenerator
@@ -19,6 +20,21 @@ from app.agents.models.web_search import WebSearchConfig
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ConfiguredAgents:
+    kochwiki: AgentRuntime[ModelAgent]
+    demo: AgentRuntime[DemoAgent]
+
+    async def start(self) -> None:
+        await self.kochwiki.start()
+        await self.demo.start()
+
+    async def close(self) -> None:
+        async with AsyncExitStack() as resources:
+            resources.push_async_callback(self.kochwiki.close)
+            resources.push_async_callback(self.demo.close)
 
 
 def configure_kochwiki_agent(settings: Settings) -> AgentRuntime[ModelAgent]:

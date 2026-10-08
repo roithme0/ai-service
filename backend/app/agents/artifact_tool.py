@@ -10,6 +10,7 @@ from referencing import Registry
 from referencing.exceptions import Unresolvable
 from pydantic import JsonValue, ValidationError
 
+from app.agents.instructions import ARTIFACT_TOOL_INSTRUCTIONS
 from app.agents.models.artifacts import ArtifactRequest
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
@@ -30,6 +31,31 @@ def _schema_rejection(
         return json.dumps({"kind": "rejected", "reason": f"invalid_{field}",
                            "location": list(issue.path), "detail": issue.message})
     return None
+
+
+def _artifact_tool_schema(capabilities: tuple[ArtifactCapability, ...]) -> dict[str, object]:
+    return {
+        "type": "function", "name": "present_artifact", "strict": False,
+        "description": "Present complete data to the user using an advertised artifact capability. This has no domain save effect.",
+        "parameters": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "type": {"type": "string", "enum": [item.type for item in capabilities]},
+                "title": {"type": "string", "minLength": 1, "maxLength": MAX_ARTIFACT_HEADER_LENGTH},
+                "subtitle": {"type": ["string", "null"], "minLength": 1, "maxLength": MAX_ARTIFACT_HEADER_LENGTH,
+                             "description": "Optional short secondary label beneath the title. Omit when unnecessary."},
+                "payload": {},
+                "metadata": {"type": "object", "description": "Optional metadata matching the selected capability's metadataSchema. Omit when no metadata schema is advertised."},
+            },
+            "required": ["type", "title", "payload"],
+        },
+    }
+
+
+def _artifact_tool_instructions(capabilities: tuple[ArtifactCapability, ...]) -> str:
+    return ARTIFACT_TOOL_INSTRUCTIONS + json.dumps(
+        [item.model_dump(by_alias=True, exclude_none=True) for item in capabilities], ensure_ascii=False,
+    )
 
 
 def artifact_tool_source(
@@ -67,28 +93,7 @@ def artifact_tool_source(
                                 metadata=request.metadata))
         return ToolExecution(ArtifactToolOutput("presented"), candidate)
 
-    return LocalToolSource((RegisteredTool("present_artifact", {
-        "type": "function", "name": "present_artifact", "strict": False,
-        "description": "Present complete data to the user using an advertised artifact capability. This has no domain save effect.",
-        "parameters": {
-            "type": "object", "additionalProperties": False,
-            "properties": {
-                "type": {"type": "string", "enum": [item.type for item in capabilities]},
-                "title": {"type": "string", "minLength": 1, "maxLength": MAX_ARTIFACT_HEADER_LENGTH},
-                "subtitle": {"type": ["string", "null"], "minLength": 1, "maxLength": MAX_ARTIFACT_HEADER_LENGTH,
-                             "description": "Optional short secondary label beneath the title. Omit when unnecessary."},
-                "payload": {},
-                "metadata": {"type": "object", "description": "Optional metadata matching the selected capability's metadataSchema. Omit when no metadata schema is advertised."},
-            },
-            "required": ["type", "title", "payload"],
-        },
-    }, execute),), instructions=(
-        "Use present_artifact deliberately when a supported presentation helps the user. "
-        "Provide complete data matching the selected payload schema. "
-        "Prefer a purpose-specific presentation over a general JSON presentation when available. "
-        "Follow the selected capability's titleDescription and subtitleDescription when provided. "
-        "Supply metadata only as advertised by the selected metadataSchema, following its field descriptions. "
-        "Presentation does not create or save domain data. Completed tool artifacts become visible when this turn terminates, even if later generation fails.\n"
-        "Available presentation capabilities (payload schemas are standalone JSON Schemas):\n"
-        + json.dumps([item.model_dump(by_alias=True, exclude_none=True) for item in capabilities], ensure_ascii=False)
-    ))
+    return LocalToolSource(
+        (RegisteredTool("present_artifact", _artifact_tool_schema(capabilities), execute),),
+        instructions=_artifact_tool_instructions(capabilities),
+    )

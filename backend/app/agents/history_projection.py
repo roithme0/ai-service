@@ -45,19 +45,27 @@ def _execution_report_output(record: ExecutionReportRecord) -> str:
                        "state": record.state, "detail": detail})
 
 
+def _generation_call(record: CallRecord) -> AgenticInputItem:
+    item = deepcopy(record.item)
+    item.update(call_id=record.call_id, name=record.name, arguments=record.arguments)
+    return item
+
+
+def _generation_tool_output(record: ToolResultRecord | ExecutionReportRecord) -> AgenticInputItem:
+    output = record.output if isinstance(record, ToolResultRecord) else _execution_report_output(record)
+    return {"type": "function_call_output", "call_id": record.call_id, "output": output}
+
+
 def model_input(history: tuple[HistoryRecord, ...]) -> tuple[AgenticInputItem, ...]:
     items: list[AgenticInputItem] = []
     for record in history:
         if isinstance(record, MessageRecord):
             items.append(_generation_message(record))
         elif isinstance(record, CallRecord):
-            item = deepcopy(record.item)
-            item.update(call_id=record.call_id, name=record.name, arguments=record.arguments)
-            items.append(item)
+            items.append(_generation_call(record))
         elif isinstance(record, (ContinuationRecord, HostedToolRecord)):
             items.append(deepcopy(record.item))
         elif isinstance(record, (ToolResultRecord, ExecutionReportRecord)):
-            items.append({"type": "function_call_output", "call_id": record.call_id,
-                          "output": record.output if isinstance(record, ToolResultRecord) else _execution_report_output(record)})
+            items.append(_generation_tool_output(record))
     return tuple(items)
 
