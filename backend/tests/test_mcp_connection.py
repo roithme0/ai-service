@@ -22,7 +22,7 @@ from mcp.client.caching import CacheMode
 from app.agents.enums.runtime import RuntimeStatus
 from app.core.config import Settings
 from app.main import AgentLifespan, app as service_app
-from app.mcp.connection import MCPConnection
+from app.mcp.connection import MCPConnection, MCPConnectionConfig
 from app.agents.instructions import CONVERSATION_INSTRUCTIONS
 from app.sessions.models.session import SessionCreation
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
@@ -46,8 +46,10 @@ def test_polling_refreshes_or_removes_server_instructions(
 
         monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
         monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
-        connection = MCPConnection("server", "http://localhost/mcp/")
-        runtime = AgentRuntime("test", object(), mcp_connections=(connection,))
+        runtime = AgentRuntime(
+            "test", object(), mcp_servers=(MCPConnectionConfig("server", "http://localhost/mcp/"),),
+        )
+        connection, = runtime.mcp_connections
         await runtime.start()
         try:
             await wait_for_status(runtime, RuntimeStatus.READY)
@@ -94,8 +96,10 @@ def test_instruction_discovery_failure_clears_both_and_recovers(
 
         monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
         monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
-        connection = MCPConnection("server", "http://localhost/mcp/")
-        runtime = AgentRuntime("test", object(), mcp_connections=(connection,))
+        runtime = AgentRuntime(
+            "test", object(), mcp_servers=(MCPConnectionConfig("server", "http://localhost/mcp/"),),
+        )
+        connection, = runtime.mcp_connections
         await runtime.start()
         try:
             await wait_for_status(runtime, RuntimeStatus.READY)
@@ -567,7 +571,7 @@ def test_shutdown_interrupts_refresh_inside_sdk_context(monkeypatch: pytest.Monk
         monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
         monkeypatch.setattr("app.mcp.connection.Client", client_for_url)
         monkeypatch.setattr(Client, "list_tools", list_tools)
-        runtime = AgentRuntime("test", object(), mcp_connections=(MCPConnection("server", "http://localhost/mcp/"),))
+        runtime = AgentRuntime("test", object(), mcp_servers=(MCPConnectionConfig("server", "http://localhost/mcp/"),))
         await runtime.start()
         try:
             await asyncio.wait_for(entered.wait(), 2)

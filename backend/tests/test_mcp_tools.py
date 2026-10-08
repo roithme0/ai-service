@@ -8,6 +8,7 @@ from mcp.types import CallToolResult, TextContent, Tool
 from app.agents.runtime import AgentRuntime
 from app.agents.enums.runtime import RuntimeStatus
 from runtime_wait import wait_for_status
+from mcp_runtime_fixture import stub_connections
 from app.mcp.connection import MCPConnection
 from app.mcp.tools import MCPToolset
 from app.agents.models.generation import AgenticGenerationRequest, AgenticGenerationResponse, AgenticToolCall
@@ -186,9 +187,11 @@ def test_invalid_connection_names_rejected(connections: tuple[MCPConnection, ...
     (Connection("server", (tool(), tool())),),
     (Connection("a__b", (tool("c"),)), Connection("a", (tool("b__c"),))),
 ])
-def test_bad_discovered_names_disable_owner_and_close_resources(connections: tuple[MCPConnection, ...]) -> None:
+def test_bad_discovered_names_disable_owner_and_close_resources(
+    monkeypatch: pytest.MonkeyPatch, connections: tuple[MCPConnection, ...],
+) -> None:
     async def exercise() -> None:
-        runtime = AgentRuntime("test", object(), mcp_connections=connections)
+        runtime = AgentRuntime("test", object(), mcp_servers=stub_connections(monkeypatch, connections))
         await runtime.start()
         try:
             await wait_for_status(runtime, RuntimeStatus.UNAVAILABLE)

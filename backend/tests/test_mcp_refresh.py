@@ -15,6 +15,7 @@ from app.demo.agent import create_demo_agent
 from app.main import app
 from app.mcp.connection import MCPConnection, MCPDiscovery
 from runtime_wait import wait_for_status
+from mcp_runtime_fixture import stub_connections
 from test_model_session_http import FakeGenerator
 from tool_turn_recorder import ToolTurnRecorder
 
@@ -65,7 +66,7 @@ def test_failed_refresh_clears_catalogue_and_recovers(
     async def exercise() -> None:
         monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
         connection = PollingConnection()
-        runtime = AgentRuntime("test", object(), mcp_connections=(connection,))
+        runtime = AgentRuntime("test", object(), mcp_servers=stub_connections(monkeypatch, (connection,)))
         source = runtime.mcp_tools
         await runtime.start()
         try:
@@ -98,7 +99,7 @@ def test_invalid_initial_catalogue_recovers_by_polling(monkeypatch: pytest.Monke
     async def exercise() -> None:
         monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
         connection = PollingConnection(initial=(tool("bad.name"),))
-        runtime = AgentRuntime("test", object(), mcp_connections=(connection,))
+        runtime = AgentRuntime("test", object(), mcp_servers=stub_connections(monkeypatch, (connection,)))
         await runtime.start()
         try:
             await wait_for_status(runtime, RuntimeStatus.UNAVAILABLE)
@@ -118,7 +119,7 @@ def test_cross_connection_collision_clears_only_affected_catalogue(monkeypatch: 
         monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
         first = PollingConnection("a__b", (tool("c"),))
         second = PollingConnection("a", (tool("other"),))
-        runtime = AgentRuntime("test", object(), mcp_connections=(first, second))
+        runtime = AgentRuntime("test", object(), mcp_servers=stub_connections(monkeypatch, (first, second)))
         await runtime.start()
         try:
             await wait_for_status(runtime, RuntimeStatus.READY)
@@ -140,7 +141,7 @@ def test_active_turn_keeps_snapshot_across_refresh(monkeypatch: pytest.MonkeyPat
     async def exercise() -> None:
         monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
         connection = PollingConnection()
-        runtime = AgentRuntime("test", object(), mcp_connections=(connection,))
+        runtime = AgentRuntime("test", object(), mcp_servers=stub_connections(monkeypatch, (connection,)))
         entered = asyncio.Event()
         release = asyncio.Event()
         requests: list[AgenticGenerationRequest] = []
@@ -226,7 +227,7 @@ def test_shutdown_settles_agent_before_interrupting_shared_connection(
                 assert connection.settled.is_set() == refresh_completes
                 await connection.call_tool("old", {})
 
-        runtime = AgentRuntime("test", Agent(), mcp_connections=(connection,))
+        runtime = AgentRuntime("test", Agent(), mcp_servers=stub_connections(monkeypatch, (connection,)))
         await runtime.start()
         await asyncio.wait_for(connection.polling.wait(), 2)
         closing = asyncio.create_task(runtime.close())
@@ -253,7 +254,7 @@ def test_unavailable_runtime_keeps_history_and_observation_but_blocks_writes(mon
         monkeypatch.setattr("app.mcp.config.CATALOGUE_REFRESH_SECONDS", 0.001)
         connection = PollingConnection()
         agent = create_model_agent(FakeGenerator(), tool_sources=())
-        runtime = AgentRuntime("kochwiki", agent, mcp_connections=(connection,))
+        runtime = AgentRuntime("kochwiki", agent, mcp_servers=stub_connections(monkeypatch, (connection,)))
         agents = ConfiguredAgents(runtime, AgentRuntime("demo", create_demo_agent(delay_seconds=0)))
         monkeypatch.setattr("app.agents.http.get_configured_agents", lambda: agents)
         await agents.start()

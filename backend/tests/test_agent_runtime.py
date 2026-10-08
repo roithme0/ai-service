@@ -6,6 +6,7 @@ from app.agents.runtime import AgentRuntime
 from app.agents.enums.runtime import RuntimeStatus
 from app.mcp.connection import MCPConnection
 from runtime_wait import wait_for_status
+from mcp_runtime_fixture import stub_connections
 
 
 class RecordedConnection(MCPConnection):
@@ -40,7 +41,7 @@ def test_partial_start_failure_retains_healthy_connection_and_recovers(monkeypat
         failing = RecordedConnection("second", events, fail_start=True)
         runtime = AgentRuntime(
             "test", object(), model_client=RecordedModelClient(events),
-            mcp_connections=(RecordedConnection("first", events), failing),
+            mcp_servers=stub_connections(monkeypatch, (RecordedConnection("first", events), failing)),
         )
         monkeypatch.setattr("app.mcp.config.INITIAL_RETRY_SECONDS", 0.01)
         await runtime.start()
@@ -64,12 +65,12 @@ def test_partial_start_failure_retains_healthy_connection_and_recovers(monkeypat
     asyncio.run(exercise())
 
 
-def test_shutdown_attempts_every_cleanup_even_if_one_fails() -> None:
+def test_shutdown_attempts_every_cleanup_even_if_one_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     async def exercise() -> None:
         events: list[str] = []
         runtime = AgentRuntime(
             "test", object(), model_client=RecordedModelClient(events),
-            mcp_connections=(RecordedConnection("first", events), RecordedConnection("second", events, fail_close=True)),
+            mcp_servers=stub_connections(monkeypatch, (RecordedConnection("first", events), RecordedConnection("second", events, fail_close=True))),
         )
         await runtime.start()
         await runtime.start()
@@ -85,7 +86,9 @@ def test_shutdown_attempts_every_cleanup_even_if_one_fails() -> None:
 
 
 @pytest.mark.parametrize("during_attempt", [False, True])
-def test_shutdown_interrupts_attempt_or_retry_wait(during_attempt: bool) -> None:
+def test_shutdown_interrupts_attempt_or_retry_wait(
+    monkeypatch: pytest.MonkeyPatch, during_attempt: bool,
+) -> None:
     async def exercise() -> None:
         entered = asyncio.Event()
         settled = asyncio.Event()
@@ -101,7 +104,7 @@ def test_shutdown_interrupts_attempt_or_retry_wait(during_attempt: bool) -> None
                 finally:
                     settled.set()
 
-        runtime = AgentRuntime("test", object(), mcp_connections=(PendingConnection("pending", events),))
+        runtime = AgentRuntime("test", object(), mcp_servers=stub_connections(monkeypatch, (PendingConnection("pending", events),)))
         await runtime.start()
         assert runtime.status == RuntimeStatus.CONNECTING
         try:
@@ -127,7 +130,7 @@ def test_unknown_initialization_error_is_not_retried(monkeypatch: pytest.MonkeyP
                 raise RuntimeError("bug")
 
         monkeypatch.setattr("app.mcp.config.INITIAL_RETRY_SECONDS", 0.001)
-        runtime = AgentRuntime("test", object(), mcp_connections=(BrokenConnection("broken", events),))
+        runtime = AgentRuntime("test", object(), mcp_servers=stub_connections(monkeypatch, (BrokenConnection("broken", events),)))
         await runtime.start()
         try:
             await wait_for_status(runtime, RuntimeStatus.UNAVAILABLE)
@@ -140,10 +143,10 @@ def test_unknown_initialization_error_is_not_retried(monkeypatch: pytest.MonkeyP
     asyncio.run(exercise())
 
 
-def test_missing_configuration_starts_no_connection_attempt() -> None:
+def test_missing_configuration_starts_no_connection_attempt(monkeypatch: pytest.MonkeyPatch) -> None:
     async def exercise() -> None:
         events: list[str] = []
-        runtime: AgentRuntime[object] = AgentRuntime("test", None, mcp_connections=(RecordedConnection("unused", events),))
+        runtime: AgentRuntime[object] = AgentRuntime("test", None, mcp_servers=stub_connections(monkeypatch, (RecordedConnection("unused", events),)))
         await runtime.start()
         assert runtime.status == RuntimeStatus.UNAVAILABLE
         assert runtime.issue is not None and runtime.issue.kind == "configuration"

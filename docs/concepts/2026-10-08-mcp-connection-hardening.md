@@ -2,15 +2,15 @@
 
 ## Status
 
-Evolving concept as of 2026-10-08. Slice 1, runtime-owned initial connection recovery, and slice 2, automatic catalogue refresh, are implemented. Reconnection after an established connection fails remains conditional on a small, safe extension of the same lifecycle. Slice 3, automatic server-instruction refresh alongside tools for modern MCP servers, is implemented.
+Evolving concept as of 2026-10-08. Initial connection recovery, scheduled catalogue and instruction refresh, and reconnection after detected transport failure are implemented. Notification-based refresh remains deferred.
 
 Scheduled catalogue polling every five minutes is agreed for the first version. Server notifications are deferred. A fixed 30-second startup retry delay and consolidated runtime status are agreed and delivered.
 
 ## Context
 
-`backend/app/agents/wiring.py` constructs agent-owned MCP connections from server configuration. FastAPI startup starts each `AgentRuntime`; `MCPConnection.start()` enters the SDK client, fetches all tool pages and retains server instructions. `MCPToolset` validates and maps tool names to model functions. Connections are shared across conversations, and the tool loop builds its registry and instructions once per turn.
+`backend/app/agents/wiring.py` supplies immutable MCP connection configurations to each `AgentRuntime`. The runtime constructs its own connection objects and injects its failure handler through their constructors. Construction performs no network activity. FastAPI startup starts each runtime; `MCPConnection.start()` enters the SDK client, fetches all tool pages and retains server instructions. `MCPToolset` validates and maps tool names to model functions. Connections are shared across conversations, and the tool loop builds its registry and instructions once per turn.
 
-The runtime retries recognized startup transport failures while retaining its agent and model client. After successful connection it polls tool catalogues every five minutes, including while unavailable after a catalogue failure. Tool-call exceptions become generic failures, without application-managed reconnection. Polling also retrieves fresh server instructions through modern discovery and publishes them with tools. The demo has no MCP dependency and remains independent.
+The runtime retries recognized startup transport failures while retaining its agent and model client. After successful connection it polls tool catalogues every five minutes, including while unavailable after a catalogue failure. Tool-call exceptions become generic failures; detected connection loss signals the runtime to rebuild its MCP transports without replaying calls. Polling also retrieves fresh server instructions through modern discovery and publishes them with tools. The demo has no MCP dependency and remains independent.
 
 ## Goal
 
@@ -20,7 +20,7 @@ Allow a configured agent to become usable when its MCP server starts late, and k
 
 ### Initial Connection Retry
 
-`AgentRuntime` owns connection coordination, retry scheduling and background SDK context ownership. `MCPConnection` performs start, tool call and close operations; it does not own retry or polling policy. The runtime begins connection attempts immediately in the background and retries recognized transient failures until successful or shutdown. The delay is 30 seconds after failed-attempt cleanup. Attempts do not overlap, and startup does not wait for the MCP server before allowing independent agents to serve requests.
+`AgentRuntime` owns connection construction, coordination, retry scheduling and background SDK context ownership. It accepts frozen `MCPConnectionConfig` values containing a name and URL, creates connections with its bound failure handler, and builds the stable `MCPToolset` from those connections. The handler is supplied once through the connection constructor; there is no public setter. Standalone connections may omit the handler. `MCPConnection` performs start, tool call and close operations; it does not own retry or polling policy. The runtime begins connection attempts immediately in the background and retries recognized transient failures until successful or shutdown. The delay is 30 seconds after failed-attempt cleanup. Attempts do not overlap, and startup does not wait for the MCP server before allowing independent agents to serve requests.
 
 Runtime status is `created`, `connecting`, `ready`, `unavailable`, `closing`, or `closed`. A separate typed issue records the failure category, affected connection where known, and retryability. Every configured MCP connection is mandatory; HTTP derives availability from `ready`. Detailed runtime diagnostics are internal, without a new status endpoint.
 
@@ -52,21 +52,22 @@ Polling is the chosen approach for the first delivery. Add server notifications 
 
 MCP declares tool-change support through `tools.listChanged`. The notification path differs between the handshake-era protocol and the newer subscription-based protocol. The installed SDK supports both protocol eras, so notification support needs a negotiated-version-aware design. See the official [2025-06-18 tools specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/specification/2025-06-18/server/tools.mdx) and [2026-07-28 tools specification](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/specification/2026-07-28/server/tools.mdx).
 
-### Conditional Reconnection on Error
+### Reconnection on Error
 
 Reuse the connection retry lifecycle only for classified connection loss, such as a closed transport or invalidated MCP session. A domain `isError`, bad arguments or ordinary tool rejection must not trigger reconnect. A timeout may leave a healthy connection and an uncertain tool outcome; it is not sufficient by itself to justify retrying an operation.
 
-Report the current call's failure or uncertain outcome through the existing history mechanism. Do not automatically repeat that tool call, restart the turn or replay earlier calls. Reconnection restores transport availability for later calls; it does not prove that the failed operation had no effect. Preserve explicit uncertainty so the model is not encouraged to repeat a mutation blindly.
+Report the current call's failure through the existing generic failed-tool result. Do not automatically repeat that tool call, restart the turn or replay earlier calls. The active model loop can continue with failed tool results. Reconnection restores transport availability for later calls; it does not prove that the failed operation had no effect. Richer uncertain-outcome handling and mid-turn recovery are deferred; there is no automatic chat/session retry in this delivery.
 
-Use one recovery owner per connection, with errors signalling it rather than starting competing reconnects. Prevent new calls on a connection being replaced, and allow or settle in-flight calls before closing its resources. Fully rediscover and validate tools before making a replacement connection available.
+Use the runtime's existing owner task, with errors signalling it rather than starting competing reconnects. Reject subsequent calls on a known broken connection. Closing transports may fail concurrent calls; no extra mid-turn settlement machinery is introduced. Fully rediscover and validate tools before restoring readiness.
 
-Include this feature only if SDK error classification, async context ownership and coordination with concurrent calls can be handled locally. If it requires a broad rewrite or reliable session recovery machinery, defer it explicitly and deliver initial retry plus catalogue refresh first. Its ease is not established by code inspection alone.
+SDK contexts entered in one task nest in connection order and must close in reverse order. Established transport recovery therefore resets all MCP dependencies of that runtime together; retaining arbitrary healthy transports would require changing context ownership. Keep the agent, model client and sessions intact. Initial connection retries still retain healthy dependencies, and catalogue validation failures alone retain transports.
 
 ## Integration Impact
 
-- `AgentRuntime` now distinguishes dependency readiness from final closure. A failed MCP attempt no longer calls the permanent runtime shutdown path. It owns the repair routine and will own future polling and reconnect coordination.
+- `AgentRuntime` distinguishes dependency readiness from final closure and owns retry, polling and reconnect coordination. A failed MCP attempt does not call the permanent runtime shutdown path.
+- Wiring supplies connection configurations instead of preconstructed transports. The runtime creates connection objects synchronously before exposing its tool source; SDK clients are still opened only by the background owner after `start()`. Model-agent construction remains in wiring, using that tool source.
 - `MCPConnection` retains start, call and close operations, with fresh clients on repeated starts. Enter and exit SDK contexts in the runtime's owning task; avoid moving task-bound cleanup between request and background tasks. Complete catalogue generations belong to slice 2.
-- `MCPToolset` and turn input assembly must capture tools and matching instructions from the same generation. Across multiple connections, new turns require all configured dependencies to be ready; one failure must not close unrelated healthy connections.
+- `MCPToolset` and turn input assembly capture tools and matching instructions from the same generation. New turns require all configured dependencies to be ready. Catalogue failures retain unrelated connections; established transport recovery resets the runtime's MCP context group in reverse order.
 - The HTTP registry retains the agent transport while unavailable. Slice 2 preserves session reads and SSE observation during a temporary outage; session creation, message appends and new turns check current readiness at admission and return the existing `503 agent_unavailable` response when unavailable. Existing history remains accessible with unchanged ownership checks, and recovery reuses the same agent and session store.
 - Shutdown must stop admission and recovery scheduling, settle active turns, then close transports and the model client. Background tasks must be tracked and awaited; cancellation must interrupt retry waits and ongoing attempts.
 
@@ -83,7 +84,7 @@ Use this concept as the evolving direction. Discuss one slice's observable behav
 1. **Delivered: initial startup recovery:** background connection attempts, explicit readiness and reliable shutdown. Establish the lifecycle needed by later slices without changing established connections.
 2. **Delivered: scheduled catalogue refresh:** five-minute polling, complete validated updates and consistent turn snapshots. Clear catalogues after any refresh failure, mark the runtime unavailable and allow recovery through later valid discovery. Preserve history reads while blocking session creation, message appends and new turns. Bypass SDK caching explicitly.
 3. **Delivered: server-instruction refresh:** modern discovery on the same connection, combined publication and clearing of tools and instructions.
-4. **Conditional reconnect:** assess error classification and concurrent-call coordination using the delivered lifecycle. Implement only if the change remains narrow; otherwise record why it is deferred. Never replay a failed tool call automatically.
+4. **Delivered: reconnection after detected connection loss:** signal the runtime, clear published MCP state, close its contexts in reverse order, and reuse startup retries and full discovery. Never replay a failed tool call automatically.
 
 Server-instruction refresh is delivered separately from reconnect; modern discovery avoids replacing established connections.
 
@@ -139,14 +140,28 @@ Fetch metadata first, then all uncached tool pages, and validate model-facing na
 
 Active turns retain their captured instructions, definitions and mappings; subsequent turns in existing sessions receive the new combined update. Publication is atomic locally, but the protocol does not provide a common revision across metadata and paginated tools. A server changing during discovery can therefore produce a mixed server revision despite complete successful responses. No stronger server snapshot guarantee is claimed.
 
-Legacy connections cannot perform this refresh and fail it explicitly; no fallback retaining stale instructions is provided. Reconnection remains deferred. Regression coverage exercises updated and removed instructions, malformed metadata and timeout clearing, incompatible protocol versions, later-page failure without partial publication, recovery, active-turn snapshots and shutdown under the existing owner task.
+Legacy connections cannot perform this refresh and fail it explicitly; no fallback retaining stale instructions is provided. Regression coverage exercises updated and removed instructions, malformed metadata and timeout clearing, incompatible protocol versions, later-page failure without partial publication, recovery, active-turn snapshots and shutdown under the existing owner task.
+
+### Slice 4: Established Connection Recovery
+
+**Status:** agreed and implemented.
+
+`MCPConnection` reports classified transport failures from tool calls and discovery synchronously to the runtime, then re-raises the original error. Classification includes SDK `CONNECTION_CLOSED` (including invalidated HTTP sessions), transport/network failures and closed AnyIO resources, including exception groups containing only such failures. Timeouts, ordinary MCP errors, domain `isError` results and invalid catalogues alone do not trigger replacement. Startup retry classification remains broader and unchanged.
+
+The failure signal immediately makes the runtime unavailable and clears all its published MCP tools and instructions. It wakes the owning repair task from its polling wait. If discovery is already in progress, the owner finishes that request before resetting; recovery can therefore be delayed by the existing request timeout, but pending discovery cannot publish over the failure signal or restore readiness. The SDK's task-bound context lifecycle stays in the original owner task.
+
+Close all runtime MCP contexts in reverse order, wait the existing 30-second retry delay after cleanup, then reuse startup initialization with fresh clients and full discovery. Continue retrying recognized startup failures, stop retrying unclassified/nonretryable initialization failures, and restore readiness only after every mandatory dependency passes initialization and aggregate catalogue validation. Invalid catalogues retain their scheduled recovery path. Polling restarts after successful reconnection.
+
+Repeated concurrent failures coalesce into one repair request. Error reporting checks SDK client identity, so a late failure from a replaced client cannot invalidate the replacement. A known broken connection rejects further calls until a new client is installed. Other active calls can fail when transports close; their failed results remain available to the existing model loop. No calls, mutations, turns or sessions are replayed. Active turns may finish, while new sessions, message appends and turns receive the existing unavailable response until readiness returns. Agent identity, session history and the model client are preserved.
+
+Regression coverage uses real SDK contexts to establish two-connection reverse cleanup and fresh-client recovery, tool-call and polling detection, refreshed instructions after reconnect, a mutation completed before response loss without replay, late concurrent failures, timeout/ordinary-error exclusion, and shutdown during the recovery delay.
 
 ## Risks and Validation
 
-Background discovery must not block tool calls behind an agent-wide lock. Connection replacement must not close a transport underneath another session's active invocation. Polling detects some idle outages but is not a complete health guarantee, and refresh traffic grows with the number of backend processes and configured connections.
+Background discovery must not block tool calls behind an agent-wide lock. Connection replacement can fail another session's active invocation; mid-turn recovery is deliberately deferred. Polling detects some idle outages but is not a complete health guarantee, and refresh traffic grows with the number of backend processes and configured connections. Failures are detected through calls or polling; no separate immediate SDK transport watcher is added.
 
-Meaningful regression coverage should establish late-server recovery, independent demo availability, cancellation during retry, clean shutdown, complete paginated refresh, invalid-update clearing and recovery, consistent active-turn snapshots and session retention across outages. Conditional reconnect needs concurrent-call coverage and proof that a failed mutation is never automatically invoked again.
+Meaningful regression coverage establishes late-server recovery, independent demo availability, cancellation during retry, clean shutdown, complete paginated refresh, invalid-update clearing and recovery, consistent active-turn snapshots and session retention across outages. Reconnect coverage includes concurrent calls and proof that a failed mutation is never automatically invoked again.
 
 ## Open Questions
 
-- Verify SDK exception classification and task ownership before deciding whether reconnect meets the user's simplicity condition.
+- Notification-based refresh and richer handling of uncertain mid-turn outcomes remain deferred.
