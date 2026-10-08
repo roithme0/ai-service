@@ -52,5 +52,5 @@ class ConversationSnapshot(Generic[ContextT, ArtifactT]):
 
 @dataclass(frozen=True)
 class ConversationReadActive(Generic[ContextT, ArtifactT]):
-    kind: Literal["active"]
     snapshot: ConversationSnapshot[ContextT, ArtifactT]
+    kind: Literal["active"] = "active"

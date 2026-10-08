@@ -36,54 +36,54 @@ class SessionSnapshot(Generic[T]):
 
 @dataclass(frozen=True)
 class SessionReadActive(Generic[T]):
-    kind: Literal["active"]
     session: SessionSnapshot[T]
+    kind: Literal["active"] = "active"
 
 
 @dataclass(frozen=True)
 class SessionReadUnknown:
-    kind: Literal["unknown"]
     session_id: str
+    kind: Literal["unknown"] = "unknown"
 
 
 @dataclass(frozen=True)
 class SessionReadExpired:
-    kind: Literal["expired"]
     session_id: str
     expires_at: datetime
+    kind: Literal["expired"] = "expired"
 
 
 @dataclass(frozen=True)
 class SessionMessageAppendAccepted:
-    kind: Literal["accepted"]
     session_id: str
     message: TextMessage
+    kind: Literal["accepted"] = "accepted"
 
 
 @dataclass(frozen=True)
 class SessionMessageAppendUnknown:
-    kind: Literal["unknown"]
     session_id: str
+    kind: Literal["unknown"] = "unknown"
 
 
 @dataclass(frozen=True)
 class SessionMessageAppendExpired:
-    kind: Literal["expired"]
     session_id: str
     expires_at: datetime
+    kind: Literal["expired"] = "expired"
 
 
 @dataclass(frozen=True)
 class SessionMessageAppendInvalidMessage:
-    kind: Literal["invalid_message"]
     session_id: str
     reason: InvalidMessageReason
+    kind: Literal["invalid_message"] = "invalid_message"
 
 
 @dataclass(frozen=True)
 class SessionMessageAppendLimitReached:
-    kind: Literal["limit_reached"]
     session_id: str
+    kind: Literal["limit_reached"] = "limit_reached"
 
 
 @dataclass(frozen=True)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.sessions.models.presentation import ArtifactCapability
+from app.sessions.models.artifacts import ArtifactCapability
 
 
 @dataclass(frozen=True)

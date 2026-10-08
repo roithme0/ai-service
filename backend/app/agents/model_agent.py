@@ -13,16 +13,15 @@ from app.sessions.models.context import SessionContext
 from app.sessions.config import DEFAULT_SESSION_LIFETIME
 from app.sessions.models.conversation import ConversationSessionSettings
 from app.sessions.session_store import ConversationSessionStore
-from app.sessions.models.artifacts import ArtifactCandidate
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactPayload
 from app.agents.instructions import CONVERSATION_INSTRUCTIONS
 from app.agents.model_turn_execution import MAX_PROVIDER_RESPONSES, MAX_TOOL_ATTEMPTS, ModelTurnStrategy
 from app.agents.protocols.tools import ToolSource
-from app.sessions.models.presentation import PresentationPayload
-from app.agents.presentation_tool import presentation_tool_source
+from app.agents.artifact_tool import artifact_tool_source
 from app.agents.models.web_search import WebSearchConfig
 
-ModelAgent = ConfiguredAgentService[object, SessionContext, PresentationPayload, ContextIssue]
-ModelSessionStore = ConversationSessionStore[SessionContext, PresentationPayload]
+ModelAgent = ConfiguredAgentService[object, SessionContext, ArtifactPayload, ContextIssue]
+ModelSessionStore = ConversationSessionStore[SessionContext, ArtifactPayload]
 MAX_ARTIFACTS = 100
 
 
@@ -42,15 +41,15 @@ def create_model_agent(
     max_artifacts: int = MAX_ARTIFACTS,
     max_tool_attempts: int = MAX_TOOL_ATTEMPTS,
     max_provider_responses: int = MAX_PROVIDER_RESPONSES,
-    tool_sources: tuple[ToolSource[ArtifactCandidate[PresentationPayload]], ...] = (),
+    tool_sources: tuple[ToolSource[ArtifactCandidate[ArtifactPayload]], ...] = (),
     web_search: WebSearchConfig | None = None,
 ) -> ModelAgent:
     owned_store = store if store is not None else new_model_session_store()
 
-    def session_tools(context: SessionContext, session_id: str, turn_id: str) -> tuple[ToolSource[ArtifactCandidate[PresentationPayload]], ...]:
+    def session_tools(context: SessionContext, session_id: str, turn_id: str) -> tuple[ToolSource[ArtifactCandidate[ArtifactPayload]], ...]:
         if not context.artifact_capabilities:
             return ()
-        return (presentation_tool_source(context.artifact_capabilities),)
+        return (artifact_tool_source(context.artifact_capabilities),)
 
     return ConfiguredAgentService(
         owned_store, validate_context_input,

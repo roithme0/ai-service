@@ -6,14 +6,13 @@ import pytest
 from pydantic import JsonValue
 
 from app.agents.generation_history import record_tool_call
-from app.sessions.models.artifacts import ArtifactCandidate
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactPayload
 from app.agents.models.input import AgentInputAccepted
 from app.agents.context_preparation import validate_context_input
 from app.sessions.models.context import SessionContext
 from app.sessions.models.conversation import ConversationSessionSettings, ConversationTurnReservation
 from app.agents.model_agent import ModelSessionStore, create_model_agent, new_model_session_store
-from app.sessions.models.presentation import PresentationPayload
-from app.agents.presentation_tool import presentation_tool_source
+from app.agents.artifact_tool import artifact_tool_source
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
 from app.agents.tool_registry import ToolRegistry
@@ -31,8 +30,8 @@ CAPABILITY = {"type": "example", "description": "An arbitrary consumer presentat
 
 
 def tool_for_session(metadata_schema: dict[str, JsonValue] | None = None) -> tuple[
-    RegisteredTool[ArtifactCandidate[PresentationPayload]], ModelSessionStore, str,
-    ConversationTurnReservation[SessionContext, PresentationPayload],
+    RegisteredTool[ArtifactCandidate[ArtifactPayload]], ModelSessionStore, str,
+    ConversationTurnReservation[SessionContext, ArtifactPayload],
 ]:
     capability = {**CAPABILITY, **({"metadataSchema": metadata_schema} if metadata_schema is not None else {})}
     accepted = validate_context_input({"context": {}, "artifactCapabilities": [capability]})
@@ -42,7 +41,7 @@ def tool_for_session(metadata_schema: dict[str, JsonValue] | None = None) -> tup
     store.append_user_message(session.session_id, "Present")
     reservation = store.reserve_turn(session.session_id)
     assert isinstance(reservation, ConversationTurnReservation)
-    source = presentation_tool_source(accepted.context.artifact_capabilities)
+    source = artifact_tool_source(accepted.context.artifact_capabilities)
     return source.registered_tools()[0], store, session.session_id, reservation
 
 
@@ -119,7 +118,7 @@ def test_local_schema_references_and_session_artifact_limit() -> None:
     asyncio.run(exercise())
     completed = store.complete_turn(session_id, reservation, "completed", "Finished")
     assert len(completed.artifacts) == 1
-    assert completed.artifacts[0].payload == PresentationPayload(title="Foodstuff", payload={"name": "Oats"})
+    assert completed.artifacts[0].payload == ArtifactPayload(title="Foodstuff", payload={"name": "Oats"})
 
 
 @pytest.mark.parametrize("subtitle", ["Example brand", None])
@@ -142,7 +141,22 @@ def test_invalid_subtitle_does_not_create_candidate(subtitle: str | int) -> None
     assert store.complete_turn(session_id, reservation, "completed", "Finished").artifacts == ()
 
 
-def test_presentation_and_other_tool_sources_are_combined() -> None:
+@pytest.mark.parametrize("field", ["title", "subtitle"])
+@pytest.mark.parametrize("length", [200, 201])
+def test_artifact_header_length_boundary(field: str, length: int) -> None:
+    tool, _, _, _ = tool_for_session()
+    arguments = {"type": "example", "title": "Oats", "payload": {"name": "Oats"}, field: "x" * length}
+    result = asyncio.run(ToolRegistry((tool,)).invoke(tool.name, json.dumps(arguments)))
+    if length == 200:
+        assert result.artifact is not None
+        header = result.artifact.payload.title if field == "title" else result.artifact.payload.subtitle
+        assert header == "x" * length
+    else:
+        assert result.artifact is None
+        assert json.loads(output_text(result))["reason"] == "invalid_arguments"
+
+
+def test_artifact_and_other_tool_sources_are_combined() -> None:
     async def exercise() -> None:
         def execute(call: ToolInvocation) -> ToolExecution[Never]:
             return ToolExecution('{"name":"Oats"}')

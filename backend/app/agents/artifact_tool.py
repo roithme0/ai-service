@@ -1,4 +1,4 @@
-"""Agent tool for producing artifacts from advertised presentation capabilities."""
+"""Agent tool for producing artifacts from advertised artifact capabilities."""
 
 from __future__ import annotations
 
@@ -10,12 +10,12 @@ from referencing import Registry
 from referencing.exceptions import Unresolvable
 from pydantic import JsonValue, ValidationError
 
-from app.agents.models.presentation import PresentationRequest
+from app.agents.models.artifacts import ArtifactRequest
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
-from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
+from app.sessions.config import MAX_ARTIFACT_HEADER_LENGTH
+from app.sessions.models.artifacts import ArtifactCandidate, ArtifactCapability, ArtifactPayload, ArtifactToolOutput
 from app.sessions.models.execution import ToolExecution
-from app.sessions.models.presentation import ArtifactCapability, PresentationPayload
 
 
 def _schema_rejection(
@@ -32,17 +32,17 @@ def _schema_rejection(
     return None
 
 
-def presentation_tool_source(
+def artifact_tool_source(
     capabilities: tuple[ArtifactCapability, ...],
-) -> LocalToolSource[ArtifactCandidate[PresentationPayload]]:
+) -> LocalToolSource[ArtifactCandidate[ArtifactPayload]]:
     validators = {item.type: Draft202012Validator(item.payload_schema, registry=Registry()) for item in capabilities}
     metadata_validators = {item.type: Draft202012Validator(item.metadata_schema, registry=Registry(),
                            format_checker=Draft202012Validator.FORMAT_CHECKER)
                            for item in capabilities if item.metadata_schema is not None}
 
-    def execute(call: ToolInvocation) -> ToolExecution[ArtifactCandidate[PresentationPayload]]:
+    def execute(call: ToolInvocation) -> ToolExecution[ArtifactCandidate[ArtifactPayload]]:
         try:
-            request = PresentationRequest.model_validate_json(call.arguments)
+            request = ArtifactRequest.model_validate_json(call.arguments)
             json.dumps(request.payload, allow_nan=False)
             json.dumps(request.metadata, allow_nan=False)
         except (ValidationError, ValueError, RecursionError):
@@ -63,7 +63,7 @@ def presentation_tool_source(
             if rejection is not None:
                 return ToolExecution(rejection, failed=True)
         candidate = ArtifactCandidate(request.type,
-            PresentationPayload(title=request.title, subtitle=request.subtitle, payload=request.payload,
+            ArtifactPayload(title=request.title, subtitle=request.subtitle, payload=request.payload,
                                 metadata=request.metadata))
         return ToolExecution(ArtifactToolOutput("presented"), candidate)
 
@@ -74,8 +74,8 @@ def presentation_tool_source(
             "type": "object", "additionalProperties": False,
             "properties": {
                 "type": {"type": "string", "enum": [item.type for item in capabilities]},
-                "title": {"type": "string", "minLength": 1, "maxLength": 200},
-                "subtitle": {"type": ["string", "null"], "minLength": 1, "maxLength": 200,
+                "title": {"type": "string", "minLength": 1, "maxLength": MAX_ARTIFACT_HEADER_LENGTH},
+                "subtitle": {"type": ["string", "null"], "minLength": 1, "maxLength": MAX_ARTIFACT_HEADER_LENGTH,
                              "description": "Optional short secondary label beneath the title. Omit when unnecessary."},
                 "payload": {},
                 "metadata": {"type": "object", "description": "Optional metadata matching the selected capability's metadataSchema. Omit when no metadata schema is advertised."},

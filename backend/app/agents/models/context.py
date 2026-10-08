@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 from app.agents.config import MAX_ARTIFACT_CAPABILITIES
-from app.sessions.models.presentation import ArtifactCapability
+from app.sessions.models.artifacts import ArtifactCapability
 
 
 @dataclass(frozen=True)

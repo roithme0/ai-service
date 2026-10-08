@@ -153,7 +153,6 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 )
             terminal = self._latest_terminal(session_id)
             return ConversationReadActive(
-                kind="active",
                 snapshot=ConversationSnapshot(
                     session=outcome.session,
                     artifacts=self._published_artifacts(session_id),
@@ -173,19 +172,19 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             read = self._read_session(session_id)
             if isinstance(read, SessionReadExpired):
                 return SessionMessageAppendExpired(
-                    kind="expired", session_id=session_id, expires_at=read.expires_at
+                    session_id=session_id, expires_at=read.expires_at
                 )
             if isinstance(read, SessionReadUnknown):
-                return SessionMessageAppendUnknown(kind="unknown", session_id=session_id)
+                return SessionMessageAppendUnknown(session_id=session_id)
             if self._sessions[session_id].active_turn_id is not None:
                 return SessionMessageBusy(session_id=session_id)
             invalid_reason = _invalid_text_reason(text)
             if invalid_reason is not None:
                 return SessionMessageAppendInvalidMessage(
-                    "invalid_message", session_id, invalid_reason
+                    session_id, invalid_reason
                 )
             if len(read.session.messages) >= MAX_MESSAGE_COUNT - 1:
-                return SessionMessageAppendLimitReached("limit_reached", session_id)
+                return SessionMessageAppendLimitReached(session_id)
             accepted_text = cast(str, text)
             self._append_history(
                 session_id,
@@ -197,7 +196,7 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
                 ),
             )
             return SessionMessageAppendAccepted(
-                "accepted", session_id, TextMessage("user", accepted_text)
+                session_id, TextMessage("user", accepted_text)
             )
 
     def admit_turn(
@@ -442,12 +441,11 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
         session = self._sessions.get(session_id)
         self._discard_expired(now)
         if session is None:
-            return SessionReadUnknown("unknown", session_id)
+            return SessionReadUnknown(session_id)
         if now >= session.expires_at:
-            return SessionReadExpired("expired", session_id, session.expires_at)
+            return SessionReadExpired(session_id, session.expires_at)
         messages = completed_text_messages(session.history)
         return SessionReadActive(
-            "active",
             SessionSnapshot(
                 session_id,
                 session.expires_at,

@@ -39,11 +39,11 @@ def timeline(history: tuple[HistoryRecord, ...]) -> tuple[TimelineItem, ...]:
                 record, results.get(record.execution_id), record.execution_id in started
             ))
         elif isinstance(record, HostedToolRecord):
-            items.append(TimelineTool(record.turn_id, record.execution_id, "web_search", record.status, "tool"))
+            items.append(TimelineTool(record.turn_id, record.execution_id, "web_search", record.status))
         elif isinstance(record, ArtifactRecord):
-            items.append(TimelineArtifact(record.turn_id, record.artifact_id, "artifact"))
+            items.append(TimelineArtifact(record.turn_id, record.artifact_id))
         elif isinstance(record, TerminalRecord) and record.kind != "completed":
-            items.append(TimelineFailure(record.turn_id, "failure"))
+            items.append(TimelineFailure(record.turn_id))
     return tuple(items)
 
 
@@ -52,7 +52,7 @@ def _message_item(
 ) -> TimelineMessage | TimelineIntermediateMessage:
     if record.kind == "intermediate":
         return TimelineIntermediateMessage(
-            record.turn_id, f"message-{record.message_id}", record.text, "intermediate"
+            record.turn_id, f"message-{record.message_id}", record.text
         )
     identity = (
         f"confirmed-{user_index}-user"
@@ -60,7 +60,7 @@ def _message_item(
         else f"message-{record.message_id}"
     )
     role: SessionRole = "user" if record.kind == "user" else "assistant"
-    return TimelineMessage(record.turn_id, identity, role, record.text, "message")
+    return TimelineMessage(record.turn_id, identity, role, record.text)
 
 
 def _tool_item(
@@ -75,4 +75,4 @@ def _tool_item(
         status = result.state
     else:
         status = "running" if started else "requested"
-    return TimelineTool(record.turn_id, record.execution_id, record.name, status, "tool")
+    return TimelineTool(record.turn_id, record.execution_id, record.name, status)

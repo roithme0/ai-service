@@ -700,7 +700,7 @@ def test_completed_turn_separates_commentary_from_standalone_answer(client: Test
     assert [item["text"] for item in snapshot["messages"]] == ["Check", "Complete answer."]
 
 
-def test_no_capabilities_means_no_presentation_tool(client: TestClient, fake_generator: FakeGenerator) -> None:
+def test_no_capabilities_means_no_artifact_tool(client: TestClient, fake_generator: FakeGenerator) -> None:
     created = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {"context": {}}})
     base = "/api/v1/agents/kochwiki/sessions/" + created.json()["session_id"]
     client.post(base + "/messages", json={"text": "Hi"})
@@ -722,3 +722,17 @@ def test_invalid_capabilities_reject_session_creation(client: TestClient, capabi
     }})
     assert response.status_code == 422
     assert response.json()["detail"][0]["loc"][:3] == ["body", "input", "artifactCapabilities"]
+
+
+@pytest.mark.parametrize("field", ["description", "titleDescription", "subtitleDescription"])
+@pytest.mark.parametrize("value", ["", "   ", "\t\n"])
+def test_blank_capability_descriptions_reject_session_creation(
+    client: TestClient, field: str, value: str,
+) -> None:
+    response = client.post("/api/v1/agents/kochwiki/sessions", json={"input": {
+        "context": {}, "artifactCapabilities": [{**JSON_CAPABILITY, field: value}],
+    }})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == [
+        "body", "input", "artifactCapabilities", 0, field,
+    ]

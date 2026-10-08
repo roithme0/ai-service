@@ -24,7 +24,7 @@ from app.agents.enums.configuration import AgentConfiguration
 from app.agents.http import create_session_router
 from app.agents.models.http_streaming import StreamEvent
 from app.agents.model_agent import create_model_agent
-from app.sessions.models.presentation import PresentationPayload
+from app.sessions.models.artifacts import ArtifactPayload
 from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
 from app.sessions.models.execution import ToolExecution
@@ -87,12 +87,12 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
             request.on_output_item({'type': 'message', 'role': 'assistant', 'phase': 'final_answer', 'content': 'Retained final'})
             await asyncio.to_thread(final_release.wait)
             raise RuntimeError('failure after accepted output')
-    async def execute(_invocation: ToolInvocation) -> ToolExecution[ArtifactCandidate[PresentationPayload]]:
+    async def execute(_invocation: ToolInvocation) -> ToolExecution[ArtifactCandidate[ArtifactPayload]]:
         nonlocal tool_calls
         tool_calls += 1
         tool_entered.set()
         await asyncio.to_thread(tool_release.wait)
-        return ToolExecution(ArtifactToolOutput('presented'), ArtifactCandidate('json', PresentationPayload(title='Data', payload={'value': 42})))
+        return ToolExecution(ArtifactToolOutput('presented'), ArtifactCandidate('json', ArtifactPayload(title='Data', payload={'value': 42})))
     source = LocalToolSource((RegisteredTool('publish', {'type': 'function', 'name': 'publish'}, execute),))
     agent = create_model_agent(Generator(), tool_sources=(source,))
     application = FastAPI()
