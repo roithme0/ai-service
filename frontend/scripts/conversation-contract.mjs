@@ -23,10 +23,14 @@ function mismatchDetails(committed, generated) {
   const checkedInLines = checkedIn.split(/\r?\n/);
   const producedLines = produced.split(/\r?\n/);
   let line = 0;
-  while (line < Math.max(checkedInLines.length, producedLines.length)
-    && checkedInLines[line] === producedLines[line]) line++;
+  while (
+    line < Math.max(checkedInLines.length, producedLines.length) &&
+    checkedInLines[line] === producedLines[line]
+  )
+    line++;
 
-  const show = (value) => value === undefined ? '<end of file>' : JSON.stringify(value.slice(0, 240));
+  const show = (value) =>
+    value === undefined ? '<end of file>' : JSON.stringify(value.slice(0, 240));
   return `First difference at line ${line + 1}:\n  checked-in: ${show(checkedInLines[line])}\n  generated:  ${show(producedLines[line])}`;
 }
 
@@ -51,14 +55,18 @@ try {
     if (check) {
       const committed = await readFile(destination).catch(() => null);
       if (!committed?.equals(generated)) {
-        throw new Error(`${destination} is stale. ${mismatchDetails(committed, generated)}\nRun npm run generate:conversation-contract.`);
+        throw new Error(
+          `${destination} is stale. ${mismatchDetails(committed, generated)}\nRun npm run generate:conversation-contract.`,
+        );
       }
     } else {
       await mkdir(contract, { recursive: true });
       await writeFile(destination, generated);
     }
   }
-  process.stdout.write(check ? 'Conversation contract is current.\n' : 'Conversation contract generated.\n');
+  process.stdout.write(
+    check ? 'Conversation contract is current.\n' : 'Conversation contract generated.\n',
+  );
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

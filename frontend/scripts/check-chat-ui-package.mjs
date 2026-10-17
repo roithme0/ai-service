@@ -14,7 +14,9 @@ for (const entry of ['.', './ui', './conversation']) {
 }
 const root = await import(pathToFileURL(resolve(packageRoot, manifest.exports['.'].default)).href);
 assert.deepEqual(Object.keys(root), [], 'Root must export no API');
-const conversation = await import(pathToFileURL(resolve(packageRoot, manifest.exports['./conversation'].default)).href);
+const conversation = await import(
+  pathToFileURL(resolve(packageRoot, manifest.exports['./conversation'].default)).href
+);
 for (const [name, value] of Object.entries(conversation.AgentConfiguration)) {
   assert.equal(name, value);
 }
@@ -26,7 +28,11 @@ globalThis.fetch = async (url, options) => {
 };
 try {
   const controller = new conversation.ConversationController(
-    new conversation.HttpConversationTransport('/ai/api/v1/', conversation.AgentConfiguration.demo, 'demo:default'),
+    new conversation.HttpConversationTransport(
+      '/ai/api/v1/',
+      conversation.AgentConfiguration.demo,
+      'demo:default',
+    ),
     () => {},
   );
   await controller.start();
@@ -46,10 +52,16 @@ const consumer = await mkdtemp(resolve(tmpdir(), 'chat-ui-consumer-'));
 await mkdir(resolve(consumer, 'node_modules/@roithme0'), { recursive: true });
 await symlink(packageRoot, resolve(consumer, 'node_modules/@roithme0/chat-ui'), 'junction');
 for (const dependency of ['@angular', 'rxjs', 'tslib']) {
-  await symlink(resolve(frontend, 'node_modules', dependency), resolve(consumer, 'node_modules', dependency), 'junction');
+  await symlink(
+    resolve(frontend, 'node_modules', dependency),
+    resolve(consumer, 'node_modules', dependency),
+    'junction',
+  );
 }
 const source = resolve(consumer, 'consumer.mts');
-await writeFile(source, `
+await writeFile(
+  source,
+  `
 import { ChatUiComponent, artifactRenderer, type ChatSubmission, type ChatContent } from '@roithme0/chat-ui/ui';
 import { AgentConfiguration, ConversationController, HttpConversationTransport, presentJsonArtifact,
   ConversationApiError, ConversationNetworkError,
@@ -74,16 +86,27 @@ Root.ChatUiComponent;
 import { parseSessionSnapshot } from '@roithme0/chat-ui/conversation';
 // @ts-expect-error Private implementation subpaths must remain inaccessible.
 import { ConversationController as PrivateController } from '@roithme0/chat-ui/conversation/src/conversation-controller';
-`);
+`,
+);
 const program = ts.createProgram([source], {
-  strict: true, noEmit: true, target: ts.ScriptTarget.ES2022,
-  module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
-  experimentalDecorators: true, skipLibCheck: false,
+  strict: true,
+  noEmit: true,
+  target: ts.ScriptTarget.ES2022,
+  module: ts.ModuleKind.NodeNext,
+  moduleResolution: ts.ModuleResolutionKind.NodeNext,
+  experimentalDecorators: true,
+  skipLibCheck: false,
 });
 const diagnostics = ts.getPreEmitDiagnostics(program);
 if (diagnostics.length) {
-  throw new Error(ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-    getCanonicalFileName: (name) => name, getCurrentDirectory: () => consumer, getNewLine: () => '\n',
-  }));
+  throw new Error(
+    ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+      getCanonicalFileName: (name) => name,
+      getCurrentDirectory: () => consumer,
+      getNewLine: () => '\n',
+    }),
+  );
 }
-console.log('Built package exports, runtime, configuration and strict consumer declarations passed.');
+console.log(
+  'Built package exports, runtime, configuration and strict consumer declarations passed.',
+);

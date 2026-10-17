@@ -23,6 +23,8 @@ The frontend is an Angular 22 workspace containing the AI Service application an
 
 Sessions retain their initialization snapshots, messages, and any published artifacts in process-local memory with a fixed 90-minute lifetime. Clients submit messages and request turns against a session identifier; the backend supplies retained history to the model. There is no database-backed conversation storage, and sessions do not survive a backend restart. Durable history, listing, and resumption are outside the current scope. See the [backend README](backend/README.md) for setup and model/MCP configuration.
 
+Frontend formatting, linting, tests, and Codex hook behavior are documented in [frontend validation](docs/frontend-validation.md). The Stop hook formats changed frontend files, checks whole-frontend lint, and runs tooling tests plus both Angular test suites. CI runs read-only linting.
+
 The checked-in `.codex/config.toml` enables Angular CLI and OpenAI documentation integrations for development.
 
 ## Workflows

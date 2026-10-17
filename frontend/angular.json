@@ -32,6 +32,21 @@
             "tsConfig": "projects/chat-ui/tsconfig.spec.json",
             "runnerConfig": "projects/chat-ui/vitest.config.ts"
           }
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": [
+              "**/*.ts",
+              "**/*.mts",
+              "**/*.cts",
+              "**/*.html",
+              "**/*.js",
+              "**/*.cjs",
+              "**/*.mjs"
+            ],
+            "maxWarnings": 0
+          }
         }
       }
     },
@@ -127,6 +142,21 @@
             "buildTarget": "ai-service-frontend:build:production",
             "tsConfig": "tsconfig.spec.json",
             "runnerConfig": "vitest.app.config.ts"
+          }
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": [
+              "**/*.ts",
+              "**/*.mts",
+              "**/*.cts",
+              "**/*.html",
+              "**/*.js",
+              "**/*.cjs",
+              "**/*.mjs"
+            ],
+            "maxWarnings": 0
           }
         }
       }
