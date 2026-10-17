@@ -3,8 +3,10 @@
 import json
 import logging
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Never
+
+from mcp.types import Tool
 
 from app.mcp.connection import MCPConnection
 from app.agents.models.tools import RegisteredTool, ToolInvocation
@@ -30,10 +32,10 @@ class MCPToolset:
             raise ValueError("MCP connection names must be unique, nonempty identifiers within an agent")
         self._connections = connections
 
-    def validate(self) -> None:
+    def validate(self, candidates: Mapping[MCPConnection, tuple[Tool, ...]] | None = None) -> None:
         names: set[str] = set()
         for connection in self._connections:
-            for tool in connection.tools:
+            for tool in (candidates.get(connection, connection.tools) if candidates is not None else connection.tools):
                 name = model_tool_name(connection.name, tool.name)
                 if name in names:
                     raise ValueError(f"Duplicate model-facing MCP tool name: {name}")

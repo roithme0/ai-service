@@ -44,6 +44,9 @@ jobs:
       - name: Check generated conversation contract
         run: npm run check:conversation-contract
 
+      - name: Lint frontend
+        run: npm run lint
+
   build-app:
     needs: check-conversation-contract
     runs-on: ubuntu-latest

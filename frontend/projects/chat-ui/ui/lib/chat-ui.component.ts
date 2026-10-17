@@ -83,7 +83,10 @@ export class ChatUiComponent {
       if (!this.composerDisabled()) return;
       const textarea = this.composer().nativeElement;
       this.restoreComposerFocus = this.document.activeElement === textarea;
-      if (this.document.activeElement !== this.document.body && this.document.activeElement !== textarea) {
+      if (
+        this.document.activeElement !== this.document.body &&
+        this.document.activeElement !== textarea
+      ) {
         this.initialFocusPending = false;
       }
       const trackFocus = (event: FocusEvent): void => {
@@ -97,7 +100,8 @@ export class ChatUiComponent {
     });
     afterEveryRender(() => {
       if (this.composerDisabled()) return;
-      const shouldFocus = this.restoreComposerFocus || (this.focusOnReady() && this.initialFocusPending);
+      const shouldFocus =
+        this.restoreComposerFocus || (this.focusOnReady() && this.initialFocusPending);
       this.restoreComposerFocus = false;
       this.initialFocusPending = false;
       if (!shouldFocus) return;

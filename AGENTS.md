@@ -24,6 +24,14 @@ Plans and specification files are gitignored. Treat the current code and tracked
 - Treat backend API as an internal contract for this repo's frontend by default: ship backend/frontend contract changes together, and do not preserve legacy compatibility unless explicitly required for a feature or an external consumer.
 - Write tests where they provide meaningful regression protection: critical user flows, branching logic, stateful behavior, contract boundaries, and bug-prone edge cases. Avoid low-signal tests that only restate implementation details. Do not remove existing tests unless they are redundant, obsolete, flaky, or block legitimate refactoring, and explain the reason when removing them.
 
+## Frontend Validation
+
+- After frontend edits, run `npm run format:changed`, then `npm run lint`, `npm run test:tooling`, `npm run test:app`, and `npm run test:chat-ui` from `frontend`. On Windows, use `npm.cmd` if PowerShell blocks `npm.ps1`.
+- Formatting covers whole staged, unstaged, and untracked frontend files without updating the Git index. Check the worktree first and coordinate before formatting files containing unrelated user edits. Generated conversation contracts, lockfiles, dependencies, caches, and build output are excluded.
+- Lint covers the whole frontend, including the application, library, tests, handwritten scripts, and Angular templates. Both errors and warnings fail validation. Use `npm run lint:fix` only deliberately and review its diff; the hook and CI never apply ESLint fixes.
+- Codex hooks snapshot frontend content before each prompt, then format changed files, lint, run tooling tests, and run both Angular test suites when content changes. Review formatting changes before completion. Successful checks are reused only for identical content after every check passes. Review and trust the hook definitions in Codex before relying on them.
+- Address findings introduced by your work; broad existing-debt cleanup requires separate authorization. Report missing dependencies or failing checks as incomplete validation. Persistent hook failures request at most one continuation.
+
 ## Communication Preferences
 
 - Keep responses concise.

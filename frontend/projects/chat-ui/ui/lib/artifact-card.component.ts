@@ -28,8 +28,14 @@ export class ArtifactCardComponent implements AfterViewInit, OnDestroy {
   protected readonly overflowing = signal(false);
   protected readonly formattedPayload = computed(() => {
     const payload = this.artifact().payload;
-    if (this.artifact().type !== 'json' || payload === null || typeof payload !== 'object'
-      || Array.isArray(payload) || !('value' in payload)) return null;
+    if (
+      this.artifact().type !== 'json' ||
+      payload === null ||
+      typeof payload !== 'object' ||
+      Array.isArray(payload) ||
+      !('value' in payload)
+    )
+      return null;
     return JSON.stringify(payload['value'], null, 2);
   });
   protected readonly renderContext = computed(() => ({

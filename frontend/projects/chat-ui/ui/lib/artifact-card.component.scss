@@ -50,7 +50,11 @@ h3 {
   border-radius: 0.75rem;
   background: var(--ai-chat-code-background, #160f12);
   color: var(--ai-chat-artifact-text, #eadde2);
-  font: 0.8rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+  font:
+    0.8rem/1.5 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }

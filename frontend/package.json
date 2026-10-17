@@ -12,7 +12,11 @@
     "test:chat-ui": "ng test chat-ui --watch=false",
     "watch:app": "ng build ai-service-frontend --watch --configuration development",
     "watch:chat-ui": "ng build chat-ui --watch",
-    "pack:chat-ui": "npm run build:chat-ui && npm pack ./dist/chat-ui --pack-destination ./dist"
+    "pack:chat-ui": "npm run build:chat-ui && npm pack ./dist/chat-ui --pack-destination ./dist",
+    "format:changed": "node scripts/format-changed.mts",
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --max-warnings=0 --fix",
+    "test:tooling": "node --test scripts/format-changed.test.mts scripts/validate-frontend.test.mts"
   },
   "private": true,
   "packageManager": "npm@10.7.0",
@@ -38,6 +42,12 @@
     "ng-packagr": "^22.0.0",
     "prettier": "^3.8.1",
     "typescript": "~6.0.0",
-    "vitest": "4.0.8"
+    "vitest": "4.0.8",
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.10.1",
+    "angular-eslint": "22.6.0",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "typescript-eslint": "8.71.2"
   }
 }

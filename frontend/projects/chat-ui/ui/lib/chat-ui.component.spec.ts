@@ -9,7 +9,6 @@ import {
   artifactRenderer,
   type ChatArtifactRenderContext,
   type ChatContent,
-  type ChatSubmission,
   type ChatTextMessage,
 } from './chat-message';
 import { ChatUiComponent } from './chat-ui.component';
@@ -19,16 +18,19 @@ const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
   { kind: 'text', id: 'assistant-1', role: 'assistant', text: '**formatted assistant text**' },
 ];
 
-@Component({ template: '<ng-template #template let-payload let-artifact="artifact">Custom: {{ payload.label }} {{ artifact.metadata?.reference }}</ng-template>' })
+@Component({
+  template:
+    '<ng-template #template let-payload let-artifact="artifact">Custom: {{ payload.label }} {{ artifact.metadata?.reference }}</ng-template>',
+})
 class RendererTemplateHost {
-  readonly template = viewChild.required<
-    TemplateRef<ChatArtifactRenderContext<{ readonly label: string }>>
-  >(
-    'template',
-  );
+  readonly template =
+    viewChild.required<TemplateRef<ChatArtifactRenderContext<{ readonly label: string }>>>(
+      'template',
+    );
 }
 
 describe('ChatUiComponent', () => {
+  const scrollTo = vi.fn<Element['scrollTo']>();
   let originalScrollTo: PropertyDescriptor | undefined;
 
   afterEach(() => {
@@ -42,16 +44,15 @@ describe('ChatUiComponent', () => {
   });
 
   beforeEach(() => {
+    scrollTo.mockClear();
     originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
-    Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: vi.fn() });
+    Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scrollTo });
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
 
   it('renders ordered host messages and applies Markdown only to assistant text', () => {
     const fixture = createFixture(INITIAL_MESSAGES);
-    const messageElements = fixture.nativeElement.querySelectorAll(
-      '.message',
-    ) as NodeListOf<HTMLElement>;
+    const messageElements = fixtureElement(fixture).querySelectorAll<HTMLElement>('.message');
 
     expect(messageElements).toHaveLength(2);
     expect(messageElements[0].classList.contains('message--user')).toBe(true);
@@ -69,7 +70,7 @@ describe('ChatUiComponent', () => {
       { kind: 'tool', id: 'tool', name: 'check', status: 'completed' },
       { kind: 'text', id: 'final', role: 'assistant', text: 'Standalone result.' },
     ]);
-    const element = fixture.nativeElement as HTMLElement;
+    const element = fixtureElement(fixture);
     const rows = [...element.querySelector('.messages')!.children];
     expect(rows[0].classList.contains('message--intermediate')).toBe(true);
     expect(rows[0].getAttribute('aria-label')).toBe('Zwischenmeldung des Assistenten');
@@ -89,22 +90,32 @@ describe('ChatUiComponent', () => {
       { kind: 'tool', id: 'tool-4', name: 'check', status: 'not_executed' },
       { kind: 'failure', id: 'failure', text: 'Die Antwort konnte nicht erstellt werden.' },
     ]);
-    const element = fixture.nativeElement as HTMLElement;
-    expect([...element.querySelector('.messages')!.children].map(child => child.tagName)).toEqual([
-      'ARTICLE', 'ARTICLE', 'AI-CHAT-ARTIFACT-CARD', 'ARTICLE', 'ARTICLE', 'ARTICLE', 'ARTICLE',
-    ]);
+    const element = fixtureElement(fixture);
+    expect([...element.querySelector('.messages')!.children].map((child) => child.tagName)).toEqual(
+      ['ARTICLE', 'ARTICLE', 'AI-CHAT-ARTIFACT-CARD', 'ARTICLE', 'ARTICLE', 'ARTICLE', 'ARTICLE'],
+    );
     const rows = [...element.querySelectorAll('.tool-call')];
-    expect(rows.map(row => row.querySelector('.tool-call__status')?.textContent?.trim())).toEqual([
-      'Abgeschlossen', 'Fehlgeschlagen', 'Ergebnis unklar', 'Nicht ausgeführt',
-    ]);
-    expect(rows.every(row => row.querySelector('mat-icon')?.getAttribute('svgIcon') === 'ai-chat:tool')).toBe(true);
+    expect(rows.map((row) => row.querySelector('.tool-call__status')?.textContent?.trim())).toEqual(
+      ['Abgeschlossen', 'Fehlgeschlagen', 'Ergebnis unklar', 'Nicht ausgeführt'],
+    );
+    expect(
+      rows.every(
+        (row) => row.querySelector('mat-icon')?.getAttribute('svgIcon') === 'ai-chat:tool',
+      ),
+    ).toBe(true);
     expect(rows[0].textContent).toContain('<b>present</b>');
     expect(rows[0].querySelector('b')).toBeNull();
-    fixture.componentRef.setInput('conversationStatus', { kind: 'error', placement: 'assistant', message: 'Current failure' });
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      placement: 'assistant',
+      message: 'Current failure',
+    });
     fixture.detectChanges();
     expect(element.querySelectorAll('.status--error')).toHaveLength(1);
-    fixture.componentRef.setInput('content', [...fixture.componentInstance.content(),
-      { kind: 'text', id: 'next-user', role: 'user', text: 'Continue' }]);
+    fixture.componentRef.setInput('content', [
+      ...fixture.componentInstance.content(),
+      { kind: 'text', id: 'next-user', role: 'user', text: 'Continue' },
+    ]);
     fixture.componentRef.setInput('conversationStatus', null);
     fixture.detectChanges();
     expect(element.querySelectorAll('.status--error')).toHaveLength(1);
@@ -114,10 +125,27 @@ describe('ChatUiComponent', () => {
     const templateFixture = TestBed.createComponent(RendererTemplateHost);
     templateFixture.detectChanges();
     const content: readonly ChatContent[] = [
-      { kind: 'artifact', id: 'custom', type: 'known', headline: 'Known', payload: { label: 'typed' }, metadata: { reference: 'host-action-reference' } },
-      { kind: 'artifact', id: 'fallback', type: 'json', headline: 'JSON', payload: { value: {
-        nested: [true, null], empty: {}, text: '<script>unsafe()</script>',
-      } } },
+      {
+        kind: 'artifact',
+        id: 'custom',
+        type: 'known',
+        headline: 'Known',
+        payload: { label: 'typed' },
+        metadata: { reference: 'host-action-reference' },
+      },
+      {
+        kind: 'artifact',
+        id: 'fallback',
+        type: 'json',
+        headline: 'JSON',
+        payload: {
+          value: {
+            nested: [true, null],
+            empty: {},
+            text: '<script>unsafe()</script>',
+          },
+        },
+      },
     ];
     const fixture = createFixture(content);
     fixture.componentRef.setInput('artifactRenderers', {
@@ -125,7 +153,7 @@ describe('ChatUiComponent', () => {
     });
     fixture.detectChanges();
 
-    const cards = fixture.nativeElement.querySelectorAll('.artifact') as NodeListOf<HTMLElement>;
+    const cards = fixtureElement(fixture).querySelectorAll<HTMLElement>('.artifact');
     expect(cards).toHaveLength(2);
     expect(cards[0].textContent).toContain('Custom: typed');
     expect(cards[0].textContent).toContain('host-action-reference');
@@ -135,11 +163,16 @@ describe('ChatUiComponent', () => {
   });
 
   it('does not silently render unsupported types as JSON', () => {
-    const fixture = createFixture([{
-      kind: 'artifact', id: 'unsupported', type: 'unknown', headline: 'Unknown',
-      payload: { secret: 'not presented' },
-    }]);
-    const element = fixture.nativeElement as HTMLElement;
+    const fixture = createFixture([
+      {
+        kind: 'artifact',
+        id: 'unsupported',
+        type: 'unknown',
+        headline: 'Unknown',
+        payload: { secret: 'not presented' },
+      },
+    ]);
+    const element = fixtureElement(fixture);
     expect(element.querySelector('pre')).toBeNull();
     expect(element.textContent).toContain('Diese Darstellung wird nicht unterst\u00fctzt.');
     expect(element.textContent).not.toContain('not presented');
@@ -147,13 +180,27 @@ describe('ChatUiComponent', () => {
 
   it('renders a subtitle literally beneath the artifact title, outside the collapsible body', () => {
     const fixture = createFixture([
-      { kind: 'artifact', id: 'with-subtitle', type: 'json', headline: 'Oats',
-        subtitle: '<strong>Example brand</strong>', payload: { value: {} } },
-      { kind: 'artifact', id: 'without-subtitle', type: 'json', headline: 'Water', payload: { value: {} } },
+      {
+        kind: 'artifact',
+        id: 'with-subtitle',
+        type: 'json',
+        headline: 'Oats',
+        subtitle: '<strong>Example brand</strong>',
+        payload: { value: {} },
+      },
+      {
+        kind: 'artifact',
+        id: 'without-subtitle',
+        type: 'json',
+        headline: 'Water',
+        payload: { value: {} },
+      },
     ]);
-    const cards = (fixture.nativeElement as HTMLElement).querySelectorAll('.artifact');
+    const cards = fixtureElement(fixture).querySelectorAll('.artifact');
     expect(cards[0].querySelector('.artifact-header h3')?.textContent).toBe('Oats');
-    expect(cards[0].querySelector('.artifact-header .artifact-subtitle')?.textContent).toBe('<strong>Example brand</strong>');
+    expect(cards[0].querySelector('.artifact-header .artifact-subtitle')?.textContent).toBe(
+      '<strong>Example brand</strong>',
+    );
     expect(cards[0].querySelector('strong')).toBeNull();
     expect(cards[0].querySelector('.artifact-body .artifact-subtitle')).toBeNull();
     expect(cards[1].querySelector('.artifact-subtitle')).toBeNull();
@@ -168,24 +215,30 @@ describe('ChatUiComponent', () => {
           scrollHeight: { configurable: true, value: 500 },
           clientHeight: { configurable: true, value: 200 },
         });
-        this.callback([], this as unknown as ResizeObserver);
+        this.callback([], this);
       }
 
       disconnect(): void {}
       unobserve(): void {}
     }
     vi.stubGlobal('ResizeObserver', OverflowObserver);
-    const fixture = createFixture([{
-      kind: 'artifact', id: 'large', type: 'json', headline: 'Large', payload: { value: { rows: [1, 2, 3] } },
-    }]);
+    const fixture = createFixture([
+      {
+        kind: 'artifact',
+        id: 'large',
+        type: 'json',
+        headline: 'Large',
+        payload: { value: { rows: [1, 2, 3] } },
+      },
+    ]);
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const toggle = fixture.nativeElement.querySelector('.artifact-toggle') as HTMLButtonElement;
+    const toggle = fixtureElement(fixture).querySelector('.artifact-toggle') as HTMLButtonElement;
     expect(toggle.textContent).toContain('Mehr anzeigen');
     expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    const body = fixture.nativeElement.querySelector('.artifact-body') as HTMLElement;
+    const body = fixtureElement(fixture).querySelector('.artifact-body') as HTMLElement;
     expect(body.classList.contains('artifact-body--faded')).toBe(true);
     toggle.click();
     fixture.detectChanges();
@@ -194,23 +247,23 @@ describe('ChatUiComponent', () => {
     expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 15 6-6 6 6');
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(body.classList.contains('artifact-body--faded')).toBe(false);
-    expect(fixture.nativeElement.querySelector('.artifact-body--expanded')).not.toBeNull();
+    expect(fixtureElement(fixture).querySelector('.artifact-body--expanded')).not.toBeNull();
   });
 
   it('retains a submission until the host acknowledges it', () => {
     const fixture = createFixture([]);
     const component = fixture.componentInstance;
     const emit = vi.spyOn(component.messageSubmitted, 'emit');
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
 
     textarea.value = '  hello there  ';
     textarea.dispatchEvent(new Event('input'));
     fixture.detectChanges();
-    (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    (fixtureElement(fixture).querySelector('button') as HTMLButtonElement).click();
     fixture.detectChanges();
 
     expect(emit).toHaveBeenCalledOnce();
-    const submission = emit.mock.calls[0][0] as ChatSubmission;
+    const submission = emit.mock.calls[0][0];
     expect(submission.text).toBe('hello there');
     expect(textarea.value).toBe('  hello there  ');
 
@@ -218,13 +271,13 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
 
     expect(textarea.value).toBe('');
-    expect(fixture.nativeElement.querySelectorAll('.message')).toHaveLength(0);
+    expect(fixtureElement(fixture).querySelectorAll('.message')).toHaveLength(0);
     expect(document.activeElement).toBe(textarea);
   });
 
   it('restores composer focus after a disabled interval', () => {
     const fixture = createFixture([]);
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
     textarea.focus();
     fixture.componentRef.setInput('composerDisabled', true);
     fixture.detectChanges();
@@ -236,7 +289,7 @@ describe('ChatUiComponent', () => {
 
   it('focuses the composer once when an initially disabled conversation becomes ready', () => {
     const fixture = createFixture([], { disabled: true, focusOnReady: true });
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
     expect(document.activeElement).not.toBe(textarea);
     fixture.componentRef.setInput('composerDisabled', false);
     fixture.detectChanges();
@@ -249,7 +302,7 @@ describe('ChatUiComponent', () => {
 
   it('preserves focus changes made while initial readiness is pending', () => {
     const fixture = createFixture([], { disabled: true, focusOnReady: true });
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
     const other = document.createElement('button');
     document.body.append(other);
     try {
@@ -263,28 +316,31 @@ describe('ChatUiComponent', () => {
     }
   });
 
-  it.each([false, true])('preserves another focus target even if it subsequently blurs (%s)', (blur) => {
-    const fixture = createFixture([]);
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
-    const other = document.createElement('button');
-    document.body.append(other);
-    try {
-      textarea.focus();
-      fixture.componentRef.setInput('composerDisabled', true);
-      fixture.detectChanges();
-      other.focus();
-      if (blur) other.blur();
-      fixture.componentRef.setInput('composerDisabled', false);
-      fixture.detectChanges();
-      expect(document.activeElement).toBe(blur ? document.body : other);
-    } finally {
-      other.remove();
-    }
-  });
+  it.each([false, true])(
+    'preserves another focus target even if it subsequently blurs (%s)',
+    (blur) => {
+      const fixture = createFixture([]);
+      const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
+      const other = document.createElement('button');
+      document.body.append(other);
+      try {
+        textarea.focus();
+        fixture.componentRef.setInput('composerDisabled', true);
+        fixture.detectChanges();
+        other.focus();
+        if (blur) other.blur();
+        fixture.componentRef.setInput('composerDisabled', false);
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(blur ? document.body : other);
+      } finally {
+        other.remove();
+      }
+    },
+  );
 
   it('does not claim focus when the composer was unfocused before disabling', () => {
     const fixture = createFixture([]);
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
     const focus = vi.spyOn(textarea, 'focus');
     fixture.componentRef.setInput('composerDisabled', true);
     fixture.detectChanges();
@@ -305,8 +361,8 @@ describe('ChatUiComponent', () => {
 
   it('renders the packaged send icon through the Material control', () => {
     const fixture = createFixture([]);
-    const button = fixture.nativeElement.querySelector('button[matIconButton]');
-    const icon = fixture.nativeElement.querySelector('mat-icon[svgIcon="ai-chat:send"]');
+    const button = fixtureElement(fixture).querySelector('button[matIconButton]');
+    const icon = fixtureElement(fixture).querySelector('mat-icon[svgIcon="ai-chat:send"]');
 
     expect(button).not.toBeNull();
     expect(icon).not.toBeNull();
@@ -314,7 +370,7 @@ describe('ChatUiComponent', () => {
 
   it('renders only the send action inside the composer surface', () => {
     const fixture = createFixture([]);
-    const surface = fixture.nativeElement.querySelector('.composer-surface') as HTMLElement;
+    const surface = fixtureElement(fixture).querySelector('.composer-surface') as HTMLElement;
     const actions = surface.querySelector('.composer-actions') as HTMLElement;
 
     expect(surface.querySelector('textarea')).not.toBeNull();
@@ -335,7 +391,7 @@ describe('ChatUiComponent', () => {
   it('submits once on Enter and does not emit blank input', () => {
     const fixture = createFixture([]);
     const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
 
     textarea.value = '   ';
     textarea.dispatchEvent(new Event('input'));
@@ -347,7 +403,7 @@ describe('ChatUiComponent', () => {
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     expect(emit).toHaveBeenCalledOnce();
-    expect((emit.mock.calls[0][0] as ChatSubmission).text).toBe('keyboard message');
+    expect(emit.mock.calls[0][0].text).toBe('keyboard message');
 
     textarea.value = 'multiline draft';
     textarea.dispatchEvent(new Event('input'));
@@ -359,62 +415,68 @@ describe('ChatUiComponent', () => {
 
   it('renders replacement host state without retaining submitted messages', () => {
     const fixture = createFixture([]);
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'host decides';
     textarea.dispatchEvent(new Event('input'));
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.message')).toHaveLength(0);
+    expect(fixtureElement(fixture).querySelectorAll('.message')).toHaveLength(0);
 
     fixture.componentRef.setInput('content', [
       { kind: 'text', id: 'replacement', role: 'assistant', text: 'Replacement state' },
     ] satisfies readonly ChatTextMessage[]);
     fixture.detectChanges();
 
-    const messages = fixture.nativeElement.querySelectorAll('.message') as NodeListOf<HTMLElement>;
+    const messages = fixtureElement(fixture).querySelectorAll<HTMLElement>('.message');
     expect(messages).toHaveLength(1);
     expect(messages[0].textContent).toContain('Replacement state');
   });
 
   it('scrolls history to new messages, statuses, and errors after rendering', () => {
     vi.useFakeTimers();
-    const scrollTo = vi.mocked(Element.prototype.scrollTo);
-      const fixture = createFixture([]);
-      const history = fixture.nativeElement.querySelector('.history') as HTMLElement;
-      Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
-      const scrollToBottom = (): void => {
-        expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
-        scrollTo.mockClear();
-      };
+    const fixture = createFixture([]);
+    const history = fixtureElement(fixture).querySelector('.history') as HTMLElement;
+    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+    const scrollToBottom = (): void => {
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
+      scrollTo.mockClear();
+    };
 
-      fixture.componentRef.setInput('content', [
-        { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
-      ] satisfies readonly ChatTextMessage[]);
-      fixture.detectChanges();
-      scrollToBottom();
+    fixture.componentRef.setInput('content', [
+      { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
+    ] satisfies readonly ChatTextMessage[]);
+    fixture.detectChanges();
+    scrollToBottom();
 
-      fixture.componentRef.setInput('conversationStatus', {
-        kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed',
-      });
-      fixture.detectChanges();
-      vi.advanceTimersByTime(300);
-      fixture.detectChanges();
-      expect(fixture.nativeElement.querySelector('.status-content')?.textContent).toContain('Sending');
-      scrollToBottom();
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      message: 'Sending',
+      placement: 'assistant',
+      reveal: 'delayed',
+    });
+    fixture.detectChanges();
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('.status-content')?.textContent).toContain(
+      'Sending',
+    );
+    scrollToBottom();
 
-      fixture.componentRef.setInput('content', [
-        { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
-        { kind: 'text', id: 'assistant-1', role: 'assistant', text: 'Hi' },
-      ] satisfies readonly ChatTextMessage[]);
-      fixture.componentRef.setInput('conversationStatus', null);
-      fixture.detectChanges();
-      scrollToBottom();
+    fixture.componentRef.setInput('content', [
+      { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
+      { kind: 'text', id: 'assistant-1', role: 'assistant', text: 'Hi' },
+    ] satisfies readonly ChatTextMessage[]);
+    fixture.componentRef.setInput('conversationStatus', null);
+    fixture.detectChanges();
+    scrollToBottom();
 
-      fixture.componentRef.setInput('conversationStatus', {
-        kind: 'error', message: 'Failed', placement: 'assistant',
-      });
-      fixture.detectChanges();
-      scrollToBottom();
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      message: 'Failed',
+      placement: 'assistant',
+    });
+    fixture.detectChanges();
+    scrollToBottom();
   });
 
   it('reveals a slow sending label after 300 ms and replaces it immediately', () => {
@@ -422,49 +484,65 @@ describe('ChatUiComponent', () => {
     const fixture = createFixture([]);
     fixture.componentRef.setInput('composerDisabled', true);
     fixture.componentRef.setInput('conversationStatus', {
-      kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed',
+      kind: 'loading',
+      message: 'Sending',
+      placement: 'assistant',
+      reveal: 'delayed',
     });
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status--delayed')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
-    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    expect(fixtureElement(fixture).querySelector('.status--delayed')).not.toBeNull();
+    expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
+    expect(
+      (fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement).disabled,
+    ).toBe(true);
     vi.advanceTimersByTime(299);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
+    expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
     vi.advanceTimersByTime(1);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status-content--fade')?.textContent).toContain('Sending');
-    const sendingLabel = fixture.nativeElement.querySelector('.status-content');
+    expect(fixtureElement(fixture).querySelector('.status-content--fade')?.textContent).toContain(
+      'Sending',
+    );
+    const sendingLabel = fixtureElement(fixture).querySelector('.status-content');
     fixture.componentRef.setInput('conversationStatus', {
-      kind: 'loading', message: 'Generating', placement: 'assistant',
+      kind: 'loading',
+      message: 'Generating',
+      placement: 'assistant',
     });
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Generating');
-    const generatingLabel = fixture.nativeElement.querySelector('.status-content');
-    expect(generatingLabel.classList.contains('status-content--fade')).toBe(true);
+    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain('Generating');
+    const generatingLabel = fixtureElement(fixture).querySelector('.status-content');
+    expect(generatingLabel!.classList.contains('status-content--fade')).toBe(true);
     expect(generatingLabel).not.toBe(sendingLabel);
   });
 
   it('cancels a quick sending reveal and starts a fresh delay for the next send', () => {
     vi.useFakeTimers();
     const fixture = createFixture([]);
-    const sending = { kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed' } as const;
+    const sending = {
+      kind: 'loading',
+      message: 'Sending',
+      placement: 'assistant',
+      reveal: 'delayed',
+    } as const;
     fixture.componentRef.setInput('conversationStatus', sending);
     fixture.detectChanges();
     vi.advanceTimersByTime(100);
     fixture.componentRef.setInput('conversationStatus', {
-      kind: 'error', message: 'Failed', placement: 'assistant',
+      kind: 'error',
+      message: 'Failed',
+      placement: 'assistant',
     });
     fixture.detectChanges();
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Failed');
+    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain('Failed');
     fixture.componentRef.setInput('conversationStatus', sending);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
+    expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Sending');
+    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain('Sending');
     fixture.destroy();
   });
 
@@ -478,10 +556,10 @@ describe('ChatUiComponent', () => {
     });
     fixture.detectChanges();
 
-    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(
-      true,
-    );
-    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain(
+    expect(
+      (fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement).disabled,
+    ).toBe(true);
+    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain(
       'Antwort wird erstellt …',
     );
 
@@ -493,10 +571,14 @@ describe('ChatUiComponent', () => {
       action: { id: 'retry-turn', label: 'Erneut versuchen' },
     });
     fixture.detectChanges();
-    (fixture.nativeElement.querySelector('.status-action') as HTMLButtonElement).click();
+    (fixtureElement(fixture).querySelector('.status-action') as HTMLButtonElement).click();
 
     expect(actionEmit).toHaveBeenCalledWith('retry-turn');
-    expect(fixture.nativeElement.querySelector('.status-content').classList.contains('status-content--fade')).toBe(false);
+    expect(
+      fixtureElement(fixture)
+        .querySelector('.status-content')!
+        .classList.contains('status-content--fade'),
+    ).toBe(false);
   });
 });
 
@@ -512,4 +594,8 @@ function createFixture(
   fixture.componentRef.setInput('focusOnReady', options.focusOnReady ?? false);
   fixture.detectChanges();
   return fixture;
+}
+
+function fixtureElement<T>(fixture: ComponentFixture<T>): HTMLElement {
+  return fixture.nativeElement as HTMLElement;
 }

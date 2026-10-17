@@ -3,7 +3,8 @@ import type { TemplateRef } from '@angular/core';
 export type ChatMessageRole = 'user' | 'assistant';
 
 export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue = JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue };
+export type JsonValue =
+  JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
 export interface ChatTextMessage {
   readonly kind: 'text';
@@ -22,7 +23,8 @@ export interface ChatArtifact<TPayload extends JsonValue = JsonValue> {
   readonly metadata?: { readonly [key: string]: JsonValue };
 }
 
-export type ChatToolStatus = 'requested' | 'running' | 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
+export type ChatToolStatus =
+  'requested' | 'running' | 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
 
 export interface ChatToolCall {
   readonly kind: 'tool';
@@ -43,7 +45,8 @@ export interface ChatTurnFailure {
   readonly text: string;
 }
 
-export type ChatContent = ChatTextMessage | ChatIntermediateMessage | ChatArtifact | ChatToolCall | ChatTurnFailure;
+export type ChatContent =
+  ChatTextMessage | ChatIntermediateMessage | ChatArtifact | ChatToolCall | ChatTurnFailure;
 
 export interface ChatArtifactRenderContext<TPayload extends JsonValue> {
   readonly $implicit: TPayload;
