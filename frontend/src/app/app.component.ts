@@ -1,9 +1,14 @@
 import { Component, OnInit, OnDestroy, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
-import { ConversationController, presentJsonArtifact, type ConversationViewState } from '@roithme0/chat-ui/conversation';
+import {
+  ConversationController,
+  presentJsonArtifact,
+  type ConversationViewState,
+} from '@roithme0/chat-ui/conversation';
 import { DemoTransport } from './demo-transport';
 
-const DEMO_ERROR_MESSAGE = 'Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.';
+const DEMO_ERROR_MESSAGE =
+  'Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.';
 const DEMO_ACTION_ID = 'demo-noop';
 
 const INITIAL_STATE: ConversationViewState = {
@@ -26,17 +31,18 @@ export class App implements OnInit, OnDestroy {
   protected readonly chat = signal<ConversationViewState>(INITIAL_STATE);
   private readonly controller = new ConversationController(
     new DemoTransport(),
-    (state) => this.chat.set(
-      state.status?.kind === 'error' && state.status.message === DEMO_ERROR_MESSAGE
-        ? {
-            ...state,
-            status: {
-              ...state.status,
-              action: { id: DEMO_ACTION_ID, label: 'Demo-Aktion (ohne Funktion)' },
-            },
-          }
-        : state,
-    ),
+    (state) =>
+      this.chat.set(
+        state.status?.kind === 'error' && state.status.message === DEMO_ERROR_MESSAGE
+          ? {
+              ...state,
+              status: {
+                ...state.status,
+                action: { id: DEMO_ACTION_ID, label: 'Demo-Aktion (ohne Funktion)' },
+              },
+            }
+          : state,
+      ),
     presentJsonArtifact,
   );
 

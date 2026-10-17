@@ -7,18 +7,33 @@ import { pathToFileURL } from 'node:url';
 
 // Run with node tests/composer-autosize.firefox.mts; FIREFOX_BIN can override the browser path.
 const root = new URL('../', import.meta.url);
-const styles = await readFile(new URL('projects/chat-ui/ui/lib/chat-ui.component.scss', root), 'utf8');
+const styles = await readFile(
+  new URL('projects/chat-ui/ui/lib/chat-ui.component.scss', root),
+  'utf8',
+);
 const textareaStyles = styles.match(/^textarea \{[\s\S]*?^\}/m)?.[0];
 if (!textareaStyles) throw new Error('Composer textarea styles were not found.');
-const cdkStyles = await readFile(new URL('node_modules/@angular/cdk/text-field-prebuilt.css', root), 'utf8');
-const cdkSource = await readFile(new URL('node_modules/@angular/cdk/fesm2022/text-field.mjs', root), 'utf8');
+const cdkStyles = await readFile(
+  new URL('node_modules/@angular/cdk/text-field-prebuilt.css', root),
+  'utf8',
+);
+const cdkSource = await readFile(
+  new URL('node_modules/@angular/cdk/fesm2022/text-field.mjs', root),
+  'utf8',
+);
 const measurement = cdkSource.match(/  _measureScrollHeight\(\) \{[\s\S]*?\n  \}/)?.[0];
 if (!measurement) throw new Error('CDK measurement method was not found.');
 
 const work = await mkdtemp(join(tmpdir(), 'composer-firefox-'));
 interface BrowserResult {
   readonly checks: number;
-  readonly failures: readonly { readonly width: number; readonly sample: string; readonly length: number; readonly height: number; readonly fullHeight: number }[];
+  readonly failures: readonly {
+    readonly width: number;
+    readonly sample: string;
+    readonly length: number;
+    readonly height: number;
+    readonly fullHeight: number;
+  }[];
   readonly grew: boolean;
   readonly capped: boolean;
   readonly shrank: boolean;
@@ -27,7 +42,9 @@ const { promise: result, resolve: resolveResult } = Promise.withResolvers<Browse
 const server = createServer((request, response) => {
   let body = '';
   request.setEncoding('utf8');
-  request.on('data', (chunk) => { body += chunk; });
+  request.on('data', (chunk) => {
+    body += chunk;
+  });
   request.on('end', () => {
     response.setHeader('Access-Control-Allow-Origin', '*');
     response.end('ok');
@@ -90,17 +107,33 @@ window.onload = async () => {
 </script>`;
 const htmlPath = join(work, 'check.html');
 await writeFile(htmlPath, html);
-const firefox = process.env.FIREFOX_BIN ?? (process.platform === 'win32'
-  ? 'C:\\Program Files\\Mozilla Firefox\\firefox.exe' : 'firefox');
-const browser = spawn(firefox, ['--headless', '--no-remote', '--profile', join(work, 'profile'),
-  '--screenshot', join(work, 'check.png'), '--window-size', '1000,900', pathToFileURL(htmlPath).href],
-{ windowsHide:true, stdio:'ignore' });
+const firefox =
+  process.env.FIREFOX_BIN ??
+  (process.platform === 'win32' ? 'C:\\Program Files\\Mozilla Firefox\\firefox.exe' : 'firefox');
+const browser = spawn(
+  firefox,
+  [
+    '--headless',
+    '--no-remote',
+    '--profile',
+    join(work, 'profile'),
+    '--screenshot',
+    join(work, 'check.png'),
+    '--window-size',
+    '1000,900',
+    pathToFileURL(htmlPath).href,
+  ],
+  { windowsHide: true, stdio: 'ignore' },
+);
 let timer: ReturnType<typeof setTimeout> | undefined;
 try {
-  const outcome = await Promise.race([result, new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('Firefox check timed out.')), 60000);
-    browser.once('error', reject);
-  })]);
+  const outcome = await Promise.race([
+    result,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Firefox check timed out.')), 60000);
+      browser.once('error', reject);
+    }),
+  ]);
   console.log(JSON.stringify(outcome, null, 2));
   if (outcome.failures.length || !outcome.grew || !outcome.capped || !outcome.shrank) {
     throw new Error('Composer autosizing regression.');
@@ -110,5 +143,5 @@ try {
   server.close();
   // The screenshot invocation exits itself after loading the page.
   await new Promise((resolve) => setTimeout(resolve, 1000));
-  await rm(work, { recursive:true, force:true, maxRetries:5, retryDelay:200 });
+  await rm(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

@@ -19,13 +19,15 @@ const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
   { kind: 'text', id: 'assistant-1', role: 'assistant', text: '**formatted assistant text**' },
 ];
 
-@Component({ template: '<ng-template #template let-payload let-artifact="artifact">Custom: {{ payload.label }} {{ artifact.metadata?.reference }}</ng-template>' })
+@Component({
+  template:
+    '<ng-template #template let-payload let-artifact="artifact">Custom: {{ payload.label }} {{ artifact.metadata?.reference }}</ng-template>',
+})
 class RendererTemplateHost {
-  readonly template = viewChild.required<
-    TemplateRef<ChatArtifactRenderContext<{ readonly label: string }>>
-  >(
-    'template',
-  );
+  readonly template =
+    viewChild.required<TemplateRef<ChatArtifactRenderContext<{ readonly label: string }>>>(
+      'template',
+    );
 }
 
 describe('ChatUiComponent', () => {
@@ -90,21 +92,31 @@ describe('ChatUiComponent', () => {
       { kind: 'failure', id: 'failure', text: 'Die Antwort konnte nicht erstellt werden.' },
     ]);
     const element = fixture.nativeElement as HTMLElement;
-    expect([...element.querySelector('.messages')!.children].map(child => child.tagName)).toEqual([
-      'ARTICLE', 'ARTICLE', 'AI-CHAT-ARTIFACT-CARD', 'ARTICLE', 'ARTICLE', 'ARTICLE', 'ARTICLE',
-    ]);
+    expect([...element.querySelector('.messages')!.children].map((child) => child.tagName)).toEqual(
+      ['ARTICLE', 'ARTICLE', 'AI-CHAT-ARTIFACT-CARD', 'ARTICLE', 'ARTICLE', 'ARTICLE', 'ARTICLE'],
+    );
     const rows = [...element.querySelectorAll('.tool-call')];
-    expect(rows.map(row => row.querySelector('.tool-call__status')?.textContent?.trim())).toEqual([
-      'Abgeschlossen', 'Fehlgeschlagen', 'Ergebnis unklar', 'Nicht ausgeführt',
-    ]);
-    expect(rows.every(row => row.querySelector('mat-icon')?.getAttribute('svgIcon') === 'ai-chat:tool')).toBe(true);
+    expect(rows.map((row) => row.querySelector('.tool-call__status')?.textContent?.trim())).toEqual(
+      ['Abgeschlossen', 'Fehlgeschlagen', 'Ergebnis unklar', 'Nicht ausgeführt'],
+    );
+    expect(
+      rows.every(
+        (row) => row.querySelector('mat-icon')?.getAttribute('svgIcon') === 'ai-chat:tool',
+      ),
+    ).toBe(true);
     expect(rows[0].textContent).toContain('<b>present</b>');
     expect(rows[0].querySelector('b')).toBeNull();
-    fixture.componentRef.setInput('conversationStatus', { kind: 'error', placement: 'assistant', message: 'Current failure' });
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      placement: 'assistant',
+      message: 'Current failure',
+    });
     fixture.detectChanges();
     expect(element.querySelectorAll('.status--error')).toHaveLength(1);
-    fixture.componentRef.setInput('content', [...fixture.componentInstance.content(),
-      { kind: 'text', id: 'next-user', role: 'user', text: 'Continue' }]);
+    fixture.componentRef.setInput('content', [
+      ...fixture.componentInstance.content(),
+      { kind: 'text', id: 'next-user', role: 'user', text: 'Continue' },
+    ]);
     fixture.componentRef.setInput('conversationStatus', null);
     fixture.detectChanges();
     expect(element.querySelectorAll('.status--error')).toHaveLength(1);
@@ -114,10 +126,27 @@ describe('ChatUiComponent', () => {
     const templateFixture = TestBed.createComponent(RendererTemplateHost);
     templateFixture.detectChanges();
     const content: readonly ChatContent[] = [
-      { kind: 'artifact', id: 'custom', type: 'known', headline: 'Known', payload: { label: 'typed' }, metadata: { reference: 'host-action-reference' } },
-      { kind: 'artifact', id: 'fallback', type: 'json', headline: 'JSON', payload: { value: {
-        nested: [true, null], empty: {}, text: '<script>unsafe()</script>',
-      } } },
+      {
+        kind: 'artifact',
+        id: 'custom',
+        type: 'known',
+        headline: 'Known',
+        payload: { label: 'typed' },
+        metadata: { reference: 'host-action-reference' },
+      },
+      {
+        kind: 'artifact',
+        id: 'fallback',
+        type: 'json',
+        headline: 'JSON',
+        payload: {
+          value: {
+            nested: [true, null],
+            empty: {},
+            text: '<script>unsafe()</script>',
+          },
+        },
+      },
     ];
     const fixture = createFixture(content);
     fixture.componentRef.setInput('artifactRenderers', {
@@ -135,10 +164,15 @@ describe('ChatUiComponent', () => {
   });
 
   it('does not silently render unsupported types as JSON', () => {
-    const fixture = createFixture([{
-      kind: 'artifact', id: 'unsupported', type: 'unknown', headline: 'Unknown',
-      payload: { secret: 'not presented' },
-    }]);
+    const fixture = createFixture([
+      {
+        kind: 'artifact',
+        id: 'unsupported',
+        type: 'unknown',
+        headline: 'Unknown',
+        payload: { secret: 'not presented' },
+      },
+    ]);
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('pre')).toBeNull();
     expect(element.textContent).toContain('Diese Darstellung wird nicht unterst\u00fctzt.');
@@ -147,13 +181,27 @@ describe('ChatUiComponent', () => {
 
   it('renders a subtitle literally beneath the artifact title, outside the collapsible body', () => {
     const fixture = createFixture([
-      { kind: 'artifact', id: 'with-subtitle', type: 'json', headline: 'Oats',
-        subtitle: '<strong>Example brand</strong>', payload: { value: {} } },
-      { kind: 'artifact', id: 'without-subtitle', type: 'json', headline: 'Water', payload: { value: {} } },
+      {
+        kind: 'artifact',
+        id: 'with-subtitle',
+        type: 'json',
+        headline: 'Oats',
+        subtitle: '<strong>Example brand</strong>',
+        payload: { value: {} },
+      },
+      {
+        kind: 'artifact',
+        id: 'without-subtitle',
+        type: 'json',
+        headline: 'Water',
+        payload: { value: {} },
+      },
     ]);
     const cards = (fixture.nativeElement as HTMLElement).querySelectorAll('.artifact');
     expect(cards[0].querySelector('.artifact-header h3')?.textContent).toBe('Oats');
-    expect(cards[0].querySelector('.artifact-header .artifact-subtitle')?.textContent).toBe('<strong>Example brand</strong>');
+    expect(cards[0].querySelector('.artifact-header .artifact-subtitle')?.textContent).toBe(
+      '<strong>Example brand</strong>',
+    );
     expect(cards[0].querySelector('strong')).toBeNull();
     expect(cards[0].querySelector('.artifact-body .artifact-subtitle')).toBeNull();
     expect(cards[1].querySelector('.artifact-subtitle')).toBeNull();
@@ -175,9 +223,15 @@ describe('ChatUiComponent', () => {
       unobserve(): void {}
     }
     vi.stubGlobal('ResizeObserver', OverflowObserver);
-    const fixture = createFixture([{
-      kind: 'artifact', id: 'large', type: 'json', headline: 'Large', payload: { value: { rows: [1, 2, 3] } },
-    }]);
+    const fixture = createFixture([
+      {
+        kind: 'artifact',
+        id: 'large',
+        type: 'json',
+        headline: 'Large',
+        payload: { value: { rows: [1, 2, 3] } },
+      },
+    ]);
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -263,24 +317,27 @@ describe('ChatUiComponent', () => {
     }
   });
 
-  it.each([false, true])('preserves another focus target even if it subsequently blurs (%s)', (blur) => {
-    const fixture = createFixture([]);
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
-    const other = document.createElement('button');
-    document.body.append(other);
-    try {
-      textarea.focus();
-      fixture.componentRef.setInput('composerDisabled', true);
-      fixture.detectChanges();
-      other.focus();
-      if (blur) other.blur();
-      fixture.componentRef.setInput('composerDisabled', false);
-      fixture.detectChanges();
-      expect(document.activeElement).toBe(blur ? document.body : other);
-    } finally {
-      other.remove();
-    }
-  });
+  it.each([false, true])(
+    'preserves another focus target even if it subsequently blurs (%s)',
+    (blur) => {
+      const fixture = createFixture([]);
+      const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+      const other = document.createElement('button');
+      document.body.append(other);
+      try {
+        textarea.focus();
+        fixture.componentRef.setInput('composerDisabled', true);
+        fixture.detectChanges();
+        other.focus();
+        if (blur) other.blur();
+        fixture.componentRef.setInput('composerDisabled', false);
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(blur ? document.body : other);
+      } finally {
+        other.remove();
+      }
+    },
+  );
 
   it('does not claim focus when the composer was unfocused before disabling', () => {
     const fixture = createFixture([]);
@@ -379,42 +436,49 @@ describe('ChatUiComponent', () => {
   it('scrolls history to new messages, statuses, and errors after rendering', () => {
     vi.useFakeTimers();
     const scrollTo = vi.mocked(Element.prototype.scrollTo);
-      const fixture = createFixture([]);
-      const history = fixture.nativeElement.querySelector('.history') as HTMLElement;
-      Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
-      const scrollToBottom = (): void => {
-        expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
-        scrollTo.mockClear();
-      };
+    const fixture = createFixture([]);
+    const history = fixture.nativeElement.querySelector('.history') as HTMLElement;
+    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+    const scrollToBottom = (): void => {
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
+      scrollTo.mockClear();
+    };
 
-      fixture.componentRef.setInput('content', [
-        { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
-      ] satisfies readonly ChatTextMessage[]);
-      fixture.detectChanges();
-      scrollToBottom();
+    fixture.componentRef.setInput('content', [
+      { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
+    ] satisfies readonly ChatTextMessage[]);
+    fixture.detectChanges();
+    scrollToBottom();
 
-      fixture.componentRef.setInput('conversationStatus', {
-        kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed',
-      });
-      fixture.detectChanges();
-      vi.advanceTimersByTime(300);
-      fixture.detectChanges();
-      expect(fixture.nativeElement.querySelector('.status-content')?.textContent).toContain('Sending');
-      scrollToBottom();
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      message: 'Sending',
+      placement: 'assistant',
+      reveal: 'delayed',
+    });
+    fixture.detectChanges();
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.status-content')?.textContent).toContain(
+      'Sending',
+    );
+    scrollToBottom();
 
-      fixture.componentRef.setInput('content', [
-        { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
-        { kind: 'text', id: 'assistant-1', role: 'assistant', text: 'Hi' },
-      ] satisfies readonly ChatTextMessage[]);
-      fixture.componentRef.setInput('conversationStatus', null);
-      fixture.detectChanges();
-      scrollToBottom();
+    fixture.componentRef.setInput('content', [
+      { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
+      { kind: 'text', id: 'assistant-1', role: 'assistant', text: 'Hi' },
+    ] satisfies readonly ChatTextMessage[]);
+    fixture.componentRef.setInput('conversationStatus', null);
+    fixture.detectChanges();
+    scrollToBottom();
 
-      fixture.componentRef.setInput('conversationStatus', {
-        kind: 'error', message: 'Failed', placement: 'assistant',
-      });
-      fixture.detectChanges();
-      scrollToBottom();
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      message: 'Failed',
+      placement: 'assistant',
+    });
+    fixture.detectChanges();
+    scrollToBottom();
   });
 
   it('reveals a slow sending label after 300 ms and replaces it immediately', () => {
@@ -422,21 +486,30 @@ describe('ChatUiComponent', () => {
     const fixture = createFixture([]);
     fixture.componentRef.setInput('composerDisabled', true);
     fixture.componentRef.setInput('conversationStatus', {
-      kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed',
+      kind: 'loading',
+      message: 'Sending',
+      placement: 'assistant',
+      reveal: 'delayed',
     });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.status--delayed')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
-    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(
+      true,
+    );
     vi.advanceTimersByTime(299);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
     vi.advanceTimersByTime(1);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status-content--fade')?.textContent).toContain('Sending');
+    expect(fixture.nativeElement.querySelector('.status-content--fade')?.textContent).toContain(
+      'Sending',
+    );
     const sendingLabel = fixture.nativeElement.querySelector('.status-content');
     fixture.componentRef.setInput('conversationStatus', {
-      kind: 'loading', message: 'Generating', placement: 'assistant',
+      kind: 'loading',
+      message: 'Generating',
+      placement: 'assistant',
     });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Generating');
@@ -448,12 +521,19 @@ describe('ChatUiComponent', () => {
   it('cancels a quick sending reveal and starts a fresh delay for the next send', () => {
     vi.useFakeTimers();
     const fixture = createFixture([]);
-    const sending = { kind: 'loading', message: 'Sending', placement: 'assistant', reveal: 'delayed' } as const;
+    const sending = {
+      kind: 'loading',
+      message: 'Sending',
+      placement: 'assistant',
+      reveal: 'delayed',
+    } as const;
     fixture.componentRef.setInput('conversationStatus', sending);
     fixture.detectChanges();
     vi.advanceTimersByTime(100);
     fixture.componentRef.setInput('conversationStatus', {
-      kind: 'error', message: 'Failed', placement: 'assistant',
+      kind: 'error',
+      message: 'Failed',
+      placement: 'assistant',
     });
     fixture.detectChanges();
     vi.advanceTimersByTime(300);
@@ -496,7 +576,11 @@ describe('ChatUiComponent', () => {
     (fixture.nativeElement.querySelector('.status-action') as HTMLButtonElement).click();
 
     expect(actionEmit).toHaveBeenCalledWith('retry-turn');
-    expect(fixture.nativeElement.querySelector('.status-content').classList.contains('status-content--fade')).toBe(false);
+    expect(
+      fixture.nativeElement
+        .querySelector('.status-content')
+        .classList.contains('status-content--fade'),
+    ).toBe(false);
   });
 });
 

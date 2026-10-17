@@ -39,27 +39,31 @@ A complete minimal standalone host (with the Material theme described below):
 import { Component, OnInit, OnDestroy, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
 import {
-  AgentConfiguration, ConversationController, HttpConversationTransport, presentJsonArtifact,
+  AgentConfiguration,
+  ConversationController,
+  HttpConversationTransport,
+  presentJsonArtifact,
   type ConversationViewState,
 } from '@roithme0/chat-ui/conversation';
 
 @Component({
   selector: 'app-chat',
   imports: [ChatUiComponent],
-  template: `
-    <ai-chat-ui
-      bannerTitle="Chat demo"
-      bannerDescription="Any text advances the scripted sequence."
-      [content]="chat().content"
-      [composerDisabled]="chat().composerDisabled"
-      [conversationStatus]="chat().status"
-      (messageSubmitted)="submit($event)"
-      (statusActionTriggered)="act($event)"
-    />`,
+  template: ` <ai-chat-ui
+    bannerTitle="Chat demo"
+    bannerDescription="Any text advances the scripted sequence."
+    [content]="chat().content"
+    [composerDisabled]="chat().composerDisabled"
+    [conversationStatus]="chat().status"
+    (messageSubmitted)="submit($event)"
+    (statusActionTriggered)="act($event)"
+  />`,
 })
 export class ChatHost implements OnInit, OnDestroy {
   readonly chat = signal<ConversationViewState>({
-    content: [], composerDisabled: true, status: null,
+    content: [],
+    composerDisabled: true,
+    status: null,
   });
   private readonly controller = new ConversationController(
     new HttpConversationTransport('/api/v1', AgentConfiguration.demo, 'demo:default'),
@@ -67,12 +71,18 @@ export class ChatHost implements OnInit, OnDestroy {
     presentJsonArtifact,
   );
 
-  ngOnInit(): void { void this.controller.start(); }
-  ngOnDestroy(): void { this.controller.dispose(); }
+  ngOnInit(): void {
+    void this.controller.start();
+  }
+  ngOnDestroy(): void {
+    this.controller.dispose();
+  }
   submit(value: ChatSubmission): void {
     void this.controller.submit(value.text, value.acknowledge);
   }
-  act(id: string): void { void this.controller.performAction(id); }
+  act(id: string): void {
+    void this.controller.performAction(id);
+  }
 }
 ```
 
@@ -127,7 +137,7 @@ Set these CSS variables on an ancestor of `ai-chat-ui`:
 | `--ai-chat-artifact-border`       | Artifact card border           | `#50363f`    |
 | `--ai-chat-artifact-subtitle`     | Artifact subtitle              | `#bda9b1`    |
 | `--ai-chat-artifact-heading`      | Artifact headline              | `#f8eef1`    |
-| `--ai-chat-artifact-text`         | JSON presentation text             | `#eadde2`    |
+| `--ai-chat-artifact-text`         | JSON presentation text         | `#eadde2`    |
 | `--ai-chat-composer-background`   | Composer field background      | `#291c21`    |
 | `--ai-chat-composer-border`       | Composer field border          | `#50363f`    |
 | `--ai-chat-composer-text`         | Composer field text            | `#f8eef1`    |
@@ -238,7 +248,12 @@ const input = {
   context: { selectedItem: item },
   artifactCapabilities: [JSON_ARTIFACT_CAPABILITY],
 };
-const transport = new HttpConversationTransport('/ai/api/v1', AgentConfiguration.kochwiki, 'kochwiki:42', input);
+const transport = new HttpConversationTransport(
+  '/ai/api/v1',
+  AgentConfiguration.kochwiki,
+  'kochwiki:42',
+  input,
+);
 ```
 
 The AI Service supplies the agent with a local `present_artifact` tool. The agent

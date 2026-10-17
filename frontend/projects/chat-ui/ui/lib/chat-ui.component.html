@@ -19,7 +19,9 @@
           </article>
         } @else if (item.kind === 'failure') {
           @if (!last || conversationStatus()?.kind !== 'error') {
-            <article class="status status--error" aria-label="Fehlgeschlagene Antwort"><p>{{ item.text }}</p></article>
+            <article class="status status--error" aria-label="Fehlgeschlagene Antwort">
+              <p>{{ item.text }}</p>
+            </article>
           }
         } @else if (item.kind === 'intermediate') {
           <article
@@ -49,23 +51,18 @@
         >
           @if (statusVisible()) {
             @for (label of [status]; track label.message) {
-            <div
-              class="status-content"
-              [class.status-content--fade]="
-                status.kind === 'loading'
-              "
-            >
-              <p>{{ status.message }}</p>
-              @if (status.action; as action) {
-                <button
-                  type="button"
-                  class="status-action"
-                  (click)="statusActionTriggered.emit(action.id)"
-                >
-                  {{ action.label }}
-                </button>
-              }
-            </div>
+              <div class="status-content" [class.status-content--fade]="status.kind === 'loading'">
+                <p>{{ status.message }}</p>
+                @if (status.action; as action) {
+                  <button
+                    type="button"
+                    class="status-action"
+                    (click)="statusActionTriggered.emit(action.id)"
+                  >
+                    {{ action.label }}
+                  </button>
+                }
+              </div>
             }
           }
         </article>
