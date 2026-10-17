@@ -1,0 +1,8 @@
+node_modules/
+dist/
+out-tsc/
+coverage/
+.angular/
+.codex-validation/
+projects/chat-ui/conversation/generated/
+package-lock.json
