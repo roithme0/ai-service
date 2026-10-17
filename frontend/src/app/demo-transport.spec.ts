@@ -10,8 +10,9 @@ describe('DemoTransport', () => {
   it('counts successful terminal events, preserves the scripted failure, and resets with a fresh session', async () => {
     vi.useFakeTimers();
     let turnCount = 0;
-    const fetchMock = vi.fn<typeof fetch>(async (input) => {
-      const url = String(input);
+    const fetchMock = vi.fn<typeof fetch>((input) => Promise.resolve(mockResponse(input)));
+    const mockResponse = (input: Parameters<typeof fetch>[0]): Response => {
+      const url = input instanceof Request ? input.url : input.toString();
       if (url.endsWith('/sessions'))
         return Response.json({ session_id: 'demo-1', expires_at: '2026-10-04T20:00:00Z' });
       if (url.endsWith('/messages'))
@@ -26,7 +27,7 @@ describe('DemoTransport', () => {
           { headers: { 'Content-Type': 'text/event-stream' } },
         );
       throw new Error(`Unexpected request: ${url}`);
-    });
+    };
     vi.stubGlobal('fetch', fetchMock);
     const transport = new DemoTransport();
     const creation = transport.createSession();

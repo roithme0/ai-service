@@ -10,7 +10,6 @@ import type {
   SessionCreationResponse,
   SessionSnapshotResponse,
   StreamEvent,
-  StreamUpsert,
   UserMessageResponse,
 } from '../generated/types.gen';
 
@@ -65,7 +64,7 @@ const tool = (
   item: { kind: 'tool', turn_id: 't', execution_id: 'e', name: 'save', status },
 });
 async function* stream(events: readonly StreamEvent[]): AsyncIterable<StreamEvent> {
-  yield* events;
+  for (const event of events) yield await Promise.resolve(event);
 }
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolve!: (value: T) => void;
@@ -223,7 +222,7 @@ describe('live conversation controller', () => {
     async (ending) => {
       const transport = new FakeTransport();
       transport.observeTurn.mockImplementation(async function* () {
-        yield initial();
+        yield await Promise.resolve(initial());
         yield tool('running', 3);
         if (ending === 'error') throw new Error('offline');
         if (ending === 'malformed') yield { ...tool('completed', 4), identity: 'wrong' };
@@ -487,8 +486,10 @@ describe('live conversation controller', () => {
     'preserves typed pre-stream %s errors without reconnect',
     async (kind) => {
       const transport = new FakeTransport();
-      transport.observeTurn.mockImplementation(async function* () {
-        throw new ConversationApiError(410, kind);
+      transport.observeTurn.mockReturnValue({
+        [Symbol.asyncIterator]: () => ({
+          next: () => Promise.reject(new ConversationApiError(410, kind)),
+        }),
       });
       const controller = new ConversationController(transport, () => undefined);
       await controller.start();

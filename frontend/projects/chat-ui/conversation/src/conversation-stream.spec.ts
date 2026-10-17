@@ -15,9 +15,12 @@ describe('fetch SSE observation', () => {
       .fn<typeof fetch>()
       .mockResolvedValue(new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }));
     vi.stubGlobal('fetch', fetchMock);
-    const iterator = new HttpConversationTransport('/ai/api/v1/', 'demo', 'test:user')
-      .observeTurn('s', 't', new AbortController().signal)
-      [Symbol.asyncIterator]();
+    const events = new HttpConversationTransport('/ai/api/v1/', 'demo', 'test:user').observeTurn(
+      's',
+      't',
+      new AbortController().signal,
+    );
+    const iterator = events[Symbol.asyncIterator]();
     const event: StreamEvent = {
       kind: 'upsert',
       turn_id: 't',
@@ -49,9 +52,12 @@ describe('fetch SSE observation', () => {
         new Response(`data: ${data}\n\n`, { headers: { 'Content-Type': 'text/event-stream' } }),
       );
     vi.stubGlobal('fetch', fetchMock);
-    const iterator = new HttpConversationTransport('/api/v1', 'demo', 'test:user')
-      .observeTurn('s', 't', new AbortController().signal)
-      [Symbol.asyncIterator]();
+    const events = new HttpConversationTransport('/api/v1', 'demo', 'test:user').observeTurn(
+      's',
+      't',
+      new AbortController().signal,
+    );
+    const iterator = events[Symbol.asyncIterator]();
     await expect(iterator.next()).rejects.toBeInstanceOf(ConversationNetworkError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -91,9 +97,12 @@ describe('fetch SSE observation', () => {
       .fn<typeof fetch>()
       .mockResolvedValue(new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }));
     vi.stubGlobal('fetch', fetchMock);
-    const iterator = new HttpConversationTransport('/api/v1', 'demo', 'test:user')
-      .observeTurn('s', 't', new AbortController().signal)
-      [Symbol.asyncIterator]();
+    const events = new HttpConversationTransport('/api/v1', 'demo', 'test:user').observeTurn(
+      's',
+      't',
+      new AbortController().signal,
+    );
+    const iterator = events[Symbol.asyncIterator]();
     expect((await iterator.next()).value).toEqual(event);
     expect(await iterator.next()).toMatchObject({ done: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);

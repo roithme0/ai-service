@@ -47,7 +47,7 @@ describe('HttpConversationTransport', () => {
   it.each([AgentConfiguration.kochwiki, AgentConfiguration.demo])(
     'uses %s for every path and sends its supplied input',
     async (configuration) => {
-      const fetchMock = vi.fn().mockResolvedValue(
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
         response(201, {
           session_id: 'session-1',
           expires_at: '2026-09-17T12:00:00Z',
@@ -61,7 +61,7 @@ describe('HttpConversationTransport', () => {
 
       expect(created.session_id).toBe('session-1');
       expect(fetchMock.mock.calls[0][0]).toBe(`/api/v1/agents/${configuration}/sessions`);
-      expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ input });
+      expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({ input });
       fetchMock
         .mockResolvedValueOnce(
           response(200, {
@@ -103,7 +103,7 @@ describe('HttpConversationTransport', () => {
         `/api/v1/agents/${configuration}/sessions/session-1/turns/turn-1/events`,
       ]);
       for (const call of fetchMock.mock.calls) {
-        expect(call[1].headers['X-Application-User']).toBe('test:user');
+        expect(new Headers(call[1]?.headers).get('X-Application-User')).toBe('test:user');
       }
     },
   );
@@ -208,7 +208,7 @@ describe('HttpConversationTransport', () => {
       payload: { nested: [true, null, 4] },
     };
     const fetchMock = vi
-      .fn()
+      .fn<typeof fetch>()
       .mockResolvedValueOnce(
         response(200, {
           timeline: [],
@@ -261,17 +261,15 @@ describe('HttpConversationTransport', () => {
   it('classifies malformed successful responses separately from API errors', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          response(200, {
-            timeline: [],
-            kind: 'completed',
-            turn_id: 'turn-1',
-            message: null,
-            artifacts: [],
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        response(200, {
+          timeline: [],
+          kind: 'completed',
+          turn_id: 'turn-1',
+          message: null,
+          artifacts: [],
+        }),
+      ),
     );
     await expect(
       new HttpConversationTransport('/api/v1', 'demo', 'test:user', null).generateTurn('session-1'),
@@ -340,21 +338,19 @@ describe('HttpConversationTransport', () => {
   it('rejects a snapshot without its required expiry', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          response(200, {
-            timeline: [],
-            session_id: 'session-1',
-            messages: [],
-            artifacts: [],
-            active_turn_id: null,
-            active_turn_status: null,
-            sequence: 0,
-            terminal_turn_id: null,
-            terminal_turn_kind: null,
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        response(200, {
+          timeline: [],
+          session_id: 'session-1',
+          messages: [],
+          artifacts: [],
+          active_turn_id: null,
+          active_turn_status: null,
+          sequence: 0,
+          terminal_turn_id: null,
+          terminal_turn_kind: null,
+        }),
+      ),
     );
     await expect(
       new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'),
@@ -364,17 +360,15 @@ describe('HttpConversationTransport', () => {
   it('rejects a completed turn with a user message', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          response(201, {
-            timeline: [],
-            kind: 'completed',
-            turn_id: 'turn-1',
-            message: { role: 'user', text: 'Hello', turn_id: null },
-            artifacts: [],
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        response(201, {
+          timeline: [],
+          kind: 'completed',
+          turn_id: 'turn-1',
+          message: { role: 'user', text: 'Hello', turn_id: null },
+          artifacts: [],
+        }),
+      ),
     );
     await expect(
       new HttpConversationTransport('/api/v1', 'demo', 'test:user').generateTurn('session-1'),
@@ -384,31 +378,29 @@ describe('HttpConversationTransport', () => {
   it('rejects an artifact payload that is not an object', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          response(200, {
-            timeline: [],
-            session_id: 'session-1',
-            expires_at: '2026-09-17T12:00:00Z',
-            messages: [],
-            artifacts: [
-              {
-                artifact_id: 'artifact-1',
-                type: 'demo',
-                created_at: '2026-09-17T12:00:00Z',
-                order: 0,
-                turn_id: 'turn-1',
-                payload: [],
-              },
-            ],
-            active_turn_id: null,
-            active_turn_status: null,
-            sequence: 0,
-            terminal_turn_id: null,
-            terminal_turn_kind: null,
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        response(200, {
+          timeline: [],
+          session_id: 'session-1',
+          expires_at: '2026-09-17T12:00:00Z',
+          messages: [],
+          artifacts: [
+            {
+              artifact_id: 'artifact-1',
+              type: 'demo',
+              created_at: '2026-09-17T12:00:00Z',
+              order: 0,
+              turn_id: 'turn-1',
+              payload: [],
+            },
+          ],
+          active_turn_id: null,
+          active_turn_status: null,
+          sequence: 0,
+          terminal_turn_id: null,
+          terminal_turn_kind: null,
+        }),
+      ),
     );
     await expect(
       new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'),
@@ -418,22 +410,20 @@ describe('HttpConversationTransport', () => {
   it('rejects a terminal turn kind outside the backend contract', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          response(200, {
-            timeline: [],
-            session_id: 'session-1',
-            expires_at: '2026-09-17T12:00:00Z',
-            messages: [],
-            artifacts: [],
-            active_turn_id: null,
-            active_turn_status: null,
-            sequence: 0,
-            terminal_turn_id: 'turn-1',
-            terminal_turn_kind: 'future_kind',
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        response(200, {
+          timeline: [],
+          session_id: 'session-1',
+          expires_at: '2026-09-17T12:00:00Z',
+          messages: [],
+          artifacts: [],
+          active_turn_id: null,
+          active_turn_status: null,
+          sequence: 0,
+          terminal_turn_id: 'turn-1',
+          terminal_turn_kind: 'future_kind',
+        }),
+      ),
     );
     await expect(
       new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'),

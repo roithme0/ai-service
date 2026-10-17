@@ -21,7 +21,7 @@ const cdkSource = await readFile(
   new URL('node_modules/@angular/cdk/fesm2022/text-field.mjs', root),
   'utf8',
 );
-const measurement = cdkSource.match(/  _measureScrollHeight\(\) \{[\s\S]*?\n  \}/)?.[0];
+const measurement = cdkSource.match(/ {2}_measureScrollHeight\(\) \{[\s\S]*?\n {2}\}/)?.[0];
 if (!measurement) throw new Error('CDK measurement method was not found.');
 
 const work = await mkdtemp(join(tmpdir(), 'composer-firefox-'));
@@ -38,7 +38,10 @@ interface BrowserResult {
   readonly capped: boolean;
   readonly shrank: boolean;
 }
-const { promise: result, resolve: resolveResult } = Promise.withResolvers<BrowserResult>();
+let resolveResult!: (result: BrowserResult) => void;
+const result = new Promise<BrowserResult>((resolve) => {
+  resolveResult = resolve;
+});
 const server = createServer((request, response) => {
   let body = '';
   request.setEncoding('utf8');
@@ -48,7 +51,7 @@ const server = createServer((request, response) => {
   request.on('end', () => {
     response.setHeader('Access-Control-Allow-Origin', '*');
     response.end('ok');
-    resolveResult(JSON.parse(body));
+    resolveResult(JSON.parse(body) as BrowserResult);
   });
 });
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -108,7 +111,7 @@ window.onload = async () => {
 const htmlPath = join(work, 'check.html');
 await writeFile(htmlPath, html);
 const firefox =
-  process.env.FIREFOX_BIN ??
+  process.env['FIREFOX_BIN'] ??
   (process.platform === 'win32' ? 'C:\\Program Files\\Mozilla Firefox\\firefox.exe' : 'firefox');
 const browser = spawn(
   firefox,

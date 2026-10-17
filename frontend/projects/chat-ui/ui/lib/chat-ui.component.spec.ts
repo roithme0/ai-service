@@ -9,7 +9,6 @@ import {
   artifactRenderer,
   type ChatArtifactRenderContext,
   type ChatContent,
-  type ChatSubmission,
   type ChatTextMessage,
 } from './chat-message';
 import { ChatUiComponent } from './chat-ui.component';
@@ -31,6 +30,7 @@ class RendererTemplateHost {
 }
 
 describe('ChatUiComponent', () => {
+  const scrollTo = vi.fn<Element['scrollTo']>();
   let originalScrollTo: PropertyDescriptor | undefined;
 
   afterEach(() => {
@@ -44,16 +44,15 @@ describe('ChatUiComponent', () => {
   });
 
   beforeEach(() => {
+    scrollTo.mockClear();
     originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
-    Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: vi.fn() });
+    Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scrollTo });
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
 
   it('renders ordered host messages and applies Markdown only to assistant text', () => {
     const fixture = createFixture(INITIAL_MESSAGES);
-    const messageElements = fixture.nativeElement.querySelectorAll(
-      '.message',
-    ) as NodeListOf<HTMLElement>;
+    const messageElements = fixtureElement(fixture).querySelectorAll<HTMLElement>('.message');
 
     expect(messageElements).toHaveLength(2);
     expect(messageElements[0].classList.contains('message--user')).toBe(true);
@@ -71,7 +70,7 @@ describe('ChatUiComponent', () => {
       { kind: 'tool', id: 'tool', name: 'check', status: 'completed' },
       { kind: 'text', id: 'final', role: 'assistant', text: 'Standalone result.' },
     ]);
-    const element = fixture.nativeElement as HTMLElement;
+    const element = fixtureElement(fixture);
     const rows = [...element.querySelector('.messages')!.children];
     expect(rows[0].classList.contains('message--intermediate')).toBe(true);
     expect(rows[0].getAttribute('aria-label')).toBe('Zwischenmeldung des Assistenten');
@@ -91,7 +90,7 @@ describe('ChatUiComponent', () => {
       { kind: 'tool', id: 'tool-4', name: 'check', status: 'not_executed' },
       { kind: 'failure', id: 'failure', text: 'Die Antwort konnte nicht erstellt werden.' },
     ]);
-    const element = fixture.nativeElement as HTMLElement;
+    const element = fixtureElement(fixture);
     expect([...element.querySelector('.messages')!.children].map((child) => child.tagName)).toEqual(
       ['ARTICLE', 'ARTICLE', 'AI-CHAT-ARTIFACT-CARD', 'ARTICLE', 'ARTICLE', 'ARTICLE', 'ARTICLE'],
     );
@@ -154,7 +153,7 @@ describe('ChatUiComponent', () => {
     });
     fixture.detectChanges();
 
-    const cards = fixture.nativeElement.querySelectorAll('.artifact') as NodeListOf<HTMLElement>;
+    const cards = fixtureElement(fixture).querySelectorAll<HTMLElement>('.artifact');
     expect(cards).toHaveLength(2);
     expect(cards[0].textContent).toContain('Custom: typed');
     expect(cards[0].textContent).toContain('host-action-reference');
@@ -173,7 +172,7 @@ describe('ChatUiComponent', () => {
         payload: { secret: 'not presented' },
       },
     ]);
-    const element = fixture.nativeElement as HTMLElement;
+    const element = fixtureElement(fixture);
     expect(element.querySelector('pre')).toBeNull();
     expect(element.textContent).toContain('Diese Darstellung wird nicht unterst\u00fctzt.');
     expect(element.textContent).not.toContain('not presented');
@@ -197,7 +196,7 @@ describe('ChatUiComponent', () => {
         payload: { value: {} },
       },
     ]);
-    const cards = (fixture.nativeElement as HTMLElement).querySelectorAll('.artifact');
+    const cards = fixtureElement(fixture).querySelectorAll('.artifact');
     expect(cards[0].querySelector('.artifact-header h3')?.textContent).toBe('Oats');
     expect(cards[0].querySelector('.artifact-header .artifact-subtitle')?.textContent).toBe(
       '<strong>Example brand</strong>',
@@ -216,7 +215,7 @@ describe('ChatUiComponent', () => {
           scrollHeight: { configurable: true, value: 500 },
           clientHeight: { configurable: true, value: 200 },
         });
-        this.callback([], this as unknown as ResizeObserver);
+        this.callback([], this);
       }
 
       disconnect(): void {}
@@ -235,11 +234,11 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const toggle = fixture.nativeElement.querySelector('.artifact-toggle') as HTMLButtonElement;
+    const toggle = fixtureElement(fixture).querySelector('.artifact-toggle') as HTMLButtonElement;
     expect(toggle.textContent).toContain('Mehr anzeigen');
     expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    const body = fixture.nativeElement.querySelector('.artifact-body') as HTMLElement;
+    const body = fixtureElement(fixture).querySelector('.artifact-body') as HTMLElement;
     expect(body.classList.contains('artifact-body--faded')).toBe(true);
     toggle.click();
     fixture.detectChanges();
@@ -248,23 +247,23 @@ describe('ChatUiComponent', () => {
     expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 15 6-6 6 6');
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(body.classList.contains('artifact-body--faded')).toBe(false);
-    expect(fixture.nativeElement.querySelector('.artifact-body--expanded')).not.toBeNull();
+    expect(fixtureElement(fixture).querySelector('.artifact-body--expanded')).not.toBeNull();
   });
 
   it('retains a submission until the host acknowledges it', () => {
     const fixture = createFixture([]);
     const component = fixture.componentInstance;
     const emit = vi.spyOn(component.messageSubmitted, 'emit');
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
 
     textarea.value = '  hello there  ';
     textarea.dispatchEvent(new Event('input'));
     fixture.detectChanges();
-    (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    (fixtureElement(fixture).querySelector('button') as HTMLButtonElement).click();
     fixture.detectChanges();
 
     expect(emit).toHaveBeenCalledOnce();
-    const submission = emit.mock.calls[0][0] as ChatSubmission;
+    const submission = emit.mock.calls[0][0];
     expect(submission.text).toBe('hello there');
     expect(textarea.value).toBe('  hello there  ');
 
@@ -272,13 +271,13 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
 
     expect(textarea.value).toBe('');
-    expect(fixture.nativeElement.querySelectorAll('.message')).toHaveLength(0);
+    expect(fixtureElement(fixture).querySelectorAll('.message')).toHaveLength(0);
     expect(document.activeElement).toBe(textarea);
   });
 
   it('restores composer focus after a disabled interval', () => {
     const fixture = createFixture([]);
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
     textarea.focus();
     fixture.componentRef.setInput('composerDisabled', true);
     fixture.detectChanges();
@@ -290,7 +289,7 @@ describe('ChatUiComponent', () => {
 
   it('focuses the composer once when an initially disabled conversation becomes ready', () => {
     const fixture = createFixture([], { disabled: true, focusOnReady: true });
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
     expect(document.activeElement).not.toBe(textarea);
     fixture.componentRef.setInput('composerDisabled', false);
     fixture.detectChanges();
@@ -303,7 +302,7 @@ describe('ChatUiComponent', () => {
 
   it('preserves focus changes made while initial readiness is pending', () => {
     const fixture = createFixture([], { disabled: true, focusOnReady: true });
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
     const other = document.createElement('button');
     document.body.append(other);
     try {
@@ -321,7 +320,7 @@ describe('ChatUiComponent', () => {
     'preserves another focus target even if it subsequently blurs (%s)',
     (blur) => {
       const fixture = createFixture([]);
-      const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+      const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
       const other = document.createElement('button');
       document.body.append(other);
       try {
@@ -341,7 +340,7 @@ describe('ChatUiComponent', () => {
 
   it('does not claim focus when the composer was unfocused before disabling', () => {
     const fixture = createFixture([]);
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
     const focus = vi.spyOn(textarea, 'focus');
     fixture.componentRef.setInput('composerDisabled', true);
     fixture.detectChanges();
@@ -362,8 +361,8 @@ describe('ChatUiComponent', () => {
 
   it('renders the packaged send icon through the Material control', () => {
     const fixture = createFixture([]);
-    const button = fixture.nativeElement.querySelector('button[matIconButton]');
-    const icon = fixture.nativeElement.querySelector('mat-icon[svgIcon="ai-chat:send"]');
+    const button = fixtureElement(fixture).querySelector('button[matIconButton]');
+    const icon = fixtureElement(fixture).querySelector('mat-icon[svgIcon="ai-chat:send"]');
 
     expect(button).not.toBeNull();
     expect(icon).not.toBeNull();
@@ -371,7 +370,7 @@ describe('ChatUiComponent', () => {
 
   it('renders only the send action inside the composer surface', () => {
     const fixture = createFixture([]);
-    const surface = fixture.nativeElement.querySelector('.composer-surface') as HTMLElement;
+    const surface = fixtureElement(fixture).querySelector('.composer-surface') as HTMLElement;
     const actions = surface.querySelector('.composer-actions') as HTMLElement;
 
     expect(surface.querySelector('textarea')).not.toBeNull();
@@ -392,7 +391,7 @@ describe('ChatUiComponent', () => {
   it('submits once on Enter and does not emit blank input', () => {
     const fixture = createFixture([]);
     const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
 
     textarea.value = '   ';
     textarea.dispatchEvent(new Event('input'));
@@ -404,7 +403,7 @@ describe('ChatUiComponent', () => {
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     expect(emit).toHaveBeenCalledOnce();
-    expect((emit.mock.calls[0][0] as ChatSubmission).text).toBe('keyboard message');
+    expect(emit.mock.calls[0][0].text).toBe('keyboard message');
 
     textarea.value = 'multiline draft';
     textarea.dispatchEvent(new Event('input'));
@@ -416,28 +415,27 @@ describe('ChatUiComponent', () => {
 
   it('renders replacement host state without retaining submitted messages', () => {
     const fixture = createFixture([]);
-    const textarea = fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'host decides';
     textarea.dispatchEvent(new Event('input'));
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelectorAll('.message')).toHaveLength(0);
+    expect(fixtureElement(fixture).querySelectorAll('.message')).toHaveLength(0);
 
     fixture.componentRef.setInput('content', [
       { kind: 'text', id: 'replacement', role: 'assistant', text: 'Replacement state' },
     ] satisfies readonly ChatTextMessage[]);
     fixture.detectChanges();
 
-    const messages = fixture.nativeElement.querySelectorAll('.message') as NodeListOf<HTMLElement>;
+    const messages = fixtureElement(fixture).querySelectorAll<HTMLElement>('.message');
     expect(messages).toHaveLength(1);
     expect(messages[0].textContent).toContain('Replacement state');
   });
 
   it('scrolls history to new messages, statuses, and errors after rendering', () => {
     vi.useFakeTimers();
-    const scrollTo = vi.mocked(Element.prototype.scrollTo);
     const fixture = createFixture([]);
-    const history = fixture.nativeElement.querySelector('.history') as HTMLElement;
+    const history = fixtureElement(fixture).querySelector('.history') as HTMLElement;
     Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
     const scrollToBottom = (): void => {
       expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
@@ -459,7 +457,7 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status-content')?.textContent).toContain(
+    expect(fixtureElement(fixture).querySelector('.status-content')?.textContent).toContain(
       'Sending',
     );
     scrollToBottom();
@@ -492,29 +490,29 @@ describe('ChatUiComponent', () => {
       reveal: 'delayed',
     });
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status--delayed')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
-    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(
-      true,
-    );
+    expect(fixtureElement(fixture).querySelector('.status--delayed')).not.toBeNull();
+    expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
+    expect(
+      (fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement).disabled,
+    ).toBe(true);
     vi.advanceTimersByTime(299);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
+    expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
     vi.advanceTimersByTime(1);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status-content--fade')?.textContent).toContain(
+    expect(fixtureElement(fixture).querySelector('.status-content--fade')?.textContent).toContain(
       'Sending',
     );
-    const sendingLabel = fixture.nativeElement.querySelector('.status-content');
+    const sendingLabel = fixtureElement(fixture).querySelector('.status-content');
     fixture.componentRef.setInput('conversationStatus', {
       kind: 'loading',
       message: 'Generating',
       placement: 'assistant',
     });
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Generating');
-    const generatingLabel = fixture.nativeElement.querySelector('.status-content');
-    expect(generatingLabel.classList.contains('status-content--fade')).toBe(true);
+    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain('Generating');
+    const generatingLabel = fixtureElement(fixture).querySelector('.status-content');
+    expect(generatingLabel!.classList.contains('status-content--fade')).toBe(true);
     expect(generatingLabel).not.toBe(sendingLabel);
   });
 
@@ -538,13 +536,13 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Failed');
+    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain('Failed');
     fixture.componentRef.setInput('conversationStatus', sending);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status-content')).toBeNull();
+    expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain('Sending');
+    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain('Sending');
     fixture.destroy();
   });
 
@@ -558,10 +556,10 @@ describe('ChatUiComponent', () => {
     });
     fixture.detectChanges();
 
-    expect((fixture.nativeElement.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(
-      true,
-    );
-    expect(fixture.nativeElement.querySelector('.status')?.textContent).toContain(
+    expect(
+      (fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement).disabled,
+    ).toBe(true);
+    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain(
       'Antwort wird erstellt …',
     );
 
@@ -573,12 +571,12 @@ describe('ChatUiComponent', () => {
       action: { id: 'retry-turn', label: 'Erneut versuchen' },
     });
     fixture.detectChanges();
-    (fixture.nativeElement.querySelector('.status-action') as HTMLButtonElement).click();
+    (fixtureElement(fixture).querySelector('.status-action') as HTMLButtonElement).click();
 
     expect(actionEmit).toHaveBeenCalledWith('retry-turn');
     expect(
-      fixture.nativeElement
-        .querySelector('.status-content')
+      fixtureElement(fixture)
+        .querySelector('.status-content')!
         .classList.contains('status-content--fade'),
     ).toBe(false);
   });
@@ -596,4 +594,8 @@ function createFixture(
   fixture.componentRef.setInput('focusOnReady', options.focusOnReady ?? false);
   fixture.detectChanges();
   return fixture;
+}
+
+function fixtureElement<T>(fixture: ComponentFixture<T>): HTMLElement {
+  return fixture.nativeElement as HTMLElement;
 }

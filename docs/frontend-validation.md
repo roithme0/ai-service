@@ -26,16 +26,22 @@ Failures or formatter edits request one continuation for correction and diff rev
 
 CI runs read-only `npm run lint` in the existing contract-check job before downstream builds. It does not format files or apply lint fixes. Existing build, contract, and package checks remain separate.
 
-## Initial verification ? 2026-10-17
+## Initial verification - 2026-10-17
 
-The setup passes all 13 tooling regression tests, 4 application tests, and 100 chat UI library tests. The PowerShell wrapper was checked for unchanged-turn skipping, initial failure feedback, and bounded continuation. Angular test workers timed out in the restricted execution environment; both suites passed when rerun with broader process permissions. Live Codex hook trust/activation still needs verification in the client.
+The setup passes all 13 tooling regression tests, 4 application tests, and 100 chat UI library tests. The PowerShell wrapper was checked for unchanged-turn skipping, initial failure feedback, and bounded continuation. Angular test workers timed out in the restricted execution environment; both suites passed when rerun with broader process permissions. Live Codex Stop hook activation was confirmed when it ran and reported the existing lint debt; a successful live hook run through all checks still needs verification.
 
-Whole-frontend lint reports 120 errors and zero warnings across six existing files: `conversation-api.spec.ts`, `conversation-controller.spec.ts`, `chat-ui.component.spec.ts`, `app.component.spec.ts`, `demo-transport.spec.ts`, and `tests/composer-autosize.firefox.mts`. No findings are in the newly added tooling. Existing source and tests were left unchanged. The hook stops at lint and CI blocks downstream builds until this debt is resolved; the passing Angular suites were run separately.
+The initial whole-frontend lint run reported 120 errors and zero warnings across six existing files: `conversation-api.spec.ts`, `conversation-controller.spec.ts`, `chat-ui.component.spec.ts`, `app.component.spec.ts`, `demo-transport.spec.ts`, and `tests/composer-autosize.firefox.mts`. No findings are in the newly added tooling. Existing source and tests were left unchanged during setup. At that point the hook stopped at lint and CI blocked downstream builds; the passing Angular suites were run separately.
 
-The additional strict TypeScript check (`node node_modules/typescript/bin/tsc -p tsconfig.eslint.json --noEmit`) reports two existing issues in the Firefox check: `Promise.withResolvers` needs a newer library declaration than the inherited ES2022 target, and `process.env.FIREFOX_BIN` must use index access. Lint uses the dedicated TypeScript project but does not replace a compiler check.
+The initial additional strict TypeScript check (`node node_modules/typescript/bin/tsc -p tsconfig.eslint.json --noEmit`) reported two existing issues in the Firefox check: `Promise.withResolvers` needs a newer library declaration than the inherited ES2022 target, and `process.env.FIREFOX_BIN` must use index access. Lint uses the dedicated TypeScript project but does not replace a compiler check.
 
 Reproduce the lint report without modifying source:
 
 ```powershell
 npm.cmd run lint -- --format json --output-file .angular/cache/lint-report.json
 ```
+
+## Lint cleanup verification - 2026-10-17
+
+The follow-up reproduced 123 errors across seven existing test/check files, including three computed-access findings in `conversation-stream.spec.ts`. Source fixes now pass whole-frontend lint with zero errors and zero warnings, without suppressions or configuration changes. Typed fixture elements and fetch mocks, explicit asynchronous stream stubs, and source-level Firefox check corrections preserve the existing assertions and coverage.
+
+`format:changed`, the strict TypeScript check, all 13 tooling tests, all 4 application tests, and all 100 chat UI library tests pass. Both Angular suites ran with broader process permissions because restricted worker execution previously timed out. The standalone Firefox browser check was type-checked but not executed during this cleanup. Live Codex Stop hook activation is confirmed; a successful live hook run through all checks still needs verification.

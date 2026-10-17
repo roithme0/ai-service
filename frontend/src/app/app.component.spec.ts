@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
 import { By } from '@angular/platform-browser';
@@ -96,8 +96,8 @@ describe('Demo application', () => {
         .componentInstance as ChatUiComponent;
       expect(chat.conversationStatus()?.message).toBe('Unterhaltung wird gestartet …');
       expect(
-        fixture.nativeElement
-          .querySelector('.status-content')
+        fixtureElement(fixture)
+          .querySelector('.status-content')!
           .classList.contains('status-content--fade'),
       ).toBe(true);
       expect(chat.composerDisabled()).toBe(true);
@@ -121,7 +121,7 @@ describe('Demo application', () => {
       );
       expect(chat.content()).toEqual([]);
       expect(chat.composerDisabled()).toBe(false);
-      expect(document.activeElement).toBe(fixture.nativeElement.querySelector('textarea'));
+      expect(document.activeElement).toBe(fixtureElement(fixture).querySelector('textarea'));
       const acknowledge = vi.fn();
       const submission: ChatSubmission = { text: 'Any text', acknowledge };
       chat.messageSubmitted.emit(submission);
@@ -168,7 +168,7 @@ describe('Demo application', () => {
         headline: type,
         payload: { value: payload },
       });
-      const element = fixture.nativeElement as HTMLElement;
+      const element = fixtureElement(fixture);
       expect(element.querySelector('.message--intermediate')?.textContent).toContain(
         "I'll create a greeting artifact.",
       );
@@ -245,8 +245,8 @@ describe('Demo application', () => {
       },
       { timeout: 2500 },
     );
-    const action = fixture.nativeElement.querySelector('.status-action') as HTMLButtonElement;
-    const element = fixture.nativeElement as HTMLElement;
+    const action = fixtureElement(fixture).querySelector('.status-action') as HTMLButtonElement;
+    const element = fixtureElement(fixture);
     expect(element.querySelector('.message--intermediate')?.textContent).toContain(
       'This update remains visible after generation fails.',
     );
@@ -304,4 +304,8 @@ function snapshotObservation(snapshot: SessionSnapshotResponse): Response {
   return new Response(`data: ${JSON.stringify(initial)}\n\ndata: ${JSON.stringify(terminal)}\n\n`, {
     headers: { 'Content-Type': 'text/event-stream' },
   });
+}
+
+function fixtureElement<T>(fixture: ComponentFixture<T>): HTMLElement {
+  return fixture.nativeElement as HTMLElement;
 }
