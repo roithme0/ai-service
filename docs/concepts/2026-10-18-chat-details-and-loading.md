@@ -10,6 +10,8 @@ For each narrow slice, discuss and agree on its details, update this concept as 
 
 The first agreed slice covers the send icon and detail typography. Register the supplied outline SVG through the existing Angular Material `MatIconRegistry` and render it through the existing `ai-chat:send` control. Use `currentColor` to inherit the themed button color, including its disabled state. Keep the existing accessible button label; the SVG is decorative. Apply primary assistant text styling to intermediate messages and tool names, retaining smaller secondary styling for tool states. Existing technical tool names and the shared tool icon remain in use. Loading and detail disclosure belong to subsequent slices.
 
+The first slice is implemented and code-reviewed. Formatting, lint, 13 tooling tests, 4 application tests and 100 chat UI tests pass. The application suite required a retry with broader process permissions after a worker-start timeout. Visual acceptance remains for user review; longer primary-size tool names may wrap more often.
+
 ## Context
 
 The shared chat UI displays intermediate assistant messages, tool calls, assistant answers and artifacts in a flat timeline. Loading feedback is currently a text status after the timeline. Intermediate messages and tool rows remain visible after completion.

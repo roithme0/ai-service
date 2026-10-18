@@ -1,7 +1,7 @@
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material/icon';
 
-const MATERIAL_ICONS = [
+const CHAT_ICONS = [
   {
     name: 'tool',
     svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.7 6.3a5 5 0 0 0-6.4 6.4L3 18l3 3 5.3-5.3a5 5 0 0 0 6.4-6.4l-3 3-3-3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -16,7 +16,7 @@ const MATERIAL_ICONS = [
   },
   {
     name: 'send',
-    svg: '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24"><path d="M0 0h24v24H0z" fill="none"/><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>',
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 3 9-3 9 19-9Z"/><path d="M6 12h16"/></svg>',
   },
   {
     name: 'retry',
@@ -33,7 +33,7 @@ const MATERIAL_ICONS = [
 ] as const;
 
 export function registerChatIcons(iconRegistry: MatIconRegistry, sanitizer: DomSanitizer): void {
-  for (const icon of MATERIAL_ICONS) {
+  for (const icon of CHAT_ICONS) {
     iconRegistry.addSvgIconLiteralInNamespace(
       'ai-chat',
       icon.name,

@@ -64,7 +64,7 @@ describe('ChatUiComponent', () => {
     );
   });
 
-  it('renders intermediate Markdown with secondary styling in conversation order', () => {
+  it('renders safe intermediate Markdown in conversation order', () => {
     const fixture = createFixture([
       { kind: 'intermediate', id: 'update', text: '**Checking** <script>alert(1)</script>' },
       { kind: 'tool', id: 'tool', name: 'check', status: 'completed' },
@@ -378,7 +378,7 @@ describe('ChatUiComponent', () => {
     expect(actions.querySelector('.send-button')).not.toBeNull();
   });
 
-  it('registers the packaged Material icons in the chat namespace', async () => {
+  it('registers the packaged icons in the chat namespace', async () => {
     createFixture([]);
     const registry = TestBed.inject(MatIconRegistry);
 
