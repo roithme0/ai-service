@@ -3,11 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
 import { By } from '@angular/platform-browser';
 import { App } from './app.component';
-import type {
-  ApiMessage,
-  ArtifactResponse,
-  SessionSnapshotResponse,
-} from '@roithme0/chat-ui/conversation';
+import type { SessionSnapshotResponse } from '@roithme0/chat-ui/conversation';
 
 describe('Demo application', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -33,57 +29,72 @@ describe('Demo application', () => {
         .mockResolvedValueOnce(
           Response.json({ session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z' }),
         )
-        .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Any text', turn_id: null }))
+        .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Any text', turn_id: 'turn-2' }))
         .mockResolvedValueOnce(Response.json({ kind: 'accepted', turn_id: 'turn-2' }))
         .mockResolvedValueOnce(
-          observation({
-            kind: 'completed',
-            turn_id: 'turn-2',
-            timeline: [
+          snapshotObservation({
+            session_id: 'demo-1',
+            expires_at: '2026-09-26T12:00:00Z',
+            sequence: 10,
+            turns: [
               {
-                kind: 'intermediate',
                 turn_id: 'turn-2',
-                id: 'update-1',
-                text: "I'll create a greeting artifact.",
-              },
-              {
-                kind: 'tool',
-                turn_id: 'turn-2',
-                execution_id: 'call-1',
-                name: 'create_greeting',
+                user_message_id: 'confirmed-0-user',
                 status: 'completed',
-              },
-              { kind: 'artifact', turn_id: 'turn-2', artifact_id: 'greeting-1' },
-              {
-                kind: 'intermediate',
-                turn_id: 'turn-2',
-                id: 'update-2',
-                text: "I'll demonstrate a failed tool call.",
-              },
-              {
-                kind: 'tool',
-                turn_id: 'turn-2',
-                execution_id: 'call-2',
-                name: 'create_greeting',
-                status: 'failed',
-              },
-              {
-                kind: 'message',
-                turn_id: 'turn-2',
-                id: 'assistant-turn-2',
-                role: 'assistant',
-                text: 'Scripted reply',
-              },
-            ],
-            message: { role: 'assistant', text: 'Scripted reply', turn_id: 'turn-2' },
-            artifacts: [
-              {
-                artifact_id: 'greeting-1',
-                type,
-                created_at: '2026-09-26T12:00:00Z',
-                order: 1,
-                turn_id: 'turn-2',
-                payload,
+                timeline: [
+                  {
+                    kind: 'message',
+                    id: 'confirmed-0-user',
+                    role: 'user',
+                    text: 'Any text',
+                    turn_id: 'turn-2',
+                  },
+                  {
+                    kind: 'intermediate',
+                    turn_id: 'turn-2',
+                    id: 'update-1',
+                    text: "I'll create a greeting artifact.",
+                  },
+                  {
+                    kind: 'tool',
+                    turn_id: 'turn-2',
+                    execution_id: 'call-1',
+                    name: 'create_greeting',
+                    status: 'completed',
+                  },
+                  {
+                    kind: 'artifact',
+                    turn_id: 'turn-2',
+                    artifact: {
+                      artifact_id: 'greeting-1',
+                      type,
+                      created_at: '2026-09-26T12:00:00Z',
+                      order: 1,
+                      turn_id: 'turn-2',
+                      payload,
+                    },
+                  },
+                  {
+                    kind: 'intermediate',
+                    turn_id: 'turn-2',
+                    id: 'update-2',
+                    text: "I'll demonstrate a failed tool call.",
+                  },
+                  {
+                    kind: 'tool',
+                    turn_id: 'turn-2',
+                    execution_id: 'call-2',
+                    name: 'create_greeting',
+                    status: 'failed',
+                  },
+                  {
+                    kind: 'message',
+                    turn_id: 'turn-2',
+                    id: 'assistant-turn-2',
+                    role: 'assistant',
+                    text: 'Scripted reply',
+                  },
+                ],
               },
             ],
           }),
@@ -193,33 +204,35 @@ describe('Demo application', () => {
       .mockResolvedValueOnce(
         Response.json({ session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z' }),
       )
-      .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Show error', turn_id: null }))
+      .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Show error', turn_id: 'turn-4' }))
       .mockResolvedValueOnce(Response.json({ kind: 'accepted', turn_id: 'turn-4' }))
       .mockResolvedValueOnce(
         snapshotObservation({
-          sequence: 4,
           session_id: 'demo-1',
           expires_at: '2026-09-26T12:00:00Z',
-          messages: [{ role: 'user', text: 'Show error', turn_id: null }],
-          artifacts: [],
+          sequence: 4,
           turns: [
-            { turn_id: 'turn-4', user_message_id: 'confirmed-0-user', status: 'generation_failed' },
-          ],
-          timeline: [
             {
-              kind: 'message',
-              id: 'confirmed-0-user',
               turn_id: 'turn-4',
-              role: 'user',
-              text: 'Show error',
+              user_message_id: 'confirmed-0-user',
+              status: 'generation_failed',
+              timeline: [
+                {
+                  kind: 'message',
+                  id: 'confirmed-0-user',
+                  turn_id: 'turn-4',
+                  role: 'user',
+                  text: 'Show error',
+                },
+                {
+                  kind: 'intermediate',
+                  id: 'failed-update',
+                  turn_id: 'turn-4',
+                  text: 'This update remains visible after generation fails.',
+                },
+                { kind: 'failure', turn_id: 'turn-4' },
+              ],
             },
-            {
-              kind: 'intermediate',
-              id: 'failed-update',
-              turn_id: 'turn-4',
-              text: 'This update remains visible after generation fails.',
-            },
-            { kind: 'failure', turn_id: 'turn-4' },
           ],
         }),
       );
@@ -264,32 +277,6 @@ describe('Demo application', () => {
   });
 });
 
-function observation(value: {
-  kind: string;
-  turn_id: string;
-  message: ApiMessage;
-  timeline: SessionSnapshotResponse['timeline'];
-  artifacts: ArtifactResponse[];
-}): Response {
-  return snapshotObservation({
-    session_id: 'demo-1',
-    expires_at: '2026-10-04T20:00:00Z',
-    sequence: 10,
-    turns: [{ turn_id: value.turn_id, user_message_id: 'confirmed-0-user', status: 'completed' }],
-    messages: [{ role: 'user', text: 'Any text', turn_id: null }, value.message],
-    timeline: [
-      {
-        kind: 'message',
-        id: 'confirmed-0-user',
-        turn_id: value.turn_id,
-        role: 'user',
-        text: 'Any text',
-      },
-      ...value.timeline,
-    ],
-    artifacts: value.artifacts,
-  });
-}
 function snapshotObservation(snapshot: SessionSnapshotResponse): Response {
   const turn = snapshot.turns.at(-1)!;
   const initial = { kind: 'snapshot', turn_id: turn.turn_id, snapshot };

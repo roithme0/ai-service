@@ -75,7 +75,7 @@ def test_scripted_sequence_uses_shared_messages_artifacts_and_new_session_reset(
     assert json.loads(results[-1].output) == {"kind": "rejected", "reason": "invalid_arguments"}
     read = store.read(first_session.session_id)
     assert isinstance(read, ConversationReadActive)
-    assert read.snapshot.artifacts == (artifact, greetings)
+    assert tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact") == (artifact, greetings)
     assert [message.role for message in read.snapshot.session.messages] == [
         "user", "assistant", "user", "assistant", "user", "user", "assistant", "user", "assistant",
     ]
@@ -107,7 +107,7 @@ def test_greeting_tool_validates_arguments_and_returns_local_candidate() -> None
     assert accepted.output == ArtifactToolOutput("created")
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert read.snapshot.artifacts == ()
+    assert tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact") == ()
     call = record_tool_call(store, session_id, reservation.turn_id, AgenticToolCall("create", "create", "{}"))
     finalized = store.record_result(session_id, call, accepted)
     published = store.complete_turn(session_id, reservation, "completed", "Created").artifacts
@@ -137,7 +137,7 @@ def test_greetings_tool_validates_list_and_candidate_acceptance() -> None:
     assert accepted.artifact.payload.messages == ("Hello, World!", "Hello, Friend!")
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert read.snapshot.artifacts == ()
+    assert tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact") == ()
     call = record_tool_call(store, session_id, reservation.turn_id, AgenticToolCall("create", "create", "{}"))
     finalized = store.record_result(session_id, call, accepted)
     published = store.complete_turn(session_id, reservation, "completed", "Created").artifacts
@@ -164,7 +164,7 @@ def test_unaccepted_candidates_are_absent_after_failure_and_retry() -> None:
     assert store.fail_turn(session_id, reservation).kind == "generation_failed"
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert read.snapshot.artifacts == ()
+    assert tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact") == ()
     store.append_user_message(session_id, "Retry")
     retry = asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id))
     assert retry.text == SECOND_REPLY
@@ -220,7 +220,7 @@ def test_unaccepted_greeting_does_not_advance_demo_step() -> None:
     assert store.fail_turn(session_id, reservation).kind == "generation_failed"
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert read.snapshot.artifacts == ()
+    assert tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact") == ()
     assert sum(message.role == "assistant" for message in read.snapshot.session.messages) == 1
     assert asyncio.run(create_demo_agent(store, delay_seconds=0, pause=no_delay).execute_turn(session_id)).kind == "generation_failed"
 
@@ -267,8 +267,8 @@ def test_scripted_turn_retains_completed_first_tool_when_second_tool_fails() -> 
     assert result.kind == "generation_failed"
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert len(read.snapshot.artifacts) == 1
-    assert read.snapshot.artifacts[0].payload.model_dump() == {"message": "Hello, World!"}
+    assert len(tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact")) == 1
+    assert tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact")[0].payload.model_dump() == {"message": "Hello, World!"}
     history = store.history(session_id)
     assert len([record for record in history if isinstance(record, CallRecord)]) == 2
     assert len([record for record in history if isinstance(record, ToolResultRecord)]) == 1
@@ -282,7 +282,7 @@ def test_scripted_turn_retains_completed_first_tool_when_second_tool_fails() -> 
     assert next_turn.kind == "generation_failed"
     retained = store.read(session_id)
     assert isinstance(retained, ConversationReadActive)
-    assert [artifact.order for artifact in retained.snapshot.artifacts] == [9, 20]
+    assert [artifact.order for artifact in tuple(item.artifact for turn in retained.snapshot.turns for item in turn.timeline if item.kind == "artifact")] == [9, 20]
 
 
 def output_text[ArtifactT](execution: ToolExecution[ArtifactT]) -> str:

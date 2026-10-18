@@ -27,7 +27,6 @@ describe('fetch SSE observation', () => {
       identity: 'm',
       order: 1,
       sequence: 2,
-      artifact: null,
       item: { kind: 'message', turn_id: 't', id: 'm', role: 'assistant', text: 'Gr\u00fc\u00dfe' },
     };
     const bytes = new TextEncoder().encode(
@@ -74,11 +73,18 @@ describe('fetch SSE observation', () => {
       snapshot: {
         session_id: 's',
         expires_at: '2026-10-04T20:00:00Z',
-        messages: [],
-        artifacts: [],
-        timeline,
         sequence: 300,
-        turns: [],
+        turns: [
+          {
+            turn_id: 't',
+            user_message_id: 'user',
+            status: 'in_progress',
+            timeline: [
+              { kind: 'message', role: 'user', id: 'user', text: 'Hello', turn_id: 't' },
+              ...timeline,
+            ],
+          },
+        ],
       },
     };
     const bytes = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`);

@@ -9,8 +9,6 @@ from app.core.models import ValidationDetail
 from app.sessions.models.artifacts import PublishedArtifact
 from app.sessions.models.conversation import ConversationSnapshot
 from app.agents.models.http_responses import (
-    ArtifactResponse,
-    AssistantMessageResponse,
     ErrorResponse,
     InputIssue,
     InputValidationErrorKind,
@@ -21,6 +19,8 @@ from app.agents.models.http_responses import (
     ValidationErrorResponse,
 )
 from app.sessions.models.session import TextMessage
+from app.sessions.models.timeline import TimelineArtifact, TimelineItem
+from app.sessions.models.turns import TurnSnapshot
 
 ContextT = TypeVar("ContextT")
 PayloadT = TypeVar("PayloadT", bound=BaseModel)
@@ -32,10 +32,10 @@ def snapshot_response(
     return SessionSnapshotResponse(
         session_id=snapshot.session.session_id,
         expires_at=snapshot.session.expires_at,
-        messages=[_message(message) for message in snapshot.session.messages],
-        artifacts=[artifact_response(artifact) for artifact in snapshot.artifacts],
-        turns=list(snapshot.turns),
-        timeline=list(snapshot.timeline),
+        turns=[TurnSnapshot(
+            turn_id=turn.turn_id, user_message_id=turn.user_message_id, status=turn.status,
+            timeline=tuple(timeline_item_response(item) for item in turn.timeline),
+        ) for turn in snapshot.turns],
         sequence=snapshot.sequence,
     )
 
@@ -46,16 +46,14 @@ def user_message_response(value: TextMessage) -> UserMessageResponse:
     )
 
 
-def _message(value: TextMessage) -> UserMessageResponse | AssistantMessageResponse:
-    if value.role == "user":
-        return user_message_response(value)
-    return AssistantMessageResponse.model_validate(
-        {"role": value.role, "text": value.text, "turn_id": value.turn_id}
-    )
+def timeline_item_response(item: TimelineItem[PayloadT]) -> TimelineItem[dict[str, object]]:
+    if item.kind == "artifact":
+        return TimelineArtifact(turn_id=item.turn_id, artifact=artifact_response(item.artifact))
+    return item
 
 
-def artifact_response(value: PublishedArtifact[PayloadT]) -> ArtifactResponse:
-    return ArtifactResponse(
+def artifact_response(value: PublishedArtifact[PayloadT]) -> PublishedArtifact[dict[str, object]]:
+    return PublishedArtifact(
         artifact_id=value.artifact_id,
         type=value.type,
         created_at=value.created_at,

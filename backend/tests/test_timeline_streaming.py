@@ -117,7 +117,7 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
                 initial = next(events)
                 assert initial['kind'] == 'snapshot'
                 assert initial['snapshot']['turns'][-1]['status'] == 'in_progress'
-                initial_items = initial['snapshot']['timeline']
+                initial_items = initial['snapshot']['turns'][-1]['timeline']
                 row = next(item for item in initial_items if item['kind'] == 'tool')
                 assert row['status'] == 'requested'
                 identity, order = f"tool-{row['execution_id']}", initial_items.index(row)
@@ -133,7 +133,7 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
                 while True:
                     event = next(events)
                     if event['kind'] == 'upsert' and event['item']['kind'] == 'artifact':
-                        assert event['artifact']['payload']['payload'] == {'value': 42}
+                        assert event['item']['artifact']['payload']['payload'] == {'value': 42}
                         break
                 assert final_entered.wait(2)
                 while True:
@@ -144,7 +144,7 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
             snapshot = client.get(url).json()
             assert snapshot['turns'][-1]['turn_id'] == turn_id
             assert snapshot['turns'][-1]['status'] == 'closing'
-            assert len(snapshot['artifacts']) == 1
+            assert len([item for turn in snapshot['turns'] for item in turn['timeline'] if item['kind'] == 'artifact']) == 1
             with client.stream('GET', f'{url}/turns/{turn_id}/events') as response:
                 events = event_lines(response)
                 catch_up = next(events)
@@ -155,13 +155,13 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
             assert retained[-1]['kind'] == 'terminal' and retained[-1]['outcome'] == 'generation_failed'
             snapshot = client.get(url).json()
             assert snapshot['turns'][-1]['status'] == 'generation_failed'
-            assert any(item.get('text') == 'Retained final' for item in snapshot['timeline'])
-            assert snapshot['timeline'][-1]['kind'] == 'failure'
+            assert any(item.get('text') == 'Retained final' for item in snapshot['turns'][-1]['timeline'])
+            assert snapshot['turns'][-1]['timeline'][-1]['kind'] == 'failure'
             assert calls == 2 and tool_calls == 1
             assert client.post(url + '/turns').json() == accepted.json()
             with client.stream('GET', f'{url}/turns/{turn_id}/events') as response:
                 terminal_before_subscribe = list(event_lines(response))
-            assert terminal_before_subscribe[0]['snapshot']['timeline'] == snapshot['timeline']
+            assert terminal_before_subscribe[0]['snapshot']['turns'][-1]['timeline'] == snapshot['turns'][-1]['timeline']
             assert terminal_before_subscribe[-1]['outcome'] == 'generation_failed'
             assert calls == 2 and tool_calls == 1
     finally:
@@ -189,7 +189,7 @@ def test_atomic_subscription_preserves_every_tool_transition_and_bounded_overflo
         while True:
             update = await asyncio.wait_for(anext(observer), 1)
             assert isinstance(update, ConversationReadActive)
-            rows = [item for item in update.snapshot.timeline if item.kind == 'tool']
+            rows = [item for item in update.snapshot.turns[-1].timeline if item.kind == 'tool']
             if rows: statuses.append(rows[0].status)
             if update.snapshot.turns[-1].status in {"completed", "generation_failed", "conflict"}: break
         assert statuses[:3] == ['requested', 'running', 'completed']
@@ -246,14 +246,14 @@ def test_records_arriving_after_initial_capture_before_first_delivery_are_not_lo
             observer = agent.observe(session)
             initial = await anext(observer)
             assert isinstance(initial, ConversationReadActive)
-            assert len(initial.snapshot.timeline) == 1
+            assert len(initial.snapshot.turns[-1].timeline) == 1
             seen_sequences = [initial.snapshot.sequence]
             messages: set[str] = set()
             while True:
                 current = await asyncio.wait_for(anext(observer), 1)
                 assert isinstance(current, ConversationReadActive)
                 seen_sequences.append(current.snapshot.sequence)
-                messages.update(item.id for item in current.snapshot.timeline if item.kind == 'message' and item.role == 'assistant')
+                messages.update(item.id for item in current.snapshot.turns[-1].timeline if item.kind == 'message' and item.role == 'assistant')
                 if current.snapshot.turns[-1].status in {"completed", "generation_failed", "conflict"}: break
             assert seen_sequences == sorted(seen_sequences)
             assert len(messages) == 1

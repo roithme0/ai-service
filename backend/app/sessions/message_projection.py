@@ -18,7 +18,7 @@ def completed_text_messages(history: tuple[HistoryRecord, ...]) -> tuple[TextMes
         if not isinstance(record, MessageRecord):
             continue
         if record.kind == "user":
-            messages.append(TextMessage("user", record.text))
+            messages.append(TextMessage("user", record.text, record.turn_id))
         elif (
             record.kind == "final"
             and record.turn_id in completed

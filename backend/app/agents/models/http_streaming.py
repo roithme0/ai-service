@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, RootModel
 
-from app.agents.models.http_responses import ArtifactResponse, SessionSnapshotResponse
+from app.agents.models.http_responses import SessionSnapshotResponse
 from app.sessions.models.timeline import TimelineItem
 from app.sessions.models.turns import TerminalTurnKind
 
@@ -26,8 +26,7 @@ class StreamUpsert(BaseModel):
     identity: str
     order: int = Field(ge=0)
     sequence: int = Field(ge=0)
-    item: Annotated[TimelineItem, Field(discriminator="kind")]
-    artifact: ArtifactResponse | None = None
+    item: Annotated[TimelineItem[dict[str, object]], Field(discriminator="kind")]
 
 
 class StreamClosing(BaseModel):

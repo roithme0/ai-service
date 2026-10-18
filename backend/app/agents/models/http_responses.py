@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from app.core.models import (
     ErrorEnvelope, HttpErrorKind, RequestValidationErrorKind, ValidationErrorEnvelope,
 )
-from app.sessions.models.timeline import TimelineItem
 from app.sessions.models.turns import TurnSnapshot
 
 
@@ -48,31 +47,7 @@ class ValidationErrorResponse(ValidationErrorEnvelope[ValidationErrorKind]):
 class UserMessageResponse(BaseModel):
     role: Literal["user"]
     text: str
-    turn_id: None
-
-
-class AssistantMessageResponse(BaseModel):
-    role: Literal["assistant"]
-    text: str
     turn_id: str
-
-
-MessageResponse = Annotated[
-    UserMessageResponse | AssistantMessageResponse, Field(discriminator="role")
-]
-
-
-class ArtifactResponse(BaseModel):
-    artifact_id: str
-    type: str
-    created_at: datetime
-    order: int
-    turn_id: str
-    payload: dict[str, object]
-
-    @field_serializer("created_at")
-    def serialize_created_at(self, value: datetime) -> str:
-        return value.isoformat()
 
 
 class SessionCreationResponse(BaseModel):
@@ -87,10 +62,7 @@ class SessionCreationResponse(BaseModel):
 class SessionSnapshotResponse(BaseModel):
     session_id: str
     expires_at: datetime
-    messages: list[MessageResponse]
-    artifacts: list[ArtifactResponse]
-    turns: list[TurnSnapshot]
-    timeline: list[Annotated[TimelineItem, Field(discriminator="kind")]]
+    turns: list[TurnSnapshot[dict[str, object]]]
     sequence: int = Field(ge=0)
 
     @field_serializer("expires_at")

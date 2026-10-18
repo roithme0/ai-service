@@ -19,56 +19,6 @@ export type AcceptedTurnResponse = {
 };
 
 /**
- * ArtifactResponse
- */
-export type ArtifactResponse = {
-    /**
-     * Artifact Id
-     */
-    artifact_id: string;
-    /**
-     * Created At
-     */
-    created_at: string;
-    /**
-     * Order
-     */
-    order: number;
-    /**
-     * Payload
-     */
-    payload: {
-        [key: string]: unknown;
-    };
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-    /**
-     * Type
-     */
-    type: string;
-};
-
-/**
- * AssistantMessageResponse
- */
-export type AssistantMessageResponse = {
-    /**
-     * Role
-     */
-    role: 'assistant';
-    /**
-     * Text
-     */
-    text: string;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
  * ErrorResponse
  */
 export type ErrorResponse = {
@@ -101,6 +51,38 @@ export type HttpErrorResponse = {
 };
 
 /**
+ * PublishedArtifact
+ */
+export type PublishedArtifactDictStrObject = {
+    /**
+     * Artifact Id
+     */
+    artifact_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Order
+     */
+    order: number;
+    /**
+     * Payload
+     */
+    payload: {
+        [key: string]: unknown;
+    };
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+    /**
+     * Type
+     */
+    type: string;
+};
+
+/**
  * SessionCreationResponse
  */
 export type SessionCreationResponse = {
@@ -119,17 +101,9 @@ export type SessionCreationResponse = {
  */
 export type SessionSnapshotResponse = {
     /**
-     * Artifacts
-     */
-    artifacts: Array<ArtifactResponse>;
-    /**
      * Expires At
      */
     expires_at: string;
-    /**
-     * Messages
-     */
-    messages: Array<UserMessageResponse | AssistantMessageResponse>;
     /**
      * Sequence
      */
@@ -139,13 +113,9 @@ export type SessionSnapshotResponse = {
      */
     session_id: string;
     /**
-     * Timeline
-     */
-    timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
-    /**
      * Turns
      */
-    turns: Array<TurnSnapshot>;
+    turns: Array<TurnSnapshotDictStrObject>;
 };
 
 /**
@@ -240,7 +210,6 @@ export type StreamTerminal = {
  * StreamUpsert
  */
 export type StreamUpsert = {
-    artifact?: ArtifactResponse | null;
     /**
      * Identity
      */
@@ -256,7 +225,7 @@ export type StreamUpsert = {
         kind: 'tool';
     } & TimelineTool) | ({
         kind: 'artifact';
-    } & TimelineArtifact) | ({
+    } & TimelineArtifactDictStrObject) | ({
         kind: 'failure';
     } & TimelineFailure);
     /**
@@ -280,11 +249,8 @@ export type StreamUpsert = {
 /**
  * TimelineArtifact
  */
-export type TimelineArtifact = {
-    /**
-     * Artifact Id
-     */
-    artifact_id: string;
+export type TimelineArtifactDictStrObject = {
+    artifact: PublishedArtifactDictStrObject;
     /**
      * Kind
      */
@@ -386,11 +352,15 @@ export type TimelineTool = {
 /**
  * TurnSnapshot
  */
-export type TurnSnapshot = {
+export type TurnSnapshotDictStrObject = {
     /**
      * Status
      */
     status: 'pending' | 'in_progress' | 'closing' | 'completed' | 'generation_failed' | 'conflict';
+    /**
+     * Timeline
+     */
+    timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifactDictStrObject | TimelineFailure>;
     /**
      * Turn Id
      */
@@ -416,7 +386,7 @@ export type UserMessageResponse = {
     /**
      * Turn Id
      */
-    turn_id: null;
+    turn_id: string;
 };
 
 /**

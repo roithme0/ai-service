@@ -20,7 +20,7 @@ class FakeTransport implements ConversationTransport {
   readSession = vi.fn<(id: string) => Promise<SessionSnapshotResponse>>();
   appendMessage = vi
     .fn<(id: string, text: string) => Promise<UserMessageResponse>>()
-    .mockResolvedValue({ role: 'user', text: 'Hello', turn_id: null });
+    .mockResolvedValue({ role: 'user', text: 'Hello', turn_id: 't' });
   generateTurn = vi
     .fn<(id: string) => Promise<AcceptedTurnResponse>>()
     .mockResolvedValue({ kind: 'accepted', turn_id: 't' });
@@ -31,12 +31,16 @@ function snapshot(overrides: Partial<SessionSnapshotResponse> = {}): SessionSnap
   return {
     session_id: 's',
     expires_at: '2026-10-04T20:00:00Z',
-    messages: [{ role: 'user', text: 'Hello', turn_id: null }],
-    artifacts: [],
     sequence: 1,
-    turns: [{ turn_id: 't', user_message_id: 'confirmed-0-user', status: 'in_progress' }],
-    timeline: [
-      { kind: 'message', role: 'user', id: 'confirmed-0-user', text: 'Hello', turn_id: 't' },
+    turns: [
+      {
+        turn_id: 't',
+        user_message_id: 'confirmed-0-user',
+        status: 'in_progress',
+        timeline: [
+          { kind: 'message', role: 'user', id: 'confirmed-0-user', text: 'Hello', turn_id: 't' },
+        ],
+      },
     ],
     ...overrides,
   };
@@ -59,7 +63,7 @@ const tool = (
   sequence,
   identity: 'tool-e',
   order: 2,
-  artifact: null,
+
   item: { kind: 'tool', turn_id: 't', execution_id: 'e', name: 'save', status },
 });
 async function* stream(events: readonly StreamEvent[]): AsyncIterable<StreamEvent> {
@@ -78,7 +82,7 @@ describe('live conversation controller', () => {
     'retains authoritative historical outcomes and current %s across interleaved output',
     async (ending) => {
       const transport = new FakeTransport();
-      const timeline: SessionSnapshotResponse['timeline'] = [
+      const timeline: SessionSnapshotResponse['turns'][number]['timeline'] = [
         { kind: 'message', role: 'user', id: 'request-first', text: 'First', turn_id: 'old' },
         { kind: 'message', role: 'assistant', id: 'old-answer', text: 'Done', turn_id: 'old' },
         {
@@ -92,7 +96,18 @@ describe('live conversation controller', () => {
         { kind: 'failure', turn_id: 'failed' },
         { kind: 'message', role: 'user', id: 'request-current', text: 'Third', turn_id: 't' },
         { kind: 'intermediate', id: 'detail-before', text: 'Before', turn_id: 't' },
-        { kind: 'artifact', artifact_id: 'a', turn_id: 't' },
+        {
+          kind: 'artifact',
+          turn_id: 't',
+          artifact: {
+            artifact_id: 'a',
+            turn_id: 't',
+            type: 'json',
+            order: 1,
+            created_at: '2026-10-18T10:00:00Z',
+            payload: { title: 'Data', payload: 1 },
+          },
+        },
         { kind: 'intermediate', id: 'detail-after', text: 'After', turn_id: 't' },
         { kind: 'message', role: 'assistant', id: 'answer', text: 'Final', turn_id: 't' },
       ];
@@ -101,20 +116,24 @@ describe('live conversation controller', () => {
           kind: 'snapshot',
           turn_id: 't',
           snapshot: snapshot({
-            timeline,
             turns: [
-              { turn_id: 'old', user_message_id: 'request-first', status: 'completed' },
-              { turn_id: 'failed', user_message_id: 'request-second', status: 'generation_failed' },
-              { turn_id: 't', user_message_id: 'request-current', status: 'closing' },
-            ],
-            artifacts: [
               {
-                artifact_id: 'a',
+                turn_id: 'old',
+                user_message_id: 'request-first',
+                status: 'completed',
+                timeline: timeline.slice(0, 2),
+              },
+              {
+                turn_id: 'failed',
+                user_message_id: 'request-second',
+                status: 'generation_failed',
+                timeline: timeline.slice(2, 5),
+              },
+              {
                 turn_id: 't',
-                type: 'json',
-                order: 1,
-                created_at: '2026-10-18T10:00:00Z',
-                payload: { title: 'Data', payload: 1 },
+                user_message_id: 'request-current',
+                status: 'closing',
+                timeline: timeline.slice(5),
               },
             ],
           }),
@@ -165,7 +184,7 @@ describe('live conversation controller', () => {
     await controller.start();
     const acknowledge = vi.fn(() => {
       expect(controller.state.content).toContainEqual(
-        expect.objectContaining({ role: 'user', text: 'Hello' }),
+        expect.objectContaining({ role: 'user', text: 'Hello', turnId: 't' }),
       );
       expect(controller.state.status).toMatchObject({ kind: 'loading', placement: 'assistant' });
       expect(controller.state.status).not.toHaveProperty('reveal');
@@ -176,7 +195,7 @@ describe('live conversation controller', () => {
     expect(controller.state.composerDisabled).toBe(true);
     expect(acknowledge).not.toHaveBeenCalled();
     expect(transport.generateTurn).not.toHaveBeenCalled();
-    accepted.resolve({ role: 'user', text: 'Hello', turn_id: null });
+    accepted.resolve({ role: 'user', text: 'Hello', turn_id: 't' });
     await submission;
     expect(acknowledge).toHaveBeenCalledOnce();
     expect(controller.state.status).toBeNull();
@@ -193,43 +212,57 @@ describe('live conversation controller', () => {
           kind: 'snapshot',
           turn_id: 't',
           snapshot: snapshot({
-            timeline: [
-              { kind: 'intermediate', turn_id: 'old', id: 'old', text: 'Previous turn' },
-              ...snapshot().timeline,
+            turns: [
+              {
+                turn_id: 'old',
+                user_message_id: 'old-user',
+                status: 'completed',
+                timeline: [
+                  {
+                    kind: 'message',
+                    role: 'user',
+                    id: 'old-user',
+                    text: 'Previous',
+                    turn_id: 'old',
+                  },
+                  { kind: 'intermediate', id: 'old', text: 'Previous turn', turn_id: 'old' },
+                ],
+              },
+              ...snapshot().turns,
             ],
           }),
         });
         expect(controller.state.status?.kind).toBe('loading');
-        const item: SessionSnapshotResponse['timeline'][number] =
+        const item: SessionSnapshotResponse['turns'][number]['timeline'][number] =
           kind === 'intermediate'
             ? { kind, turn_id: 't', id: 'first', text: 'Checking' }
             : kind === 'tool'
               ? { kind, turn_id: 't', execution_id: 'first', name: 'check', status: 'requested' }
               : kind === 'artifact'
-                ? { kind, turn_id: 't', artifact_id: 'first' }
+                ? {
+                    kind,
+                    turn_id: 't',
+                    artifact: {
+                      artifact_id: 'first',
+                      turn_id: 't',
+                      type: 'json',
+                      order: 2,
+                      created_at: '2026-10-18T10:00:00Z',
+                      payload: { title: 'Data', payload: 1 },
+                    },
+                  }
                 : { kind, turn_id: 't', id: 'first', role: 'assistant', text: 'Done' };
         yield {
           kind: 'upsert',
           turn_id: 't',
           sequence: 2,
-          order: 2,
+          order: 1,
           identity: kind === 'tool' ? 'tool-first' : 'first',
           item,
-          artifact:
-            kind === 'artifact'
-              ? {
-                  artifact_id: 'first',
-                  turn_id: 't',
-                  type: 'json',
-                  order: 2,
-                  created_at: '2026-10-18T10:00:00Z',
-                  payload: { title: 'Data', payload: 1 },
-                }
-              : null,
         };
         expect(controller.state.status).toBeNull();
         expect(controller.state.composerDisabled).toBe(true);
-        yield { ...tool('running', 3), order: 3 };
+        yield { ...tool('running', 3), order: 2 };
         expect(controller.state.status).toBeNull();
         yield terminal();
       });
@@ -256,15 +289,22 @@ describe('live conversation controller', () => {
                 turn_id: 't',
                 user_message_id: 'confirmed-0-user',
                 status: source === 'snapshot' ? 'closing' : 'in_progress',
-              },
-            ],
-            timeline: [
-              {
-                kind: 'message',
-                turn_id: 't',
-                id: 'answer',
-                role: 'assistant',
-                text: 'Retained answer',
+                timeline: [
+                  {
+                    kind: 'message',
+                    role: 'user',
+                    id: 'confirmed-0-user',
+                    text: 'Hello',
+                    turn_id: 't',
+                  },
+                  {
+                    kind: 'message',
+                    turn_id: 't',
+                    id: 'answer',
+                    role: 'assistant',
+                    text: 'Retained answer',
+                  },
+                ],
               },
             ],
           }),
@@ -287,7 +327,7 @@ describe('live conversation controller', () => {
       await submission;
       expect(controller.state.status?.kind).toBe('error');
       expect(controller.state.composerDisabled).toBe(false);
-      expect(controller.state.content[0]).toMatchObject({ text: 'Retained answer' });
+      expect(controller.state.content[1]).toMatchObject({ text: 'Retained answer' });
     },
   );
 
@@ -303,9 +343,22 @@ describe('live conversation controller', () => {
         kind: 'snapshot',
         turn_id: turnId,
         snapshot: snapshot({
-          turns: [{ turn_id: turnId, user_message_id: 'confirmed-0-user', status: 'in_progress' }],
-          timeline: [
-            { kind: 'intermediate', id: turnId, turn_id: turnId, text: 'Already working' },
+          turns: [
+            {
+              turn_id: turnId,
+              user_message_id: 'confirmed-0-user',
+              status: 'in_progress',
+              timeline: [
+                {
+                  kind: 'message',
+                  role: 'user',
+                  id: 'confirmed-0-user',
+                  text: 'Hello',
+                  turn_id: turnId,
+                },
+                { kind: 'intermediate', id: turnId, turn_id: turnId, text: 'Already working' },
+              ],
+            },
           ],
         }),
       });
@@ -323,9 +376,14 @@ describe('live conversation controller', () => {
     transport.generateTurn.mockRejectedValue(new ConversationNetworkError('offline'));
     transport.readSession.mockResolvedValue(
       snapshot({
-        timeline: [
-          ...snapshot().timeline,
-          { kind: 'intermediate', id: 'working', turn_id: 't', text: 'Working' },
+        turns: [
+          {
+            ...snapshot().turns[0],
+            timeline: [
+              ...snapshot().turns[0].timeline,
+              { kind: 'intermediate', id: 'working', turn_id: 't', text: 'Working' },
+            ],
+          },
         ],
       }),
     );
@@ -354,7 +412,7 @@ describe('live conversation controller', () => {
         sequence: 2,
         identity: 'commentary',
         order: 1,
-        artifact: null,
+
         item: { kind: 'intermediate', turn_id: 't', id: 'commentary', text: 'Checking' },
       };
       yield tool('requested', 3);
@@ -367,7 +425,7 @@ describe('live conversation controller', () => {
         sequence: 6,
         identity: 'final',
         order: 3,
-        artifact: null,
+
         item: {
           kind: 'message',
           turn_id: 't',
@@ -382,14 +440,17 @@ describe('live conversation controller', () => {
         sequence: 7,
         identity: 'a',
         order: 4,
-        item: { kind: 'artifact', turn_id: 't', artifact_id: 'a' },
-        artifact: {
-          artifact_id: 'a',
-          type: 'json',
-          created_at: '2026-10-04T18:00:00Z',
+        item: {
+          kind: 'artifact',
           turn_id: 't',
-          order: 4,
-          payload: { title: 'Data', payload: { value: 1 } },
+          artifact: {
+            artifact_id: 'a',
+            type: 'json',
+            created_at: '2026-10-04T18:00:00Z',
+            turn_id: 't',
+            order: 4,
+            payload: { title: 'Data', payload: { value: 1 } },
+          },
         },
       };
       visible.resolve();
@@ -400,7 +461,7 @@ describe('live conversation controller', () => {
         sequence: 8,
         identity: 'failure-t',
         order: 5,
-        artifact: null,
+
         item: { kind: 'failure', turn_id: 't' },
       };
       yield terminal('generation_failed');
@@ -447,7 +508,7 @@ describe('live conversation controller', () => {
       const transport = new FakeTransport();
       transport.observeTurn.mockImplementation(async function* () {
         yield await Promise.resolve(initial());
-        yield tool('running', 3);
+        yield { ...tool('running', 3), order: 1 };
         if (ending === 'error') throw new Error('offline');
         if (ending === 'malformed') yield { ...tool('completed', 4), identity: 'wrong' };
       });
@@ -478,16 +539,20 @@ describe('live conversation controller', () => {
           turn_id: 't',
           snapshot: snapshot({
             turns: [
-              { turn_id: 't', user_message_id: 'confirmed-0-user', status: 'generation_failed' },
-            ],
-            timeline: [
-              ...snapshot().timeline,
               {
-                kind: 'message',
                 turn_id: 't',
-                id: 'f',
-                role: 'assistant',
-                text: 'Final before failure',
+                user_message_id: 'confirmed-0-user',
+                status: 'generation_failed',
+                timeline: [
+                  ...snapshot().turns[0].timeline,
+                  {
+                    kind: 'message',
+                    turn_id: 't',
+                    id: 'f',
+                    role: 'assistant',
+                    text: 'Final before failure',
+                  },
+                ],
               },
             ],
           }),
@@ -521,17 +586,17 @@ describe('live conversation controller', () => {
                   turn_id: 't',
                   user_message_id: 'confirmed-0-user',
                   status: outcome,
-                },
-              ],
-              timeline: [
-                ...snapshot().timeline,
-                { kind: 'intermediate', id: 'detail', text: 'Received detail', turn_id: 't' },
-                {
-                  kind: 'message',
-                  role: 'assistant',
-                  id: 'answer',
-                  text: 'Received answer',
-                  turn_id: 't',
+                  timeline: [
+                    ...snapshot().turns[0].timeline,
+                    { kind: 'intermediate', id: 'detail', text: 'Received detail', turn_id: 't' },
+                    {
+                      kind: 'message',
+                      role: 'assistant',
+                      id: 'answer',
+                      text: 'Received answer',
+                      turn_id: 't',
+                    },
+                  ],
                 },
               ],
             }),
@@ -648,7 +713,7 @@ describe('live conversation controller', () => {
     const submitting = controller.submit('Hello', acknowledge);
     controller.dispose();
     publish.mockClear();
-    pending.resolve({ role: 'user', text: 'Hello', turn_id: null });
+    pending.resolve({ role: 'user', text: 'Hello', turn_id: 't' });
     await submitting;
     expect(publish).not.toHaveBeenCalled();
     expect(acknowledge).not.toHaveBeenCalled();
@@ -689,11 +754,17 @@ describe('live conversation controller', () => {
               turn_id: 't',
               user_message_id: 'confirmed-0-user',
               status: outcome,
+              timeline: [
+                ...snapshot().turns[0].timeline,
+                {
+                  kind: 'message',
+                  role: 'assistant',
+                  id: 'answer',
+                  text: 'Received',
+                  turn_id: 't',
+                },
+              ],
             },
-          ],
-          timeline: [
-            ...snapshot().timeline,
-            { kind: 'message', role: 'assistant', id: 'answer', text: 'Received', turn_id: 't' },
           ],
         }),
       );
@@ -719,13 +790,35 @@ describe('live conversation controller', () => {
     transport.readSession.mockResolvedValue(
       snapshot({
         turns: [
-          { turn_id: 'old', user_message_id: 'request-old', status: 'completed' },
-          { turn_id: 'latest', user_message_id: 'request-latest', status: 'pending' },
-        ],
-        timeline: [
-          { kind: 'message', role: 'user', id: 'request-old', text: 'Old', turn_id: 'old' },
-          { kind: 'message', role: 'assistant', id: 'old-answer', text: 'Done', turn_id: 'old' },
-          { kind: 'message', role: 'user', id: 'request-latest', text: 'Hello', turn_id: 'latest' },
+          {
+            turn_id: 'old',
+            user_message_id: 'request-old',
+            status: 'completed',
+            timeline: [
+              { kind: 'message', role: 'user', id: 'request-old', text: 'Old', turn_id: 'old' },
+              {
+                kind: 'message',
+                role: 'assistant',
+                id: 'old-answer',
+                text: 'Done',
+                turn_id: 'old',
+              },
+            ],
+          },
+          {
+            turn_id: 'latest',
+            user_message_id: 'request-latest',
+            status: 'pending',
+            timeline: [
+              {
+                kind: 'message',
+                role: 'user',
+                id: 'request-latest',
+                text: 'Hello',
+                turn_id: 'latest',
+              },
+            ],
+          },
         ],
       }),
     );
@@ -766,7 +859,7 @@ describe('live conversation controller', () => {
           sequence: 2,
           identity: 'phase-less',
           order: 1,
-          artifact: null,
+
           item: {
             kind: 'message',
             id: 'phase-less',
@@ -784,10 +877,22 @@ describe('live conversation controller', () => {
     transport.appendMessage.mockRejectedValueOnce(new ConversationNetworkError('uncertain'));
     transport.readSession.mockResolvedValue(
       snapshot({
-        messages: [
-          { role: 'user', text: 'Hello', turn_id: null },
-          { role: 'assistant', text: 'Canonical answer', turn_id: 't' },
-          { role: 'user', text: 'Next', turn_id: null },
+        turns: [
+          { ...snapshot().turns[0], status: 'completed' },
+          {
+            turn_id: 'next',
+            user_message_id: 'confirmed-1-user',
+            status: 'pending',
+            timeline: [
+              {
+                kind: 'message',
+                id: 'confirmed-1-user',
+                role: 'user',
+                text: 'Next',
+                turn_id: 'next',
+              },
+            ],
+          },
         ],
       }),
     );
@@ -825,7 +930,7 @@ describe('live conversation controller', () => {
     await controller.submit('second', vi.fn());
     expect(acknowledge).not.toHaveBeenCalled();
     expect(transport.appendMessage).toHaveBeenCalledTimes(1);
-    pending.resolve({ role: 'user', text: 'Hello', turn_id: null });
+    pending.resolve({ role: 'user', text: 'Hello', turn_id: 't' });
     await first;
     expect(acknowledge).toHaveBeenCalledTimes(1);
   });
@@ -837,7 +942,7 @@ describe('live conversation controller', () => {
     await controller.submit('Hello', vi.fn());
     expect(controller.state.turns).toEqual([]);
     expect(controller.state.content).toEqual([
-      { kind: 'text', id: 'confirmed-0-user', role: 'user', text: 'Hello' },
+      { kind: 'text', id: 'confirmed-0-user', role: 'user', text: 'Hello', turnId: 't' },
     ]);
     expect(controller.state.composerDisabled).toBe(true);
     expect(controller.state.status?.kind).toBe('error');
@@ -921,14 +1026,17 @@ describe('live conversation controller', () => {
         identity: id,
         order: id === 'omitted' ? 1 : 2,
         sequence: id === 'omitted' ? 2 : 3,
-        item: { kind: 'artifact', turn_id: 't', artifact_id: id },
-        artifact: {
-          artifact_id: id,
+        item: {
+          kind: 'artifact',
           turn_id: 't',
-          type: 'custom',
-          order: 7,
-          created_at: '2026-10-04T18:00:00Z',
-          payload: { value: id },
+          artifact: {
+            artifact_id: id,
+            turn_id: 't',
+            type: 'custom',
+            order: 7,
+            created_at: '2026-10-04T18:00:00Z',
+            payload: { value: id },
+          },
         },
       });
     const statuses: (string | null)[] = [];
@@ -939,16 +1047,17 @@ describe('live conversation controller', () => {
       }
       yield terminal();
     });
-    const mapper = vi.fn((artifact: import('../generated/types.gen').ArtifactResponse) =>
-      artifact.artifact_id === 'omitted'
-        ? null
-        : {
-            kind: 'artifact' as const,
-            id: `custom-${artifact.artifact_id}`,
-            type: 'custom',
-            headline: 'Mapped',
-            payload: { value: 'visible' },
-          },
+    const mapper = vi.fn(
+      (artifact: import('../generated/types.gen').PublishedArtifactDictStrObject) =>
+        artifact.artifact_id === 'omitted'
+          ? null
+          : {
+              kind: 'artifact' as const,
+              id: `custom-${artifact.artifact_id}`,
+              type: 'custom',
+              headline: 'Mapped',
+              payload: { value: 'visible' },
+            },
     );
     const controller = new ConversationController(transport, () => undefined, mapper);
     await controller.start();
@@ -962,6 +1071,119 @@ describe('live conversation controller', () => {
       expect.objectContaining({ artifact_id: 'visible', order: 7, payload: { value: 'visible' } }),
     );
     expect(controller.state.content[1]).toMatchObject({ headline: 'Mapped', type: 'custom' });
+  });
+
+  it.each(['identity', 'turn', 'position', 'collision', 'artifact-turn'] as const)(
+    'rejects an inconsistent turn-local upsert: %s',
+    async (variant) => {
+      const transport = new FakeTransport();
+      const first = { ...tool('running', 2), order: 1 };
+      const invalid: Extract<StreamEvent, { kind: 'upsert' }> =
+        variant === 'artifact-turn'
+          ? {
+              kind: 'upsert',
+              turn_id: 't',
+              identity: 'a',
+              order: 2,
+              sequence: 3,
+              item: {
+                kind: 'artifact',
+                turn_id: 't',
+                artifact: {
+                  artifact_id: 'a',
+                  turn_id: 'other',
+                  type: 'json',
+                  order: 7,
+                  created_at: '2026-10-18T10:00:00Z',
+                  payload: { title: 'Data', payload: 1 },
+                },
+              },
+            }
+          : {
+              ...tool('completed', 3),
+              order: variant === 'position' ? 2 : variant === 'collision' ? 0 : 1,
+              identity:
+                variant === 'identity'
+                  ? 'other'
+                  : variant === 'collision'
+                    ? 'tool-other'
+                    : 'tool-e',
+              item: {
+                kind: 'tool',
+                name: 'save',
+                status: 'completed',
+                turn_id: variant === 'turn' ? 'other' : 't',
+                execution_id: variant === 'collision' ? 'other' : 'e',
+              },
+            };
+      transport.observeTurn.mockReturnValue(stream([initial(), first, invalid, terminal()]));
+      const controller = new ConversationController(transport, () => undefined);
+      await controller.start();
+      await controller.submit('Hello', vi.fn());
+      expect(controller.state.turns[0]?.status).toBe('unknown');
+      expect(controller.state.composerDisabled).toBe(true);
+      expect(controller.state.content).toHaveLength(2);
+      expect(controller.state.content[1]).toMatchObject({ kind: 'tool', status: 'running' });
+    },
+  );
+
+  it('applies local positions after historical turns and reconciles repeated identical submissions without duplication', async () => {
+    const transport = new FakeTransport();
+    const firstTurn = { ...snapshot().turns[0], status: 'completed' as const };
+    const nextTurn = {
+      turn_id: 'next',
+      user_message_id: 'confirmed-1-user',
+      status: 'pending' as const,
+      timeline: [
+        {
+          kind: 'message' as const,
+          role: 'user' as const,
+          id: 'confirmed-1-user',
+          text: 'Hello',
+          turn_id: 'next',
+        },
+      ],
+    };
+    transport.observeTurn.mockReturnValueOnce(stream([initial(), terminal()]));
+    transport.generateTurn
+      .mockResolvedValueOnce({ kind: 'accepted', turn_id: 't' })
+      .mockResolvedValueOnce({ kind: 'accepted', turn_id: 'next' });
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    await controller.submit('Hello', vi.fn());
+    transport.appendMessage.mockRejectedValueOnce(new ConversationNetworkError('uncertain'));
+    transport.readSession.mockResolvedValue(snapshot({ turns: [firstTurn, nextTurn] }));
+    transport.observeTurn.mockImplementationOnce(async function* () {
+      expect(controller.state.content.map((item) => item.id)).toEqual([
+        'confirmed-0-user',
+        'confirmed-1-user',
+      ]);
+      yield await Promise.resolve<StreamEvent>({
+        kind: 'snapshot',
+        turn_id: 'next',
+        snapshot: snapshot({ turns: [firstTurn, { ...nextTurn, status: 'in_progress' }] }),
+      });
+      yield {
+        kind: 'upsert',
+        turn_id: 'next',
+        identity: 'detail-next',
+        order: 1,
+        sequence: 2,
+        item: { kind: 'intermediate', turn_id: 'next', id: 'detail-next', text: 'Working' },
+      };
+      yield { ...terminal(), turn_id: 'next' };
+    });
+    const acknowledge = vi.fn();
+    await controller.submit('Hello', acknowledge);
+    expect(acknowledge).toHaveBeenCalledOnce();
+    expect(transport.generateTurn).toHaveBeenCalledTimes(2);
+    expect(controller.state.content.map((item) => item.id)).toEqual([
+      'confirmed-0-user',
+      'confirmed-1-user',
+      'detail-next',
+    ]);
+    expect(controller.state.turns.map((turn) => turn.status)).toEqual(['completed', 'completed']);
+    expect(controller.state.composerDisabled).toBe(false);
   });
 
   it('recovers from unavailable session creation with an explicitly requested new session', async () => {
@@ -982,7 +1204,7 @@ describe('live conversation controller', () => {
   it('establishes an absent ambiguous append without acknowledgement or generation', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationNetworkError('uncertain'));
-    transport.readSession.mockResolvedValue(snapshot({ messages: [], timeline: [], turns: [] }));
+    transport.readSession.mockResolvedValue(snapshot({ turns: [] }));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();

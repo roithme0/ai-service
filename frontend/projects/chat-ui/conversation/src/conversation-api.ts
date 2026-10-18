@@ -36,7 +36,7 @@ export const AgentConfiguration =
 export type AgentConfiguration =
   CreateSessionApiV1AgentsConfigurationSessionsPostData['path']['configuration'];
 
-export type ApiMessage = SessionSnapshotResponse['messages'][number];
+export type ApiMessage = UserMessageResponse;
 export type ApiErrorKind = ErrorResponse['kind'] | ValidationErrorResponse['kind'];
 
 export class ConversationApiError extends Error {
@@ -78,7 +78,12 @@ export class HttpConversationTransport implements ConversationTransport {
   }
 
   async readSession(sessionId: string): Promise<SessionSnapshotResponse> {
-    return parseResponse(zSessionSnapshotResponse, await this.request(`/${sessionId}`, 'GET'));
+    const snapshot = parseResponse(
+      zSessionSnapshotResponse,
+      await this.request(`/${sessionId}`, 'GET'),
+    );
+    validateSnapshot(snapshot);
+    return snapshot;
   }
 
   async appendMessage(sessionId: string, text: string): Promise<UserMessageResponse> {
@@ -143,7 +148,9 @@ export class HttpConversationTransport implements ConversationTransport {
             .map((line) => line.slice(5).replace(/^ /, ''))
             .join('\n');
           if (data === '') continue;
-          yield parseResponse(zStreamEvent, JSON.parse(data) as unknown);
+          const event = parseResponse(zStreamEvent, JSON.parse(data) as unknown);
+          if (event.kind === 'snapshot') validateSnapshot(event.snapshot);
+          yield event;
         }
         scanFrom = Math.max(0, buffer.length - 1);
         if (chunk.done) return;
@@ -192,6 +199,35 @@ export class HttpConversationTransport implements ConversationTransport {
       throw new ConversationApiError(response.status, errorBody.kind);
     }
     return payload;
+  }
+}
+
+export function validateSnapshot(snapshot: SessionSnapshotResponse): void {
+  const turns = new Set<string>();
+  const identities = new Set<string>();
+  for (const turn of snapshot.turns) {
+    if (turns.has(turn.turn_id)) throw invalidResponse();
+    turns.add(turn.turn_id);
+    const anchor = turn.timeline[0];
+    if (anchor?.kind !== 'message' || anchor.role !== 'user' || anchor.id !== turn.user_message_id)
+      throw invalidResponse();
+    for (const item of turn.timeline) {
+      const identity =
+        item.kind === 'message' || item.kind === 'intermediate'
+          ? item.id
+          : item.kind === 'tool'
+            ? `tool-${item.execution_id}`
+            : item.kind === 'artifact'
+              ? item.artifact.artifact_id
+              : `failure-${item.turn_id}`;
+      if (
+        item.turn_id !== turn.turn_id ||
+        identities.has(identity) ||
+        (item.kind === 'artifact' && item.artifact.turn_id !== turn.turn_id)
+      )
+        throw invalidResponse();
+      identities.add(identity);
+    }
   }
 }
 

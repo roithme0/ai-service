@@ -1,7 +1,13 @@
 """Shared turn lifecycle types."""
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Annotated, Generic, Literal, TypeVar
+
+from pydantic import Field
+
+from app.sessions.models.timeline import TimelineItem
+
+ArtifactT = TypeVar("ArtifactT")
 
 
 TurnExecutionKind = Literal["completed", "generation_failed"]
@@ -12,7 +18,8 @@ TurnSnapshotStatus = Literal["pending", ActiveTurnStatus, TerminalTurnKind]
 
 
 @dataclass(frozen=True)
-class TurnSnapshot:
+class TurnSnapshot(Generic[ArtifactT]):
     turn_id: str
     user_message_id: str
     status: TurnSnapshotStatus
+    timeline: tuple[Annotated[TimelineItem[ArtifactT], Field(discriminator="kind")], ...]

@@ -9,11 +9,15 @@ import type {
 import {
   ConversationApiError,
   ConversationNetworkError,
+  validateSnapshot,
   type ApiErrorKind,
   type ApiMessage,
   type ConversationTransport,
 } from './conversation-api';
-import type { ArtifactResponse, SessionSnapshotResponse } from '../generated/types.gen';
+import type {
+  PublishedArtifactDictStrObject as ArtifactResponse,
+  SessionSnapshotResponse,
+} from '../generated/types.gen';
 
 import { presentArtifact } from './generic-artifact-mapper';
 
@@ -156,12 +160,9 @@ export class ConversationController {
         try {
           const snapshot = await this.transport.readSession(sessionId);
           if (epoch !== this.epoch) return;
-          this.confirmedMessages = snapshot.messages;
-          const presented = presentTimeline(
-            snapshot.timeline,
-            snapshot.artifacts,
-            this.mapArtifact,
-          );
+          this.confirmedMessages = userMessages(snapshot);
+          validateSnapshot(snapshot);
+          const presented = presentTimeline(snapshot.turns, this.mapArtifact);
           const turn = snapshot.turns.at(-1);
           this.currentTurnId = turn?.turn_id ?? null;
           responseStarted = turn !== undefined && presented.responseTurnIds.has(turn.turn_id);
@@ -207,12 +208,9 @@ export class ConversationController {
     this.currentTurnId = turnId;
     const observation = new AbortController();
     this.observation = observation;
-    const items = new Map<
-      string,
-      { order: number; sequence: number; item: SessionSnapshotResponse['timeline'][number] }
-    >();
-    const artifacts = new Map<string, ArtifactResponse>();
-    let turns = this.stateValue.turns;
+    let turns: SessionSnapshotResponse['turns'] = [];
+    const sequences = new Map<string, number>();
+    let snapshotSequence = -1;
     let initialized = false;
     let latestSequence = -1;
     try {
@@ -229,19 +227,20 @@ export class ConversationController {
         if (event.kind === 'snapshot') {
           if (initialized || event.snapshot.session_id !== sessionId)
             throw new ConversationNetworkError('Ungültiger Anfangszustand.');
+          validateSnapshot(event.snapshot);
+          if (!event.snapshot.turns.some((turn) => turn.turn_id === turnId))
+            throw new ConversationNetworkError('Ungültige Turn-Zuordnung.');
           initialized = true;
           closing = event.snapshot.turns.some(
             (turn) => turn.turn_id === turnId && turn.status === 'closing',
           );
           latestSequence = event.snapshot.sequence;
-          this.confirmedMessages = event.snapshot.messages;
-          turns = event.snapshot.turns.map(presentTurn);
-          event.snapshot.artifacts.forEach((artifact) =>
-            artifacts.set(artifact.artifact_id, artifact),
-          );
-          event.snapshot.timeline.forEach((item, order) =>
-            items.set(itemIdentity(item), { item, order, sequence: event.snapshot.sequence }),
-          );
+          this.confirmedMessages = userMessages(event.snapshot);
+          turns = event.snapshot.turns.map((turn) => ({ ...turn, timeline: [...turn.timeline] }));
+          snapshotSequence = event.snapshot.sequence;
+          for (const turn of turns) {
+            for (const item of turn.timeline) sequences.set(itemIdentity(item), snapshotSequence);
+          }
         } else if (event.kind === 'upsert') {
           if (
             !initialized ||
@@ -249,26 +248,27 @@ export class ConversationController {
             event.identity !== itemIdentity(event.item)
           )
             throw new ConversationNetworkError('Ungültiger Timeline-Eintrag.');
-          const previous = items.get(event.identity);
-          if (previous !== undefined && event.sequence <= previous.sequence) continue;
-          if (previous !== undefined && event.order !== previous.order)
+          const turn = turns.find((turn) => turn.turn_id === turnId);
+          if (turn === undefined) throw new ConversationNetworkError('Ungültige Turn-Zuordnung.');
+          const position = turn.timeline.findIndex((item) => itemIdentity(item) === event.identity);
+          if (
+            (position !== -1 && event.order !== position) ||
+            (position === -1 &&
+              (event.order !== turn.timeline.length ||
+                turns.some(
+                  (other) =>
+                    other.turn_id !== turnId &&
+                    other.timeline.some((item) => itemIdentity(item) === event.identity),
+                )))
+          )
             throw new ConversationNetworkError('Ungültige Reihenfolge.');
-          if (event.item.kind === 'artifact') {
-            if (
-              event.artifact == null ||
-              event.artifact.artifact_id !== event.item.artifact_id ||
-              event.artifact.turn_id !== turnId
-            )
-              throw new ConversationNetworkError('Ungültiges Artefakt.');
-            artifacts.set(event.artifact.artifact_id, event.artifact);
-          } else if (event.artifact != null)
-            throw new ConversationNetworkError('Unerwartetes Artefakt.');
+          if (event.item.kind === 'artifact' && event.item.artifact.turn_id !== turnId)
+            throw new ConversationNetworkError('Ungültiges Artefakt.');
+          if (event.sequence <= (sequences.get(event.identity) ?? snapshotSequence)) continue;
           latestSequence = Math.max(latestSequence, event.sequence);
-          items.set(event.identity, {
-            item: event.item,
-            order: event.order,
-            sequence: event.sequence,
-          });
+          sequences.set(event.identity, event.sequence);
+          if (position === -1) turn.timeline.push(event.item);
+          else turn.timeline[position] = event.item;
         } else if (event.kind === 'closing') {
           if (!initialized || event.sequence < latestSequence)
             throw new ConversationNetworkError('Ungültiger Abschlusszustand.');
@@ -291,15 +291,12 @@ export class ConversationController {
           });
           return;
         }
-        const timeline = [...items.values()]
-          .sort((a, b) => a.order - b.order)
-          .map((entry) => entry.item);
-        const presented = presentTimeline(timeline, [...artifacts.values()], this.mapArtifact);
+        const presented = presentTimeline(turns, this.mapArtifact);
         responseStarted ||= presented.responseTurnIds.has(turnId);
         this.setState({
           ...this.stateValue,
           content: presented.content,
-          turns,
+          turns: turns.map(presentTurn),
           composerDisabled: true,
           status:
             closing || responseStarted ? null : loading('Antwort wird erstellt …', 'assistant'),
@@ -346,7 +343,8 @@ export class ConversationController {
     try {
       const snapshot = await this.transport.readSession(sessionId);
       if (epoch !== this.epoch) return;
-      const users = snapshot.messages.filter((message) => message.role === 'user');
+      validateSnapshot(snapshot);
+      const users = userMessages(snapshot);
       const appended = users[previousMessages.length];
       if (
         prefixMatches(previousMessages, users) &&
@@ -359,7 +357,7 @@ export class ConversationController {
           status: loading('Antwort wird erstellt …', 'assistant'),
         });
         if (epoch !== this.epoch) return;
-        this.confirmedMessages = snapshot.messages;
+        this.confirmedMessages = userMessages(snapshot);
         acknowledge();
         if (epoch !== this.epoch) return;
         await this.generate(sessionId);
@@ -491,9 +489,10 @@ export class ConversationController {
 function presentMessage(message: ApiMessage, index: number): ChatTextMessage {
   return {
     kind: 'text',
-    id: message.turn_id === null ? `confirmed-${index}-user` : `assistant-${message.turn_id}`,
+    id: `confirmed-${index}-user`,
     role: message.role,
     text: message.text,
+    turnId: message.turn_id,
   };
 }
 
@@ -502,7 +501,7 @@ function presentSnapshot(
   mapArtifact: ArtifactMapper,
 ): Pick<ConversationViewState, 'content' | 'turns'> {
   return {
-    content: presentTimeline(snapshot.timeline, snapshot.artifacts, mapArtifact).content,
+    content: presentTimeline(snapshot.turns, mapArtifact).content,
     turns: snapshot.turns.map(presentTurn),
   };
 }
@@ -521,54 +520,53 @@ function presentTurn(turn: SessionSnapshotResponse['turns'][number]): ChatTurn {
 }
 
 function presentTimeline(
-  timeline: SessionSnapshotResponse['timeline'],
-  artifacts: readonly ArtifactResponse[],
+  turns: SessionSnapshotResponse['turns'],
   mapArtifact: ArtifactMapper,
 ): { readonly content: readonly ChatContent[]; readonly responseTurnIds: ReadonlySet<string> } {
-  const envelopes = new Map(artifacts.map((artifact) => [artifact.artifact_id, artifact]));
   const responseTurnIds = new Set<string>();
-  const content = timeline.flatMap((item): ChatContent[] => {
-    if (item.kind !== 'artifact' && (item.kind !== 'message' || item.role === 'assistant')) {
-      responseTurnIds.add(item.turn_id);
-    }
-    switch (item.kind) {
-      case 'message':
-        return [
-          { kind: 'text', id: item.id, role: item.role, text: item.text, turnId: item.turn_id },
-        ];
-      case 'intermediate':
-        return [{ kind: 'intermediate', id: item.id, text: item.text, turnId: item.turn_id }];
-      case 'tool':
-        return [
-          {
-            kind: 'tool',
-            id: `tool-${item.execution_id}`,
-            name: item.name,
-            status: item.status,
-            turnId: item.turn_id,
-          },
-        ];
-      case 'artifact': {
-        const envelope = envelopes.get(item.artifact_id);
-        const artifact = envelope === undefined ? null : mapArtifact(envelope);
-        if (artifact !== null) responseTurnIds.add(item.turn_id);
-        return artifact === null ? [] : [{ ...artifact, turnId: item.turn_id }];
+  const content = turns
+    .flatMap((turn) => turn.timeline)
+    .flatMap((item): ChatContent[] => {
+      if (item.kind !== 'artifact' && (item.kind !== 'message' || item.role === 'assistant')) {
+        responseTurnIds.add(item.turn_id);
       }
-      case 'failure':
-        return [
-          {
-            kind: 'failure',
-            id: `failure-${item.turn_id}`,
-            turnId: item.turn_id,
-            text: 'Die Antwort konnte nicht erstellt werden.',
-          },
-        ];
-    }
-  });
+      switch (item.kind) {
+        case 'message':
+          return [
+            { kind: 'text', id: item.id, role: item.role, text: item.text, turnId: item.turn_id },
+          ];
+        case 'intermediate':
+          return [{ kind: 'intermediate', id: item.id, text: item.text, turnId: item.turn_id }];
+        case 'tool':
+          return [
+            {
+              kind: 'tool',
+              id: `tool-${item.execution_id}`,
+              name: item.name,
+              status: item.status,
+              turnId: item.turn_id,
+            },
+          ];
+        case 'artifact': {
+          const artifact = mapArtifact(item.artifact);
+          if (artifact !== null) responseTurnIds.add(item.turn_id);
+          return artifact === null ? [] : [{ ...artifact, turnId: item.turn_id }];
+        }
+        case 'failure':
+          return [
+            {
+              kind: 'failure',
+              id: `failure-${item.turn_id}`,
+              turnId: item.turn_id,
+              text: 'Die Antwort konnte nicht erstellt werden.',
+            },
+          ];
+      }
+    });
   return { content, responseTurnIds };
 }
 
-function itemIdentity(item: SessionSnapshotResponse['timeline'][number]): string {
+function itemIdentity(item: SessionSnapshotResponse['turns'][number]['timeline'][number]): string {
   switch (item.kind) {
     case 'message':
     case 'intermediate':
@@ -576,10 +574,20 @@ function itemIdentity(item: SessionSnapshotResponse['timeline'][number]): string
     case 'tool':
       return `tool-${item.execution_id}`;
     case 'artifact':
-      return item.artifact_id;
+      return item.artifact.artifact_id;
     case 'failure':
       return `failure-${item.turn_id}`;
   }
+}
+
+function userMessages(snapshot: SessionSnapshotResponse): ApiMessage[] {
+  return snapshot.turns.flatMap((turn) =>
+    turn.timeline.flatMap((item): ApiMessage[] =>
+      item.kind === 'message' && item.role === 'user'
+        ? [{ role: 'user', text: item.text, turn_id: item.turn_id }]
+        : [],
+    ),
+  );
 }
 
 function prefixMatches(previous: readonly ApiMessage[], current: readonly ApiMessage[]): boolean {

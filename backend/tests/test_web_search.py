@@ -127,10 +127,10 @@ def test_search_survives_later_provider_failure_in_reads_and_sse(status: str) ->
         with client.stream("GET", f"{base}/{session}/turns/{turn}/events") as response:
             events = [json.loads(line[6:]) for line in response.iter_lines() if line.startswith("data: ")]
         snapshot = client.get(f"{base}/{session}").json()
-        row = next(item for item in snapshot["timeline"] if item["kind"] == "tool")
+        row = next(item for item in snapshot["turns"][-1]["timeline"] if item["kind"] == "tool")
         assert row == {"kind": "tool", "turn_id": turn, "execution_id": row["execution_id"], "name": "web_search", "status": status}
         assert any(event["kind"] == "terminal" and event["outcome"] == "generation_failed" for event in events)
-        visible = [item for event in events if event["kind"] == "snapshot" for item in event["snapshot"]["timeline"]]
+        visible = [item for event in events if event["kind"] == "snapshot" for turn in event["snapshot"]["turns"] for item in turn["timeline"]]
         visible += [event["item"] for event in events if event["kind"] == "upsert"]
         assert row in visible
 

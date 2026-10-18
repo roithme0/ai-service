@@ -142,13 +142,11 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             if not isinstance(outcome, SessionReadActive):
                 return outcome
             session = self._sessions[session_id]
-            projected_timeline = timeline(session.history)
+            projected_timeline = timeline(session.history, self._published_artifacts(session_id))
             return ConversationReadActive(
                 snapshot=ConversationSnapshot(
                     session=outcome.session,
-                    artifacts=self._published_artifacts(session_id),
                     turns=turn_snapshots(session.history, projected_timeline, session.active_turn_id),
-                    timeline=projected_timeline,
                     sequence=len(session.history),
                 ),
             )
@@ -174,17 +172,10 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             if len(read.session.messages) >= MAX_MESSAGE_COUNT - 1:
                 return SessionMessageAppendLimitReached(session_id)
             accepted_text = cast(str, text)
-            self._append_history(
-                session_id,
-                MessageRecord(
-                    str(uuid4()),
-                    None,
-                    accepted_text,
-                    "user",
-                ),
-            )
+            record = MessageRecord(str(uuid4()), None, accepted_text, "user")
+            self._append_history(session_id, record)
             return SessionMessageAppendAccepted(
-                session_id, TextMessage("user", accepted_text)
+                session_id, TextMessage("user", accepted_text, record.turn_id)
             )
 
     def admit_turn(

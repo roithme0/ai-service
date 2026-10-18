@@ -11,27 +11,6 @@ export const zAcceptedTurnResponse = z.object({
 });
 
 /**
- * ArtifactResponse
- */
-export const zArtifactResponse = z.object({
-    artifact_id: z.string(),
-    created_at: z.string(),
-    order: z.int(),
-    payload: z.record(z.string(), z.unknown()),
-    turn_id: z.string(),
-    type: z.string()
-});
-
-/**
- * AssistantMessageResponse
- */
-export const zAssistantMessageResponse = z.object({
-    role: z.literal('assistant'),
-    text: z.string(),
-    turn_id: z.string()
-});
-
-/**
  * ErrorResponse
  */
 export const zErrorResponse = z.object({
@@ -65,6 +44,18 @@ export const zHttpErrorResponse = z.object({
         'http_error',
         'internal_error'
     ])
+});
+
+/**
+ * PublishedArtifact
+ */
+export const zPublishedArtifactDictStrObject = z.object({
+    artifact_id: z.string(),
+    created_at: z.string(),
+    order: z.int(),
+    payload: z.record(z.string(), z.unknown()),
+    turn_id: z.string(),
+    type: z.string()
 });
 
 /**
@@ -110,8 +101,8 @@ export const zStreamTerminal = z.object({
 /**
  * TimelineArtifact
  */
-export const zTimelineArtifact = z.object({
-    artifact_id: z.string(),
+export const zTimelineArtifactDictStrObject = z.object({
+    artifact: zPublishedArtifactDictStrObject,
     kind: z.literal('artifact'),
     turn_id: z.string()
 });
@@ -167,13 +158,12 @@ export const zTimelineTool = z.object({
  * StreamUpsert
  */
 export const zStreamUpsert = z.object({
-    artifact: zArtifactResponse.nullish(),
     identity: z.string(),
     item: z.discriminatedUnion('kind', [
         zTimelineMessage,
         zTimelineIntermediateMessage,
         zTimelineTool,
-        zTimelineArtifact,
+        zTimelineArtifactDictStrObject,
         zTimelineFailure
     ]),
     kind: z.literal('upsert'),
@@ -185,7 +175,7 @@ export const zStreamUpsert = z.object({
 /**
  * TurnSnapshot
  */
-export const zTurnSnapshot = z.object({
+export const zTurnSnapshotDictStrObject = z.object({
     status: z.enum([
         'pending',
         'in_progress',
@@ -194,36 +184,25 @@ export const zTurnSnapshot = z.object({
         'generation_failed',
         'conflict'
     ]),
+    timeline: z.array(z.union([
+        zTimelineMessage,
+        zTimelineIntermediateMessage,
+        zTimelineTool,
+        zTimelineArtifactDictStrObject,
+        zTimelineFailure
+    ])),
     turn_id: z.string(),
     user_message_id: z.string()
-});
-
-/**
- * UserMessageResponse
- */
-export const zUserMessageResponse = z.object({
-    role: z.literal('user'),
-    text: z.string(),
-    turn_id: z.null()
 });
 
 /**
  * SessionSnapshotResponse
  */
 export const zSessionSnapshotResponse = z.object({
-    artifacts: z.array(zArtifactResponse),
     expires_at: z.string(),
-    messages: z.array(z.union([zUserMessageResponse, zAssistantMessageResponse])),
     sequence: z.int().gte(0),
     session_id: z.string(),
-    timeline: z.array(z.union([
-        zTimelineMessage,
-        zTimelineIntermediateMessage,
-        zTimelineTool,
-        zTimelineArtifact,
-        zTimelineFailure
-    ])),
-    turns: z.array(zTurnSnapshot)
+    turns: z.array(zTurnSnapshotDictStrObject)
 });
 
 /**
@@ -245,6 +224,15 @@ export const zStreamEvent = z.discriminatedUnion('kind', [
     zStreamTerminal,
     zStreamError
 ]);
+
+/**
+ * UserMessageResponse
+ */
+export const zUserMessageResponse = z.object({
+    role: z.literal('user'),
+    text: z.string(),
+    turn_id: z.string()
+});
 
 /**
  * ValidationDetail

@@ -26,8 +26,8 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
         ArtifactToolOutput("presented"), ArtifactCandidate("example", "retained content")))
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert [item.kind for item in read.snapshot.timeline] == ["message", "intermediate", "tool", "artifact"]
-    assert len(read.snapshot.artifacts) == 1
+    assert [item.kind for item in read.snapshot.turns[0].timeline] == ["message", "intermediate", "tool", "artifact"]
+    assert len(tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact")) == 1
 
     calls = tuple(AgenticToolCall(str(index), name, "{}") for index, name in enumerate(
         ("explicit_failure", "domain_payload", "uncertain", "never_started")))
@@ -45,17 +45,16 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
 
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    items = read.snapshot.timeline
+    items = read.snapshot.turns[0].timeline
     assert [item.kind for item in items] == ["message", "intermediate", "tool", "artifact", "tool", "tool", "tool", "tool", "failure"]
     tools = [item for item in items if isinstance(item, TimelineTool)]
     assert [item.status for item in tools] == ["completed", "failed", "completed", "outcome_unknown", "not_executed"]
     assert tools[-1].execution_id == never_started.execution_id
     artifact = items[3]
     assert isinstance(artifact, TimelineArtifact)
-    assert artifact.artifact_id == read.snapshot.artifacts[0].artifact_id
     assert isinstance(accepted.output, str)
-    assert json.loads(accepted.output)["artifact_id"] == artifact.artifact_id
-    assert read.snapshot.artifacts[0].payload == "retained content"
+    assert json.loads(accepted.output)["artifact_id"] == artifact.artifact.artifact_id
+    assert artifact.artifact.payload == "retained content"
     assert "secret" not in repr(items) and "explicit error detail" not in repr(items)
     assert model_input(store.history(session_id))[3]["output"] == accepted.output
 
@@ -65,7 +64,9 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
     store.complete_turn(session_id, next_turn, "completed", "Done")
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert read.snapshot.timeline[:len(items)] == items
-    assert isinstance(read.snapshot.timeline[-3], TimelineFailure)
-    assert isinstance(read.snapshot.timeline[-1], TimelineMessage)
-    assert read.snapshot.timeline[-1].text == "Done"
+    assert read.snapshot.turns[0].timeline == items
+    assert isinstance(read.snapshot.turns[0].timeline[-1], TimelineFailure)
+    final = read.snapshot.turns[1].timeline[-1]
+    assert isinstance(final, TimelineMessage)
+    assert final.text == "Done"
+    assert all(item.turn_id == next_turn.turn_id for item in read.snapshot.turns[1].timeline)
