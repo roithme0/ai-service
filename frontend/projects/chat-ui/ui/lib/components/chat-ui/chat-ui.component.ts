@@ -49,6 +49,9 @@ export class ChatUiComponent {
   private restoreComposerFocus = false;
   private initialFocusPending = true;
   private scrollHistoryToBottom = false;
+  private expandedTurnToScroll: string | null = null;
+  private collapsedScrollTop: number | null = null;
+  private readonly expandedTurns = signal<ReadonlySet<string>>(new Set());
 
   readonly bannerTitle = input.required<string>();
   readonly bannerDescription = input.required<string>();
@@ -63,6 +66,21 @@ export class ChatUiComponent {
   readonly statusActionTriggered = output<string>();
 
   protected readonly draft = signal('');
+  protected readonly disclosureAnswers = computed(() => {
+    const answers = new Map<string, string>();
+    for (const turn of this.turns()) {
+      if (
+        turn.status !== 'completed' ||
+        !turn.content.some((item) => item.kind === 'intermediate' || item.kind === 'tool')
+      )
+        continue;
+      const answer = turn.content.find(
+        (item) => item.kind === 'text' && item.role === 'assistant' && item.isFinal,
+      );
+      if (answer) answers.set(turn.id, answer.id);
+    }
+    return answers;
+  });
   protected readonly renderAssistantMarkdown = renderAssistantMarkdown;
   protected readonly toolStatusLabels: Record<ChatToolStatus, string> = {
     completed: 'Abgeschlossen',
@@ -117,6 +135,32 @@ export class ChatUiComponent {
         this.composer().nativeElement.focus({ preventScroll: true });
       }
     });
+    afterEveryRender(() => {
+      const history = this.history().nativeElement;
+      if (this.collapsedScrollTop !== null) {
+        history.scrollTop = Math.max(
+          0,
+          Math.min(this.collapsedScrollTop, history.scrollHeight - history.clientHeight),
+        );
+        this.collapsedScrollTop = null;
+      }
+      const turnId = this.expandedTurnToScroll;
+      if (turnId === null) return;
+      this.expandedTurnToScroll = null;
+      const anchor = [...history.querySelectorAll<HTMLElement>('[data-turn-start]')].find(
+        (item) => item.dataset['turnStart'] === turnId,
+      );
+      if (!anchor) return;
+      const top =
+        history.scrollTop +
+        anchor.getBoundingClientRect().top -
+        history.getBoundingClientRect().top -
+        history.clientTop;
+      history.scrollTo({
+        top: Math.max(0, Math.min(top, history.scrollHeight - history.clientHeight)),
+        behavior: 'smooth',
+      });
+    });
     effect(() => {
       this.turns();
       this.conversationStatus();
@@ -144,6 +188,29 @@ export class ChatUiComponent {
 
   protected updateDraft(value: string): void {
     this.draft.set(value);
+  }
+
+  protected detailsExpanded(turnId: string): boolean {
+    return this.expandedTurns().has(turnId);
+  }
+
+  protected detailsHidden(turnId: string): boolean {
+    return this.disclosureAnswers().has(turnId) && !this.detailsExpanded(turnId);
+  }
+
+  protected toggleDetails(turnId: string): void {
+    if (!this.disclosureAnswers().has(turnId)) return;
+    const expanded = new Set(this.expandedTurns());
+    if (expanded.has(turnId)) {
+      this.collapsedScrollTop = this.history().nativeElement.scrollTop;
+      expanded.delete(turnId);
+      this.expandedTurnToScroll = null;
+    } else {
+      this.collapsedScrollTop = null;
+      expanded.add(turnId);
+      this.expandedTurnToScroll = turnId;
+    }
+    this.expandedTurns.set(expanded);
   }
 
   protected submit(event: Event): void {

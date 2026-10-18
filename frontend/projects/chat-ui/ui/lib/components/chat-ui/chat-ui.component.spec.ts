@@ -10,6 +10,7 @@ import {
   type ChatArtifactRenderContext,
   type ChatContent,
   type ChatTextMessage,
+  type ChatTurn,
 } from '../../models/chat-message';
 import { ChatUiComponent } from './chat-ui.component';
 
@@ -22,6 +23,13 @@ const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
     role: 'assistant',
     text: '**formatted assistant text**',
   },
+];
+
+const DISCLOSURE_CONTENT: readonly ChatContent[] = [
+  { kind: 'text', isFinal: false, id: 'request', role: 'user', text: 'Request' },
+  { kind: 'intermediate', id: 'detail', text: 'Checking' },
+  { kind: 'tool', id: 'recoverable', name: 'check', status: 'failed' },
+  { kind: 'text', isFinal: true, id: 'answer', role: 'assistant', text: 'Answer' },
 ];
 
 @Component({
@@ -54,6 +62,214 @@ describe('ChatUiComponent', () => {
     originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
     Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scrollTo });
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
+  });
+
+  it('collapses details only after completion and places an accessible toggle below the explicit answer', () => {
+    const fixture = createFixture([]);
+    const turn: ChatTurn = {
+      id: 'first',
+      userMessageId: 'request',
+      status: 'active',
+      content: DISCLOSURE_CONTENT,
+    };
+    fixture.componentRef.setInput('turns', [turn]);
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const detail = element.querySelector<HTMLElement>('.message--intermediate')!;
+    expect(detail.hidden).toBe(false);
+    expect(element.querySelector('.details-toggle')).toBeNull();
+
+    fixture.componentRef.setInput('turns', [{ ...turn, status: 'completed' }]);
+    fixture.detectChanges();
+    expect(detail.hidden).toBe(true);
+    expect(element.querySelector<HTMLElement>('.tool-call')!.hidden).toBe(true);
+    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    expect(toggle.type).toBe('button');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.getAttribute('aria-label')).toBe('Details anzeigen');
+    expect(toggle.querySelector('mat-icon')?.getAttribute('svgIcon')).toBe('ai-chat:list-tree');
+    expect(toggle.parentElement?.previousElementSibling?.textContent).toContain('Answer');
+    toggle.click();
+    fixture.detectChanges();
+    expect(detail.hidden).toBe(false);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.getAttribute('aria-label')).toBe('Details ausblenden');
+  });
+
+  it.each(['failed', 'unknown'] as const)(
+    'keeps details visible for a %s turn even with explicit final text',
+    (status) => {
+      const fixture = createFixture([]);
+      fixture.componentRef.setInput('turns', [
+        { id: 'first', userMessageId: 'request', status, content: DISCLOSURE_CONTENT },
+      ]);
+      fixture.detectChanges();
+      const element = fixtureElement(fixture);
+      expect(element.querySelector<HTMLElement>('.message--intermediate')!.hidden).toBe(false);
+      expect(element.querySelector<HTMLElement>('.tool-call')!.hidden).toBe(false);
+      expect(element.querySelector('.details-toggle')).toBeNull();
+    },
+  );
+
+  it.each([
+    { content: [] },
+    {
+      content: DISCLOSURE_CONTENT.filter(
+        (item) => item.kind !== 'tool' && item.kind !== 'intermediate',
+      ),
+    },
+    { content: DISCLOSURE_CONTENT.filter((item) => item.kind !== 'text' || !item.isFinal) },
+  ])(
+    'does not offer disclosure without both details and an explicit final answer (%j)',
+    ({ content }) => {
+      const fixture = createFixture(content);
+      expect(fixtureElement(fixture).querySelector('.details-toggle')).toBeNull();
+      expect(fixtureElement(fixture).querySelector('[hidden]')).toBeNull();
+    },
+  );
+
+  it('uses the first explicitly final answer rather than later unspecified or additional final text', () => {
+    const fixture = createFixture([
+      ...DISCLOSURE_CONTENT,
+      {
+        kind: 'text',
+        isFinal: true,
+        id: 'another-final',
+        role: 'assistant',
+        text: 'Another final',
+      },
+      { kind: 'text', isFinal: false, id: 'later', role: 'assistant', text: 'Later ordinary text' },
+      { kind: 'failure', id: 'failure', text: 'Retained failure' },
+    ]);
+    const element = fixtureElement(fixture);
+    expect(element.querySelectorAll('.details-toggle')).toHaveLength(1);
+    expect(element.querySelector('.answer-actions')?.previousElementSibling?.textContent).toBe(
+      'Answer',
+    );
+    const visibleText = [...element.querySelectorAll<HTMLElement>('article:not([hidden])')].map(
+      (item) => item.textContent,
+    );
+    expect(visibleText).toEqual([
+      'Request',
+      'Answer',
+      'Another final',
+      'Later ordinary text',
+      'Retained failure',
+    ]);
+  });
+
+  it('remembers manual disclosure per historical turn across new inputs and resets on recreation', () => {
+    const fixture = createFixture(DISCLOSURE_CONTENT);
+    const element = fixtureElement(fixture);
+    element.querySelector<HTMLButtonElement>('.details-toggle')!.click();
+    fixture.detectChanges();
+    const historical = fixture.componentInstance.turns()[0];
+    const next: ChatTurn = { ...historical, id: 'next', content: [...DISCLOSURE_CONTENT] };
+    fixture.componentRef.setInput('turns', [
+      { ...historical, content: [...historical.content] },
+      next,
+    ]);
+    fixture.detectChanges();
+    const toggles = element.querySelectorAll<HTMLButtonElement>('.details-toggle');
+    expect([...toggles].map((toggle) => toggle.getAttribute('aria-expanded'))).toEqual([
+      'true',
+      'false',
+    ]);
+    toggles[0].click();
+    fixture.detectChanges();
+    fixture.componentRef.setInput('turns', [
+      ...fixture.componentInstance.turns(),
+      { id: 'pending', userMessageId: 'pending-user', status: 'active', content: [] },
+    ]);
+    fixture.detectChanges();
+    expect(toggles[0].getAttribute('aria-expanded')).toBe('false');
+    toggles[1].click();
+    fixture.detectChanges();
+    expect(toggles[1].getAttribute('aria-expanded')).toBe('true');
+    fixture.destroy();
+    const recreated = createFixture(DISCLOSURE_CONTENT);
+    expect(
+      fixtureElement(recreated).querySelector('.details-toggle')?.getAttribute('aria-expanded'),
+    ).toBe('false');
+  });
+
+  it('preserves interleaved artifact nodes, renderer DOM state and order across toggles', () => {
+    const templateFixture = TestBed.createComponent(RendererTemplateHost);
+    templateFixture.detectChanges();
+    const fixture = createFixture([
+      DISCLOSURE_CONTENT[0],
+      DISCLOSURE_CONTENT[1],
+      {
+        kind: 'artifact',
+        id: 'card',
+        type: 'known',
+        headline: 'Card',
+        payload: { label: 'retained' },
+      },
+      DISCLOSURE_CONTENT[2],
+      DISCLOSURE_CONTENT[3],
+    ]);
+    fixture.componentRef.setInput('artifactRenderers', {
+      known: artifactRenderer(templateFixture.componentInstance.template()),
+    });
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const card = element.querySelector('ai-chat-artifact-card')!;
+    const rendererBody = card.querySelector('.artifact-body')!;
+    const localInput = document.createElement('input');
+    localInput.value = 'renderer local state';
+    rendererBody.append(localInput);
+    const rows = [...element.querySelector('.messages')!.children];
+    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    for (let index = 0; index < 2; index++) {
+      toggle.click();
+      fixture.detectChanges();
+      expect(element.querySelector('ai-chat-artifact-card')).toBe(card);
+      expect(card.querySelector('.artifact-body')).toBe(rendererBody);
+      expect(card.querySelector('input')?.value).toBe('renderer local state');
+      expect([...element.querySelector('.messages')!.children]).toEqual(rows);
+    }
+  });
+
+  it('expands before scrolling the first timeline item to the viewport top and preserves collapse offset', () => {
+    const fixture = createFixture(DISCLOSURE_CONTENT);
+    const element = fixtureElement(fixture);
+    const history = element.querySelector<HTMLElement>('.history')!;
+    const anchor = element.querySelector<HTMLElement>('[data-turn-start]')!;
+    const detail = element.querySelector<HTMLElement>('.message--intermediate')!;
+    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    Object.defineProperties(history, {
+      scrollHeight: { configurable: true, value: 2000 },
+      clientHeight: { configurable: true, value: 400 },
+      clientTop: { configurable: true, value: 2 },
+    });
+    history.scrollTop = 300;
+    vi.spyOn(history, 'getBoundingClientRect').mockReturnValue({ top: 50 } as DOMRect);
+    vi.spyOn(anchor, 'getBoundingClientRect').mockImplementation(() => {
+      expect(detail.hidden).toBe(false);
+      return { top: 202 } as DOMRect;
+    });
+    scrollTo.mockClear();
+    toggle.click();
+    fixture.detectChanges();
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 450, behavior: 'smooth' });
+    scrollTo.mockClear();
+
+    history.scrollTop = 600;
+    toggle.click();
+    history.scrollTop = 450;
+    fixture.detectChanges();
+    expect(history.scrollTop).toBe(600);
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    toggle.click();
+    fixture.detectChanges();
+    scrollTo.mockClear();
+    history.scrollTop = 1800;
+    toggle.click();
+    fixture.detectChanges();
+    expect(history.scrollTop).toBe(1600);
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 
   it('renders ordered host messages and applies Markdown only to assistant text', () => {

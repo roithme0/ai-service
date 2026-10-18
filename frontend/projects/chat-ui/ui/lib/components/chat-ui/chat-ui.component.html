@@ -7,11 +7,20 @@
 
     <div class="messages">
       @for (turn of turns(); track turn.id; let lastTurn = $last) {
-        @for (item of turn.content; track item.id; let last = $last) {
+        @for (item of turn.content; track item.id; let first = $first; let last = $last) {
           @if (item.kind === 'artifact') {
-            <ai-chat-artifact-card [artifact]="item" [renderer]="rendererFor(item.type)" />
+            <ai-chat-artifact-card
+              [attr.data-turn-start]="first ? turn.id : null"
+              [artifact]="item"
+              [renderer]="rendererFor(item.type)"
+            />
           } @else if (item.kind === 'tool') {
-            <article class="tool-call" aria-label="Werkzeugaufruf">
+            <article
+              class="tool-call"
+              aria-label="Werkzeugaufruf"
+              [attr.data-turn-start]="first ? turn.id : null"
+              [hidden]="detailsHidden(turn.id)"
+            >
               <span class="tool-call__label">
                 <mat-icon svgIcon="ai-chat:tool" aria-hidden="true" />
                 <span class="tool-call__name">{{ item.name }}</span>
@@ -20,26 +29,53 @@
             </article>
           } @else if (item.kind === 'failure') {
             @if (!lastTurn || !last || conversationStatus()?.kind !== 'error') {
-              <article class="status status--error" aria-label="Fehlgeschlagene Antwort">
+              <article
+                class="status status--error"
+                aria-label="Fehlgeschlagene Antwort"
+                [attr.data-turn-start]="first ? turn.id : null"
+              >
                 <p>{{ item.text }}</p>
               </article>
             }
           } @else if (item.kind === 'intermediate') {
             <article
               class="message message--intermediate markdown"
+              [attr.data-turn-start]="first ? turn.id : null"
+              [hidden]="detailsHidden(turn.id)"
               aria-label="Zwischenmeldung des Assistenten"
               [innerHTML]="renderAssistantMarkdown(item.text)"
             ></article>
           } @else if (item.role === 'user') {
-            <article class="message message--user" aria-label="Nachricht des Benutzers">
+            <article
+              class="message message--user"
+              aria-label="Nachricht des Benutzers"
+              [attr.data-turn-start]="first ? turn.id : null"
+            >
               <p>{{ item.text }}</p>
             </article>
           } @else {
             <article
               class="message message--assistant markdown"
+              [attr.data-turn-start]="first ? turn.id : null"
               aria-label="Antwort des Assistenten"
               [innerHTML]="renderAssistantMarkdown(item.text)"
             ></article>
+            @if (disclosureAnswers().get(turn.id) === item.id) {
+              <div class="answer-actions">
+                <button
+                  type="button"
+                  class="details-toggle"
+                  [attr.aria-expanded]="detailsExpanded(turn.id)"
+                  [attr.aria-label]="
+                    detailsExpanded(turn.id) ? 'Details ausblenden' : 'Details anzeigen'
+                  "
+                  [title]="detailsExpanded(turn.id) ? 'Details ausblenden' : 'Details anzeigen'"
+                  (click)="toggleDetails(turn.id)"
+                >
+                  <mat-icon svgIcon="ai-chat:list-tree" aria-hidden="true" />
+                </button>
+              </div>
+            }
           }
         }
       }
