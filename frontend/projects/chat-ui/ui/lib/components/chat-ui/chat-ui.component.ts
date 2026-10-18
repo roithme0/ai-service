@@ -21,7 +21,6 @@ import { ArtifactCardComponent } from '../artifact-card/artifact-card.component'
 import { LoadingDotsComponent } from '../loading-dots/loading-dots.component';
 import type {
   ChatArtifactRendererMap,
-  ChatContent,
   ChatConversationStatus,
   ChatSubmission,
   ChatToolStatus,
@@ -53,8 +52,7 @@ export class ChatUiComponent {
 
   readonly bannerTitle = input.required<string>();
   readonly bannerDescription = input.required<string>();
-  readonly content = input.required<readonly ChatContent[]>();
-  readonly turns = input<readonly ChatTurn[]>([]);
+  readonly turns = input.required<readonly ChatTurn[]>();
   readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
   readonly composerDisabled = input(false);
@@ -120,7 +118,7 @@ export class ChatUiComponent {
       }
     });
     effect(() => {
-      this.content();
+      this.turns();
       this.conversationStatus();
       this.statusVisible();
       this.scrollHistoryToBottom = true;

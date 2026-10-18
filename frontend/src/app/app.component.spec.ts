@@ -130,7 +130,7 @@ describe('Demo application', () => {
           body: JSON.stringify({ input: {} }),
         }),
       );
-      expect(chat.content()).toEqual([]);
+      expect(chat.turns().flatMap((turn) => turn.content)).toEqual([]);
       expect(chat.composerDisabled()).toBe(false);
       expect(document.activeElement).toBe(fixtureElement(fixture).querySelector('textarea'));
       const acknowledge = vi.fn();
@@ -150,7 +150,7 @@ describe('Demo application', () => {
       );
       await vi.waitFor(() => {
         fixture.detectChanges();
-        expect(chat.content()).toHaveLength(7);
+        expect(chat.turns().flatMap((turn) => turn.content)).toHaveLength(7);
       });
       expect(acknowledge).toHaveBeenCalledOnce();
       expect(fetchMock).toHaveBeenNthCalledWith(
@@ -163,7 +163,12 @@ describe('Demo application', () => {
         '/api/v1/agents/demo/sessions/demo-1/turns',
         expect.objectContaining({ method: 'POST' }),
       );
-      expect(chat.content().map((item) => item.id)).toEqual([
+      expect(
+        chat
+          .turns()
+          .flatMap((turn) => turn.content)
+          .map((item) => item.id),
+      ).toEqual([
         'confirmed-0-user',
         'update-1',
         'tool-call-1',
@@ -172,7 +177,7 @@ describe('Demo application', () => {
         'tool-call-2',
         'assistant-turn-2',
       ]);
-      expect(chat.content()[3]).toEqual({
+      expect(chat.turns().flatMap((turn) => turn.content)[3]).toEqual({
         kind: 'artifact',
         id: 'greeting-1',
         turnId: 'turn-2',

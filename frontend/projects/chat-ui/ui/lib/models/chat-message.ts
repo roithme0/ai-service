@@ -12,6 +12,7 @@ export interface ChatTurn {
   readonly id: string;
   readonly userMessageId: string;
   readonly status: ChatTurnStatus;
+  readonly content: readonly ChatContent[];
 }
 
 export interface ChatTurnContent {

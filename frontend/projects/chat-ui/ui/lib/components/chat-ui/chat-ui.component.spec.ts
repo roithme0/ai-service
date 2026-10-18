@@ -64,6 +64,63 @@ describe('ChatUiComponent', () => {
     );
   });
 
+  it('renders turn-owned content in order and preserves historical failures with a current error', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('turns', [
+      {
+        id: 'first',
+        userMessageId: 'first-user',
+        status: 'failed',
+        content: [
+          { kind: 'text', id: 'first-user', role: 'user', text: 'First' },
+          { kind: 'failure', id: 'first-failure', text: 'Historical failure' },
+        ],
+      },
+      {
+        id: 'second',
+        userMessageId: 'second-user',
+        status: 'failed',
+        content: [
+          { kind: 'text', id: 'second-user', role: 'user', text: 'Second' },
+          { kind: 'intermediate', id: 'detail', text: 'Checking' },
+          { kind: 'tool', id: 'tool', name: 'check', status: 'failed' },
+          {
+            kind: 'artifact',
+            id: 'result',
+            type: 'json',
+            headline: 'Result',
+            payload: { value: 1 },
+          },
+          { kind: 'failure', id: 'second-failure', text: 'Covered failure' },
+        ],
+      },
+    ]);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      placement: 'assistant',
+      message: 'Current error',
+    });
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const rows = [...element.querySelector('.messages')!.children];
+    expect(rows.map((row) => row.tagName)).toEqual([
+      'ARTICLE',
+      'ARTICLE',
+      'ARTICLE',
+      'ARTICLE',
+      'ARTICLE',
+      'AI-CHAT-ARTIFACT-CARD',
+      'ARTICLE',
+    ]);
+    expect(rows[0].textContent).toContain('First');
+    expect(rows[1].textContent).toContain('Historical failure');
+    expect(rows[2].textContent).toContain('Second');
+    expect(rows[3].textContent).toContain('Checking');
+    expect(rows[4].textContent).toContain('check');
+    expect(rows[6].textContent).toContain('Current error');
+    expect(element.textContent).not.toContain('Covered failure');
+  });
+
   it('renders safe intermediate Markdown in conversation order', () => {
     const fixture = createFixture([
       { kind: 'intermediate', id: 'update', text: '**Checking** <script>alert(1)</script>' },
@@ -112,8 +169,8 @@ describe('ChatUiComponent', () => {
     });
     fixture.detectChanges();
     expect(element.querySelectorAll('.status--error')).toHaveLength(1);
-    fixture.componentRef.setInput('content', [
-      ...fixture.componentInstance.content(),
+    setContent(fixture, [
+      ...fixture.componentInstance.turns()[0].content,
       { kind: 'text', id: 'next-user', role: 'user', text: 'Continue' },
     ]);
     fixture.componentRef.setInput('conversationStatus', null);
@@ -422,7 +479,7 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     expect(fixtureElement(fixture).querySelectorAll('.message')).toHaveLength(0);
 
-    fixture.componentRef.setInput('content', [
+    setContent(fixture, [
       { kind: 'text', id: 'replacement', role: 'assistant', text: 'Replacement state' },
     ] satisfies readonly ChatTextMessage[]);
     fixture.detectChanges();
@@ -442,7 +499,7 @@ describe('ChatUiComponent', () => {
       scrollTo.mockClear();
     };
 
-    fixture.componentRef.setInput('content', [
+    setContent(fixture, [
       { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
     ] satisfies readonly ChatTextMessage[]);
     fixture.detectChanges();
@@ -462,7 +519,7 @@ describe('ChatUiComponent', () => {
     );
     scrollToBottom();
 
-    fixture.componentRef.setInput('content', [
+    setContent(fixture, [
       { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
       { kind: 'text', id: 'assistant-1', role: 'assistant', text: 'Hi' },
     ] satisfies readonly ChatTextMessage[]);
@@ -608,7 +665,7 @@ function createFixture(
   const fixture = TestBed.createComponent(ChatUiComponent);
   fixture.componentRef.setInput('bannerTitle', 'Welcome');
   fixture.componentRef.setInput('bannerDescription', 'Description');
-  fixture.componentRef.setInput('content', messages);
+  setContent(fixture, messages);
   fixture.componentRef.setInput('composerDisabled', options.disabled ?? false);
   fixture.componentRef.setInput('focusOnReady', options.focusOnReady ?? false);
   fixture.detectChanges();
@@ -617,4 +674,16 @@ function createFixture(
 
 function fixtureElement<T>(fixture: ComponentFixture<T>): HTMLElement {
   return fixture.nativeElement as HTMLElement;
+}
+
+function setContent(
+  fixture: ComponentFixture<ChatUiComponent>,
+  content: readonly ChatContent[],
+): void {
+  fixture.componentRef.setInput(
+    'turns',
+    content.length === 0
+      ? []
+      : [{ id: 'turn-1', userMessageId: 'user-1', status: 'completed', content }],
+  );
 }

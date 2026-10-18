@@ -1,5 +1,6 @@
 ﻿import { describe, expect, it, vi } from 'vitest';
-import { ConversationController } from './conversation-controller';
+import type { ChatContent } from '@roithme0/chat-ui/ui';
+import { type ConversationViewState, ConversationController } from './conversation-controller';
 import {
   ConversationApiError,
   ConversationNetworkError,
@@ -138,16 +139,21 @@ describe('live conversation controller', () => {
             ],
           }),
         });
-        expect(controller.state.turns).toEqual([
+        expect(controller.state.turns).toMatchObject([
           { id: 'old', userMessageId: 'request-first', status: 'completed' },
           { id: 'failed', userMessageId: 'request-second', status: 'failed' },
           { id: 't', userMessageId: 'request-current', status: 'active' },
         ]);
+        expect(controller.state.turns.map((turn) => turn.content.map((item) => item.id))).toEqual([
+          ['request-first', 'old-answer'],
+          ['request-second', 'old-detail', 'failure-failed'],
+          ['request-current', 'detail-before', 'a', 'detail-after', 'answer'],
+        ]);
         expect(controller.state.composerDisabled).toBe(true);
-        expect(controller.state.content.map((item) => item.turnId)).toEqual(
+        expect(contentOf(controller.state).map((item) => item.turnId)).toEqual(
           timeline.map((item) => item.turn_id),
         );
-        expect(controller.state.content.map((item) => item.kind)).toEqual([
+        expect(contentOf(controller.state).map((item) => item.kind)).toEqual([
           'text',
           'text',
           'text',
@@ -170,8 +176,8 @@ describe('live conversation controller', () => {
         'failed',
         ending,
       ]);
-      expect(controller.state.content.map((item) => item.id)).toContain('detail-after');
-      expect(controller.state.content.map((item) => item.id)).toContain('answer');
+      expect(contentOf(controller.state).map((item) => item.id)).toContain('detail-after');
+      expect(contentOf(controller.state).map((item) => item.id)).toContain('answer');
     },
   );
 
@@ -183,7 +189,9 @@ describe('live conversation controller', () => {
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     const acknowledge = vi.fn(() => {
-      expect(controller.state.content).toContainEqual(
+      expect(controller.state.turns).toHaveLength(1);
+      expect(controller.state.turns[0]).toMatchObject({ id: 't', status: 'active' });
+      expect(contentOf(controller.state)).toContainEqual(
         expect.objectContaining({ role: 'user', text: 'Hello', turnId: 't' }),
       );
       expect(controller.state.status).toMatchObject({ kind: 'loading', placement: 'assistant' });
@@ -191,7 +199,7 @@ describe('live conversation controller', () => {
     });
     const submission = controller.submit('Hello', acknowledge);
     expect(controller.state.status).toBeNull();
-    expect(controller.state.content).toEqual([]);
+    expect(contentOf(controller.state)).toEqual([]);
     expect(controller.state.composerDisabled).toBe(true);
     expect(acknowledge).not.toHaveBeenCalled();
     expect(transport.generateTurn).not.toHaveBeenCalled();
@@ -327,7 +335,7 @@ describe('live conversation controller', () => {
       await submission;
       expect(controller.state.status?.kind).toBe('error');
       expect(controller.state.composerDisabled).toBe(false);
-      expect(controller.state.content[1]).toMatchObject({ text: 'Retained answer' });
+      expect(contentOf(controller.state)[1]).toMatchObject({ text: 'Retained answer' });
     },
   );
 
@@ -468,7 +476,7 @@ describe('live conversation controller', () => {
     });
     const states: string[] = [];
     const controller = new ConversationController(transport, (state) => {
-      const row = state.content.find((item) => item.kind === 'tool');
+      const row = contentOf(state).find((item) => item.kind === 'tool');
       if (row?.kind === 'tool') states.push(row.status);
     });
     await controller.start();
@@ -476,7 +484,7 @@ describe('live conversation controller', () => {
     await visible.promise;
     expect(controller.state.composerDisabled).toBe(true);
     expect(controller.state.status).toBeNull();
-    expect(controller.state.content.map((item) => item.kind)).toEqual([
+    expect(contentOf(controller.state).map((item) => item.kind)).toEqual([
       'text',
       'intermediate',
       'tool',
@@ -486,11 +494,11 @@ describe('live conversation controller', () => {
     expect(controller.state.turns[0]?.status).toBe('active');
     expect(states).toContain('requested');
     expect(states).toContain('running');
-    expect(controller.state.content.filter((item) => item.kind === 'tool')).toHaveLength(1);
+    expect(contentOf(controller.state).filter((item) => item.kind === 'tool')).toHaveLength(1);
     finish.resolve();
     await submission;
     expect(controller.state.composerDisabled).toBe(false);
-    expect(controller.state.content.map((item) => item.kind)).toEqual([
+    expect(contentOf(controller.state).map((item) => item.kind)).toEqual([
       'text',
       'intermediate',
       'tool',
@@ -515,8 +523,8 @@ describe('live conversation controller', () => {
       const controller = new ConversationController(transport, () => undefined);
       await controller.start();
       await controller.submit('Hello', vi.fn());
-      expect(controller.state.content).toHaveLength(2);
-      expect(controller.state.turns).toEqual([
+      expect(contentOf(controller.state)).toHaveLength(2);
+      expect(controller.state.turns).toMatchObject([
         { id: 't', userMessageId: 'confirmed-0-user', status: 'unknown' },
       ]);
       expect(controller.state.composerDisabled).toBe(true);
@@ -565,8 +573,8 @@ describe('live conversation controller', () => {
     await controller.submit('Hello', vi.fn());
     expect(controller.state.composerDisabled).toBe(false);
     expect(controller.state.status?.kind).toBe('error');
-    expect(controller.state.content[1]).toMatchObject({ text: 'Final before failure' });
-    expect(controller.state.turns).toEqual([
+    expect(contentOf(controller.state)[1]).toMatchObject({ text: 'Final before failure' });
+    expect(controller.state.turns).toMatchObject([
       { id: 't', userMessageId: 'confirmed-0-user', status: 'failed' },
     ]);
   });
@@ -606,14 +614,14 @@ describe('live conversation controller', () => {
       const controller = new ConversationController(transport, () => undefined);
       await controller.start();
       await controller.submit('Hello', vi.fn());
-      expect(controller.state.turns).toEqual([
+      expect(controller.state.turns).toMatchObject([
         {
           id: 't',
           userMessageId: 'confirmed-0-user',
           status: outcome === 'completed' ? 'completed' : 'failed',
         },
       ]);
-      expect(controller.state.content.map((item) => item.id)).toEqual([
+      expect(contentOf(controller.state).map((item) => item.id)).toEqual([
         'confirmed-0-user',
         'detail',
         'answer',
@@ -644,7 +652,7 @@ describe('live conversation controller', () => {
     expect(signal?.aborted).toBe(true);
     finish.resolve();
     await old;
-    expect(controller.state.content).toEqual([]);
+    expect(contentOf(controller.state)).toEqual([]);
     controller.dispose();
     await controller.submit('ignored', vi.fn());
     expect(transport.appendMessage).toHaveBeenCalledTimes(1);
@@ -658,7 +666,7 @@ describe('live conversation controller', () => {
         if (source === 'acknowledge') controller.dispose();
       });
       const controller = new ConversationController(transport, (state) => {
-        if (source === 'publish' && state.content.length > 0) controller.dispose();
+        if (source === 'publish' && contentOf(state).length > 0) controller.dispose();
       });
       await controller.start();
       await controller.submit('Hello', acknowledge);
@@ -674,7 +682,7 @@ describe('live conversation controller', () => {
       transport.appendMessage.mockRejectedValue(new ConversationNetworkError('uncertain'));
       transport.readSession.mockResolvedValue(snapshot());
       const controller = new ConversationController(transport, (state) => {
-        if (source === 'publish' && state.content.length > 0) controller.dispose();
+        if (source === 'publish' && contentOf(state).length > 0) controller.dispose();
       });
       await controller.start();
       const acknowledge = vi.fn(() => {
@@ -771,14 +779,14 @@ describe('live conversation controller', () => {
       const controller = new ConversationController(transport, () => undefined);
       await controller.start();
       await controller.submit('Hello', vi.fn());
-      expect(controller.state.turns).toEqual([
+      expect(controller.state.turns).toMatchObject([
         {
           id: 't',
           userMessageId: 'confirmed-0-user',
           status: outcome === 'completed' ? 'completed' : 'failed',
         },
       ]);
-      expect(controller.state.content[1]).toMatchObject({ id: 'answer', turnId: 't' });
+      expect(contentOf(controller.state)[1]).toMatchObject({ id: 'answer', turnId: 't' });
       expect(controller.state.composerDisabled).toBe(false);
       expect(transport.observeTurn).not.toHaveBeenCalled();
     },
@@ -825,7 +833,7 @@ describe('live conversation controller', () => {
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Hello', vi.fn());
-    expect(controller.state.turns).toEqual([
+    expect(controller.state.turns).toMatchObject([
       { id: 'old', userMessageId: 'request-old', status: 'completed' },
       { id: 'latest', userMessageId: 'request-latest', status: 'unknown' },
     ]);
@@ -934,14 +942,16 @@ describe('live conversation controller', () => {
     await first;
     expect(acknowledge).toHaveBeenCalledTimes(1);
   });
-  it('retains accepted content without fabricating a turn when observation ends before its snapshot', async () => {
+  it('retains the accepted turn with unknown outcome when observation ends before its snapshot', async () => {
     const transport = new FakeTransport();
     transport.observeTurn.mockReturnValue(stream([]));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Hello', vi.fn());
-    expect(controller.state.turns).toEqual([]);
-    expect(controller.state.content).toEqual([
+    expect(controller.state.turns).toMatchObject([
+      { id: 't', userMessageId: 'confirmed-0-user', status: 'unknown' },
+    ]);
+    expect(contentOf(controller.state)).toEqual([
       { kind: 'text', id: 'confirmed-0-user', role: 'user', text: 'Hello', turnId: 't' },
     ]);
     expect(controller.state.composerDisabled).toBe(true);
@@ -963,7 +973,7 @@ describe('live conversation controller', () => {
       await controller.submit('Hello', vi.fn());
       expect(controller.state.composerDisabled).toBe(true);
       expect(controller.state.status?.message).not.toContain('unbekannt');
-      expect(controller.state.turns).toEqual([]);
+      expect(controller.state.turns).toMatchObject([{ id: 't', status: 'unknown' }]);
       expect(transport.observeTurn).toHaveBeenCalledTimes(1);
       expect(transport.readSession).not.toHaveBeenCalled();
     },
@@ -985,7 +995,7 @@ describe('live conversation controller', () => {
         expect(controller.state.status?.message).toContain('unbekannt');
         expect(controller.state.status).not.toHaveProperty('action');
       }
-      expect(controller.state.content).toHaveLength(1);
+      expect(contentOf(controller.state)).toHaveLength(1);
     },
   );
 
@@ -1062,7 +1072,7 @@ describe('live conversation controller', () => {
     const controller = new ConversationController(transport, () => undefined, mapper);
     await controller.start();
     await controller.submit('Hello', vi.fn());
-    expect(controller.state.content.map((item) => item.id)).toEqual([
+    expect(contentOf(controller.state).map((item) => item.id)).toEqual([
       'confirmed-0-user',
       'custom-visible',
     ]);
@@ -1070,7 +1080,7 @@ describe('live conversation controller', () => {
     expect(mapper).toHaveBeenCalledWith(
       expect.objectContaining({ artifact_id: 'visible', order: 7, payload: { value: 'visible' } }),
     );
-    expect(controller.state.content[1]).toMatchObject({ headline: 'Mapped', type: 'custom' });
+    expect(contentOf(controller.state)[1]).toMatchObject({ headline: 'Mapped', type: 'custom' });
   });
 
   it.each(['identity', 'turn', 'position', 'collision', 'artifact-turn'] as const)(
@@ -1122,8 +1132,8 @@ describe('live conversation controller', () => {
       await controller.submit('Hello', vi.fn());
       expect(controller.state.turns[0]?.status).toBe('unknown');
       expect(controller.state.composerDisabled).toBe(true);
-      expect(controller.state.content).toHaveLength(2);
-      expect(controller.state.content[1]).toMatchObject({ kind: 'tool', status: 'running' });
+      expect(contentOf(controller.state)).toHaveLength(2);
+      expect(contentOf(controller.state)[1]).toMatchObject({ kind: 'tool', status: 'running' });
     },
   );
 
@@ -1154,7 +1164,7 @@ describe('live conversation controller', () => {
     transport.appendMessage.mockRejectedValueOnce(new ConversationNetworkError('uncertain'));
     transport.readSession.mockResolvedValue(snapshot({ turns: [firstTurn, nextTurn] }));
     transport.observeTurn.mockImplementationOnce(async function* () {
-      expect(controller.state.content.map((item) => item.id)).toEqual([
+      expect(contentOf(controller.state).map((item) => item.id)).toEqual([
         'confirmed-0-user',
         'confirmed-1-user',
       ]);
@@ -1177,7 +1187,7 @@ describe('live conversation controller', () => {
     await controller.submit('Hello', acknowledge);
     expect(acknowledge).toHaveBeenCalledOnce();
     expect(transport.generateTurn).toHaveBeenCalledTimes(2);
-    expect(controller.state.content.map((item) => item.id)).toEqual([
+    expect(contentOf(controller.state).map((item) => item.id)).toEqual([
       'confirmed-0-user',
       'confirmed-1-user',
       'detail-next',
@@ -1196,7 +1206,7 @@ describe('live conversation controller', () => {
     expect(controller.state.composerDisabled).toBe(true);
     expect(controller.state.status?.action?.id).toBe('new-session');
     await controller.performAction('new-session');
-    expect(controller.state.content).toEqual([]);
+    expect(contentOf(controller.state)).toEqual([]);
     expect(controller.state.composerDisabled).toBe(false);
     expect(transport.createSession).toHaveBeenCalledTimes(2);
   });
@@ -1226,3 +1236,7 @@ describe('live conversation controller', () => {
     expect(transport.generateTurn).not.toHaveBeenCalled();
   });
 });
+
+function contentOf(state: ConversationViewState): readonly ChatContent[] {
+  return state.turns.flatMap((turn) => turn.content);
+}

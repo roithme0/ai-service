@@ -12,7 +12,6 @@ const DEMO_ERROR_MESSAGE =
 const DEMO_ACTION_ID = 'demo-noop';
 
 const INITIAL_STATE: ConversationViewState = {
-  content: [],
   turns: [],
   composerDisabled: true,
   status: {

@@ -24,14 +24,12 @@ import { presentArtifact } from './generic-artifact-mapper';
 export type ArtifactMapper = (artifact: ArtifactResponse) => ChatArtifact | null;
 
 export interface ConversationViewState {
-  readonly content: readonly ChatContent[];
   readonly turns: readonly ChatTurn[];
   readonly composerDisabled: boolean;
   readonly status: ChatConversationStatus | null;
 }
 
 const INITIAL_STATE: ConversationViewState = {
-  content: [],
   turns: [],
   composerDisabled: true,
   status: loading('Unterhaltung wird gestartet …', 'conversation'),
@@ -76,7 +74,7 @@ export class ConversationController {
       if (epoch !== this.epoch) return;
       this.confirmedMessages = [];
       this.sessionId = created.session_id;
-      this.setState({ content: [], turns: [], composerDisabled: false, status: null });
+      this.setState({ turns: [], composerDisabled: false, status: null });
     } catch (error: unknown) {
       if (epoch !== this.epoch) return;
       if (isUnsupportedApiRequest(error)) {
@@ -133,9 +131,14 @@ export class ConversationController {
     const epoch = this.epoch;
     const userIndex = this.confirmedMessages.filter((item) => item.role === 'user').length;
     this.confirmedMessages = [...this.confirmedMessages, message];
+    this.currentTurnId = message.turn_id;
+    const content = presentMessage(message, userIndex);
     this.setState({
       ...this.stateValue,
-      content: [...this.stateValue.content, presentMessage(message, userIndex)],
+      turns: [
+        ...this.stateValue.turns,
+        { id: message.turn_id, userMessageId: content.id, status: 'active', content: [content] },
+      ],
       composerDisabled: true,
       status: loading('Antwort wird erstellt …', 'assistant'),
     });
@@ -162,7 +165,7 @@ export class ConversationController {
           if (epoch !== this.epoch) return;
           this.confirmedMessages = userMessages(snapshot);
           validateSnapshot(snapshot);
-          const presented = presentTimeline(snapshot.turns, this.mapArtifact);
+          const presented = presentTurns(snapshot.turns, this.mapArtifact);
           const turn = snapshot.turns.at(-1);
           this.currentTurnId = turn?.turn_id ?? null;
           responseStarted = turn !== undefined && presented.responseTurnIds.has(turn.turn_id);
@@ -174,8 +177,7 @@ export class ConversationController {
               turn.status === 'conflict');
           this.setState({
             ...this.stateValue,
-            content: presented.content,
-            turns: snapshot.turns.map(presentTurn),
+            turns: presented.turns,
             composerDisabled: !terminal,
             status: terminal
               ? turn.status === 'completed'
@@ -291,12 +293,11 @@ export class ConversationController {
           });
           return;
         }
-        const presented = presentTimeline(turns, this.mapArtifact);
+        const presented = presentTurns(turns, this.mapArtifact);
         responseStarted ||= presented.responseTurnIds.has(turnId);
         this.setState({
           ...this.stateValue,
-          content: presented.content,
-          turns: turns.map(presentTurn),
+          turns: presented.turns,
           composerDisabled: true,
           status:
             closing || responseStarted ? null : loading('Antwort wird erstellt …', 'assistant'),
@@ -499,15 +500,16 @@ function presentMessage(message: ApiMessage, index: number): ChatTextMessage {
 function presentSnapshot(
   snapshot: SessionSnapshotResponse,
   mapArtifact: ArtifactMapper,
-): Pick<ConversationViewState, 'content' | 'turns'> {
-  return {
-    content: presentTimeline(snapshot.turns, mapArtifact).content,
-    turns: snapshot.turns.map(presentTurn),
-  };
+): Pick<ConversationViewState, 'turns'> {
+  return { turns: presentTurns(snapshot.turns, mapArtifact).turns };
 }
 
-function presentTurn(turn: SessionSnapshotResponse['turns'][number]): ChatTurn {
-  return {
+function presentTurns(
+  turns: SessionSnapshotResponse['turns'],
+  mapArtifact: ArtifactMapper,
+): { readonly turns: readonly ChatTurn[]; readonly responseTurnIds: ReadonlySet<string> } {
+  const responseTurnIds = new Set<string>();
+  const presented = turns.map((turn): ChatTurn => ({
     id: turn.turn_id,
     userMessageId: turn.user_message_id,
     status:
@@ -516,17 +518,7 @@ function presentTurn(turn: SessionSnapshotResponse['turns'][number]): ChatTurn {
         : turn.status === 'generation_failed' || turn.status === 'conflict'
           ? 'failed'
           : 'active',
-  };
-}
-
-function presentTimeline(
-  turns: SessionSnapshotResponse['turns'],
-  mapArtifact: ArtifactMapper,
-): { readonly content: readonly ChatContent[]; readonly responseTurnIds: ReadonlySet<string> } {
-  const responseTurnIds = new Set<string>();
-  const content = turns
-    .flatMap((turn) => turn.timeline)
-    .flatMap((item): ChatContent[] => {
+    content: turn.timeline.flatMap((item): ChatContent[] => {
       if (item.kind !== 'artifact' && (item.kind !== 'message' || item.role === 'assistant')) {
         responseTurnIds.add(item.turn_id);
       }
@@ -562,8 +554,9 @@ function presentTimeline(
             },
           ];
       }
-    });
-  return { content, responseTurnIds };
+    }),
+  }));
+  return { turns: presented, responseTurnIds };
 }
 
 function itemIdentity(item: SessionSnapshotResponse['turns'][number]['timeline'][number]): string {
