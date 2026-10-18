@@ -32,6 +32,7 @@ class TimelineMessage:
     id: str
     role: SessionRole
     text: str
+    is_final: bool
     kind: Literal["message"] = "message"
 
 

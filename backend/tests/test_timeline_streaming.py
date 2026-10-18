@@ -118,6 +118,8 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
                 assert initial['kind'] == 'snapshot'
                 assert initial['snapshot']['turns'][-1]['status'] == 'in_progress'
                 initial_items = initial['snapshot']['turns'][-1]['timeline']
+                assert [(item['text'], item['is_final']) for item in initial_items if item['kind'] == 'message'] == [('Show', False), ('Phase-less', False)]
+                assert next(item for item in initial_items if item['kind'] == 'intermediate')['text'] == 'Already visible'
                 row = next(item for item in initial_items if item['kind'] == 'tool')
                 assert row['status'] == 'requested'
                 identity, order = f"tool-{row['execution_id']}", initial_items.index(row)
@@ -136,26 +138,35 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
                         assert event['item']['artifact']['payload']['payload'] == {'value': 42}
                         break
                 assert final_entered.wait(2)
+                final_upsert = None
                 while True:
                     event = next(events)
+                    if event['kind'] == 'upsert' and event['item'].get('text') == 'Retained final':
+                        final_upsert = event['item']
+                        assert final_upsert['is_final'] is True
+
                     if event['kind'] == 'closing':
                         break
                 # Close an observer while the backend remains paused after accepted artifacts.
             snapshot = client.get(url).json()
             assert snapshot['turns'][-1]['turn_id'] == turn_id
             assert snapshot['turns'][-1]['status'] == 'closing'
+            assert final_upsert is not None
+            assert final_upsert in snapshot['turns'][-1]['timeline']
             assert len([item for turn in snapshot['turns'] for item in turn['timeline'] if item['kind'] == 'artifact']) == 1
             with client.stream('GET', f'{url}/turns/{turn_id}/events') as response:
                 events = event_lines(response)
                 catch_up = next(events)
                 assert catch_up['kind'] == 'snapshot'
                 assert catch_up['snapshot']['turns'][-1]['status'] == 'closing'
+                assert final_upsert in catch_up['snapshot']['turns'][-1]['timeline']
                 final_release.set()
                 retained = list(events)
             assert retained[-1]['kind'] == 'terminal' and retained[-1]['outcome'] == 'generation_failed'
             snapshot = client.get(url).json()
             assert snapshot['turns'][-1]['status'] == 'generation_failed'
-            assert any(item.get('text') == 'Retained final' for item in snapshot['turns'][-1]['timeline'])
+            assert final_upsert in snapshot['turns'][-1]['timeline']
+            assert [(item['text'], item['is_final']) for item in snapshot['turns'][-1]['timeline'] if item['kind'] == 'message'] == [('Show', False), ('Phase-less', False), ('Retained final', True)]
             assert snapshot['turns'][-1]['timeline'][-1]['kind'] == 'failure'
             assert calls == 2 and tool_calls == 1
             assert client.post(url + '/turns').json() == accepted.json()

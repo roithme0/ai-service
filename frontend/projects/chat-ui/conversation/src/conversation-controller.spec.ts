@@ -39,7 +39,14 @@ function snapshot(overrides: Partial<SessionSnapshotResponse> = {}): SessionSnap
         user_message_id: 'confirmed-0-user',
         status: 'in_progress',
         timeline: [
-          { kind: 'message', role: 'user', id: 'confirmed-0-user', text: 'Hello', turn_id: 't' },
+          {
+            kind: 'message',
+            is_final: false,
+            role: 'user',
+            id: 'confirmed-0-user',
+            text: 'Hello',
+            turn_id: 't',
+          },
         ],
       },
     ],
@@ -84,10 +91,25 @@ describe('live conversation controller', () => {
     async (ending) => {
       const transport = new FakeTransport();
       const timeline: SessionSnapshotResponse['turns'][number]['timeline'] = [
-        { kind: 'message', role: 'user', id: 'request-first', text: 'First', turn_id: 'old' },
-        { kind: 'message', role: 'assistant', id: 'old-answer', text: 'Done', turn_id: 'old' },
         {
           kind: 'message',
+          is_final: false,
+          role: 'user',
+          id: 'request-first',
+          text: 'First',
+          turn_id: 'old',
+        },
+        {
+          kind: 'message',
+          is_final: false,
+          role: 'assistant',
+          id: 'old-answer',
+          text: 'Done',
+          turn_id: 'old',
+        },
+        {
+          kind: 'message',
+          is_final: false,
           role: 'user',
           id: 'request-second',
           text: 'Second',
@@ -95,7 +117,14 @@ describe('live conversation controller', () => {
         },
         { kind: 'intermediate', id: 'old-detail', text: 'Received', turn_id: 'failed' },
         { kind: 'failure', turn_id: 'failed' },
-        { kind: 'message', role: 'user', id: 'request-current', text: 'Third', turn_id: 't' },
+        {
+          kind: 'message',
+          is_final: false,
+          role: 'user',
+          id: 'request-current',
+          text: 'Third',
+          turn_id: 't',
+        },
         { kind: 'intermediate', id: 'detail-before', text: 'Before', turn_id: 't' },
         {
           kind: 'artifact',
@@ -110,7 +139,14 @@ describe('live conversation controller', () => {
           },
         },
         { kind: 'intermediate', id: 'detail-after', text: 'After', turn_id: 't' },
-        { kind: 'message', role: 'assistant', id: 'answer', text: 'Final', turn_id: 't' },
+        {
+          kind: 'message',
+          is_final: true,
+          role: 'assistant',
+          id: 'answer',
+          text: 'Final',
+          turn_id: 't',
+        },
       ];
       transport.observeTurn.mockImplementation(async function* () {
         yield await Promise.resolve<StreamEvent>({
@@ -177,7 +213,18 @@ describe('live conversation controller', () => {
         ending,
       ]);
       expect(contentOf(controller.state).map((item) => item.id)).toContain('detail-after');
-      expect(contentOf(controller.state).map((item) => item.id)).toContain('answer');
+      expect(contentOf(controller.state)).toContainEqual(
+        expect.objectContaining({ id: 'answer', isFinal: true }),
+      );
+      expect(contentOf(controller.state)).toContainEqual(
+        expect.objectContaining({ id: 'old-answer', isFinal: false }),
+      );
+      expect(contentOf(controller.state)).toContainEqual(
+        expect.objectContaining({ id: 'request-current', role: 'user', isFinal: false }),
+      );
+      expect(
+        contentOf(controller.state).find((item) => item.id === 'detail-after'),
+      ).not.toHaveProperty('isFinal');
     },
   );
 
@@ -228,6 +275,7 @@ describe('live conversation controller', () => {
                 timeline: [
                   {
                     kind: 'message',
+                    is_final: false,
                     role: 'user',
                     id: 'old-user',
                     text: 'Previous',
@@ -259,7 +307,14 @@ describe('live conversation controller', () => {
                       payload: { title: 'Data', payload: 1 },
                     },
                   }
-                : { kind, turn_id: 't', id: 'first', role: 'assistant', text: 'Done' };
+                : {
+                    kind,
+                    is_final: true,
+                    turn_id: 't',
+                    id: 'first',
+                    role: 'assistant',
+                    text: 'Done',
+                  };
         yield {
           kind: 'upsert',
           turn_id: 't',
@@ -300,6 +355,7 @@ describe('live conversation controller', () => {
                 timeline: [
                   {
                     kind: 'message',
+                    is_final: false,
                     role: 'user',
                     id: 'confirmed-0-user',
                     text: 'Hello',
@@ -307,6 +363,7 @@ describe('live conversation controller', () => {
                   },
                   {
                     kind: 'message',
+                    is_final: true,
                     turn_id: 't',
                     id: 'answer',
                     role: 'assistant',
@@ -335,7 +392,10 @@ describe('live conversation controller', () => {
       await submission;
       expect(controller.state.status?.kind).toBe('error');
       expect(controller.state.composerDisabled).toBe(false);
-      expect(contentOf(controller.state)[1]).toMatchObject({ text: 'Retained answer' });
+      expect(contentOf(controller.state)[1]).toMatchObject({
+        text: 'Retained answer',
+        isFinal: true,
+      });
     },
   );
 
@@ -359,6 +419,7 @@ describe('live conversation controller', () => {
               timeline: [
                 {
                   kind: 'message',
+                  is_final: false,
                   role: 'user',
                   id: 'confirmed-0-user',
                   text: 'Hello',
@@ -436,6 +497,7 @@ describe('live conversation controller', () => {
 
         item: {
           kind: 'message',
+          is_final: true,
           turn_id: 't',
           id: 'final',
           role: 'assistant',
@@ -508,6 +570,9 @@ describe('live conversation controller', () => {
     ]);
     expect(controller.state.status?.kind).toBe('error');
     expect(controller.state.turns[0]?.status).toBe('failed');
+    expect(contentOf(controller.state)).toContainEqual(
+      expect.objectContaining({ id: 'final', isFinal: true }),
+    );
   });
 
   it.each(['eof', 'error', 'malformed'] as const)(
@@ -648,6 +713,7 @@ describe('live conversation controller', () => {
                   ...snapshot().turns[0].timeline,
                   {
                     kind: 'message',
+                    is_final: true,
                     turn_id: 't',
                     id: 'f',
                     role: 'assistant',
@@ -666,7 +732,10 @@ describe('live conversation controller', () => {
     await controller.submit('Hello', vi.fn());
     expect(controller.state.composerDisabled).toBe(false);
     expect(controller.state.status?.kind).toBe('error');
-    expect(contentOf(controller.state)[1]).toMatchObject({ text: 'Final before failure' });
+    expect(contentOf(controller.state)[1]).toMatchObject({
+      text: 'Final before failure',
+      isFinal: true,
+    });
     expect(controller.state.turns).toMatchObject([
       { id: 't', userMessageId: 'confirmed-0-user', status: 'failed' },
     ]);
@@ -692,6 +761,7 @@ describe('live conversation controller', () => {
                     { kind: 'intermediate', id: 'detail', text: 'Received detail', turn_id: 't' },
                     {
                       kind: 'message',
+                      is_final: true,
                       role: 'assistant',
                       id: 'answer',
                       text: 'Received answer',
@@ -859,6 +929,7 @@ describe('live conversation controller', () => {
                 ...snapshot().turns[0].timeline,
                 {
                   kind: 'message',
+                  is_final: false,
                   role: 'assistant',
                   id: 'answer',
                   text: 'Received',
@@ -896,9 +967,17 @@ describe('live conversation controller', () => {
             user_message_id: 'request-old',
             status: 'completed',
             timeline: [
-              { kind: 'message', role: 'user', id: 'request-old', text: 'Old', turn_id: 'old' },
               {
                 kind: 'message',
+                is_final: false,
+                role: 'user',
+                id: 'request-old',
+                text: 'Old',
+                turn_id: 'old',
+              },
+              {
+                kind: 'message',
+                is_final: false,
                 role: 'assistant',
                 id: 'old-answer',
                 text: 'Done',
@@ -913,6 +992,7 @@ describe('live conversation controller', () => {
             timeline: [
               {
                 kind: 'message',
+                is_final: false,
                 role: 'user',
                 id: 'request-latest',
                 text: 'Hello',
@@ -963,6 +1043,7 @@ describe('live conversation controller', () => {
 
           item: {
             kind: 'message',
+            is_final: false,
             id: 'phase-less',
             role: 'assistant',
             turn_id: 't',
@@ -987,6 +1068,7 @@ describe('live conversation controller', () => {
             timeline: [
               {
                 kind: 'message',
+                is_final: false,
                 id: 'confirmed-1-user',
                 role: 'user',
                 text: 'Next',
@@ -1045,7 +1127,14 @@ describe('live conversation controller', () => {
       { id: 't', userMessageId: 'confirmed-0-user', status: 'unknown' },
     ]);
     expect(contentOf(controller.state)).toEqual([
-      { kind: 'text', id: 'confirmed-0-user', role: 'user', text: 'Hello', turnId: 't' },
+      {
+        kind: 'text',
+        isFinal: false,
+        id: 'confirmed-0-user',
+        role: 'user',
+        text: 'Hello',
+        turnId: 't',
+      },
     ]);
     expect(controller.state.composerDisabled).toBe(true);
     expect(controller.state.status?.kind).toBe('error');
@@ -1224,6 +1313,7 @@ describe('live conversation controller', () => {
               timeline: [
                 {
                   kind: 'message',
+                  is_final: false,
                   role: 'user',
                   id: 'other-user',
                   text: 'Other',
@@ -1334,6 +1424,7 @@ describe('live conversation controller', () => {
       timeline: [
         {
           kind: 'message' as const,
+          is_final: false,
           role: 'user' as const,
           id: 'confirmed-1-user',
           text: 'Hello',
@@ -1420,7 +1511,14 @@ describe('live conversation controller', () => {
         ...snapshot().turns[0],
         status: 'completed',
         timeline: [
-          { kind: 'message', id: 'historical-user', role: 'user', text: 'Earlier', turn_id: 't' },
+          {
+            kind: 'message',
+            is_final: false,
+            id: 'historical-user',
+            role: 'user',
+            text: 'Earlier',
+            turn_id: 't',
+          },
         ],
         user_message_id: 'historical-user',
       };
@@ -1440,7 +1538,14 @@ describe('live conversation controller', () => {
         user_message_id: 'next-user',
         status: 'in_progress',
         timeline: [
-          { kind: 'message', id: 'next-user', role: 'user', text: 'Hello', turn_id: 'next' },
+          {
+            kind: 'message',
+            is_final: false,
+            id: 'next-user',
+            role: 'user',
+            text: 'Hello',
+            turn_id: 'next',
+          },
         ],
       };
       const nextSnapshot = snapshot({ turns: [historicalTurn, nextTurn] });

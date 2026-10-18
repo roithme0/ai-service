@@ -143,7 +143,7 @@ export class ConversationController {
         turn_id: message.turn_id,
         user_message_id: userMessageId,
         status: 'pending',
-        timeline: [{ kind: 'message', id: userMessageId, ...message }],
+        timeline: [{ kind: 'message', is_final: false, id: userMessageId, ...message }],
       },
     ]);
     this.updateState({
@@ -505,7 +505,14 @@ function presentTurns(turns: readonly RetainedTurn[], mapArtifact: ArtifactMappe
       switch (item.kind) {
         case 'message':
           return [
-            { kind: 'text', id: item.id, role: item.role, text: item.text, turnId: item.turn_id },
+            {
+              kind: 'text',
+              id: item.id,
+              role: item.role,
+              isFinal: item.is_final,
+              text: item.text,
+              turnId: item.turn_id,
+            },
           ];
         case 'intermediate':
           return [{ kind: 'intermediate', id: item.id, text: item.text, turnId: item.turn_id }];

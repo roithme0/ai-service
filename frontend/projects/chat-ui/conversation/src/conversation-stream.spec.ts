@@ -27,7 +27,14 @@ describe('fetch SSE observation', () => {
       identity: 'm',
       order: 1,
       sequence: 2,
-      item: { kind: 'message', turn_id: 't', id: 'm', role: 'assistant', text: 'Gr\u00fc\u00dfe' },
+      item: {
+        kind: 'message',
+        is_final: false,
+        turn_id: 't',
+        id: 'm',
+        role: 'assistant',
+        text: 'Gr\u00fc\u00dfe',
+      },
     };
     const bytes = new TextEncoder().encode(
       `: heartbeat\r\n\r\ndata: ${JSON.stringify(event)}\r\n\r\n`,
@@ -43,6 +50,29 @@ describe('fetch SSE observation', () => {
   it.each([
     '{"kind":"future"}',
     '{bad json}',
+    JSON.stringify({
+      kind: 'upsert',
+      turn_id: 't',
+      identity: 'm',
+      order: 1,
+      sequence: 2,
+      item: { kind: 'message', turn_id: 't', id: 'm', role: 'assistant', text: 'Missing marker' },
+    }),
+    JSON.stringify({
+      kind: 'upsert',
+      turn_id: 't',
+      identity: 'm',
+      order: 1,
+      sequence: 2,
+      item: {
+        kind: 'message',
+        turn_id: 't',
+        id: 'm',
+        role: 'assistant',
+        text: 'Invalid marker',
+        is_final: 'true',
+      },
+    }),
     '{"kind":"terminal","turn_id":"t","sequence":1,"outcome":"success"}',
   ])('rejects malformed event %s without replacement requests', async (data) => {
     const fetchMock = vi
@@ -80,7 +110,14 @@ describe('fetch SSE observation', () => {
             user_message_id: 'user',
             status: 'in_progress',
             timeline: [
-              { kind: 'message', role: 'user', id: 'user', text: 'Hello', turn_id: 't' },
+              {
+                kind: 'message',
+                is_final: false,
+                role: 'user',
+                id: 'user',
+                text: 'Hello',
+                turn_id: 't',
+              },
               ...timeline,
             ],
           },

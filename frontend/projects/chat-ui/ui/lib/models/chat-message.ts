@@ -23,6 +23,7 @@ export interface ChatTextMessage extends ChatTurnContent {
   readonly kind: 'text';
   readonly id: string;
   readonly role: ChatMessageRole;
+  readonly isFinal: boolean;
   readonly text: string;
 }
 

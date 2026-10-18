@@ -670,6 +670,7 @@ def test_completed_turn_separates_commentary_from_standalone_answer(client: Test
     result = response.json()
     assert result["message"]["text"] == "Complete answer."
     assert [item["kind"] for item in result["timeline"]] == ["intermediate", "message"]
+    assert result["timeline"][-1]["is_final"] is True
     snapshot = client.get(base).json()
     assert [item for turn in snapshot["turns"] for item in turn["timeline"]][1:] == result["timeline"]
     assert [item["text"] for item in [item for turn in snapshot["turns"] for item in turn["timeline"] if item["kind"] == "message"]] == ["Check", "Complete answer."]

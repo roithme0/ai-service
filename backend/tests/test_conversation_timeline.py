@@ -1,6 +1,8 @@
 import json
 from datetime import timedelta
 
+import pytest
+
 from app.agents.generation_history import record_generation_response, record_tool_call
 from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
@@ -9,6 +11,9 @@ from app.sessions.session_store import ConversationSessionStore
 from app.agents.history_projection import model_input
 from app.sessions.models.timeline import TimelineArtifact, TimelineFailure, TimelineMessage, TimelineTool
 from app.sessions.models.execution import ToolExecution
+from app.sessions.models.history import HistoryRecord, MessageRecord, TerminalRecord
+from app.sessions.models.turns import TerminalTurnKind
+from app.sessions.timeline import timeline
 
 
 def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> None:
@@ -70,3 +75,25 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
     assert isinstance(final, TimelineMessage)
     assert final.text == "Done"
     assert all(item.turn_id == next_turn.turn_id for item in read.snapshot.turns[1].timeline)
+
+
+@pytest.mark.parametrize("outcome", ["completed", "generation_failed", "conflict"])
+def test_only_explicit_final_records_are_marked_final_regardless_of_position_or_outcome(
+    outcome: TerminalTurnKind,
+) -> None:
+    history: tuple[HistoryRecord, ...] = (
+        MessageRecord("turn", None, "Request", "user"),
+        MessageRecord("turn", None, "Unspecified before", "unspecified"),
+        MessageRecord("turn", None, "Progress", "intermediate"),
+        MessageRecord("turn", None, "Explicit final", "final"),
+        MessageRecord("turn", None, "Unspecified after", "unspecified"),
+        TerminalRecord("turn", outcome),
+    )
+    items = timeline(history, ())
+    assert [(item.text, item.role, item.is_final) for item in items if isinstance(item, TimelineMessage)] == [
+        ("Request", "user", False),
+        ("Unspecified before", "assistant", False),
+        ("Explicit final", "assistant", True),
+        ("Unspecified after", "assistant", False),
+    ]
+    assert items[2].kind == "intermediate"

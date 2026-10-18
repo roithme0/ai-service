@@ -44,6 +44,7 @@ describe('Demo application', () => {
                 timeline: [
                   {
                     kind: 'message',
+                    is_final: false,
                     id: 'confirmed-0-user',
                     role: 'user',
                     text: 'Any text',
@@ -89,6 +90,7 @@ describe('Demo application', () => {
                   },
                   {
                     kind: 'message',
+                    is_final: true,
                     turn_id: 'turn-2',
                     id: 'assistant-turn-2',
                     role: 'assistant',
@@ -224,6 +226,7 @@ describe('Demo application', () => {
               timeline: [
                 {
                   kind: 'message',
+                  is_final: false,
                   id: 'confirmed-0-user',
                   turn_id: 'turn-4',
                   role: 'user',

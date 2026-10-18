@@ -306,6 +306,10 @@ export type TimelineMessage = {
      */
     id: string;
     /**
+     * Is Final
+     */
+    is_final: boolean;
+    /**
      * Kind
      */
     kind: 'message';

@@ -466,6 +466,10 @@
             "title": "Id",
             "type": "string"
           },
+          "is_final": {
+            "title": "Is Final",
+            "type": "boolean"
+          },
           "kind": {
             "const": "message",
             "title": "Kind",
@@ -493,6 +497,7 @@
           "id",
           "role",
           "text",
+          "is_final",
           "kind"
         ],
         "title": "TimelineMessage",

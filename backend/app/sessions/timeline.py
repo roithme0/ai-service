@@ -94,7 +94,7 @@ def _message_item(
         else f"message-{record.message_id}"
     )
     role: SessionRole = "user" if record.kind == "user" else "assistant"
-    return TimelineMessage(record.turn_id, identity, role, record.text)
+    return TimelineMessage(record.turn_id, identity, role, record.text, is_final=record.kind == "final")
 
 
 def _tool_item(

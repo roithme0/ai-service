@@ -34,7 +34,14 @@ describe('HttpConversationTransport', () => {
                 user_message_id: 'user',
                 status: 'in_progress',
                 timeline: [
-                  { kind: 'message', role: 'user', id: 'user', text: 'Hello', turn_id: 'turn-1' },
+                  {
+                    kind: 'message',
+                    is_final: false,
+                    role: 'user',
+                    id: 'user',
+                    text: 'Hello',
+                    turn_id: 'turn-1',
+                  },
                   row,
                 ],
               },
@@ -220,6 +227,7 @@ describe('HttpConversationTransport', () => {
               timeline: [
                 {
                   kind: 'message',
+                  is_final: false,
                   role: 'user',
                   turn_id: 'turn-1',
                   id: 'request',
@@ -252,6 +260,7 @@ describe('HttpConversationTransport', () => {
           timeline: [
             {
               kind: 'message',
+              is_final: false,
               role: 'user',
               turn_id: 'turn-1',
               id: 'request',
@@ -397,7 +406,14 @@ describe('HttpConversationTransport', () => {
               user_message_id: 'request',
               status: 'completed',
               timeline: [
-                { kind: 'message', role: 'user', turn_id: 'turn-1', id: 'request', text: 'Hello' },
+                {
+                  kind: 'message',
+                  is_final: false,
+                  role: 'user',
+                  turn_id: 'turn-1',
+                  id: 'request',
+                  text: 'Hello',
+                },
                 {
                   kind: 'artifact',
                   turn_id: 'turn-1',
@@ -439,6 +455,7 @@ describe('HttpConversationTransport', () => {
                 timeline: [
                   {
                     kind: 'message',
+                    is_final: false,
                     role: 'user',
                     id: 'request',
                     text: 'Hello',
@@ -459,6 +476,7 @@ describe('HttpConversationTransport', () => {
   it('rejects an artifact row without its required kind', async () => {
     const user = {
       kind: 'message',
+      is_final: false,
       role: 'user',
       id: 'request',
       text: 'Hello',
@@ -516,6 +534,7 @@ describe('HttpConversationTransport', () => {
               timeline: [
                 {
                   kind: 'message',
+                  is_final: false,
                   role: 'user',
                   turn_id: 'turn-1',
                   id: 'request',
@@ -554,7 +573,14 @@ describe('HttpConversationTransport', () => {
           user_message_id: 'request',
           status: 'completed',
           timeline: [
-            { kind: 'message', role: 'user', turn_id: 'turn-1', id: 'request', text: 'Hello' },
+            {
+              kind: 'message',
+              is_final: false,
+              role: 'user',
+              turn_id: 'turn-1',
+              id: 'request',
+              text: 'Hello',
+            },
             {
               kind: 'artifact',
               turn_id: 'turn-1',

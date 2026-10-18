@@ -23,8 +23,8 @@ def snapshot() -> ConversationSnapshot[str, ArtifactPayload]:
     return ConversationSnapshot(
         session=SessionSnapshot("session", datetime(2030, 1, 1, tzinfo=UTC), 1, "context", ()),
         turns=(TurnSnapshot("turn", "request", "in_progress", (
-            TimelineMessage("turn", "request", "user", "Request"),
-            TimelineMessage("turn", "message", "assistant", "Hello"),
+            TimelineMessage("turn", "request", "user", "Request", is_final=False),
+            TimelineMessage("turn", "message", "assistant", "Hello", is_final=False),
         )),),
         sequence=1,
     )
@@ -47,7 +47,7 @@ def test_stream_emits_changes_and_closing_before_terminal_after_turn_release() -
     initial = snapshot()
     changed = replace(
         initial, turns=(replace(initial.turns[0], status="closing", timeline=(
-            *initial.turns[0].timeline, TimelineMessage("turn", "new", "assistant", "Done"),
+            *initial.turns[0].timeline, TimelineMessage("turn", "new", "assistant", "Done", is_final=True),
         )),), sequence=2,
     )
     released = replace(changed, turns=(replace(changed.turns[0], status="completed"),), sequence=3)
@@ -108,7 +108,7 @@ def test_final_output_upsert_precedes_terminal_from_same_snapshot() -> None:
     terminal = replace(
         initial,
         turns=(replace(initial.turns[0], status="completed", timeline=(
-            *initial.turns[0].timeline, TimelineMessage("turn", "final", "assistant", "Final output"),
+            *initial.turns[0].timeline, TimelineMessage("turn", "final", "assistant", "Final output", is_final=True),
         )),),
         sequence=3,
     )
@@ -125,8 +125,8 @@ def test_final_output_upsert_precedes_terminal_from_same_snapshot() -> None:
 def test_upserts_are_turn_local_and_embed_artifacts_without_a_second_payload() -> None:
     initial = snapshot()
     history = TurnSnapshot[ArtifactPayload]("old", "old-request", "completed", (
-        TimelineMessage("old", "old-request", "user", "Earlier"),
-        TimelineMessage("old", "old-answer", "assistant", "Earlier answer"),
+        TimelineMessage("old", "old-request", "user", "Earlier", is_final=False),
+        TimelineMessage("old", "old-answer", "assistant", "Earlier answer", is_final=True),
     ))
     initial = replace(initial, turns=(history, initial.turns[0]))
     artifact = PublishedArtifact(
@@ -136,7 +136,7 @@ def test_upserts_are_turn_local_and_embed_artifacts_without_a_second_payload() -
     completed = replace(initial, sequence=3, turns=(history, replace(
         initial.turns[1], status="completed", timeline=(
             *initial.turns[1].timeline, TimelineArtifact("turn", artifact),
-            TimelineMessage("turn", "final", "assistant", "Final"),
+            TimelineMessage("turn", "final", "assistant", "Final", is_final=True),
         ),
     )))
     events = collect((ConversationReadActive(initial), ConversationReadActive(completed)))

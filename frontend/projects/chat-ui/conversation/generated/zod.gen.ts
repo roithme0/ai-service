@@ -130,6 +130,7 @@ export const zTimelineIntermediateMessage = z.object({
  */
 export const zTimelineMessage = z.object({
     id: z.string(),
+    is_final: z.boolean(),
     kind: z.literal('message'),
     role: z.enum(['user', 'assistant']),
     text: z.string(),

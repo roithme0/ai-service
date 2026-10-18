@@ -14,8 +14,14 @@ import {
 import { ChatUiComponent } from './chat-ui.component';
 
 const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
-  { kind: 'text', id: 'user-1', role: 'user', text: '**literal user text**' },
-  { kind: 'text', id: 'assistant-1', role: 'assistant', text: '**formatted assistant text**' },
+  { kind: 'text', isFinal: false, id: 'user-1', role: 'user', text: '**literal user text**' },
+  {
+    kind: 'text',
+    isFinal: false,
+    id: 'assistant-1',
+    role: 'assistant',
+    text: '**formatted assistant text**',
+  },
 ];
 
 @Component({
@@ -72,7 +78,7 @@ describe('ChatUiComponent', () => {
         userMessageId: 'first-user',
         status: 'failed',
         content: [
-          { kind: 'text', id: 'first-user', role: 'user', text: 'First' },
+          { kind: 'text', isFinal: false, id: 'first-user', role: 'user', text: 'First' },
           { kind: 'failure', id: 'first-failure', text: 'Historical failure' },
         ],
       },
@@ -81,7 +87,7 @@ describe('ChatUiComponent', () => {
         userMessageId: 'second-user',
         status: 'failed',
         content: [
-          { kind: 'text', id: 'second-user', role: 'user', text: 'Second' },
+          { kind: 'text', isFinal: false, id: 'second-user', role: 'user', text: 'Second' },
           { kind: 'intermediate', id: 'detail', text: 'Checking' },
           { kind: 'tool', id: 'tool', name: 'check', status: 'failed' },
           {
@@ -125,7 +131,7 @@ describe('ChatUiComponent', () => {
     const fixture = createFixture([
       { kind: 'intermediate', id: 'update', text: '**Checking** <script>alert(1)</script>' },
       { kind: 'tool', id: 'tool', name: 'check', status: 'completed' },
-      { kind: 'text', id: 'final', role: 'assistant', text: 'Standalone result.' },
+      { kind: 'text', isFinal: true, id: 'final', role: 'assistant', text: 'Standalone result.' },
     ]);
     const element = fixtureElement(fixture);
     const rows = [...element.querySelector('.messages')!.children];
@@ -139,7 +145,7 @@ describe('ChatUiComponent', () => {
 
   it('renders compact tool rows and artifacts in host order with all four status labels', () => {
     const fixture = createFixture([
-      { kind: 'text', id: 'user', role: 'user', text: 'Show' },
+      { kind: 'text', isFinal: false, id: 'user', role: 'user', text: 'Show' },
       { kind: 'tool', id: 'tool-1', name: '<b>present</b>', status: 'completed' },
       { kind: 'artifact', id: 'artifact', type: 'json', headline: 'Result', payload: { value: 1 } },
       { kind: 'tool', id: 'tool-2', name: 'save', status: 'failed' },
@@ -171,7 +177,7 @@ describe('ChatUiComponent', () => {
     expect(element.querySelectorAll('.status--error')).toHaveLength(1);
     setContent(fixture, [
       ...fixture.componentInstance.turns()[0].content,
-      { kind: 'text', id: 'next-user', role: 'user', text: 'Continue' },
+      { kind: 'text', isFinal: false, id: 'next-user', role: 'user', text: 'Continue' },
     ]);
     fixture.componentRef.setInput('conversationStatus', null);
     fixture.detectChanges();
@@ -480,7 +486,13 @@ describe('ChatUiComponent', () => {
     expect(fixtureElement(fixture).querySelectorAll('.message')).toHaveLength(0);
 
     setContent(fixture, [
-      { kind: 'text', id: 'replacement', role: 'assistant', text: 'Replacement state' },
+      {
+        kind: 'text',
+        isFinal: false,
+        id: 'replacement',
+        role: 'assistant',
+        text: 'Replacement state',
+      },
     ] satisfies readonly ChatTextMessage[]);
     fixture.detectChanges();
 
@@ -500,7 +512,7 @@ describe('ChatUiComponent', () => {
     };
 
     setContent(fixture, [
-      { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
+      { kind: 'text', isFinal: false, id: 'user-1', role: 'user', text: 'Hello' },
     ] satisfies readonly ChatTextMessage[]);
     fixture.detectChanges();
     scrollToBottom();
@@ -520,8 +532,8 @@ describe('ChatUiComponent', () => {
     scrollToBottom();
 
     setContent(fixture, [
-      { kind: 'text', id: 'user-1', role: 'user', text: 'Hello' },
-      { kind: 'text', id: 'assistant-1', role: 'assistant', text: 'Hi' },
+      { kind: 'text', isFinal: false, id: 'user-1', role: 'user', text: 'Hello' },
+      { kind: 'text', isFinal: false, id: 'assistant-1', role: 'assistant', text: 'Hi' },
     ] satisfies readonly ChatTextMessage[]);
     fixture.componentRef.setInput('conversationStatus', null);
     fixture.detectChanges();
