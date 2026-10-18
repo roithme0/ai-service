@@ -14,6 +14,7 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
 import { renderAssistantMarkdown } from '../../assistant-markdown';
 import { registerChatIcons } from '../../chat-icons';
+import { ToolCallComponent } from '../tool-call/tool-call.component';
 import { ComposerComponent } from '../composer/composer.component';
 import { ArtifactCardComponent } from '../artifact-card/artifact-card.component';
 import { LoadingDotsComponent } from '../loading-dots/loading-dots.component';
@@ -21,13 +22,18 @@ import type {
   ChatArtifactRendererMap,
   ChatConversationStatus,
   ChatSubmission,
-  ChatToolStatus,
   ChatTurn,
 } from '../../models/chat-message';
 
 @Component({
   selector: 'ai-chat-ui',
-  imports: [ArtifactCardComponent, LoadingDotsComponent, MatIconModule, ComposerComponent],
+  imports: [
+    ArtifactCardComponent,
+    LoadingDotsComponent,
+    MatIconModule,
+    ComposerComponent,
+    ToolCallComponent,
+  ],
   templateUrl: './chat-ui.component.html',
   styleUrl: './chat-ui.component.scss',
 })
@@ -69,14 +75,6 @@ export class ChatUiComponent {
     return answers;
   });
   protected readonly renderAssistantMarkdown = renderAssistantMarkdown;
-  protected readonly toolStatusLabels: Record<ChatToolStatus, string> = {
-    completed: 'Abgeschlossen',
-    failed: 'Fehlgeschlagen',
-    not_executed: 'Nicht ausgeführt',
-    outcome_unknown: 'Ergebnis unklar',
-    requested: 'Angefragt',
-    running: 'Wird ausgeführt',
-  };
   private readonly revealedStatus = signal<ChatConversationStatus | null>(null);
   protected readonly statusVisible = computed(() => {
     const status = this.conversationStatus();

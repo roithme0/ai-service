@@ -15,18 +15,11 @@
               [renderer]="rendererFor(item.type)"
             />
           } @else if (item.kind === 'tool') {
-            <article
-              class="tool-call"
-              aria-label="Werkzeugaufruf"
+            <ai-chat-tool-call
+              [toolCall]="item"
               [attr.data-turn-start]="first ? turn.id : null"
               [hidden]="detailsHidden(turn.id)"
-            >
-              <span class="tool-call__label">
-                <mat-icon svgIcon="ai-chat:tool" aria-hidden="true" />
-                <span class="tool-call__name">{{ item.name }}</span>
-              </span>
-              <span class="tool-call__status">{{ toolStatusLabels[item.status] }}</span>
-            </article>
+            />
           } @else if (item.kind === 'failure') {
             @if (!lastTurn || !last || conversationStatus()?.kind !== 'error') {
               <article

@@ -17,13 +17,13 @@
   pointer-events: none;
 }
 
-.composer-surface,
+.surface,
 textarea,
 .send-button {
   pointer-events: auto;
 }
 
-.composer-surface {
+.surface {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -49,7 +49,7 @@ textarea {
   line-height: 1.35;
 }
 
-.composer-actions {
+.actions {
   display: flex;
   justify-content: flex-end;
   align-items: center;

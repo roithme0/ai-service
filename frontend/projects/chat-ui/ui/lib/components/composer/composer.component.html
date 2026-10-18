@@ -1,5 +1,5 @@
-<form class="composer" (submit)="submit($event)">
-  <div class="composer-surface">
+<form (submit)="submit($event)">
+  <div class="surface">
     <textarea
       #composer
       cdkTextareaAutosize
@@ -13,7 +13,7 @@
       (input)="updateDraft(composer.value)"
       (keydown)="submitFromKeyboard($event)"
     ></textarea>
-    <div class="composer-actions">
+    <div class="actions">
       <button
         class="send-button"
         matIconButton

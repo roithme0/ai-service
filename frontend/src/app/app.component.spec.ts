@@ -193,10 +193,10 @@ describe('Demo application', () => {
       );
       const rows = [...element.querySelector('.messages')!.children];
       expect(rows[1].matches('.message--intermediate')).toBe(true);
-      expect(rows[2].matches('.tool-call')).toBe(true);
+      expect(rows[2].matches('ai-chat-tool-call')).toBe(true);
       expect(rows[3].tagName).toBe('AI-CHAT-ARTIFACT-CARD');
       expect(rows[4].matches('.message--intermediate')).toBe(true);
-      expect(rows[5].querySelector('.tool-call__status')?.textContent).toContain('Fehlgeschlagen');
+      expect(rows[5].querySelector('.status')?.textContent).toContain('Fehlgeschlagen');
       expect(rows[6].matches('.message--assistant')).toBe(true);
       expect(element.querySelector('pre')?.textContent).toContain(text);
       expect(element.textContent).toContain('festen Skript ohne KI-Modell');

@@ -82,7 +82,7 @@ describe('ChatUiComponent', () => {
     fixture.componentRef.setInput('turns', [{ ...turn, status: 'completed' }]);
     fixture.detectChanges();
     expect(detail.hidden).toBe(true);
-    expect(element.querySelector<HTMLElement>('.tool-call')!.hidden).toBe(true);
+    expect(element.querySelector<HTMLElement>('ai-chat-tool-call')!.hidden).toBe(true);
     const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
     expect(toggle.type).toBe('button');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
@@ -106,7 +106,7 @@ describe('ChatUiComponent', () => {
       fixture.detectChanges();
       const element = fixtureElement(fixture);
       expect(element.querySelector<HTMLElement>('.message--intermediate')!.hidden).toBe(false);
-      expect(element.querySelector<HTMLElement>('.tool-call')!.hidden).toBe(false);
+      expect(element.querySelector<HTMLElement>('ai-chat-tool-call')!.hidden).toBe(false);
       expect(element.querySelector('.details-toggle')).toBeNull();
     },
   );
@@ -330,7 +330,7 @@ describe('ChatUiComponent', () => {
       'ARTICLE',
       'ARTICLE',
       'ARTICLE',
-      'ARTICLE',
+      'AI-CHAT-TOOL-CALL',
       'AI-CHAT-ARTIFACT-CARD',
       'ARTICLE',
     ]);
@@ -355,7 +355,7 @@ describe('ChatUiComponent', () => {
     expect(rows[0].getAttribute('aria-label')).toBe('Zwischenmeldung des Assistenten');
     expect(rows[0].querySelector('strong')?.textContent).toBe('Checking');
     expect(rows[0].querySelector('script')).toBeNull();
-    expect(rows[1].classList.contains('tool-call')).toBe(true);
+    expect(rows[1].matches('ai-chat-tool-call')).toBe(true);
     expect(rows[2].classList.contains('message--assistant')).toBe(true);
   });
 
@@ -371,12 +371,23 @@ describe('ChatUiComponent', () => {
     ]);
     const element = fixtureElement(fixture);
     expect([...element.querySelector('.messages')!.children].map((child) => child.tagName)).toEqual(
-      ['ARTICLE', 'ARTICLE', 'AI-CHAT-ARTIFACT-CARD', 'ARTICLE', 'ARTICLE', 'ARTICLE', 'ARTICLE'],
+      [
+        'ARTICLE',
+        'AI-CHAT-TOOL-CALL',
+        'AI-CHAT-ARTIFACT-CARD',
+        'AI-CHAT-TOOL-CALL',
+        'AI-CHAT-TOOL-CALL',
+        'AI-CHAT-TOOL-CALL',
+        'ARTICLE',
+      ],
     );
-    const rows = [...element.querySelectorAll('.tool-call')];
-    expect(rows.map((row) => row.querySelector('.tool-call__status')?.textContent?.trim())).toEqual(
-      ['Abgeschlossen', 'Fehlgeschlagen', 'Ergebnis unklar', 'Nicht ausgeführt'],
-    );
+    const rows = [...element.querySelectorAll('ai-chat-tool-call')];
+    expect(rows.map((row) => row.querySelector('.status')?.textContent?.trim())).toEqual([
+      'Abgeschlossen',
+      'Fehlgeschlagen',
+      'Ergebnis unklar',
+      'Nicht ausgeführt',
+    ]);
     expect(
       rows.every(
         (row) => row.querySelector('mat-icon')?.getAttribute('svgIcon') === 'ai-chat:tool',
@@ -649,8 +660,8 @@ describe('ChatUiComponent', () => {
 
   it('renders only the send action inside the composer surface', () => {
     const fixture = createFixture([]);
-    const surface = fixtureElement(fixture).querySelector('.composer-surface') as HTMLElement;
-    const actions = surface.querySelector('.composer-actions') as HTMLElement;
+    const surface = fixtureElement(fixture).querySelector('.surface') as HTMLElement;
+    const actions = surface.querySelector('.actions') as HTMLElement;
 
     expect(surface.querySelector('textarea')).not.toBeNull();
     expect(actions.querySelectorAll('button')).toHaveLength(1);
