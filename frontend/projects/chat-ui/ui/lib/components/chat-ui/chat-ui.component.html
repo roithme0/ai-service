@@ -22,13 +22,11 @@
             />
           } @else if (item.kind === 'failure') {
             @if (!lastTurn || !last || conversationStatus()?.kind !== 'error') {
-              <article
-                class="status status--error"
+              <ai-chat-status
+                [status]="{ kind: 'error', placement: 'assistant', message: item.text }"
                 aria-label="Fehlgeschlagene Antwort"
                 [attr.data-turn-start]="first ? turn.id : null"
-              >
-                <p>{{ item.text }}</p>
-              </article>
+              />
             }
           } @else if (item.kind === 'intermediate') {
             <article
@@ -74,38 +72,11 @@
       }
 
       @if (conversationStatus(); as status) {
-        <article
-          class="status"
-          [class.status--error]="status.kind === 'error'"
-          [class.status--assistant]="status.placement === 'assistant'"
-          [class.status--delayed]="status.kind === 'loading' && status.reveal === 'delayed'"
-        >
-          @if (statusVisible()) {
-            @for (label of [status]; track label.message) {
-              <div
-                class="status-content"
-                [class.status-content--fade]="
-                  status.kind === 'loading' && status.placement === 'conversation'
-                "
-              >
-                @if (status.kind === 'loading' && status.placement === 'assistant') {
-                  <ai-chat-loading-dots class="loading-dots" [label]="status.message" />
-                } @else {
-                  <p>{{ status.message }}</p>
-                }
-                @if (status.action; as action) {
-                  <button
-                    type="button"
-                    class="status-action"
-                    (click)="statusActionTriggered.emit(action.id)"
-                  >
-                    {{ action.label }}
-                  </button>
-                }
-              </div>
-            }
-          }
-        </article>
+        <ai-chat-status
+          [status]="status"
+          (actionTriggered)="statusActionTriggered.emit($event)"
+          (contentRevealed)="requestHistoryScroll()"
+        />
       }
     </div>
   </div>

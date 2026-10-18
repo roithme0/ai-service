@@ -17,7 +17,7 @@ import { registerChatIcons } from '../../chat-icons';
 import { ToolCallComponent } from '../tool-call/tool-call.component';
 import { ComposerComponent } from '../composer/composer.component';
 import { ArtifactCardComponent } from '../artifact-card/artifact-card.component';
-import { LoadingDotsComponent } from '../loading-dots/loading-dots.component';
+import { StatusComponent } from '../status/status.component';
 import type {
   ChatArtifactRendererMap,
   ChatConversationStatus,
@@ -29,7 +29,7 @@ import type {
   selector: 'ai-chat-ui',
   imports: [
     ArtifactCardComponent,
-    LoadingDotsComponent,
+    StatusComponent,
     MatIconModule,
     ComposerComponent,
     ToolCallComponent,
@@ -75,14 +75,6 @@ export class ChatUiComponent {
     return answers;
   });
   protected readonly renderAssistantMarkdown = renderAssistantMarkdown;
-  private readonly revealedStatus = signal<ChatConversationStatus | null>(null);
-  protected readonly statusVisible = computed(() => {
-    const status = this.conversationStatus();
-    return (
-      status?.kind !== 'loading' || status.reveal !== 'delayed' || this.revealedStatus() === status
-    );
-  });
-
   protected rendererFor(type: string) {
     return this.artifactRenderers()[type] ?? null;
   }
@@ -118,7 +110,6 @@ export class ChatUiComponent {
     effect(() => {
       this.turns();
       this.conversationStatus();
-      this.statusVisible();
       this.scrollHistoryToBottom = true;
     });
     afterEveryRender(() => {
@@ -131,13 +122,10 @@ export class ChatUiComponent {
         history.scrollTop = history.scrollHeight;
       }
     });
-    effect((onCleanup) => {
-      const status = this.conversationStatus();
-      this.revealedStatus.set(null);
-      if (status?.kind !== 'loading' || status.reveal !== 'delayed') return;
-      const timer = setTimeout(() => this.revealedStatus.set(status), 300);
-      onCleanup(() => clearTimeout(timer));
-    });
+  }
+
+  protected requestHistoryScroll(): void {
+    this.scrollHistoryToBottom = true;
   }
 
   protected detailsExpanded(turnId: string): boolean {

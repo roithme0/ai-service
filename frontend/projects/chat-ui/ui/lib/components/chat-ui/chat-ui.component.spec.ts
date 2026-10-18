@@ -146,9 +146,9 @@ describe('ChatUiComponent', () => {
     expect(element.querySelector('.answer-actions')?.previousElementSibling?.textContent).toBe(
       'Answer',
     );
-    const visibleText = [...element.querySelectorAll<HTMLElement>('article:not([hidden])')].map(
-      (item) => item.textContent,
-    );
+    const visibleText = [
+      ...element.querySelectorAll<HTMLElement>('article:not([hidden]), ai-chat-status'),
+    ].map((item) => item.textContent);
     expect(visibleText).toEqual([
       'Request',
       'Answer',
@@ -327,12 +327,12 @@ describe('ChatUiComponent', () => {
     const rows = [...element.querySelector('.messages')!.children];
     expect(rows.map((row) => row.tagName)).toEqual([
       'ARTICLE',
-      'ARTICLE',
+      'AI-CHAT-STATUS',
       'ARTICLE',
       'ARTICLE',
       'AI-CHAT-TOOL-CALL',
       'AI-CHAT-ARTIFACT-CARD',
-      'ARTICLE',
+      'AI-CHAT-STATUS',
     ]);
     expect(rows[0].textContent).toContain('First');
     expect(rows[1].textContent).toContain('Historical failure');
@@ -378,7 +378,7 @@ describe('ChatUiComponent', () => {
         'AI-CHAT-TOOL-CALL',
         'AI-CHAT-TOOL-CALL',
         'AI-CHAT-TOOL-CALL',
-        'ARTICLE',
+        'AI-CHAT-STATUS',
       ],
     );
     const rows = [...element.querySelectorAll('ai-chat-tool-call')];
@@ -401,14 +401,14 @@ describe('ChatUiComponent', () => {
       message: 'Current failure',
     });
     fixture.detectChanges();
-    expect(element.querySelectorAll('.status--error')).toHaveLength(1);
+    expect(element.querySelectorAll('ai-chat-status.error')).toHaveLength(1);
     setContent(fixture, [
       ...fixture.componentInstance.turns()[0].content,
       { kind: 'text', isFinal: false, id: 'next-user', role: 'user', text: 'Continue' },
     ]);
     fixture.componentRef.setInput('conversationStatus', null);
     fixture.detectChanges();
-    expect(element.querySelectorAll('.status--error')).toHaveLength(1);
+    expect(element.querySelectorAll('ai-chat-status.error')).toHaveLength(1);
   });
 
   it('uses a matching renderer and renders explicit JSON safely', () => {
@@ -786,21 +786,21 @@ describe('ChatUiComponent', () => {
       reveal: 'delayed',
     });
     fixture.detectChanges();
-    expect(fixtureElement(fixture).querySelector('.status--delayed')).not.toBeNull();
-    expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
+    expect(fixtureElement(fixture).querySelector('ai-chat-status.delayed')).not.toBeNull();
+    expect(fixtureElement(fixture).querySelector('.content')).toBeNull();
     expect(
       (fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement).disabled,
     ).toBe(true);
     vi.advanceTimersByTime(299);
     fixture.detectChanges();
-    expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
+    expect(fixtureElement(fixture).querySelector('.content')).toBeNull();
     vi.advanceTimersByTime(1);
     fixture.detectChanges();
     expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
       'Sending',
     );
-    expect(fixtureElement(fixture).querySelector('.status p')).toBeNull();
-    const sendingLabel = fixtureElement(fixture).querySelector('.status-content');
+    expect(fixtureElement(fixture).querySelector('ai-chat-status p')).toBeNull();
+    const sendingLabel = fixtureElement(fixture).querySelector('.content');
     fixture.componentRef.setInput('conversationStatus', {
       kind: 'loading',
       message: 'Generating',
@@ -810,8 +810,8 @@ describe('ChatUiComponent', () => {
     expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
       'Generating',
     );
-    const generatingLabel = fixtureElement(fixture).querySelector('.status-content');
-    expect(generatingLabel!.classList.contains('status-content--fade')).toBe(false);
+    const generatingLabel = fixtureElement(fixture).querySelector('.content');
+    expect(generatingLabel!.classList.contains('fade')).toBe(false);
     expect(generatingLabel).not.toBe(sendingLabel);
   });
 
@@ -835,10 +835,12 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
-    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain('Failed');
+    expect(fixtureElement(fixture).querySelector('ai-chat-status')?.textContent).toContain(
+      'Failed',
+    );
     fixture.componentRef.setInput('conversationStatus', sending);
     fixture.detectChanges();
-    expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
+    expect(fixtureElement(fixture).querySelector('.content')).toBeNull();
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
     expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
@@ -856,7 +858,7 @@ describe('ChatUiComponent', () => {
     });
     fixture.detectChanges();
     expect(fixtureElement(fixture).querySelector('.loading-dots')).toBeNull();
-    expect(fixtureElement(fixture).querySelector('.status p')?.textContent).toBe(
+    expect(fixtureElement(fixture).querySelector('ai-chat-status p')?.textContent).toBe(
       'Starting conversation',
     );
   });
@@ -886,14 +888,12 @@ describe('ChatUiComponent', () => {
       action: { id: 'retry-turn', label: 'Erneut versuchen' },
     });
     fixture.detectChanges();
-    (fixtureElement(fixture).querySelector('.status-action') as HTMLButtonElement).click();
+    (fixtureElement(fixture).querySelector('.action') as HTMLButtonElement).click();
 
     expect(actionEmit).toHaveBeenCalledWith('retry-turn');
-    expect(
-      fixtureElement(fixture)
-        .querySelector('.status-content')!
-        .classList.contains('status-content--fade'),
-    ).toBe(false);
+    expect(fixtureElement(fixture).querySelector('.content')!.classList.contains('fade')).toBe(
+      false,
+    );
   });
 });
 

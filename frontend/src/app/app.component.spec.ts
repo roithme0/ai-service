@@ -108,11 +108,9 @@ describe('Demo application', () => {
       const chat = fixture.debugElement.query(By.directive(ChatUiComponent))
         .componentInstance as ChatUiComponent;
       expect(chat.conversationStatus()?.message).toBe('Unterhaltung wird gestartet …');
-      expect(
-        fixtureElement(fixture)
-          .querySelector('.status-content')!
-          .classList.contains('status-content--fade'),
-      ).toBe(true);
+      expect(fixtureElement(fixture).querySelector('.content')!.classList.contains('fade')).toBe(
+        true,
+      );
       expect(chat.composerDisabled()).toBe(true);
       expect(fetchMock).not.toHaveBeenCalled();
       await fixture.whenStable();
@@ -266,13 +264,13 @@ describe('Demo application', () => {
       },
       { timeout: 2500 },
     );
-    const action = fixtureElement(fixture).querySelector('.status-action') as HTMLButtonElement;
+    const action = fixtureElement(fixture).querySelector('.action') as HTMLButtonElement;
     const element = fixtureElement(fixture);
     expect(element.querySelector('.message--intermediate')?.textContent).toContain(
       'This update remains visible after generation fails.',
     );
     expect(element.querySelector('.message--assistant')).toBeNull();
-    expect(element.querySelectorAll('.status--error')).toHaveLength(1);
+    expect(element.querySelectorAll('ai-chat-status.error')).toHaveLength(1);
     expect(action.textContent).toContain('Demo-Aktion (ohne Funktion)');
     action.click();
     fixture.detectChanges();
