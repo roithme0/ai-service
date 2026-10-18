@@ -10,7 +10,7 @@ import {
   type ChatArtifactRenderContext,
   type ChatContent,
   type ChatTextMessage,
-} from './chat-message';
+} from '../../models/chat-message';
 import { ChatUiComponent } from './chat-ui.component';
 
 const INITIAL_MESSAGES: readonly ChatTextMessage[] = [

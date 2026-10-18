@@ -1,4 +1,4 @@
-import type { JsonValue } from './chat-message';
+import type { JsonValue } from './models/chat-message';
 
 export interface ChatArtifactCapability {
   readonly type: string;

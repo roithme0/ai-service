@@ -1,4 +1,4 @@
-export { ChatUiComponent } from './lib/chat-ui.component';
+export { ChatUiComponent } from './lib/components/chat-ui/chat-ui.component';
 export type {
   ChatArtifact,
   ChatArtifactRenderContext,
@@ -16,7 +16,7 @@ export type {
   ChatTurnFailure,
   JsonPrimitive,
   JsonValue,
-} from './lib/chat-message';
-export { artifactRenderer } from './lib/chat-message';
+} from './lib/models/chat-message';
+export { artifactRenderer } from './lib/models/chat-message';
 export { JSON_ARTIFACT_CAPABILITY } from './lib/artifact-capabilities';
 export type { ChatArtifactCapability } from './lib/artifact-capabilities';

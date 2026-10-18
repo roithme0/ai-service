@@ -78,7 +78,7 @@ Tool-specific leading icons and user-friendly replacements for technical tool na
 
 ## Integration Impact
 
-`frontend/projects/chat-ui/ui/lib/chat-ui.component.*` currently renders a flat `ChatContent` list. `chat-message.ts` distinguishes intermediate messages, tools, answers, artifacts and failures, but does not expose turn identity or per-turn completion state to the rendering component.
+`frontend/projects/chat-ui/ui/lib/components/chat-ui/chat-ui.component.*` currently renders a flat `ChatContent` list. `chat-message.ts` distinguishes intermediate messages, tools, answers, artifacts and failures, but does not expose turn identity or per-turn completion state to the rendering component.
 
 The backend timeline already provides turn IDs. The conversation mapper in `frontend/projects/chat-ui/conversation/src/conversation-controller.ts` currently drops that association when producing UI content. A reliable grouping model needs to retain turn identity and expose enough lifecycle information for the chosen interaction rules. A backend contract change is not yet established as necessary.
 

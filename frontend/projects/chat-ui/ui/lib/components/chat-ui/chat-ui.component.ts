@@ -15,17 +15,17 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
 import { TextFieldModule } from '@angular/cdk/text-field';
-import { renderAssistantMarkdown } from './assistant-markdown';
-import { registerChatIcons } from './chat-icons';
-import { ArtifactCardComponent } from './artifact-card.component';
-import { LoadingDotsComponent } from './loading-dots.component';
+import { renderAssistantMarkdown } from '../../assistant-markdown';
+import { registerChatIcons } from '../../chat-icons';
+import { ArtifactCardComponent } from '../artifact-card/artifact-card.component';
+import { LoadingDotsComponent } from '../loading-dots/loading-dots.component';
 import type {
   ChatArtifactRendererMap,
   ChatContent,
   ChatConversationStatus,
   ChatSubmission,
   ChatToolStatus,
-} from './chat-message';
+} from '../../models/chat-message';
 
 @Component({
   selector: 'ai-chat-ui',
