@@ -1,0 +1,28 @@
+<form class="composer" (submit)="submit($event)">
+  <div class="composer-surface">
+    <textarea
+      #composer
+      cdkTextareaAutosize
+      cdkAutosizeMinRows="1"
+      cdkAutosizeMaxRows="5"
+      [placeholder]="placeholder()"
+      aria-label="Nachricht"
+      enterkeyhint="send"
+      [value]="draft()"
+      [disabled]="disabled()"
+      (input)="updateDraft(composer.value)"
+      (keydown)="submitFromKeyboard($event)"
+    ></textarea>
+    <div class="composer-actions">
+      <button
+        class="send-button"
+        matIconButton
+        type="submit"
+        aria-label="Nachricht senden"
+        [disabled]="disabled() || draft().trim() === ''"
+      >
+        <mat-icon svgIcon="ai-chat:send" aria-hidden="true" />
+      </button>
+    </div>
+  </div>
+</form>

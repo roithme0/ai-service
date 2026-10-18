@@ -117,32 +117,10 @@
     </div>
   </div>
 
-  <form class="composer" (submit)="submit($event)">
-    <div class="composer-surface">
-      <textarea
-        #composer
-        cdkTextareaAutosize
-        cdkAutosizeMinRows="1"
-        cdkAutosizeMaxRows="5"
-        [placeholder]="composerPlaceholder()"
-        aria-label="Nachricht"
-        enterkeyhint="send"
-        [value]="draft()"
-        [disabled]="composerDisabled()"
-        (input)="updateDraft(composer.value)"
-        (keydown)="submitFromKeyboard($event)"
-      ></textarea>
-      <div class="composer-actions">
-        <button
-          class="send-button"
-          matIconButton
-          type="submit"
-          aria-label="Nachricht senden"
-          [disabled]="composerDisabled() || draft().trim() === ''"
-        >
-          <mat-icon svgIcon="ai-chat:send" aria-hidden="true" />
-        </button>
-      </div>
-    </div>
-  </form>
+  <ai-chat-composer
+    [disabled]="composerDisabled()"
+    [focusOnReady]="focusOnReady()"
+    [placeholder]="composerPlaceholder()"
+    (messageSubmitted)="messageSubmitted.emit($event)"
+  />
 </section>
