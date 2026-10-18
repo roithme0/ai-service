@@ -51,8 +51,17 @@
         >
           @if (statusVisible()) {
             @for (label of [status]; track label.message) {
-              <div class="status-content" [class.status-content--fade]="status.kind === 'loading'">
-                <p>{{ status.message }}</p>
+              <div
+                class="status-content"
+                [class.status-content--fade]="
+                  status.kind === 'loading' && status.placement === 'conversation'
+                "
+              >
+                @if (status.kind === 'loading' && status.placement === 'assistant') {
+                  <ai-chat-loading-dots class="loading-dots" [label]="status.message" />
+                } @else {
+                  <p>{{ status.message }}</p>
+                }
                 @if (status.action; as action) {
                   <button
                     type="button"

@@ -126,7 +126,7 @@ describe('Demo application', () => {
       const submission: ChatSubmission = { text: 'Any text', acknowledge };
       chat.messageSubmitted.emit(submission);
       fixture.detectChanges();
-      expect(chat.conversationStatus()?.message).toBe('Nachricht wird gesendet …');
+      expect(chat.conversationStatus()).toBeNull();
       expect(chat.composerDisabled()).toBe(true);
       expect(acknowledge).not.toHaveBeenCalled();
       expect(fetchMock).toHaveBeenCalledTimes(1);

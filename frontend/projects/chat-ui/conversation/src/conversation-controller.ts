@@ -94,7 +94,7 @@ export class ConversationController {
     this.setState({
       ...this.stateValue,
       composerDisabled: true,
-      status: { ...loading('Nachricht wird gesendet …', 'assistant'), reveal: 'delayed' },
+      status: null,
     });
     try {
       const accepted = await this.transport.appendMessage(sessionId, text);
@@ -138,6 +138,8 @@ export class ConversationController {
       status: loading('Antwort wird erstellt …', 'assistant'),
     });
     let turnId: string;
+    let responseStarted = false;
+    let closing = false;
     try {
       turnId = (await this.transport.generateTurn(sessionId)).turn_id;
     } catch (error: unknown) {
@@ -147,9 +149,19 @@ export class ConversationController {
           const snapshot = await this.transport.readSession(sessionId);
           if (epoch !== this.epoch) return;
           this.confirmedMessages = snapshot.messages;
+          const presented = presentTimeline(
+            snapshot.timeline,
+            snapshot.artifacts,
+            this.mapArtifact,
+          );
+          responseStarted =
+            snapshot.active_turn_id !== null &&
+            presented.responseTurnIds.has(snapshot.active_turn_id);
+          closing = snapshot.active_turn_status === 'closing';
           this.setState({
             ...this.stateValue,
-            content: presentSnapshot(snapshot, this.mapArtifact),
+            content: presented.content,
+            status: closing || responseStarted ? null : this.stateValue.status,
           });
           if (snapshot.active_turn_id !== null) {
             turnId = snapshot.active_turn_id;
@@ -178,7 +190,6 @@ export class ConversationController {
     >();
     const artifacts = new Map<string, ArtifactResponse>();
     let initialized = false;
-    let closing = false;
     let latestSequence = -1;
     try {
       for await (const event of this.transport.observeTurn(sessionId, turnId, observation.signal)) {
@@ -257,10 +268,13 @@ export class ConversationController {
         const timeline = [...items.values()]
           .sort((a, b) => a.order - b.order)
           .map((entry) => entry.item);
+        const presented = presentTimeline(timeline, [...artifacts.values()], this.mapArtifact);
+        responseStarted ||= presented.responseTurnIds.has(turnId);
         this.setState({
-          content: presentTimeline(timeline, [...artifacts.values()], this.mapArtifact),
+          content: presented.content,
           composerDisabled: true,
-          status: closing ? null : loading('Antwort wird erstellt …', 'assistant'),
+          status:
+            closing || responseStarted ? null : loading('Antwort wird erstellt …', 'assistant'),
         });
       }
       if (epoch === this.epoch) this.observationLost();
@@ -463,16 +477,20 @@ function presentSnapshot(
   snapshot: SessionSnapshotResponse,
   mapArtifact: ArtifactMapper,
 ): readonly ChatContent[] {
-  return presentTimeline(snapshot.timeline, snapshot.artifacts, mapArtifact);
+  return presentTimeline(snapshot.timeline, snapshot.artifacts, mapArtifact).content;
 }
 
 function presentTimeline(
   timeline: SessionSnapshotResponse['timeline'],
   artifacts: readonly ArtifactResponse[],
   mapArtifact: ArtifactMapper,
-): readonly ChatContent[] {
+): { readonly content: readonly ChatContent[]; readonly responseTurnIds: ReadonlySet<string> } {
   const envelopes = new Map(artifacts.map((artifact) => [artifact.artifact_id, artifact]));
-  return timeline.flatMap((item): ChatContent[] => {
+  const responseTurnIds = new Set<string>();
+  const content = timeline.flatMap((item): ChatContent[] => {
+    if (item.kind !== 'artifact' && (item.kind !== 'message' || item.role === 'assistant')) {
+      responseTurnIds.add(item.turn_id);
+    }
     switch (item.kind) {
       case 'message':
         return [{ kind: 'text', id: item.id, role: item.role, text: item.text }];
@@ -485,6 +503,7 @@ function presentTimeline(
       case 'artifact': {
         const envelope = envelopes.get(item.artifact_id);
         const artifact = envelope === undefined ? null : mapArtifact(envelope);
+        if (artifact !== null) responseTurnIds.add(item.turn_id);
         return artifact === null ? [] : [artifact];
       }
       case 'failure':
@@ -497,6 +516,7 @@ function presentTimeline(
         ];
     }
   });
+  return { content, responseTurnIds };
 }
 
 function itemIdentity(item: SessionSnapshotResponse['timeline'][number]): string {

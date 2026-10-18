@@ -18,6 +18,7 @@ import { TextFieldModule } from '@angular/cdk/text-field';
 import { renderAssistantMarkdown } from './assistant-markdown';
 import { registerChatIcons } from './chat-icons';
 import { ArtifactCardComponent } from './artifact-card.component';
+import { LoadingDotsComponent } from './loading-dots.component';
 import type {
   ChatArtifactRendererMap,
   ChatContent,
@@ -28,7 +29,13 @@ import type {
 
 @Component({
   selector: 'ai-chat-ui',
-  imports: [ArtifactCardComponent, MatButtonModule, MatIconModule, TextFieldModule],
+  imports: [
+    ArtifactCardComponent,
+    LoadingDotsComponent,
+    MatButtonModule,
+    MatIconModule,
+    TextFieldModule,
+  ],
   templateUrl: './chat-ui.component.html',
   styleUrl: './chat-ui.component.scss',
 })

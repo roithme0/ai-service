@@ -457,7 +457,7 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
-    expect(fixtureElement(fixture).querySelector('.status-content')?.textContent).toContain(
+    expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
       'Sending',
     );
     scrollToBottom();
@@ -479,7 +479,7 @@ describe('ChatUiComponent', () => {
     scrollToBottom();
   });
 
-  it('reveals a slow sending label after 300 ms and replaces it immediately', () => {
+  it('reveals accessible sending dots after 300 ms and updates their label immediately', () => {
     vi.useFakeTimers();
     const fixture = createFixture([]);
     fixture.componentRef.setInput('composerDisabled', true);
@@ -500,9 +500,10 @@ describe('ChatUiComponent', () => {
     expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
     vi.advanceTimersByTime(1);
     fixture.detectChanges();
-    expect(fixtureElement(fixture).querySelector('.status-content--fade')?.textContent).toContain(
+    expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
       'Sending',
     );
+    expect(fixtureElement(fixture).querySelector('.status p')).toBeNull();
     const sendingLabel = fixtureElement(fixture).querySelector('.status-content');
     fixture.componentRef.setInput('conversationStatus', {
       kind: 'loading',
@@ -510,9 +511,11 @@ describe('ChatUiComponent', () => {
       placement: 'assistant',
     });
     fixture.detectChanges();
-    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain('Generating');
+    expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
+      'Generating',
+    );
     const generatingLabel = fixtureElement(fixture).querySelector('.status-content');
-    expect(generatingLabel!.classList.contains('status-content--fade')).toBe(true);
+    expect(generatingLabel!.classList.contains('status-content--fade')).toBe(false);
     expect(generatingLabel).not.toBe(sendingLabel);
   });
 
@@ -542,8 +545,24 @@ describe('ChatUiComponent', () => {
     expect(fixtureElement(fixture).querySelector('.status-content')).toBeNull();
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
-    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain('Sending');
+    expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
+      'Sending',
+    );
     fixture.destroy();
+  });
+
+  it('keeps conversation startup as text without response dots', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      message: 'Starting conversation',
+      placement: 'conversation',
+    });
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('.loading-dots')).toBeNull();
+    expect(fixtureElement(fixture).querySelector('.status p')?.textContent).toBe(
+      'Starting conversation',
+    );
   });
 
   it('disables submission and renders host-controlled loading and recovery states', () => {
@@ -559,7 +578,7 @@ describe('ChatUiComponent', () => {
     expect(
       (fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement).disabled,
     ).toBe(true);
-    expect(fixtureElement(fixture).querySelector('.status')?.textContent).toContain(
+    expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
       'Antwort wird erstellt …',
     );
 

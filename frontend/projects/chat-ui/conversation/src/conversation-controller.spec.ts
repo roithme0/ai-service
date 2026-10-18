@@ -75,6 +75,90 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 }
 
 describe('live conversation controller', () => {
+  it('shows no sending indicator and starts dots only with the accepted user message in history', async () => {
+    const transport = new FakeTransport();
+    const accepted = deferred<UserMessageResponse>();
+    transport.appendMessage.mockReturnValue(accepted.promise);
+    transport.observeTurn.mockReturnValue(stream([initial(), terminal()]));
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    const acknowledge = vi.fn(() => {
+      expect(controller.state.content).toContainEqual(
+        expect.objectContaining({ role: 'user', text: 'Hello' }),
+      );
+      expect(controller.state.status).toMatchObject({ kind: 'loading', placement: 'assistant' });
+      expect(controller.state.status).not.toHaveProperty('reveal');
+    });
+    const submission = controller.submit('Hello', acknowledge);
+    expect(controller.state.status).toBeNull();
+    expect(controller.state.content).toEqual([]);
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(acknowledge).not.toHaveBeenCalled();
+    expect(transport.generateTurn).not.toHaveBeenCalled();
+    accepted.resolve({ role: 'user', text: 'Hello', turn_id: null });
+    await submission;
+    expect(acknowledge).toHaveBeenCalledOnce();
+    expect(controller.state.status).toBeNull();
+    expect(controller.state.composerDisabled).toBe(false);
+  });
+
+  it.each(['intermediate', 'tool', 'artifact', 'message'] as const)(
+    'hides loading on the first visible %s, ignoring previous-turn content',
+    async (kind) => {
+      const transport = new FakeTransport();
+      const controller = new ConversationController(transport, () => undefined);
+      transport.observeTurn.mockImplementation(async function* () {
+        yield await Promise.resolve<StreamEvent>({
+          kind: 'snapshot',
+          turn_id: 't',
+          snapshot: snapshot({
+            timeline: [
+              { kind: 'intermediate', turn_id: 'old', id: 'old', text: 'Previous turn' },
+              ...snapshot().timeline,
+            ],
+          }),
+        });
+        expect(controller.state.status?.kind).toBe('loading');
+        const item: SessionSnapshotResponse['timeline'][number] =
+          kind === 'intermediate'
+            ? { kind, turn_id: 't', id: 'first', text: 'Checking' }
+            : kind === 'tool'
+              ? { kind, turn_id: 't', execution_id: 'first', name: 'check', status: 'requested' }
+              : kind === 'artifact'
+                ? { kind, turn_id: 't', artifact_id: 'first' }
+                : { kind, turn_id: 't', id: 'first', role: 'assistant', text: 'Done' };
+        yield {
+          kind: 'upsert',
+          turn_id: 't',
+          sequence: 2,
+          order: 2,
+          identity: kind === 'tool' ? 'tool-first' : 'first',
+          item,
+          artifact:
+            kind === 'artifact'
+              ? {
+                  artifact_id: 'first',
+                  turn_id: 't',
+                  type: 'json',
+                  order: 2,
+                  created_at: '2026-10-18T10:00:00Z',
+                  payload: { title: 'Data', payload: 1 },
+                }
+              : null,
+        };
+        expect(controller.state.status).toBeNull();
+        expect(controller.state.composerDisabled).toBe(true);
+        yield { ...tool('running', 3), order: 3 };
+        expect(controller.state.status).toBeNull();
+        yield terminal();
+      });
+      await controller.start();
+      await controller.submit('Hello', vi.fn());
+      expect(transport.observeTurn).toHaveBeenCalledOnce();
+      expect(controller.state.composerDisabled).toBe(false);
+    },
+  );
+
   it.each(['event', 'snapshot'] as const)(
     'hides progress on backend closing %s and keeps submission disabled until terminal failure',
     async (source) => {
@@ -119,6 +203,57 @@ describe('live conversation controller', () => {
       expect(controller.state.content[0]).toMatchObject({ text: 'Retained answer' });
     },
   );
+
+  it('hides dots for snapshot output and starts waiting again on the next turn', async () => {
+    const transport = new FakeTransport();
+    transport.generateTurn.mockResolvedValueOnce({ kind: 'accepted', turn_id: 'first' });
+    transport.generateTurn.mockResolvedValueOnce({ kind: 'accepted', turn_id: 'second' });
+    const statuses: (string | null)[] = [];
+    const controller = new ConversationController(transport, () => undefined);
+    transport.observeTurn.mockImplementation(async function* (_id, turnId) {
+      statuses.push(controller.state.status?.kind ?? null);
+      yield await Promise.resolve<StreamEvent>({
+        kind: 'snapshot',
+        turn_id: turnId,
+        snapshot: snapshot({
+          active_turn_id: turnId,
+          timeline: [
+            { kind: 'intermediate', id: turnId, turn_id: turnId, text: 'Already working' },
+          ],
+        }),
+      });
+      statuses.push(controller.state.status?.kind ?? null);
+      yield { ...terminal(), turn_id: turnId };
+    });
+    await controller.start();
+    await controller.submit('One', vi.fn());
+    await controller.submit('Two', vi.fn());
+    expect(statuses).toEqual(['loading', null, 'loading', null]);
+  });
+
+  it('keeps loading hidden when start recovery already reveals turn output', async () => {
+    const transport = new FakeTransport();
+    transport.generateTurn.mockRejectedValue(new ConversationNetworkError('offline'));
+    transport.readSession.mockResolvedValue(
+      snapshot({
+        timeline: [
+          ...snapshot().timeline,
+          { kind: 'intermediate', id: 'working', turn_id: 't', text: 'Working' },
+        ],
+      }),
+    );
+    const statuses: (string | null)[] = [];
+    const controller = new ConversationController(transport, () => undefined);
+    transport.observeTurn.mockImplementation(async function* () {
+      statuses.push(controller.state.status?.kind ?? null);
+      yield await Promise.resolve(initial());
+      statuses.push(controller.state.status?.kind ?? null);
+      yield terminal();
+    });
+    await controller.start();
+    await controller.submit('Hello', vi.fn());
+    expect(statuses).toEqual([null, null]);
+  });
 
   it('shows complete messages while busy, preserves all styles/output on failure, and upserts without regression', async () => {
     const transport = new FakeTransport();
@@ -192,7 +327,7 @@ describe('live conversation controller', () => {
     const submission = controller.submit('Hello', vi.fn());
     await visible.promise;
     expect(controller.state.composerDisabled).toBe(true);
-    expect(controller.state.status?.kind).toBe('loading');
+    expect(controller.state.status).toBeNull();
     expect(controller.state.content.map((item) => item.kind)).toEqual([
       'text',
       'intermediate',
@@ -568,13 +703,20 @@ describe('live conversation controller', () => {
           payload: { value: id },
         },
       });
-    transport.observeTurn.mockReturnValue(stream([...events, terminal()]));
+    const statuses: (string | null)[] = [];
+    transport.observeTurn.mockImplementation(async function* () {
+      for (const event of events) {
+        yield await Promise.resolve(event);
+        statuses.push(controller.state.status?.kind ?? null);
+      }
+      yield terminal();
+    });
     const mapper = vi.fn((artifact: import('../generated/types.gen').ArtifactResponse) =>
       artifact.artifact_id === 'omitted'
         ? null
         : {
             kind: 'artifact' as const,
-            id: artifact.artifact_id,
+            id: `custom-${artifact.artifact_id}`,
             type: 'custom',
             headline: 'Mapped',
             payload: { value: 'visible' },
@@ -585,8 +727,9 @@ describe('live conversation controller', () => {
     await controller.submit('Hello', vi.fn());
     expect(controller.state.content.map((item) => item.id)).toEqual([
       'confirmed-0-user',
-      'visible',
+      'custom-visible',
     ]);
+    expect(statuses).toEqual(['loading', 'loading', null]);
     expect(mapper).toHaveBeenCalledWith(
       expect.objectContaining({ artifact_id: 'visible', order: 7, payload: { value: 'visible' } }),
     );

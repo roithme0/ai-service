@@ -10,7 +10,7 @@ For each narrow slice, discuss and agree on its details, update this concept as 
 
 The first agreed slice covers the send icon and detail typography. Register the supplied outline SVG through the existing Angular Material `MatIconRegistry` and render it through the existing `ai-chat:send` control. Use `currentColor` to inherit the themed button color, including its disabled state. Keep the existing accessible button label; the SVG is decorative. Apply primary assistant text styling to intermediate messages and tool names, retaining smaller secondary styling for tool states. Existing technical tool names and the shared tool icon remain in use. Loading and detail disclosure belong to subsequent slices.
 
-The first slice is implemented and code-reviewed. Formatting, lint, 13 tooling tests, 4 application tests and 100 chat UI tests pass. The application suite required a retry with broader process permissions after a worker-start timeout. Visual acceptance remains for user review; longer primary-size tool names may wrap more often.
+The first slice is implemented and code-reviewed. Formatting, lint, 13 tooling tests, 4 application tests and 100 chat UI tests pass. The application suite required a retry with broader process permissions after a worker-start timeout. The send and shared tool icons were reviewed in Edge, including fixes for SVG baseline alignment and clipping. Longer primary-size tool names may wrap more often.
 
 ## Context
 
@@ -36,7 +36,11 @@ Treat intermediate messages and tool calls as details associated with an assista
 
 ### Loading and Execution
 
-The dots bridge the gap from sending a user message to the first turn detail appearing. Remove them when the first intermediate assistant message or tool call appears. They do not accompany subsequent tool activity or reappear between steps of the same turn.
+The second agreed slice implements the supplied three-dot animation and its lifetime. Show no indicator while submitting the user message. Start the dots immediately after acceptance, together with displaying the user message in history. Preserve the themed foreground color and an accessible loading label. Use the supplied animated SVG as the external template of a reusable Angular component, keeping its animation definitions inside the SVG. Use only the SVG animation for dots, without the loading-text entrance fade. Reduced-motion handling is not required. Conversation startup and errors retain their existing text presentation. Turn grouping, detail disclosure and scrolling changes are outside this slice.
+
+The second slice is implemented. Formatting, lint, 13 tooling tests, 4 application tests and 107 chat UI tests pass. Edge accessibility and DOM checks confirmed the waiting indicator and its absence after visible response content. Animation appearance still needs visual acceptance: transient screenshots did not capture a clear rendered indicator, and subsequent browser capture stalled. The Edge tab remains open for reuse.
+
+The dots bridge the gap from the accepted user message appearing in history to the first response fragment appearing. They are absent while the user message is being sent; no sending text replaces them. Remove them when the first intermediate assistant message or tool call appears. They also disappear if an artifact, final answer or failure is the first visible response content. Dots are shown exclusively when nothing else from that turn can be displayed, excluding the initiating user message. An artifact omitted by the host mapper does not count as visible content. They do not accompany subsequent activity or reappear between steps of the same turn. Previous-turn content does not suppress a new turn's dots.
 
 During execution, show intermediate messages and tool calls as they arrive. There is no action bar or expand/collapse control during the active turn; users cannot collapse or expand details mid-turn.
 
@@ -64,7 +68,7 @@ Tool failures can be recoverable steps in otherwise successful turns. They do no
 
 If a turn fails without a final response, keep any received details visible alongside the error. Do not automatically collapse them or introduce a details action bar. The presentation of interrupted observation, where the turn outcome is unknown, remains open.
 
-Use the supplied icon and animation designs as references. Preserve accessible control names, expanded-state semantics, keyboard access and reduced-motion behavior when integrating them. Exact styling beyond the requested details, loading and send changes remains to be agreed.
+Use the supplied icon and animation designs as references. Preserve accessible control names, expanded-state semantics, keyboard access when integrating them. Exact styling beyond the requested details, loading and send changes remains to be agreed.
 
 ### Detail Typography
 
@@ -93,7 +97,6 @@ Token streaming, cancellation, reconnection, persistence and a general chat rede
 ## Open Questions
 
 - Is there one details toggle per turn, positioned beneath its answer as shown?
-- If a turn produces a final answer without any details, should the dots disappear on answer arrival? What if an artifact arrives before any detail?
 - Should interrupted observation with an unknown turn outcome use the same visible-details presentation as a failed turn without a final answer?
 - How should artifacts that arrive between intermediate messages and tool calls be presented without obscuring their original order?
 - What keyboard-focus behavior should accompany collapse when focus is inside the details?
