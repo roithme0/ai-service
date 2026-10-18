@@ -456,55 +456,48 @@ describe('HttpConversationTransport', () => {
     },
   );
 
-  it.each(['wrong-turn', 'wrong-anchor', 'duplicate-identity', 'missing-artifact-kind'])(
-    'rejects inconsistent nested snapshot content: %s',
-    async (variant) => {
-      const user = {
-        kind: 'message',
-        role: 'user',
-        id: 'request',
-        text: 'Hello',
+  it('rejects an artifact row without its required kind', async () => {
+    const user = {
+      kind: 'message',
+      role: 'user',
+      id: 'request',
+      text: 'Hello',
+      turn_id: 'turn-1',
+    };
+    const timeline: object[] = [user];
+    timeline.push({
+      turn_id: 'turn-1',
+      artifact: {
+        artifact_id: 'a',
+        type: 'json',
+        created_at: '2026-10-18T10:00:00Z',
+        order: 7,
         turn_id: 'turn-1',
-      };
-      const timeline: object[] = [user];
-      if (variant === 'wrong-turn')
-        timeline.push({ kind: 'intermediate', turn_id: 'other', id: 'detail', text: 'Working' });
-      if (variant === 'duplicate-identity') timeline.push({ ...user });
-      if (variant === 'missing-artifact-kind')
-        timeline.push({
-          turn_id: 'turn-1',
-          artifact: {
-            artifact_id: 'a',
-            type: 'json',
-            created_at: '2026-10-18T10:00:00Z',
-            order: 7,
-            turn_id: 'turn-1',
-            payload: { title: 'Data', payload: 1 },
-          },
-        });
-      vi.stubGlobal(
-        'fetch',
-        vi.fn().mockResolvedValue(
-          response(200, {
-            session_id: 'session-1',
-            expires_at: '2026-09-17T12:00:00Z',
-            sequence: 2,
-            turns: [
-              {
-                turn_id: 'turn-1',
-                user_message_id: variant === 'wrong-anchor' ? 'missing' : 'request',
-                status: 'in_progress',
-                timeline,
-              },
-            ],
-          }),
-        ),
-      );
-      await expect(
-        new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'),
-      ).rejects.toBeInstanceOf(ConversationNetworkError);
-    },
-  );
+        payload: { title: 'Data', payload: 1 },
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        response(200, {
+          session_id: 'session-1',
+          expires_at: '2026-09-17T12:00:00Z',
+          sequence: 2,
+          turns: [
+            {
+              turn_id: 'turn-1',
+              user_message_id: 'request',
+              status: 'in_progress',
+              timeline,
+            },
+          ],
+        }),
+      ),
+    );
+    await expect(
+      new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'),
+    ).rejects.toBeInstanceOf(ConversationNetworkError);
+  });
 
   it('strips additive response fields while preserving extensible artifact payloads', async () => {
     vi.stubGlobal(

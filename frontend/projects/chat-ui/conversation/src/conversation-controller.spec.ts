@@ -538,6 +538,99 @@ describe('live conversation controller', () => {
     },
   );
 
+  it.each(['completed', 'generation_failed', 'conflict'] as const)(
+    'retains the %s outcome and streamed content when accepting the next turn',
+    async (outcome) => {
+      const transport = new FakeTransport();
+      const original = snapshot();
+      transport.observeTurn.mockReturnValueOnce(
+        stream([
+          { kind: 'snapshot', turn_id: 't', snapshot: original },
+          { ...tool('completed', 2), order: 1 },
+          terminal(outcome),
+        ]),
+      );
+      const controller = new ConversationController(transport, () => undefined);
+      await controller.start();
+      await controller.submit('Hello', vi.fn());
+      const completedState = controller.state;
+      transport.appendMessage.mockResolvedValueOnce({
+        role: 'user',
+        text: 'Next',
+        turn_id: 'next',
+      });
+      transport.generateTurn.mockResolvedValueOnce({ kind: 'accepted', turn_id: 'next' });
+      transport.observeTurn.mockReturnValueOnce(stream([]));
+      await controller.submit('Next', vi.fn());
+      expect(controller.state.turns.map((turn) => turn.status)).toEqual([
+        outcome === 'completed' ? 'completed' : 'failed',
+        'unknown',
+      ]);
+      expect(controller.state.turns[0].content).toEqual(completedState.turns[0].content);
+      expect(controller.state.turns[0].content[1]).toMatchObject({
+        kind: 'tool',
+        status: 'completed',
+      });
+      expect(completedState.turns).toHaveLength(1);
+      expect(original.turns[0].status).toBe('in_progress');
+      expect(original.turns[0].timeline).toHaveLength(1);
+      expect(controller.state.composerDisabled).toBe(true);
+    },
+  );
+
+  it.each(['event', 'snapshot'] as const)(
+    'retains closing from %s across omitted output and marks interrupted work unknown',
+    async (source) => {
+      const transport = new FakeTransport();
+      transport.observeTurn.mockImplementation(async function* () {
+        yield await Promise.resolve<StreamEvent>({
+          kind: 'snapshot',
+          turn_id: 't',
+          snapshot: snapshot({
+            turns: [
+              { ...snapshot().turns[0], status: source === 'snapshot' ? 'closing' : 'in_progress' },
+            ],
+          }),
+        });
+        if (source === 'event') yield { kind: 'closing', turn_id: 't', sequence: 2 };
+        expect(controller.state.turns[0].status).toBe('active');
+        expect(controller.state.status).toBeNull();
+        expect(controller.state.composerDisabled).toBe(true);
+        yield {
+          kind: 'upsert',
+          turn_id: 't',
+          sequence: 3,
+          identity: 'omitted',
+          order: 1,
+          item: {
+            kind: 'artifact',
+            turn_id: 't',
+            artifact: {
+              artifact_id: 'omitted',
+              turn_id: 't',
+              type: 'custom',
+              order: 1,
+              created_at: '2026-10-18T10:00:00Z',
+              payload: {},
+            },
+          },
+        };
+        expect(controller.state.status).toBeNull();
+      });
+      const controller = new ConversationController(
+        transport,
+        () => undefined,
+        () => null,
+      );
+      await controller.start();
+      await controller.submit('Hello', vi.fn());
+      expect(controller.state.turns[0].status).toBe('unknown');
+      expect(controller.state.turns[0].content).toHaveLength(1);
+      expect(controller.state.composerDisabled).toBe(true);
+      expect(controller.state.status?.kind).toBe('error');
+    },
+  );
+
   it('accepts terminal-before-subscribe catch-up and uses terminal metadata rather than displayed text', async () => {
     const transport = new FakeTransport();
     transport.observeTurn.mockReturnValue(
@@ -1083,6 +1176,100 @@ describe('live conversation controller', () => {
     expect(contentOf(controller.state)[1]).toMatchObject({ headline: 'Mapped', type: 'custom' });
   });
 
+  describe.each(['observation', 'append-reconciliation', 'start-reconciliation'] as const)(
+    'snapshot validation through %s',
+    (source) => {
+      it.each([
+        'wrong-session',
+        'wrong-turn',
+        'wrong-anchor',
+        'duplicate-identity',
+        'duplicate-turn',
+        'artifact-turn',
+        'cross-turn-collision',
+      ] as const)(
+        'rejects %s from a custom transport before retaining its content',
+        async (variant) => {
+          const invalid = snapshot();
+          const turn = invalid.turns[0];
+          if (variant === 'wrong-session') invalid.session_id = 'other';
+          if (variant === 'wrong-turn')
+            turn.timeline.push({
+              kind: 'intermediate',
+              id: 'detail',
+              text: 'Invalid output',
+              turn_id: 'other',
+            });
+          if (variant === 'wrong-anchor') turn.user_message_id = 'missing';
+          if (variant === 'duplicate-identity') turn.timeline.push({ ...turn.timeline[0] });
+          if (variant === 'duplicate-turn') invalid.turns.push({ ...turn });
+          if (variant === 'artifact-turn')
+            turn.timeline.push({
+              kind: 'artifact',
+              turn_id: 't',
+              artifact: {
+                artifact_id: 'artifact',
+                turn_id: 'other',
+                type: 'json',
+                order: 1,
+                created_at: '2026-10-18T10:00:00Z',
+                payload: { title: 'Invalid output', payload: {} },
+              },
+            });
+          if (variant === 'cross-turn-collision')
+            invalid.turns.push({
+              turn_id: 'other',
+              user_message_id: 'other-user',
+              status: 'completed',
+              timeline: [
+                {
+                  kind: 'message',
+                  role: 'user',
+                  id: 'other-user',
+                  text: 'Other',
+                  turn_id: 'other',
+                },
+                {
+                  kind: 'intermediate',
+                  id: turn.user_message_id,
+                  text: 'Invalid output',
+                  turn_id: 'other',
+                },
+              ],
+            });
+          const transport = new FakeTransport();
+          if (source === 'observation') {
+            transport.observeTurn.mockReturnValue(
+              stream([{ kind: 'snapshot', turn_id: 't', snapshot: invalid }, terminal()]),
+            );
+          } else {
+            transport.readSession.mockResolvedValue(invalid);
+            if (source === 'append-reconciliation')
+              transport.appendMessage.mockRejectedValue(new ConversationNetworkError('uncertain'));
+            else
+              transport.generateTurn.mockRejectedValue(new ConversationNetworkError('uncertain'));
+          }
+          const controller = new ConversationController(transport, () => undefined);
+          await controller.start();
+          const acknowledge = vi.fn();
+          await controller.submit('Hello', acknowledge);
+          expect(controller.state.composerDisabled).toBe(true);
+          expect(controller.state.status?.kind).toBe('error');
+          if (source === 'append-reconciliation') {
+            expect(controller.state.turns).toEqual([]);
+            expect(acknowledge).not.toHaveBeenCalled();
+            expect(transport.generateTurn).not.toHaveBeenCalled();
+          } else {
+            expect(controller.state.turns).toMatchObject([{ id: 't', status: 'unknown' }]);
+            expect(controller.state.turns[0].content).toHaveLength(1);
+            expect(acknowledge).toHaveBeenCalledOnce();
+          }
+          if (source !== 'observation') expect(transport.observeTurn).not.toHaveBeenCalled();
+        },
+      );
+    },
+  );
+
   it.each(['identity', 'turn', 'position', 'collision', 'artifact-turn'] as const)(
     'rejects an inconsistent turn-local upsert: %s',
     async (variant) => {
@@ -1224,6 +1411,74 @@ describe('live conversation controller', () => {
     expect(acknowledge).not.toHaveBeenCalled();
     expect(transport.generateTurn).not.toHaveBeenCalled();
   });
+
+  it.each(['accepted', 'uncertain'] as const)(
+    'uses the displayed turns after an unsuccessful reconciliation for a later %s append',
+    async (outcome) => {
+      const transport = new FakeTransport();
+      const historicalTurn: SessionSnapshotResponse['turns'][number] = {
+        ...snapshot().turns[0],
+        status: 'completed',
+        timeline: [
+          { kind: 'message', id: 'historical-user', role: 'user', text: 'Earlier', turn_id: 't' },
+        ],
+        user_message_id: 'historical-user',
+      };
+      transport.appendMessage.mockRejectedValueOnce(new ConversationNetworkError('uncertain'));
+      transport.readSession.mockResolvedValueOnce(snapshot({ turns: [historicalTurn] }));
+      const controller = new ConversationController(transport, () => undefined);
+      await controller.start();
+      const firstAcknowledgement = vi.fn();
+      await controller.submit('Hello', firstAcknowledgement);
+      expect(firstAcknowledgement).not.toHaveBeenCalled();
+      expect(controller.state.turns[0].content[0]).toMatchObject({ text: 'Earlier' });
+      expect(controller.state.composerDisabled).toBe(false);
+      expect(transport.generateTurn).not.toHaveBeenCalled();
+
+      const nextTurn: SessionSnapshotResponse['turns'][number] = {
+        turn_id: 'next',
+        user_message_id: 'next-user',
+        status: 'in_progress',
+        timeline: [
+          { kind: 'message', id: 'next-user', role: 'user', text: 'Hello', turn_id: 'next' },
+        ],
+      };
+      const nextSnapshot = snapshot({ turns: [historicalTurn, nextTurn] });
+      if (outcome === 'uncertain') {
+        transport.appendMessage.mockRejectedValueOnce(new ConversationNetworkError('uncertain'));
+        transport.readSession.mockResolvedValueOnce(nextSnapshot);
+      } else {
+        transport.appendMessage.mockResolvedValueOnce({
+          role: 'user',
+          text: 'Hello',
+          turn_id: 'next',
+        });
+      }
+      transport.generateTurn.mockResolvedValueOnce({ kind: 'accepted', turn_id: 'next' });
+      transport.observeTurn.mockImplementationOnce(async function* () {
+        expect(controller.state.turns).toHaveLength(2);
+        expect(controller.state.turns[1].content[0]).toMatchObject({
+          id: outcome === 'accepted' ? 'confirmed-1-user' : 'next-user',
+          text: 'Hello',
+        });
+        yield await Promise.resolve<StreamEvent>({
+          kind: 'snapshot',
+          turn_id: 'next',
+          snapshot: nextSnapshot,
+        });
+        yield { ...terminal(), turn_id: 'next' };
+      });
+      const acknowledgement = vi.fn();
+      await controller.submit('Hello', acknowledgement);
+      expect(acknowledgement).toHaveBeenCalledOnce();
+      expect(transport.generateTurn).toHaveBeenCalledOnce();
+      expect(controller.state.turns.map((turn) => turn.content.map((item) => item.id))).toEqual([
+        ['historical-user'],
+        ['next-user'],
+      ]);
+      expect(controller.state.composerDisabled).toBe(false);
+    },
+  );
 
   it('keeps ambiguous append disabled when authoritative state cannot be read', async () => {
     const transport = new FakeTransport();
