@@ -183,6 +183,22 @@ export const zStreamUpsert = z.object({
 });
 
 /**
+ * TurnSnapshot
+ */
+export const zTurnSnapshot = z.object({
+    status: z.enum([
+        'pending',
+        'in_progress',
+        'closing',
+        'completed',
+        'generation_failed',
+        'conflict'
+    ]),
+    turn_id: z.string(),
+    user_message_id: z.string()
+});
+
+/**
  * UserMessageResponse
  */
 export const zUserMessageResponse = z.object({
@@ -195,31 +211,19 @@ export const zUserMessageResponse = z.object({
  * SessionSnapshotResponse
  */
 export const zSessionSnapshotResponse = z.object({
-    active_turn_id: z.string().nullable(),
-    active_turn_status: z.enum(['in_progress', 'closing']).nullable(),
     artifacts: z.array(zArtifactResponse),
     expires_at: z.string(),
     messages: z.array(z.union([zUserMessageResponse, zAssistantMessageResponse])),
     sequence: z.int().gte(0),
     session_id: z.string(),
-    terminal_turn_id: z.string().nullable(),
-    terminal_turn_kind: z.enum([
-        'completed',
-        'generation_failed',
-        'unknown',
-        'expired',
-        'not_ready',
-        'limit_reached',
-        'conflict',
-        'busy'
-    ]).nullable(),
     timeline: z.array(z.union([
         zTimelineMessage,
         zTimelineIntermediateMessage,
         zTimelineTool,
         zTimelineArtifact,
         zTimelineFailure
-    ]))
+    ])),
+    turns: z.array(zTurnSnapshot)
 });
 
 /**

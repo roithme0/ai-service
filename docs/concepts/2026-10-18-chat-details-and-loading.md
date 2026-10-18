@@ -12,6 +12,10 @@ The first agreed slice covers the send icon and detail typography. Register the 
 
 The first slice is implemented and code-reviewed. Formatting, lint, 13 tooling tests, 4 application tests and 100 chat UI tests pass. The application suite required a retry with broader process permissions after a worker-start timeout. The send and shared tool icons were reviewed in Edge, including fixes for SVG baseline alignment and clipping. Longer primary-size tool names may wrap more often.
 
+The third agreed slice provides turn association and lifecycle metadata without visual, disclosure or scrolling changes. Each response fragment retains its actual backend turn ID, and each turn references its stable initiating user message ID. The flat content list preserves recorded order, including artifacts interleaved with details. The rendering-only `/ui` contract accepts optional content `turnId` associations and a separate host-controlled `turns` collection with `id`, `userMessageId` and `active`, `completed`, `failed` or `unknown` status. Active includes accepted work waiting to start and closing work whose final answer has arrived before completion.
+
+Snapshots expose ordered backend-provided `turns` records with actual turn identity, initiating user message identity and lifecycle status. The backend reuses its authoritative timeline identities, internal admission identity and retained terminal history. Turn records carry precise `pending`, `in_progress`, `closing`, `completed`, `generation_failed` or `conflict` lifecycle; they replace the separate latest-terminal and active-turn snapshot fields. Terminal outcomes outrank received final text, and pending work is distinct from admitted work. Historical completion is never inferred from a final message or proximity. The controller maps pending, in-progress and closing states to UI active, completed to completed, and generation failure or conflict to failed. Unknown remains a client observation outcome. Recovery considers the latest submitted turn, so newly pending work cannot be confused with an older terminal turn. The controller marks only the affected active turn unknown when observation is interrupted. It does not reconstruct turn associations or fabricate an initiating user anchor at admission. If observation fails before its first snapshot, the accepted user message and error remain visible without a turn record. Unknown outcomes retain received details visibly, including when a final answer was received. Disclosure behavior itself belongs to the next slice.
+
 ## Context
 
 The shared chat UI displays intermediate assistant messages, tool calls, assistant answers and artifacts in a flat timeline. Loading feedback is currently a text status after the timeline. Intermediate messages and tool rows remain visible after completion.
@@ -66,7 +70,7 @@ Keep toggle handling explicit and separate from the existing content/status-driv
 
 Tool failures can be recoverable steps in otherwise successful turns. They do not force details to remain expanded or require a separate visible warning when details are collapsed. Trust the agent to work around failures where possible and explain essential tool failures or resulting limitations in its final response. Recorded tool outcomes remain available inside the expanded details.
 
-If a turn fails without a final response, keep any received details visible alongside the error. Do not automatically collapse them or introduce a details action bar. The presentation of interrupted observation, where the turn outcome is unknown, remains open.
+If a turn fails without a final response, keep any received details visible alongside the error. Do not automatically collapse them or introduce a details action bar. If observation is interrupted and the outcome is unknown, keep all received details visible, even if a final answer has already arrived. Do not automatically collapse details or reveal the details action bar.
 
 Use the supplied icon and animation designs as references. Preserve accessible control names, expanded-state semantics, keyboard access when integrating them. Exact styling beyond the requested details, loading and send changes remains to be agreed.
 
@@ -78,9 +82,9 @@ Tool-specific leading icons and user-friendly replacements for technical tool na
 
 ## Integration Impact
 
-`frontend/projects/chat-ui/ui/lib/components/chat-ui/chat-ui.component.*` currently renders a flat `ChatContent` list. `chat-message.ts` distinguishes intermediate messages, tools, answers, artifacts and failures, but does not expose turn identity or per-turn completion state to the rendering component.
+`frontend/projects/chat-ui/ui/lib/components/chat-ui/chat-ui.component.*` currently renders a flat `ChatContent` list. `chat-message.ts` distinguishes intermediate messages, tools, answers, artifacts and failures, with optional turn association and host-controlled per-turn lifecycle metadata.
 
-The backend timeline already provides turn IDs. The conversation mapper in `frontend/projects/chat-ui/conversation/src/conversation-controller.ts` currently drops that association when producing UI content. A reliable grouping model needs to retain turn identity and expose enough lifecycle information for the chosen interaction rules. A backend contract change is not yet established as necessary.
+The backend timeline provides actual turn IDs and stable initiating user identities. The conversation mapper retains that association for messages, details, tool rows, mapped artifacts and failures. A small snapshot contract extension exposes ordered turn records with initiating user identity and lifecycle, since the latest terminal marker alone cannot establish historical state. The backend owns both association and lifecycle projection; the frontend only maps supplied records and applies live terminal or unknown updates. Closing and terminal stream events derive from the same snapshot as their preceding timeline updates; a final output upsert cannot be skipped by a newer out-of-band terminal lookup. Final-message arrival does not imply completion.
 
 The rendering-only `/ui` entry point must remain usable with host-supplied content, independently of the `/conversation` controller and HTTP transport. Grouping and presentation rules need a clear contract for both consumers.
 
@@ -97,7 +101,6 @@ Token streaming, cancellation, reconnection, persistence and a general chat rede
 ## Open Questions
 
 - Is there one details toggle per turn, positioned beneath its answer as shown?
-- Should interrupted observation with an unknown turn outcome use the same visible-details presentation as a failed turn without a final answer?
 - How should artifacts that arrive between intermediate messages and tool calls be presented without obscuring their original order?
 - What keyboard-focus behavior should accompany collapse when focus is inside the details?
 - Should expanded states survive subsequent submissions, component recreation or refresh?
@@ -105,4 +108,4 @@ Token streaming, cancellation, reconnection, persistence and a general chat rede
 
 ## Risks
 
-The agreed presentation relies on the agent explaining essential tool failures in its final response; the UI does not independently surface individual tool failures outside collapsed details. Failed turns without a final response retain visible details and an error, while unknown outcomes still need a presentation decision. Unconditional scrolling during execution can interrupt reading earlier content; this existing limitation is explicitly accepted. Collapsing details may clamp the scroll offset when the content becomes shorter. Grouping by proximity alone can associate details with the wrong answer; preserve actual turn association. Reference assets currently live in `.temp`, so eventual implementation must retain required assets in maintained source locations.
+The agreed presentation relies on the agent explaining essential tool failures in its final response; the UI does not independently surface individual tool failures outside collapsed details. Failed turns without a final response retain visible details and an error, and unknown outcomes likewise retain all received details visibly. Unconditional scrolling during execution can interrupt reading earlier content; this existing limitation is explicitly accepted. Collapsing details may clamp the scroll offset when the content becomes shorter. Grouping by proximity alone can associate details with the wrong answer; preserve actual turn association. Reference assets currently live in `.temp`, so eventual implementation must retain required assets in maintained source locations.

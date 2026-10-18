@@ -11,7 +11,7 @@ from app.core.models import (
     ErrorEnvelope, HttpErrorKind, RequestValidationErrorKind, ValidationErrorEnvelope,
 )
 from app.sessions.models.timeline import TimelineItem
-from app.sessions.models.turns import ActiveTurnStatus, TurnKind
+from app.sessions.models.turns import TurnSnapshot
 
 
 class InputIssue(BaseModel):
@@ -89,11 +89,8 @@ class SessionSnapshotResponse(BaseModel):
     expires_at: datetime
     messages: list[MessageResponse]
     artifacts: list[ArtifactResponse]
-    terminal_turn_id: str | None
-    terminal_turn_kind: TurnKind | None
+    turns: list[TurnSnapshot]
     timeline: list[Annotated[TimelineItem, Field(discriminator="kind")]]
-    active_turn_id: str | None
-    active_turn_status: ActiveTurnStatus | None
     sequence: int = Field(ge=0)
 
     @field_serializer("expires_at")

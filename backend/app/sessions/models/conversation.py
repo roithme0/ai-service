@@ -8,7 +8,7 @@ from typing import Generic, Literal, TypeVar
 from app.sessions.models.artifacts import PublishedArtifact
 from app.sessions.models.session import SessionSnapshot
 from app.sessions.models.timeline import TimelineItem
-from app.sessions.models.turns import ActiveTurnStatus, TurnKind
+from app.sessions.models.turns import TurnKind, TurnSnapshot
 
 ContextT = TypeVar("ContextT")
 ArtifactT = TypeVar("ArtifactT")
@@ -42,11 +42,8 @@ class ConversationTurnReservation(Generic[ContextT, ArtifactT]):
 class ConversationSnapshot(Generic[ContextT, ArtifactT]):
     session: SessionSnapshot[ContextT]
     artifacts: tuple[PublishedArtifact[ArtifactT], ...]
-    terminal_turn_id: str | None
-    terminal_turn_kind: TurnKind | None
+    turns: tuple[TurnSnapshot, ...]
     timeline: tuple[TimelineItem, ...]
-    active_turn_id: str | None
-    active_turn_status: ActiveTurnStatus | None
     sequence: int
 
 

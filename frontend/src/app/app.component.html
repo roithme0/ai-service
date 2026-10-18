@@ -5,6 +5,7 @@
     composerPlaceholder="Nachricht schreiben"
     [focusOnReady]="true"
     [content]="chat().content"
+    [turns]="chat().turns"
     [composerDisabled]="chat().composerDisabled"
     [conversationStatus]="chat().status"
     (messageSubmitted)="handleMessage($event)"

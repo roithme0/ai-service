@@ -119,14 +119,6 @@ export type SessionCreationResponse = {
  */
 export type SessionSnapshotResponse = {
     /**
-     * Active Turn Id
-     */
-    active_turn_id: string | null;
-    /**
-     * Active Turn Status
-     */
-    active_turn_status: 'in_progress' | 'closing' | null;
-    /**
      * Artifacts
      */
     artifacts: Array<ArtifactResponse>;
@@ -147,17 +139,13 @@ export type SessionSnapshotResponse = {
      */
     session_id: string;
     /**
-     * Terminal Turn Id
-     */
-    terminal_turn_id: string | null;
-    /**
-     * Terminal Turn Kind
-     */
-    terminal_turn_kind: 'completed' | 'generation_failed' | 'unknown' | 'expired' | 'not_ready' | 'limit_reached' | 'conflict' | 'busy' | null;
-    /**
      * Timeline
      */
     timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure>;
+    /**
+     * Turns
+     */
+    turns: Array<TurnSnapshot>;
 };
 
 /**
@@ -393,6 +381,24 @@ export type TimelineTool = {
      * Turn Id
      */
     turn_id: string;
+};
+
+/**
+ * TurnSnapshot
+ */
+export type TurnSnapshot = {
+    /**
+     * Status
+     */
+    status: 'pending' | 'in_progress' | 'closing' | 'completed' | 'generation_failed' | 'conflict';
+    /**
+     * Turn Id
+     */
+    turn_id: string;
+    /**
+     * User Message Id
+     */
+    user_message_id: string;
 };
 
 /**

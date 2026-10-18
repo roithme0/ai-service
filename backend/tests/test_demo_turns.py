@@ -198,7 +198,7 @@ def test_busy_cancellation_and_retry_keep_first_step() -> None:
     asyncio.run(run())
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert read.snapshot.terminal_turn_kind == "generation_failed"
+    assert read.snapshot.turns[-1].status == "generation_failed"
     assert len(read.snapshot.session.messages) == 1
     assert store.reserve_turn(session_id).kind == "generation_failed"
     store.append_user_message(session_id, "Retry")

@@ -175,32 +175,6 @@
       },
       "SessionSnapshotResponse": {
         "properties": {
-          "active_turn_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Active Turn Id"
-          },
-          "active_turn_status": {
-            "anyOf": [
-              {
-                "enum": [
-                  "in_progress",
-                  "closing"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Active Turn Status"
-          },
           "artifacts": {
             "items": {
               "$ref": "#/components/schemas/ArtifactResponse"
@@ -242,38 +216,6 @@
             "title": "Session Id",
             "type": "string"
           },
-          "terminal_turn_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Terminal Turn Id"
-          },
-          "terminal_turn_kind": {
-            "anyOf": [
-              {
-                "enum": [
-                  "completed",
-                  "generation_failed",
-                  "unknown",
-                  "expired",
-                  "not_ready",
-                  "limit_reached",
-                  "conflict",
-                  "busy"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Terminal Turn Kind"
-          },
           "timeline": {
             "items": {
               "discriminator": {
@@ -306,6 +248,13 @@
             },
             "title": "Timeline",
             "type": "array"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/TurnSnapshot"
+            },
+            "title": "Turns",
+            "type": "array"
           }
         },
         "required": [
@@ -313,11 +262,8 @@
           "expires_at",
           "messages",
           "artifacts",
-          "terminal_turn_id",
-          "terminal_turn_kind",
+          "turns",
           "timeline",
-          "active_turn_id",
-          "active_turn_status",
           "sequence"
         ],
         "title": "SessionSnapshotResponse",
@@ -691,6 +637,37 @@
           "kind"
         ],
         "title": "TimelineTool",
+        "type": "object"
+      },
+      "TurnSnapshot": {
+        "properties": {
+          "status": {
+            "enum": [
+              "pending",
+              "in_progress",
+              "closing",
+              "completed",
+              "generation_failed",
+              "conflict"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "user_message_id": {
+            "title": "User Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "user_message_id",
+          "status"
+        ],
+        "title": "TurnSnapshot",
         "type": "object"
       },
       "UserMessageResponse": {

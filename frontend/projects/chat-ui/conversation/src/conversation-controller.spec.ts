@@ -33,11 +33,8 @@ function snapshot(overrides: Partial<SessionSnapshotResponse> = {}): SessionSnap
     expires_at: '2026-10-04T20:00:00Z',
     messages: [{ role: 'user', text: 'Hello', turn_id: null }],
     artifacts: [],
-    active_turn_id: 't',
-    active_turn_status: 'in_progress',
     sequence: 1,
-    terminal_turn_id: null,
-    terminal_turn_kind: null,
+    turns: [{ turn_id: 't', user_message_id: 'confirmed-0-user', status: 'in_progress' }],
     timeline: [
       { kind: 'message', role: 'user', id: 'confirmed-0-user', text: 'Hello', turn_id: 't' },
     ],
@@ -45,7 +42,9 @@ function snapshot(overrides: Partial<SessionSnapshotResponse> = {}): SessionSnap
   };
 }
 const initial = (): StreamEvent => ({ kind: 'snapshot', turn_id: 't', snapshot: snapshot() });
-const terminal = (outcome: 'completed' | 'generation_failed' = 'completed'): StreamEvent => ({
+const terminal = (
+  outcome: 'completed' | 'generation_failed' | 'conflict' = 'completed',
+): StreamEvent => ({
   kind: 'terminal',
   turn_id: 't',
   sequence: 10,
@@ -75,6 +74,88 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 }
 
 describe('live conversation controller', () => {
+  it.each(['completed', 'failed', 'unknown'] as const)(
+    'retains authoritative historical outcomes and current %s across interleaved output',
+    async (ending) => {
+      const transport = new FakeTransport();
+      const timeline: SessionSnapshotResponse['timeline'] = [
+        { kind: 'message', role: 'user', id: 'request-first', text: 'First', turn_id: 'old' },
+        { kind: 'message', role: 'assistant', id: 'old-answer', text: 'Done', turn_id: 'old' },
+        {
+          kind: 'message',
+          role: 'user',
+          id: 'request-second',
+          text: 'Second',
+          turn_id: 'failed',
+        },
+        { kind: 'intermediate', id: 'old-detail', text: 'Received', turn_id: 'failed' },
+        { kind: 'failure', turn_id: 'failed' },
+        { kind: 'message', role: 'user', id: 'request-current', text: 'Third', turn_id: 't' },
+        { kind: 'intermediate', id: 'detail-before', text: 'Before', turn_id: 't' },
+        { kind: 'artifact', artifact_id: 'a', turn_id: 't' },
+        { kind: 'intermediate', id: 'detail-after', text: 'After', turn_id: 't' },
+        { kind: 'message', role: 'assistant', id: 'answer', text: 'Final', turn_id: 't' },
+      ];
+      transport.observeTurn.mockImplementation(async function* () {
+        yield await Promise.resolve<StreamEvent>({
+          kind: 'snapshot',
+          turn_id: 't',
+          snapshot: snapshot({
+            timeline,
+            turns: [
+              { turn_id: 'old', user_message_id: 'request-first', status: 'completed' },
+              { turn_id: 'failed', user_message_id: 'request-second', status: 'generation_failed' },
+              { turn_id: 't', user_message_id: 'request-current', status: 'closing' },
+            ],
+            artifacts: [
+              {
+                artifact_id: 'a',
+                turn_id: 't',
+                type: 'json',
+                order: 1,
+                created_at: '2026-10-18T10:00:00Z',
+                payload: { title: 'Data', payload: 1 },
+              },
+            ],
+          }),
+        });
+        expect(controller.state.turns).toEqual([
+          { id: 'old', userMessageId: 'request-first', status: 'completed' },
+          { id: 'failed', userMessageId: 'request-second', status: 'failed' },
+          { id: 't', userMessageId: 'request-current', status: 'active' },
+        ]);
+        expect(controller.state.composerDisabled).toBe(true);
+        expect(controller.state.content.map((item) => item.turnId)).toEqual(
+          timeline.map((item) => item.turn_id),
+        );
+        expect(controller.state.content.map((item) => item.kind)).toEqual([
+          'text',
+          'text',
+          'text',
+          'intermediate',
+          'failure',
+          'text',
+          'intermediate',
+          'artifact',
+          'intermediate',
+          'text',
+        ]);
+        if (ending !== 'unknown')
+          yield terminal(ending === 'completed' ? 'completed' : 'generation_failed');
+      });
+      const controller = new ConversationController(transport, () => undefined);
+      await controller.start();
+      await controller.submit('Third', vi.fn());
+      expect(controller.state.turns.map((turn) => turn.status)).toEqual([
+        'completed',
+        'failed',
+        ending,
+      ]);
+      expect(controller.state.content.map((item) => item.id)).toContain('detail-after');
+      expect(controller.state.content.map((item) => item.id)).toContain('answer');
+    },
+  );
+
   it('shows no sending indicator and starts dots only with the accepted user message in history', async () => {
     const transport = new FakeTransport();
     const accepted = deferred<UserMessageResponse>();
@@ -170,7 +251,13 @@ describe('live conversation controller', () => {
           kind: 'snapshot',
           turn_id: 't',
           snapshot: snapshot({
-            active_turn_status: source === 'snapshot' ? 'closing' : 'in_progress',
+            turns: [
+              {
+                turn_id: 't',
+                user_message_id: 'confirmed-0-user',
+                status: source === 'snapshot' ? 'closing' : 'in_progress',
+              },
+            ],
             timeline: [
               {
                 kind: 'message',
@@ -216,7 +303,7 @@ describe('live conversation controller', () => {
         kind: 'snapshot',
         turn_id: turnId,
         snapshot: snapshot({
-          active_turn_id: turnId,
+          turns: [{ turn_id: turnId, user_message_id: 'confirmed-0-user', status: 'in_progress' }],
           timeline: [
             { kind: 'intermediate', id: turnId, turn_id: turnId, text: 'Already working' },
           ],
@@ -335,6 +422,7 @@ describe('live conversation controller', () => {
       'text',
       'artifact',
     ]);
+    expect(controller.state.turns[0]?.status).toBe('active');
     expect(states).toContain('requested');
     expect(states).toContain('running');
     expect(controller.state.content.filter((item) => item.kind === 'tool')).toHaveLength(1);
@@ -350,6 +438,7 @@ describe('live conversation controller', () => {
       'failure',
     ]);
     expect(controller.state.status?.kind).toBe('error');
+    expect(controller.state.turns[0]?.status).toBe('failed');
   });
 
   it.each(['eof', 'error', 'malformed'] as const)(
@@ -366,6 +455,9 @@ describe('live conversation controller', () => {
       await controller.start();
       await controller.submit('Hello', vi.fn());
       expect(controller.state.content).toHaveLength(2);
+      expect(controller.state.turns).toEqual([
+        { id: 't', userMessageId: 'confirmed-0-user', status: 'unknown' },
+      ]);
       expect(controller.state.composerDisabled).toBe(true);
       expect(controller.state.status).not.toHaveProperty('action');
       await controller.performAction('retry-turn');
@@ -385,11 +477,11 @@ describe('live conversation controller', () => {
           kind: 'snapshot',
           turn_id: 't',
           snapshot: snapshot({
-            active_turn_id: null,
-            active_turn_status: null,
-            terminal_turn_id: 't',
-            terminal_turn_kind: 'generation_failed',
+            turns: [
+              { turn_id: 't', user_message_id: 'confirmed-0-user', status: 'generation_failed' },
+            ],
             timeline: [
+              ...snapshot().timeline,
               {
                 kind: 'message',
                 turn_id: 't',
@@ -408,8 +500,63 @@ describe('live conversation controller', () => {
     await controller.submit('Hello', vi.fn());
     expect(controller.state.composerDisabled).toBe(false);
     expect(controller.state.status?.kind).toBe('error');
-    expect(controller.state.content[0]).toMatchObject({ text: 'Final before failure' });
+    expect(controller.state.content[1]).toMatchObject({ text: 'Final before failure' });
+    expect(controller.state.turns).toEqual([
+      { id: 't', userMessageId: 'confirmed-0-user', status: 'failed' },
+    ]);
   });
+
+  it.each(['completed', 'generation_failed', 'conflict'] as const)(
+    'retains authoritative %s snapshot outcome when observation ends before terminal event',
+    async (outcome) => {
+      const transport = new FakeTransport();
+      transport.observeTurn.mockReturnValue(
+        stream([
+          {
+            kind: 'snapshot',
+            turn_id: 't',
+            snapshot: snapshot({
+              turns: [
+                {
+                  turn_id: 't',
+                  user_message_id: 'confirmed-0-user',
+                  status: outcome,
+                },
+              ],
+              timeline: [
+                ...snapshot().timeline,
+                { kind: 'intermediate', id: 'detail', text: 'Received detail', turn_id: 't' },
+                {
+                  kind: 'message',
+                  role: 'assistant',
+                  id: 'answer',
+                  text: 'Received answer',
+                  turn_id: 't',
+                },
+              ],
+            }),
+          },
+        ]),
+      );
+      const controller = new ConversationController(transport, () => undefined);
+      await controller.start();
+      await controller.submit('Hello', vi.fn());
+      expect(controller.state.turns).toEqual([
+        {
+          id: 't',
+          userMessageId: 'confirmed-0-user',
+          status: outcome === 'completed' ? 'completed' : 'failed',
+        },
+      ]);
+      expect(controller.state.content.map((item) => item.id)).toEqual([
+        'confirmed-0-user',
+        'detail',
+        'answer',
+      ]);
+      expect(controller.state.composerDisabled).toBe(true);
+      expect(controller.state.status?.kind).toBe('error');
+    },
+  );
 
   it('detaches and ignores stale events when replaced or disposed', async () => {
     const transport = new FakeTransport();
@@ -530,6 +677,71 @@ describe('live conversation controller', () => {
     expect(transport.readSession).not.toHaveBeenCalled();
   });
 
+  it.each(['completed', 'generation_failed', 'conflict'] as const)(
+    'recovers authoritative %s admission outcome without attaching another observer',
+    async (outcome) => {
+      const transport = new FakeTransport();
+      transport.generateTurn.mockRejectedValue(new ConversationNetworkError('uncertain'));
+      transport.readSession.mockResolvedValue(
+        snapshot({
+          turns: [
+            {
+              turn_id: 't',
+              user_message_id: 'confirmed-0-user',
+              status: outcome,
+            },
+          ],
+          timeline: [
+            ...snapshot().timeline,
+            { kind: 'message', role: 'assistant', id: 'answer', text: 'Received', turn_id: 't' },
+          ],
+        }),
+      );
+      const controller = new ConversationController(transport, () => undefined);
+      await controller.start();
+      await controller.submit('Hello', vi.fn());
+      expect(controller.state.turns).toEqual([
+        {
+          id: 't',
+          userMessageId: 'confirmed-0-user',
+          status: outcome === 'completed' ? 'completed' : 'failed',
+        },
+      ]);
+      expect(controller.state.content[1]).toMatchObject({ id: 'answer', turnId: 't' });
+      expect(controller.state.composerDisabled).toBe(false);
+      expect(transport.observeTurn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not recover an older terminal turn when the latest submitted turn is pending', async () => {
+    const transport = new FakeTransport();
+    transport.generateTurn.mockRejectedValue(new ConversationNetworkError('uncertain'));
+    transport.readSession.mockResolvedValue(
+      snapshot({
+        turns: [
+          { turn_id: 'old', user_message_id: 'request-old', status: 'completed' },
+          { turn_id: 'latest', user_message_id: 'request-latest', status: 'pending' },
+        ],
+        timeline: [
+          { kind: 'message', role: 'user', id: 'request-old', text: 'Old', turn_id: 'old' },
+          { kind: 'message', role: 'assistant', id: 'old-answer', text: 'Done', turn_id: 'old' },
+          { kind: 'message', role: 'user', id: 'request-latest', text: 'Hello', turn_id: 'latest' },
+        ],
+      }),
+    );
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    await controller.submit('Hello', vi.fn());
+    expect(controller.state.turns).toEqual([
+      { id: 'old', userMessageId: 'request-old', status: 'completed' },
+      { id: 'latest', userMessageId: 'request-latest', status: 'unknown' },
+    ]);
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status?.kind).toBe('error');
+    expect(transport.observeTurn).not.toHaveBeenCalled();
+    expect(transport.generateTurn).toHaveBeenCalledTimes(1);
+  });
+
   it('reconciles uncertain start once and observes the authoritative active turn without replacement execution', async () => {
     const transport = new FakeTransport();
     transport.generateTurn.mockRejectedValue(new ConversationNetworkError('offline'));
@@ -617,6 +829,21 @@ describe('live conversation controller', () => {
     await first;
     expect(acknowledge).toHaveBeenCalledTimes(1);
   });
+  it('retains accepted content without fabricating a turn when observation ends before its snapshot', async () => {
+    const transport = new FakeTransport();
+    transport.observeTurn.mockReturnValue(stream([]));
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    await controller.submit('Hello', vi.fn());
+    expect(controller.state.turns).toEqual([]);
+    expect(controller.state.content).toEqual([
+      { kind: 'text', id: 'confirmed-0-user', role: 'user', text: 'Hello' },
+    ]);
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status?.kind).toBe('error');
+    expect(transport.readSession).not.toHaveBeenCalled();
+  });
+
   it.each(['expired', 'unknown', 'agent_unavailable', 'method_not_allowed'] as const)(
     'preserves typed pre-stream %s errors without reconnect',
     async (kind) => {
@@ -631,6 +858,7 @@ describe('live conversation controller', () => {
       await controller.submit('Hello', vi.fn());
       expect(controller.state.composerDisabled).toBe(true);
       expect(controller.state.status?.message).not.toContain('unbekannt');
+      expect(controller.state.turns).toEqual([]);
       expect(transport.observeTurn).toHaveBeenCalledTimes(1);
       expect(transport.readSession).not.toHaveBeenCalled();
     },
@@ -754,9 +982,7 @@ describe('live conversation controller', () => {
   it('establishes an absent ambiguous append without acknowledgement or generation', async () => {
     const transport = new FakeTransport();
     transport.appendMessage.mockRejectedValue(new ConversationNetworkError('uncertain'));
-    transport.readSession.mockResolvedValue(
-      snapshot({ messages: [], timeline: [], active_turn_id: null }),
-    );
+    transport.readSession.mockResolvedValue(snapshot({ messages: [], timeline: [], turns: [] }));
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     const acknowledge = vi.fn();

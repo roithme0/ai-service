@@ -34,11 +34,8 @@ def snapshot_response(
         expires_at=snapshot.session.expires_at,
         messages=[_message(message) for message in snapshot.session.messages],
         artifacts=[artifact_response(artifact) for artifact in snapshot.artifacts],
-        terminal_turn_id=snapshot.terminal_turn_id,
-        terminal_turn_kind=snapshot.terminal_turn_kind,
+        turns=list(snapshot.turns),
         timeline=list(snapshot.timeline),
-        active_turn_id=snapshot.active_turn_id,
-        active_turn_status=snapshot.active_turn_status,
         sequence=snapshot.sequence,
     )
 

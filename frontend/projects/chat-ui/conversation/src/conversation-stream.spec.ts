@@ -77,11 +77,8 @@ describe('fetch SSE observation', () => {
         messages: [],
         artifacts: [],
         timeline,
-        active_turn_id: 't',
-        active_turn_status: 'in_progress',
         sequence: 300,
-        terminal_turn_id: null,
-        terminal_turn_kind: null,
+        turns: [],
       },
     };
     const bytes = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`);

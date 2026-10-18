@@ -220,7 +220,10 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
             assert body["kind"] == "generation_failed"
             assert observe_turn(client, f"{session}/turns").json() == body
             failed_history = client.get(session).json()
-            assert failed_history["terminal_turn_kind"] == "generation_failed"
+            assert [turn["status"] for turn in failed_history["turns"]] == ["completed", "completed", "generation_failed"]
+            assert failed_history["turns"][-1] == {
+                "turn_id": body["turn_id"], "user_message_id": "confirmed-2-user", "status": "generation_failed",
+            }
             assert len(failed_history["artifacts"]) == 2
             failed_activity = [item for item in failed_history["timeline"] if item["turn_id"] == body["turn_id"]]
             assert [item["kind"] for item in failed_activity] == ["message", "intermediate", "failure"]
@@ -503,10 +506,10 @@ def test_demo_concurrent_sessions_and_busy_turn() -> None:
             client.headers["X-Application-User"] = "test:user"
             for _ in range(100):
                 snapshot = (await client.get(f"{base}/{first}")).json()
-                if snapshot["terminal_turn_kind"] is not None:
+                if snapshot["turns"][-1]["status"] in {"completed", "generation_failed", "conflict"}:
                     break
                 await asyncio.sleep(0.01)
-            assert snapshot["terminal_turn_kind"] == "completed"
+            assert snapshot["turns"][-1]["status"] == "completed"
             observed = await client.get(f"{base}/{first}/turns/{turn_id}/events")
             assert observed.status_code == 200
             assert '"kind":"terminal"' in observed.text

@@ -25,6 +25,7 @@ import type {
   ChatConversationStatus,
   ChatSubmission,
   ChatToolStatus,
+  ChatTurn,
 } from '../../models/chat-message';
 
 @Component({
@@ -53,6 +54,7 @@ export class ChatUiComponent {
   readonly bannerTitle = input.required<string>();
   readonly bannerDescription = input.required<string>();
   readonly content = input.required<readonly ChatContent[]>();
+  readonly turns = input<readonly ChatTurn[]>([]);
   readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
   readonly composerDisabled = input(false);

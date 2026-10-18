@@ -112,11 +112,8 @@ def test_create_and_read_return_accepted_snapshots_without_derived_index(client:
         "expires_at": created["expires_at"],
         "messages": [],
         "artifacts": [],
-        "terminal_turn_id": None,
-        "terminal_turn_kind": None,
+        "turns": [],
         "timeline": [],
-        "active_turn_id": None,
-        "active_turn_status": None,
         "sequence": 0,
     }
     assert "availability_reference_index" not in read.json()
@@ -570,7 +567,7 @@ def test_unknown_retired_tool_and_failed_final_keep_retry_stable(
     assert isinstance(tool_output, str)
     assert json.loads(tool_output) == {"kind": "rejected", "reason": "unknown_tool"}
     assert read.json()["artifacts"] == []
-    assert read.json()["terminal_turn_id"] == first.json()["turn_id"]
+    assert read.json()["turns"][-1]["turn_id"] == first.json()["turn_id"]
     assert read.json()["messages"] == [{"role": "user", "text": "Propose one", "turn_id": None}]
 
 
@@ -670,7 +667,7 @@ def test_failed_turn_retains_completed_presentations(client: TestClient, fake_ge
     assert len(snapshot["artifacts"]) == 1
     assert snapshot["artifacts"][0]["payload"]["payload"] == {"value": [1, None]}
     assert len(snapshot["messages"]) == 1
-    assert snapshot["terminal_turn_kind"] == "generation_failed"
+    assert snapshot["turns"][-1]["status"] == "generation_failed"
     assert [item["kind"] for item in snapshot["timeline"]] == ["message", "intermediate", "tool", "artifact", "failure"]
     assert snapshot["timeline"][1]["text"] == "Preparing data."
     assert snapshot["timeline"][2]["name"] == "present_artifact"

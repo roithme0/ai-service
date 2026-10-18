@@ -126,14 +126,13 @@ class AgentTransport(Generic[InputT, ContextT, PayloadT, IssueT]):
         read = self.read(session_id, owner)
         if isinstance(read, JSONResponse):
             return read
-        if not any(item.turn_id == turn_id for item in read.timeline):
+        if not any(item.turn_id == turn_id for item in read.turns):
             return session_error_response("unknown")
         if not self.agent.observation_available(session_id):
             return session_error_response("busy")
 
         return turn_event_stream(
             turn_id, self.agent.observe(session_id),
-            lambda: self.agent.turn_terminal(session_id, turn_id),
         )
 
 

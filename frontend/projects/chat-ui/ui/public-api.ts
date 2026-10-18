@@ -13,7 +13,10 @@ export type {
   ChatTextMessage,
   ChatToolCall,
   ChatToolStatus,
+  ChatTurn,
+  ChatTurnContent,
   ChatTurnFailure,
+  ChatTurnStatus,
   JsonPrimitive,
   JsonValue,
 } from './lib/models/chat-message';

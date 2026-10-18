@@ -164,6 +164,7 @@ describe('Demo application', () => {
       expect(chat.content()[3]).toEqual({
         kind: 'artifact',
         id: 'greeting-1',
+        turnId: 'turn-2',
         type: 'json',
         headline: type,
         payload: { value: payload },
@@ -196,15 +197,14 @@ describe('Demo application', () => {
       .mockResolvedValueOnce(Response.json({ kind: 'accepted', turn_id: 'turn-4' }))
       .mockResolvedValueOnce(
         snapshotObservation({
-          active_turn_id: null,
-          active_turn_status: null,
           sequence: 4,
           session_id: 'demo-1',
           expires_at: '2026-09-26T12:00:00Z',
           messages: [{ role: 'user', text: 'Show error', turn_id: null }],
           artifacts: [],
-          terminal_turn_id: 'turn-4',
-          terminal_turn_kind: 'generation_failed',
+          turns: [
+            { turn_id: 'turn-4', user_message_id: 'confirmed-0-user', status: 'generation_failed' },
+          ],
           timeline: [
             {
               kind: 'message',
@@ -274,11 +274,8 @@ function observation(value: {
   return snapshotObservation({
     session_id: 'demo-1',
     expires_at: '2026-10-04T20:00:00Z',
-    active_turn_id: null,
-    active_turn_status: null,
     sequence: 10,
-    terminal_turn_id: value.turn_id,
-    terminal_turn_kind: 'completed',
+    turns: [{ turn_id: value.turn_id, user_message_id: 'confirmed-0-user', status: 'completed' }],
     messages: [{ role: 'user', text: 'Any text', turn_id: null }, value.message],
     timeline: [
       {
@@ -294,12 +291,13 @@ function observation(value: {
   });
 }
 function snapshotObservation(snapshot: SessionSnapshotResponse): Response {
-  const initial = { kind: 'snapshot', turn_id: snapshot.terminal_turn_id, snapshot };
+  const turn = snapshot.turns.at(-1)!;
+  const initial = { kind: 'snapshot', turn_id: turn.turn_id, snapshot };
   const terminal = {
     kind: 'terminal',
-    turn_id: snapshot.terminal_turn_id,
+    turn_id: turn.turn_id,
     sequence: snapshot.sequence,
-    outcome: snapshot.terminal_turn_kind,
+    outcome: turn.status,
   };
   return new Response(`data: ${JSON.stringify(initial)}\n\ndata: ${JSON.stringify(terminal)}\n\n`, {
     headers: { 'Content-Type': 'text/event-stream' },

@@ -1,6 +1,6 @@
 """HTTP streaming of retained agent conversation activity."""
 
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
 from typing import TypeVar
 
@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 from app.agents.http_responses import artifact_response, snapshot_response
 from app.sessions.models.conversation import ConversationReadActive, ConversationSnapshot
-from app.sessions.models.history import TerminalRecord
 from app.agents.models.http_streaming import (
     StreamClosing,
     StreamError,
@@ -35,10 +34,9 @@ class _StreamState:
 def turn_event_stream(
     turn_id: str,
     updates: AsyncIterator[ConversationReadActive[ContextT, PayloadT] | SessionReadExpired | SessionReadUnknown | None],
-    terminal_lookup: Callable[[], TerminalRecord | None],
 ) -> StreamingResponse:
     return StreamingResponse(
-        _encode_events(_turn_events(turn_id, updates, terminal_lookup)),
+        _encode_events(_turn_events(turn_id, updates)),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -50,7 +48,6 @@ def turn_event_stream(
 async def _turn_events(
     turn_id: str,
     updates: AsyncIterator[ConversationReadActive[ContextT, PayloadT] | SessionReadExpired | SessionReadUnknown | None],
-    terminal_lookup: Callable[[], TerminalRecord | None],
 ) -> AsyncIterator[StreamEventPayload | None]:
     state = _StreamState()
     async for update in updates:
@@ -61,27 +58,24 @@ async def _turn_events(
             )
             return
         snapshot = update.snapshot
+        turn = next((turn for turn in snapshot.turns if turn.turn_id == turn_id), None)
+        if turn is None:
+            yield StreamError(kind="error", turn_id=turn_id, reason="unavailable")
+            return
         if not state.snapshot_sent:
             yield StreamSnapshot(kind="snapshot", turn_id=turn_id, snapshot=snapshot_response(snapshot))
             state.snapshot_sent = True
             state.previous = {_identity(item): item for item in snapshot.timeline}
-            state.closing_sent = (
-                snapshot.active_turn_id == turn_id and snapshot.active_turn_status == "closing"
-            )
+            state.closing_sent = turn.status == "closing"
         else:
             for event in _timeline_upserts(turn_id, snapshot, state.previous):
                 yield event
-        if (
-            not state.closing_sent
-            and snapshot.active_turn_id == turn_id
-            and snapshot.active_turn_status == "closing"
-        ):
+        if not state.closing_sent and turn.status == "closing":
             yield StreamClosing(kind="closing", turn_id=turn_id, sequence=snapshot.sequence)
             state.closing_sent = True
-        terminal = terminal_lookup()
-        if terminal is not None and snapshot.active_turn_id != turn_id:
+        if turn.status in {"completed", "generation_failed", "conflict"}:
             yield StreamTerminal(
-                kind="terminal", turn_id=turn_id, sequence=snapshot.sequence, outcome=terminal.kind,
+                kind="terminal", turn_id=turn_id, sequence=snapshot.sequence, outcome=turn.status,
             )
             return
         yield None

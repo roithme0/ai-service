@@ -29,11 +29,8 @@ describe('HttpConversationTransport', () => {
             expires_at: '2026-09-17T12:00:00Z',
             messages: [],
             artifacts: [],
-            active_turn_id: null,
-            active_turn_status: null,
             sequence: 0,
-            terminal_turn_id: null,
-            terminal_turn_kind: null,
+            turns: [],
             timeline: [row],
           }),
         ),
@@ -70,11 +67,8 @@ describe('HttpConversationTransport', () => {
             expires_at: '2026-09-17T12:00:00Z',
             messages: [],
             artifacts: [],
-            active_turn_id: null,
-            active_turn_status: null,
             sequence: 0,
-            terminal_turn_id: null,
-            terminal_turn_kind: null,
+            turns: [],
           }),
         )
         .mockResolvedValueOnce(response(201, { role: 'user', text: 'Hello', turn_id: null }))
@@ -216,11 +210,8 @@ describe('HttpConversationTransport', () => {
           expires_at: '2026-09-17T12:00:00Z',
           messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
           artifacts: [artifact],
-          active_turn_id: null,
-          active_turn_status: null,
           sequence: 0,
-          terminal_turn_id: null,
-          terminal_turn_kind: null,
+          turns: [],
         }),
       )
       .mockResolvedValueOnce(response(201, { role: 'user', text: 'Weniger Zucker', turn_id: null }))
@@ -236,11 +227,8 @@ describe('HttpConversationTransport', () => {
       expires_at: '2026-09-17T12:00:00Z',
       messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
       artifacts: [artifact],
-      active_turn_id: null,
-      active_turn_status: null,
       sequence: 0,
-      terminal_turn_id: null,
-      terminal_turn_kind: null,
+      turns: [],
     });
     await expect(transport.appendMessage('session-1', 'Weniger Zucker')).resolves.toEqual({
       role: 'user',
@@ -344,11 +332,8 @@ describe('HttpConversationTransport', () => {
           session_id: 'session-1',
           messages: [],
           artifacts: [],
-          active_turn_id: null,
-          active_turn_status: null,
           sequence: 0,
-          terminal_turn_id: null,
-          terminal_turn_kind: null,
+          turns: [],
         }),
       ),
     );
@@ -394,11 +379,8 @@ describe('HttpConversationTransport', () => {
               payload: [],
             },
           ],
-          active_turn_id: null,
-          active_turn_status: null,
           sequence: 0,
-          terminal_turn_id: null,
-          terminal_turn_kind: null,
+          turns: [],
         }),
       ),
     );
@@ -407,7 +389,7 @@ describe('HttpConversationTransport', () => {
     ).rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
-  it('rejects a terminal turn kind outside the backend contract', async () => {
+  it('rejects a turn lifecycle status outside the backend contract', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -417,11 +399,8 @@ describe('HttpConversationTransport', () => {
           expires_at: '2026-09-17T12:00:00Z',
           messages: [],
           artifacts: [],
-          active_turn_id: null,
-          active_turn_status: null,
           sequence: 0,
-          terminal_turn_id: 'turn-1',
-          terminal_turn_kind: 'future_kind',
+          turns: [{ turn_id: 'turn-1', user_message_id: 'request', status: 'future_kind' }],
         }),
       ),
     );
@@ -451,11 +430,8 @@ describe('HttpConversationTransport', () => {
               payload: { future_field: true },
             },
           ],
-          active_turn_id: null,
-          active_turn_status: null,
           sequence: 0,
-          terminal_turn_id: null,
-          terminal_turn_kind: null,
+          turns: [],
         }),
       ),
     );
@@ -477,11 +453,8 @@ describe('HttpConversationTransport', () => {
           payload: { future_field: true },
         },
       ],
-      active_turn_id: null,
-      active_turn_status: null,
       sequence: 0,
-      terminal_turn_id: null,
-      terminal_turn_kind: null,
+      turns: [],
     });
   });
 });

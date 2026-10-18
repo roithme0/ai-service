@@ -12,6 +12,7 @@ from app.sessions.models.history import (
     ToolResultRecord,
 )
 from app.sessions.models.session import SessionRole
+from app.sessions.models.turns import TurnSnapshot, TurnSnapshotStatus
 from app.sessions.models.timeline import (
     TimelineArtifact,
     TimelineFailure,
@@ -45,6 +46,28 @@ def timeline(history: tuple[HistoryRecord, ...]) -> tuple[TimelineItem, ...]:
         elif isinstance(record, TerminalRecord) and record.kind != "completed":
             items.append(TimelineFailure(record.turn_id))
     return tuple(items)
+
+
+def turn_snapshots(
+    history: tuple[HistoryRecord, ...], items: tuple[TimelineItem, ...], active_turn_id: str | None,
+) -> tuple[TurnSnapshot, ...]:
+    outcomes = {record.turn_id: record.kind for record in history
+                if isinstance(record, TerminalRecord)}
+    final_turn_ids = {record.turn_id for record in history
+                      if isinstance(record, MessageRecord) and record.kind == "final"}
+    turns: list[TurnSnapshot] = []
+    for item in items:
+        if not isinstance(item, TimelineMessage) or item.role != "user":
+            continue
+        status: TurnSnapshotStatus
+        if item.turn_id in outcomes:
+            status = outcomes[item.turn_id]
+        elif item.turn_id == active_turn_id:
+            status = "closing" if item.turn_id in final_turn_ids else "in_progress"
+        else:
+            status = "pending"
+        turns.append(TurnSnapshot(item.turn_id, item.id, status))
+    return tuple(turns)
 
 
 def _message_item(
