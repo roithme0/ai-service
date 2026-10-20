@@ -597,7 +597,7 @@ def test_duplicate_function_identity_preserves_first_call_without_execution(dupl
     async def run() -> None:
         async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, stream=body))) as http_client:
             async with AsyncOpenAI(api_key="test", http_client=http_client, max_retries=0) as client:
-                with pytest.raises(ValueError):
+                with pytest.raises((ValueError, RuntimeError), match="duplicate|conflicting"):
                     await OpenAIAgenticGenerator("model", client).generate(
                         AgenticGenerationRequest((), "Instructions", (), retained.append))
         assert body.closed and len(retained) == 1

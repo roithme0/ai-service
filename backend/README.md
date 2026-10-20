@@ -44,6 +44,77 @@ The AI Service owns generic conversation, execution and presentation guidance.
 Keep multi-step domain policies in the MCP instructions rather than repeating
 them in tool descriptions or artifact capabilities.
 
+## Pydantic AI migration development
+
+The new executor in `app/agentic/turns.py` is developed alongside the current
+production engine. It uses Pydantic AI 2.58.0 directly for OpenAI Responses,
+tool execution, MCP and conversation history. It is not wired into HTTP sessions yet.
+Hosted web search, artifacts and frontend timeline integration follow in
+separate slices before the eventual cutover and legacy removal.
+
+The caller keeps the native agent open with `async with agent:` and passes
+`result.all_messages()` into the next `execute_turn()` call. Native message JSON
+can also be serialized and restored with `ModelMessagesTypeAdapter`. Results
+expose output, messages and usage; `capture_run_messages()` supports inspecting
+a failed run. No hosted telemetry exporter is configured by this slice.
+
+Execution defaults are collected in `app/agentic/config.py`: 40 model requests,
+32 framework-counted tool calls, a 120-second
+model-request deadline and a 60-second tool timeout. These are framework budgets,
+not replicas of the legacy attempt counters. Automatic provider and validation
+retries are disabled. Tools can report an expected failure with `ToolFailed`;
+unexpected exceptions propagate. The model can still choose another call, so
+these settings do not provide duplicate-mutation prevention.
+
+After installing the backend dependencies, run the isolated live smoke test from
+`backend` with `OPENAI_API_KEY` and `KOCHWIKI_OPENAI_MODEL` configured in `.env`:
+
+```powershell
+.venv/Scripts/python.exe -m scripts.verify_pydantic_turn
+```
+
+It uses a harmless local lookup tool and checks a follow-up without reexecuting
+the tool. It prints the answers, call identities and usage without contacting MCP
+or the application session API. Run deterministic coverage with
+`python -m pytest tests/test_pydantic_turns.py`.
+
+Native MCP access is configured with `app.agentic.mcp.create_mcp_toolset(url,
+id="kochwiki")` and passed to `create_turn_agent(..., toolsets=[toolset])`.
+The agent context owns connection setup and cleanup. An explicitly supplied
+HTTP client remains caller-owned. Server instructions and discovered tool
+schemas reach the model directly; domain tools load eagerly because they are
+the agent's core functionality. There is no legacy registry, polling loop or
+application reconnect policy in this path. Defaults in `app/agentic/config.py`
+give MCP connection setup five seconds and reads 60 seconds.
+
+Completed MCP tool errors become native failed tool results. Tool retries are
+disabled, while transport failures propagate and do not add application-level
+replays. A transport failure can surface during both the run and agent cleanup.
+These policies do not prevent the model from independently choosing another
+call. Native MCP regression tests exercise real protocol exchanges through an
+in-process HTTP server, without model credentials or external domain access:
+
+```powershell
+python -m pytest tests/test_pydantic_mcp.py tests/test_pydantic_turns.py
+```
+
+For a real-model, read-only Kochwiki smoke test, configure all three Kochwiki
+environment settings above and choose an existing tool explicitly advertised
+with `readOnlyHint: true`:
+
+```powershell
+.venv/Scripts/python.exe -m scripts.verify_pydantic_mcp --tool TOOL_NAME --prompt "A question answerable with one call to this tool."
+```
+
+Only the selected tool is exposed. The script requires one successful result,
+then requests a summary using native history with further tool execution
+disabled. Read-only status is the server's declaration; choose a trusted lookup
+tool. This verifies execution and history handoff, not answer quality. Neither
+smoke script invokes the application session API.
+
+The project skill in `.agents/skills/building-pydantic-ai-agents` is copied from
+the installed framework package. Refresh that copy when upgrading Pydantic AI.
+
 ## MCP connections and tool execution
 
 The Kochwiki agent's model setting is `KOCHWIKI_OPENAI_MODEL`, replacing
@@ -58,7 +129,7 @@ the chosen value. For the example `gpt-6.1-sol` model, use `low`, `medium`,
 `high`, `xhigh`, or `max` (default: `medium`). Unknown values fail settings
 validation; model-specific unsupported values are rejected by OpenAI.
 
-The `kochwiki` agent owns a generic MCP connection using the official Python
+The production `kochwiki` agent still owns a generic MCP connection using the official Python
 SDK (`mcp==2.2.0`). Set `KOCHWIKI_MCP_URL` to the complete Streamable HTTP
 endpoint, for example `http://localhost:8002/mcp/` for a backend running on the
 host. Inside Docker use an address reachable from the backend container,
