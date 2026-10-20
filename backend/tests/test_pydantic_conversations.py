@@ -80,8 +80,8 @@ def test_initial_context_is_snapshotted_as_data_and_retained_once_across_request
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)])
         async with agent:
-            first = await conversation.run_turn(agent, "first")
-            second = await conversation.run_turn(agent, "followup")
+            first = await conversation.execute_turn(agent, "first")
+            second = await conversation.execute_turn(agent, "followup")
         assert first.conversation_id == second.conversation_id
         assert prompts(conversation.messages) == [context_text, "first", "followup"]
         assert calls == ["lookup"]
@@ -109,7 +109,7 @@ def test_initial_context_is_isolated_between_concurrent_conversations() -> None:
         left = AgentConversation(initial_context={"recipe": "left"})
         right = AgentConversation(initial_context={"recipe": "right"})
         async with agent:
-            first, second = await asyncio.gather(left.run_turn(agent, "left"), right.run_turn(agent, "right"))
+            first, second = await asyncio.gather(left.execute_turn(agent, "left"), right.execute_turn(agent, "right"))
         assert first.conversation_id != second.conversation_id
 
     asyncio.run(exercise())
@@ -133,13 +133,13 @@ def test_initial_context_survives_setup_and_first_model_failure_without_duplicat
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         async with agent:
             with pytest.raises(RuntimeError, match="Toolset unavailable"):
-                await conversation.run_turn(agent, "invalid", toolsets=[UnavailableTools()])
+                await conversation.execute_turn(agent, "invalid", toolsets=[UnavailableTools()])
             assert prompts(conversation.messages) == [context_text]
             assert conversation.last_turn is None
             with pytest.raises(RuntimeError, match="Model unavailable"):
-                await conversation.run_turn(agent, "first")
+                await conversation.execute_turn(agent, "first")
             assert prompts(conversation.messages) == [context_text, "first"]
-            await conversation.run_turn(agent, "followup")
+            await conversation.execute_turn(agent, "followup")
         assert prompts(conversation.messages) == [context_text, "first", "followup"]
 
     asyncio.run(exercise())
@@ -189,7 +189,7 @@ def test_continuation_has_fresh_budgets_and_detached_snapshots() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         limits = UsageLimits(request_limit=2, tool_calls_limit=1)
         async with agent:
-            first = await conversation.run_turn(agent, "first", usage_limits=limits, toolsets=[toolset])
+            first = await conversation.execute_turn(agent, "first", usage_limits=limits, toolsets=[toolset])
             snapshot = conversation.messages
             assert snapshot == tuple(first.all_messages())
             first.response.parts.clear()
@@ -198,7 +198,7 @@ def test_continuation_has_fresh_budgets_and_detached_snapshots() -> None:
             assert inspection is not None
             inspection.messages.clear()
             inspection.usage.requests = 999
-            second = await conversation.run_turn(agent, "second", usage_limits=limits, toolsets=[toolset])
+            second = await conversation.execute_turn(agent, "second", usage_limits=limits, toolsets=[toolset])
         assert first.run_id != second.run_id
         assert first.conversation_id == second.conversation_id
         assert prompts(conversation.messages) == ["first", "second"]
@@ -240,13 +240,13 @@ def test_model_failure_retains_confirmed_results_for_followup_without_replay() -
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(update)])
         async with agent:
             with pytest.raises(RuntimeError, match="Model unavailable"):
-                await conversation.run_turn(agent, "update")
+                await conversation.execute_turn(agent, "update")
             failed = conversation.last_turn
             assert failed is not None
             assert failed.usage.tool_calls == 1
             assert returns(conversation.messages)["update"].content == 42
             assert any(isinstance(part, TextPart) for msg in conversation.messages for part in msg.parts)
-            result = await conversation.run_turn(agent, "followup", usage_limits=UsageLimits(request_limit=1))
+            result = await conversation.execute_turn(agent, "followup", usage_limits=UsageLimits(request_limit=1))
         assert result.usage.tool_calls == 0
         assert result.conversation_id == failed.conversation_id
         assert calls == 1
@@ -280,11 +280,11 @@ def test_cancellation_retains_uncertain_call_and_releases_busy_guard() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(update)])
         conversation = AgentConversation()
         async with agent:
-            task = asyncio.create_task(conversation.run_turn(agent, "update"))
+            task = asyncio.create_task(conversation.execute_turn(agent, "update"))
             try:
                 await asyncio.wait_for(started.wait(), timeout=5)
                 with pytest.raises(ConversationBusyError):
-                    await conversation.run_turn(agent, "must not be admitted")
+                    await conversation.execute_turn(agent, "must not be admitted")
                 assert conversation.messages == ()
             finally:
                 task.cancel()
@@ -296,7 +296,7 @@ def test_cancellation_retains_uncertain_call_and_releases_busy_guard() -> None:
             assert [call.tool_call_id for call in failed.started_calls] == ["update"]
             assert not returns(conversation.messages)
             assert conversation.messages[-1].state == "interrupted"
-            result = await conversation.run_turn(agent, "followup")
+            result = await conversation.execute_turn(agent, "followup")
         assert result.usage.tool_calls == 0
         assert prompts(conversation.messages) == ["update", "followup"]
         assert calls == 1
@@ -326,7 +326,7 @@ def test_independent_conversations_run_concurrently_on_one_agent() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)])
         left, right = AgentConversation(), AgentConversation()
         async with agent:
-            first, second = await asyncio.gather(left.run_turn(agent, "left"), right.run_turn(agent, "right"))
+            first, second = await asyncio.gather(left.execute_turn(agent, "left"), right.execute_turn(agent, "right"))
         assert prompts(left.messages) == ["left"]
         assert prompts(right.messages) == ["right"]
         assert set(returns(left.messages)) == {"left"}
@@ -352,11 +352,11 @@ def test_budget_failure_retains_requested_call_and_next_turn_gets_fresh_budget()
         conversation = AgentConversation()
         async with agent:
             with pytest.raises(UsageLimitExceeded):
-                await conversation.run_turn(agent, "lookup", usage_limits=UsageLimits(tool_calls_limit=0))
+                await conversation.execute_turn(agent, "lookup", usage_limits=UsageLimits(tool_calls_limit=0))
             failed = conversation.last_turn
             assert failed is not None
             assert failed.started_calls == ()
-            result = await conversation.run_turn(agent, "followup", usage_limits=UsageLimits(request_limit=1))
+            result = await conversation.execute_turn(agent, "followup", usage_limits=UsageLimits(request_limit=1))
         assert result.usage.requests == 1
         assert result.usage.tool_calls == 0
 
@@ -375,12 +375,12 @@ def test_setup_failure_does_not_discard_prior_history_or_keep_conversation_busy(
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         conversation = AgentConversation()
         async with agent:
-            await conversation.run_turn(agent, "first")
+            await conversation.execute_turn(agent, "first")
             history = conversation.messages
             with pytest.raises(RuntimeError, match="Toolset unavailable"):
-                await conversation.run_turn(agent, "invalid", toolsets=[UnavailableTools()])
+                await conversation.execute_turn(agent, "invalid", toolsets=[UnavailableTools()])
             assert conversation.messages == history
-            await conversation.run_turn(agent, "followup")
+            await conversation.execute_turn(agent, "followup")
         assert prompts(conversation.messages) == ["first", "followup"]
 
     asyncio.run(exercise())

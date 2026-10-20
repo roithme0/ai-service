@@ -47,8 +47,8 @@ def test_owner_checks_isolation_and_detached_snapshots() -> None:
                 with pytest.raises(SessionNotFoundError, match="^Session not found\\.$"):
                     registry.read(session_id, owner="bob")
                 with pytest.raises(SessionNotFoundError, match="^Session not found\\.$"):
-                    await registry.run_turn(session_id, owner="bob", agent=agent, prompt="unauthorized")
-            result = await registry.run_turn(first.session_id, owner="alice", agent=agent, prompt="hello")
+                    await registry.execute_turn(session_id, owner="bob", agent=agent, prompt="unauthorized")
+            result = await registry.execute_turn(first.session_id, owner="alice", agent=agent, prompt="hello")
             assert "recipe" in result.output and "hello" in result.output
             assert "unauthorized" not in result.output
             snapshot = registry.read(first.session_id, owner="alice")
@@ -59,9 +59,9 @@ def test_owner_checks_isolation_and_detached_snapshots() -> None:
             assert snapshot.last_turn is snapshot.turns[-1].observation
             fresh = registry.read(first.session_id, owner="alice")
             assert fresh.messages[0].parts and fresh.last_turn is not None and fresh.last_turn.messages
-            reply = await registry.run_turn(first.session_id, owner="alice", agent=agent, prompt="followup")
+            reply = await registry.execute_turn(first.session_id, owner="alice", agent=agent, prompt="followup")
             assert "hello" in reply.output and "followup" in reply.output
-            other = await registry.run_turn(second.session_id, owner="bob", agent=agent, prompt="independent")
+            other = await registry.execute_turn(second.session_id, owner="bob", agent=agent, prompt="independent")
             assert "recipe" not in other.output and "hello" not in other.output
             assert other.conversation_id != reply.conversation_id
         assert registry.read(first.session_id, owner="alice").expires_at == first.expires_at
@@ -92,13 +92,13 @@ def test_snapshot_initial_context_survives_setup_failure_and_is_replaced_by_hist
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         async with agent:
             with pytest.raises(RuntimeError, match="Toolset unavailable"):
-                await registry.run_turn(
+                await registry.execute_turn(
                     created.session_id, owner="alice", agent=agent, prompt="invalid", toolsets=[UnavailableTools()],
                 )
             failed = registry.read(created.session_id, owner="alice")
             assert failed.last_turn is None and failed.messages == pristine.messages
             assert failed.turns[0].observation is None
-            await registry.run_turn(created.session_id, owner="alice", agent=agent, prompt="hello")
+            await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="hello")
             settled = registry.read(created.session_id, owner="alice")
             assert settled.initial_context_message is None
             assert settled.last_turn is settled.turns[-1].observation
@@ -130,7 +130,7 @@ def test_exact_expiry_denies_reads_and_execution_without_refreshing_lifetime() -
         with pytest.raises(SessionNotFoundError):
             registry.read(created.session_id, owner="alice")
         with pytest.raises(SessionNotFoundError):
-            await registry.run_turn(created.session_id, owner="alice", agent=agent, prompt="late")
+            await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="late")
         assert not calls
         replacement = registry.create(owner="alice")
         assert replacement.session_id != created.session_id
@@ -180,7 +180,7 @@ def test_admitted_turn_survives_expiry_and_retains_native_settlement(outcome: st
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(operation)])
         async with agent:
-            task = asyncio.create_task(registry.run_turn(
+            task = asyncio.create_task(registry.execute_turn(
                 created.session_id, owner="alice", agent=agent, prompt="work",
             ))
             await asyncio.wait_for(started.wait(), timeout=5)
@@ -189,12 +189,12 @@ def test_admitted_turn_survives_expiry_and_retains_native_settlement(outcome: st
             before.artifacts[0].payload.payload["injected"] = True
             assert registry.read(created.session_id, owner="alice").artifacts[0].payload.payload == {}
             with pytest.raises(ConversationBusyError):
-                await registry.run_turn(created.session_id, owner="alice", agent=agent, prompt="overlap")
+                await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="overlap")
             clock.now = created.expires_at
             with pytest.raises(SessionNotFoundError):
                 registry.read(created.session_id, owner="alice")
             with pytest.raises(SessionNotFoundError):
-                await registry.run_turn(created.session_id, owner="alice", agent=agent, prompt="late")
+                await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="late")
             assert not task.done()
             if outcome == "cancel":
                 task.cancel()

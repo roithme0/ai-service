@@ -64,12 +64,12 @@ def test_owned_publication_snapshots_capabilities_and_artifacts_and_continues_wi
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         async with agent:
-            first = await conversation.run_turn(agent, "present")
+            first = await conversation.execute_turn(agent, "present")
             snapshot = conversation.artifacts
             payload = snapshot[0].payload.payload
             assert isinstance(payload, dict)
             payload["name"] = "changed"
-            second = await conversation.run_turn(agent, "followup")
+            second = await conversation.execute_turn(agent, "followup")
         artifacts = conversation.artifacts
         assert [item.payload.payload for item in artifacts] == [{"name": "First"}, {"name": "Second"}]
         assert [item.order for item in artifacts] == [0, 1]
@@ -103,9 +103,9 @@ def test_capacity_is_shared_across_turns_and_rejections_do_not_publish(limit: in
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         async with agent:
-            first = await conversation.run_turn(agent, "first")
-            second = await conversation.run_turn(agent, "second")
-            await conversation.run_turn(agent, "third")
+            first = await conversation.execute_turn(agent, "first")
+            second = await conversation.execute_turn(agent, "second")
+            await conversation.execute_turn(agent, "third")
         assert len(conversation.artifacts) == limit
         if limit:
             assert [item.turn_id for item in conversation.artifacts] == [first.run_id, second.run_id]
@@ -142,14 +142,14 @@ def test_publication_survives_later_failure_or_cancellation_and_is_visible_durin
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(fail)])
         async with agent:
-            task = asyncio.create_task(conversation.run_turn(agent, "present"))
+            task = asyncio.create_task(conversation.execute_turn(agent, "present"))
             try:
                 await asyncio.wait_for(published.wait(), timeout=5)
                 accepted = conversation.artifacts
                 assert len(accepted) == 1
                 if failure == "cancel":
                     with pytest.raises(ConversationBusyError):
-                        await conversation.run_turn(agent, "busy")
+                        await conversation.execute_turn(agent, "busy")
             finally:
                 if failure == "cancel":
                     task.cancel()
@@ -158,7 +158,7 @@ def test_publication_survives_later_failure_or_cancellation_and_is_visible_durin
             failed = conversation.last_turn
             assert failed is not None
             assert accepted[0].turn_id == failed.run_id
-            result = await conversation.run_turn(agent, "followup")
+            result = await conversation.execute_turn(agent, "followup")
         assert result.usage.tool_calls == 0
         assert conversation.artifacts == accepted
 
@@ -186,7 +186,7 @@ def test_shared_agent_keeps_concurrent_capabilities_and_publications_isolated() 
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         async with agent:
-            left, right = await asyncio.gather(*(item.run_turn(agent, name) for name, item in conversations.items()))
+            left, right = await asyncio.gather(*(item.execute_turn(agent, name) for name, item in conversations.items()))
             empty = AgentConversation()
 
             def without_artifacts(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -194,7 +194,7 @@ def test_shared_agent_keeps_concurrent_capabilities_and_publications_isolated() 
                 return ModelResponse(parts=[TextPart("No presentation configured.")])
 
             with agent.override(model=FunctionModel(without_artifacts)):
-                await empty.run_turn(agent, "empty")
+                await empty.execute_turn(agent, "empty")
         assert empty.artifacts == ()
         assert conversations["left"].artifacts[0].turn_id == left.run_id
         assert conversations["right"].artifacts[0].turn_id == right.run_id

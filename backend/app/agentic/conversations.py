@@ -2,7 +2,7 @@
 
 import json
 from asyncio import CancelledError
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -164,24 +164,23 @@ class AgentConversation:
             self._artifacts = (*self._artifacts, artifact)
             return accepted
 
-    async def run_turn(
+    async def execute_turn(
         self,
         agent: Agent[None, str],
         prompt: str,
         *,
         usage_limits: UsageLimits | None = None,
         toolsets: Sequence[AbstractToolset[None]] = (),
+        on_admitted: Callable[[], None] | None = None,
     ) -> AgentRunResult[str]:
-        if not self._turn_lock.acquire(blocking=False):
-            raise ConversationBusyError("The conversation already has a running turn.")
-        observation = TurnObservation()
-        turn = ConversationTurn(
-            lifecycle=TurnLifecycle(run_id=None, status="running", started_at=datetime.now(UTC), finished_at=None),
-            observation=observation,
-        )
-        self._turns = (*self._turns, turn)
+        """Admit and await execution; notify the runner before execution can suspend."""
+        turn = self._admit_turn()
+        observation = turn.observation
+        assert observation is not None
         status: TurnStatus = "failed"
         try:
+            if on_admitted is not None:
+                on_admitted()
             artifact_toolset = create_artifact_toolset(self._artifact_capabilities, self._accept_artifact)
             result = await execute_turn(
                 agent,
@@ -198,19 +197,35 @@ class AgentConversation:
             status = "completed"
             return result
         finally:
-            previous_turns = self._turns[:-1]
-            if observation.run_id is not None:
-                self._initial_context_message = None
-                # Superseded captures contain cumulative history; retain only the latest.
-                previous_turns = tuple(replace(previous, observation=None) for previous in previous_turns)
-            settled = replace(
-                turn.lifecycle,
-                run_id=observation.run_id,
-                status=status,
-                finished_at=datetime.now(UTC),
-            )
-            self._turns = (*previous_turns, ConversationTurn(
-                lifecycle=settled,
-                observation=observation if observation.run_id is not None else None,
-            ))
-            self._turn_lock.release()
+            self._settle_turn(turn, status)
+
+    def _admit_turn(self) -> ConversationTurn:
+        if not self._turn_lock.acquire(blocking=False):
+            raise ConversationBusyError("The conversation already has a running turn.")
+        observation = TurnObservation()
+        turn = ConversationTurn(
+            lifecycle=TurnLifecycle(run_id=None, status="running", started_at=datetime.now(UTC), finished_at=None),
+            observation=observation,
+        )
+        self._turns = (*self._turns, turn)
+        return turn
+
+    def _settle_turn(self, turn: ConversationTurn, status: TurnStatus) -> None:
+        observation = turn.observation
+        assert observation is not None
+        previous_turns = self._turns[:-1]
+        if observation.run_id is not None:
+            self._initial_context_message = None
+            # Superseded captures contain cumulative history; retain only the latest.
+            previous_turns = tuple(replace(previous, observation=None) for previous in previous_turns)
+        settled = replace(
+            turn.lifecycle,
+            run_id=observation.run_id,
+            status=status,
+            finished_at=datetime.now(UTC),
+        )
+        self._turns = (*previous_turns, ConversationTurn(
+            lifecycle=settled,
+            observation=observation if observation.run_id is not None else None,
+        ))
+        self._turn_lock.release()

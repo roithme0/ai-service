@@ -61,7 +61,7 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
         before = datetime.now(UTC)
         assert registry.read(created.session_id, owner="alice").turns == ()
         async with agent:
-            task = asyncio.create_task(registry.run_turn(
+            task = asyncio.create_task(registry.execute_turn(
                 created.session_id, owner="alice", agent=agent, prompt="work",
             ))
             try:
@@ -81,9 +81,9 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
                 with pytest.raises(SessionNotFoundError):
                     registry.read(created.session_id, owner="bob")
                 with pytest.raises(SessionNotFoundError):
-                    await registry.run_turn(created.session_id, owner="bob", agent=agent, prompt="unauthorized")
+                    await registry.execute_turn(created.session_id, owner="bob", agent=agent, prompt="unauthorized")
                 with pytest.raises(ConversationBusyError):
-                    await registry.run_turn(created.session_id, owner="alice", agent=agent, prompt="overlap")
+                    await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="overlap")
                 assert registry.read(created.session_id, owner="alice").turns == active.turns
                 assert registry.read(other.session_id, owner="bob").turns == ()
                 if outcome == "cancelled":
@@ -114,7 +114,7 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
             assert running.status == "running" and running.finished_at is None
             assert settled.last_turn is not None and settled.last_turn.run_id == record.run_id
             assert settled.messages and settled.artifacts == active.artifacts
-            followup_task = asyncio.create_task(registry.run_turn(
+            followup_task = asyncio.create_task(registry.execute_turn(
                 created.session_id, owner="alice", agent=agent, prompt="followup",
             ))
             try:
@@ -165,9 +165,9 @@ def test_setup_lifecycle_without_run_id_preserves_prior_history(outcome: str) ->
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         async with agent:
-            await registry.run_turn(created.session_id, owner="alice", agent=agent, prompt="first")
+            await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="first")
             prior = registry.read(created.session_id, owner="alice")
-            task = asyncio.create_task(registry.run_turn(
+            task = asyncio.create_task(registry.execute_turn(
                 created.session_id, owner="alice", agent=agent, prompt="invalid", toolsets=[UnavailableTools()],
             ))
             try:
@@ -198,7 +198,7 @@ def test_setup_lifecycle_without_run_id_preserves_prior_history(outcome: str) ->
             assert settled.turns[-1].lifecycle.finished_at is not None
             release.set()
             with pytest.raises(RuntimeError, match="Toolset unavailable"):
-                await registry.run_turn(
+                await registry.execute_turn(
                     created.session_id, owner="alice", agent=agent, prompt="invalid again",
                     toolsets=[UnavailableTools()],
                 )
@@ -206,7 +206,7 @@ def test_setup_lifecycle_without_run_id_preserves_prior_history(outcome: str) ->
             assert repeated.messages == prior.messages and repeated.last_turn == prior.last_turn
             assert repeated.turns[:-1] == settled.turns
             assert repeated.turns[-1].lifecycle.status == "failed" and repeated.turns[-1].lifecycle.run_id is None
-            await registry.run_turn(created.session_id, owner="alice", agent=agent, prompt="followup")
+            await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="followup")
             final = registry.read(created.session_id, owner="alice")
             assert len(final.turns) == 4 and final.turns[-1].lifecycle.status == "completed"
             prompts = [part.content for message in final.messages for part in message.parts

@@ -141,9 +141,9 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
                 assert toolsets[0].client.is_connected()
                 assert not model.client.is_closed()
                 with agent.override(model=FunctionModel(respond)):
-                    result = await first.run_turn(agent, "Find and present soup.")
-                    followup = await first.run_turn(agent, "Repeat that.")
-                    separate = await independent.run_turn(agent, "Hello.")
+                    result = await first.execute_turn(agent, "Find and present soup.")
+                    followup = await first.execute_turn(agent, "Repeat that.")
+                    separate = await independent.execute_turn(agent, "Hello.")
                 assert result.output == followup.output == separate.output == "Soup is ready."
                 assert result.usage.tool_calls == 2
                 assert followup.usage.tool_calls == separate.usage.tool_calls == 0

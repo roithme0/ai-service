@@ -69,8 +69,8 @@ from app.core.config import get_settings
 agent = create_kochwiki_agent(get_settings())
 conversation = AgentConversation()
 async with agent:
-    first = await conversation.run_turn(agent, "Find a soup recipe.")
-    second = await conversation.run_turn(agent, "Explain that recipe.")
+    first = await conversation.execute_turn(agent, "Find a soup recipe.")
+    second = await conversation.execute_turn(agent, "Explain that recipe.")
 ```
 
 Keep one agent context open across conversations. Native context entry connects
@@ -90,11 +90,11 @@ The caller keeps the native agent open with `async with agent:`. Use
 ```python
 conversation = AgentConversation(initial_context={"recipe": {"id": "recipe-42"}})
 async with agent:
-    first = await conversation.run_turn(agent, "Find the value.")
-    second = await conversation.run_turn(agent, "Explain that result.")
+    first = await conversation.execute_turn(agent, "Find the value.")
+    second = await conversation.execute_turn(agent, "Explain that result.")
 ```
 
-`run_turn()` returns the native `AgentRunResult[str]` and accepts per-turn
+`execute_turn()` returns the native `AgentRunResult[str]` and accepts per-turn
 `usage_limits` and additional `toolsets`.
 `conversation.messages` returns a detached tuple of native messages;
 `conversation.last_turn` returns detached `TurnObservation` inspection data.
@@ -111,7 +111,7 @@ and agent guidance establish a data boundary; they do not guarantee resistance
 to instructions embedded in caller data.
 
 Optional `artifact_capabilities` are also snapshotted at conversation creation.
-`run_turn()` automatically attaches the native `present_artifact` tool when
+`execute_turn()` automatically attaches the native `present_artifact` tool when
 capabilities are advertised. Acceptance atomically checks the conversation's
 `max_artifacts` capacity (default 100, configurable down to zero), assigns a UUID
 and UTC timestamp, and retains a detached payload before returning the accepted ID
@@ -133,7 +133,7 @@ conversation = AgentConversation(
     artifact_capabilities=capabilities,
 )
 async with agent:
-    await conversation.run_turn(agent, "Present the recipe.")
+    await conversation.execute_turn(agent, "Present the recipe.")
 artifacts = conversation.artifacts
 ```
 
@@ -157,23 +157,27 @@ durable storage or public timeline projection. The production session store is
 not connected. Focused coverage runs with
 `python -m pytest tests/test_pydantic_conversations.py tests/test_pydantic_conversation_artifacts.py`.
 
-`app.agentic.sessions.AgentSessionRegistry` adds application session ownership and
-expiry around those conversations, independently of the production store:
+`app.agentic.runner.AgentTurnRunner` is the consumer-facing boundary for one
+configured agent and all its conversations. It creates and owns an internal
+`AgentSessionRegistry`; consumers do not construct or access that registry:
 
 ```python
-from app.agentic.sessions import AgentSessionRegistry
+from app.agentic.runner import AgentTurnRunner
 
-sessions = AgentSessionRegistry()
-created = sessions.create(owner="recipe-app:user-42", initial_context={"recipe": {"id": "recipe-42"}})
-async with agent:
-    result = await sessions.run_turn(
-        created.session_id, owner="recipe-app:user-42", agent=agent, prompt="Explain the recipe.",
-    )
-snapshot = sessions.read(created.session_id, owner="recipe-app:user-42")
+runner = AgentTurnRunner(agent)
+created = runner.create_session(
+    owner="recipe-app:user-42", initial_context={"recipe": {"id": "recipe-42"}},
+)
+async with agent, runner:
+    await runner.submit(created.session_id, owner="recipe-app:user-42", prompt="Explain the recipe.")
+    snapshot = runner.read_session(created.session_id, owner="recipe-app:user-42")
+    # Keep the application running here; leaving the context shuts down active work.
 ```
 
 The registry owns session IDs and a fixed 90-minute lifetime, configured in
-`app/agentic/config.py`. Creation also accepts artifact capabilities and capacity.
+`app/agentic/config.py`. The runner accepts an optional `session_lifetime` and clock
+for configuration and deterministic tests. `create_session()` also accepts artifact
+capabilities and capacity. Each runner owns an independent registry.
 Every read and turn admission checks the exact owner and expiry; unknown,
 other-owner and expired sessions raise the same `SessionNotFoundError`. Owner
 identity must come from the application boundary; this check is not authentication.
@@ -216,9 +220,40 @@ Lifecycle records contain no duplicate messages, tool results or usage. They rem
 conversation-owned for the session lifetime and do not change exception propagation
 or artifact correlation: artifacts still use the native run ID. A failed or
 cancelled execution retains accepted artifacts and captured history; cancellation
-does not establish whether an interrupted tool's external effects occurred. Execution
-remains awaited, with no background runner or public API changes. Focused coverage:
+does not establish whether an interrupted tool's external effects occurred. Direct
+`execute_turn()` calls remain awaited. Focused coverage:
 `python -m pytest tests/test_pydantic_turn_lifecycle.py`.
+
+`await runner.submit(...)` waits for admission, then returns without waiting for
+completion. Ownership, expiry and the conversation's existing busy guard are checked
+inside the background execution; admission failures reach the submitting caller.
+The conversation acknowledges admission through the optional internal `on_admitted`
+callback before execution can suspend. The runner creates, retains and observes all
+background tasks; neither the registry nor the conversation schedules work.
+Internally, `sessions.execute_turn()` awaits conversation settlement and returns
+the native result or propagates the execution error to the runner. Consumers use
+`create_session()`, `read_session()` and `submit()`; they do not execute through the
+registry. Session snapshots contain internal native data, not a public HTTP schema.
+
+The runner consumes background exceptions and logs failure exception types without
+provider payloads. Existing conversation entries remain the only lifecycle records.
+Caller cancellation while admission is pending cancels the pending execution. Once
+admitted, execution remains runner-owned even if the submitting caller is cancelled
+before `submit()` returns. Independent sessions can run concurrently, and session
+expiry does not cancel admitted work.
+
+`close()` rejects new sessions and submissions with `RunnerClosedError`. Owner-
+checked `read_session()` remains available after shutdown, subject to session expiry,
+so callers can inspect settled outcomes. Shutdown cancels outstanding
+tasks and waits for native cleanup and conversation settlement. It is idempotent;
+cancellation of the closing caller is propagated after cleanup finishes. Work
+cancelled before admission creates no turn record and adds no prompt to history.
+Cancellation after admission settles the existing record, possibly without a native
+run ID if native execution has not started. Close the runner before leaving the
+native agent context, as in the example. Cleanup is cooperative and has no additional
+shutdown deadline; cancellation cannot roll back external tool effects.
+There is no HTTP, SSE, frontend or production routing change.
+Run `python -m pytest tests/test_pydantic_runner.py` for focused coverage.
 
 Continuation passes native `message_history` without previous usage, so request
 and tool budgets start fresh for every turn. The framework inherits conversation

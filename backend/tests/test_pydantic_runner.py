@@ -1,0 +1,364 @@
+import asyncio
+from collections.abc import Callable, Sequence
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from pydantic import JsonValue
+from pydantic_ai import Agent, Tool, models
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.run import AgentRunResult
+from pydantic_ai.toolsets import AbstractToolset
+from pydantic_ai.usage import UsageLimits
+
+from app.agentic.conversations import AgentConversation, ConversationBusyError, ConversationTurn
+from app.agentic.runner import AgentTurnRunner, RunnerClosedError
+from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
+from app.agentic.turns import create_turn_agent
+from app.sessions.models.artifacts import ArtifactCapability
+
+
+@pytest.fixture(autouse=True)
+def prevent_live_model_requests(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)
+
+
+async def wait_until_settled(runner: AgentTurnRunner, session_id: str) -> None:
+    async with asyncio.timeout(5):
+        while runner.read_session(session_id, owner="alice").turns[-1].lifecycle.status == "running":
+            await asyncio.sleep(0)
+
+
+def test_submission_waits_for_admission_and_survives_submitting_caller_cancellation() -> None:
+    async def exercise() -> None:
+        started, release = asyncio.Event(), asyncio.Event()
+        submission_returned = asyncio.Event()
+
+        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            prompts = [part.content for message in messages for part in message.parts
+                       if isinstance(part, UserPromptPart)]
+            assert "rejected" not in prompts
+            started.set()
+            await release.wait()
+            return ModelResponse(parts=[TextPart("Finished.")])
+
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        runner = AgentTurnRunner(agent)
+        created = runner.create_session(owner="alice")
+        async with agent, runner:
+            async def submit() -> None:
+                await runner.submit(created.session_id, owner="alice", prompt="work")
+                snapshot = runner.read_session(created.session_id, owner="alice")
+                assert len(snapshot.turns) == 1
+                assert snapshot.turns[0].lifecycle.status == "running"
+                with pytest.raises(ConversationBusyError):
+                    await runner.submit(created.session_id, owner="alice", prompt="rejected")
+                submission_returned.set()
+                await asyncio.Event().wait()
+
+            caller = asyncio.create_task(submit())
+            await asyncio.wait_for(started.wait(), 5)
+            await asyncio.wait_for(submission_returned.wait(), 5)
+            caller.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await caller
+            assert runner.read_session(created.session_id, owner="alice").turns[0].lifecycle.status == "running"
+            release.set()
+            await wait_until_settled(runner, created.session_id)
+            assert runner.read_session(created.session_id, owner="alice").turns[0].lifecycle.status == "completed"
+            await runner.submit(created.session_id, owner="alice", prompt="followup")
+            await wait_until_settled(runner, created.session_id)
+            assert len(runner.read_session(created.session_id, owner="alice").turns) == 2
+        with pytest.raises(RunnerClosedError):
+            await runner.submit(created.session_id, owner="alice", prompt="rejected")
+
+    asyncio.run(exercise())
+
+
+def test_background_failure_is_consumed_and_later_turn_can_run(caplog: pytest.LogCaptureFixture) -> None:
+    async def exercise() -> None:
+
+        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            prompts = [part.content for message in messages for part in message.parts
+                       if isinstance(part, UserPromptPart)]
+            if prompts[-1] == "fail":
+                raise RuntimeError("Sensitive provider payload")
+            return ModelResponse(parts=[TextPart("Recovered.")])
+
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        runner = AgentTurnRunner(agent)
+        created = runner.create_session(owner="alice")
+        async with agent, runner:
+            await runner.submit(created.session_id, owner="alice", prompt="fail")
+            await wait_until_settled(runner, created.session_id)
+            assert runner.read_session(created.session_id, owner="alice").turns[0].lifecycle.status == "failed"
+            await runner.submit(created.session_id, owner="alice", prompt="followup")
+            await wait_until_settled(runner, created.session_id)
+        assert runner.read_session(created.session_id, owner="alice").turns[-1].lifecycle.status == "completed"
+
+    asyncio.run(exercise())
+    assert "Background agent turn failed (RuntimeError)." in caplog.text
+    assert "Sensitive provider payload" not in caplog.text
+
+
+def test_shutdown_before_execution_starts_cancels_submission_without_admission() -> None:
+    async def exercise() -> None:
+        calls = 0
+
+        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            nonlocal calls
+            calls += 1
+            return ModelResponse(parts=[TextPart("Done.")])
+
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        runner = AgentTurnRunner(agent)
+        created = runner.create_session(owner="alice", initial_context={"recipe": 42})
+        async with agent:
+            submission = asyncio.create_task(runner.submit(
+                created.session_id, owner="alice", prompt="never started",
+            ))
+            await asyncio.sleep(0)
+            await runner.close()
+            with pytest.raises(asyncio.CancelledError):
+                await submission
+            await runner.close()
+            snapshot = runner.read_session(created.session_id, owner="alice")
+            assert snapshot.turns == () and snapshot.initial_context_message is not None
+            assert calls == 0
+            with pytest.raises(RunnerClosedError):
+                async with runner:
+                    pytest.fail("Closed runner was reopened")
+            with pytest.raises(RunnerClosedError):
+                runner.create_session(owner="alice")
+
+    asyncio.run(exercise())
+
+
+def test_caller_cancellation_before_admission_leaves_no_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def exercise() -> None:
+        waiting = asyncio.Event()
+
+        class DelayedSessions(AgentSessionRegistry):
+            async def execute_turn(
+                self,
+                session_id: str,
+                *,
+                owner: str,
+                agent: Agent[None, str],
+                prompt: str,
+                usage_limits: UsageLimits | None = None,
+                toolsets: Sequence[AbstractToolset[None]] = (),
+                on_admitted: Callable[[], None] | None = None,
+            ) -> AgentRunResult[str]:
+                waiting.set()
+                await asyncio.Event().wait()
+                return await super().execute_turn(
+                    session_id, owner=owner, agent=agent, prompt=prompt,
+                    usage_limits=usage_limits, toolsets=toolsets, on_admitted=on_admitted,
+                )
+
+        monkeypatch.setattr("app.agentic.runner.AgentSessionRegistry", DelayedSessions)
+
+        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            pytest.fail("Cancelled submission reached the model")
+
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        runner = AgentTurnRunner(agent)
+        created = runner.create_session(owner="alice")
+        async with agent, runner:
+            submission = asyncio.create_task(runner.submit(created.session_id, owner="alice", prompt="work"))
+            await asyncio.wait_for(waiting.wait(), 5)
+            submission.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await submission
+        assert runner.read_session(created.session_id, owner="alice").turns == ()
+
+    asyncio.run(exercise())
+
+
+def test_caller_cancellation_after_admission_before_submit_returns_keeps_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def exercise() -> None:
+        started, release = asyncio.Event(), asyncio.Event()
+        submission: asyncio.Task[None] | None = None
+        admit_turn = AgentConversation._admit_turn
+
+        def admit_and_cancel_caller(conversation: AgentConversation) -> ConversationTurn:
+            turn = admit_turn(conversation)
+            assert submission is not None and not submission.done()
+            submission.cancel()
+            return turn
+
+        monkeypatch.setattr(AgentConversation, "_admit_turn", admit_and_cancel_caller)
+
+        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            started.set()
+            await release.wait()
+            return ModelResponse(parts=[TextPart("Done.")])
+
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        runner = AgentTurnRunner(agent)
+        created = runner.create_session(owner="alice")
+        async with agent, runner:
+            submission = asyncio.create_task(runner.submit(created.session_id, owner="alice", prompt="work"))
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(submission, 5)
+            await asyncio.wait_for(started.wait(), 5)
+            assert runner.read_session(created.session_id, owner="alice").turns[0].lifecycle.status == "running"
+            release.set()
+            await wait_until_settled(runner, created.session_id)
+            assert runner.read_session(created.session_id, owner="alice").turns[0].lifecycle.status == "completed"
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("cancel_close", [0, 1, 2])
+def test_shutdown_awaits_tool_cleanup_and_retains_artifacts(cancel_close: int) -> None:
+    async def exercise() -> None:
+        started, cleaning, release_cleanup, cleaned = (asyncio.Event() for _ in range(4))
+
+        async def operation() -> str:
+            """Perform a domain operation."""
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cleaning.set()
+                await release_cleanup.wait()
+                cleaned.set()
+            return "Done"
+
+        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            return ModelResponse(parts=[
+                ToolCallPart("present_artifact", {"candidate": {
+                    "type": "example", "payload": {"title": "Accepted", "payload": {}},
+                }}, "artifact"),
+                ToolCallPart("operation", {}, "operation"),
+            ])
+
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(operation)])
+        runner = AgentTurnRunner(agent)
+        created = runner.create_session(owner="alice", artifact_capabilities=[ArtifactCapability(
+            type="example", description="Present data.", payloadSchema={"type": "object"},
+        )])
+        async with agent:
+            await runner.submit(created.session_id, owner="alice", prompt="work")
+            await asyncio.wait_for(started.wait(), 5)
+            assert len(runner.read_session(created.session_id, owner="alice").artifacts) == 1
+            closing = asyncio.create_task(runner.close())
+            await asyncio.wait_for(cleaning.wait(), 5)
+            assert not closing.done() and not cleaned.is_set()
+            with pytest.raises(RunnerClosedError):
+                await runner.submit(created.session_id, owner="alice", prompt="rejected")
+            for _ in range(cancel_close):
+                closing.cancel()
+                await asyncio.sleep(0)
+                assert not closing.done()
+            release_cleanup.set()
+            if cancel_close:
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(closing, 5)
+            else:
+                await asyncio.wait_for(closing, 5)
+            assert cleaned.is_set()
+            snapshot = runner.read_session(created.session_id, owner="alice")
+            assert snapshot.turns[-1].lifecycle.status == "cancelled"
+            assert snapshot.last_turn is not None and snapshot.last_turn.started_calls
+            assert len(snapshot.artifacts) == 1
+            await runner.close()
+
+    asyncio.run(exercise())
+
+
+def test_owner_expiry_and_independent_session_admission() -> None:
+    async def exercise() -> None:
+        now = datetime(2026, 10, 20, tzinfo=UTC)
+        both_started, release = asyncio.Event(), asyncio.Event()
+        calls = 0
+
+        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                both_started.set()
+            await release.wait()
+            return ModelResponse(parts=[TextPart("Done.")])
+
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        runner = AgentTurnRunner(agent, clock=lambda: now)
+        first = runner.create_session(owner="alice")
+        second = runner.create_session(owner="bob")
+        async with agent, runner:
+            for session_id in (first.session_id, "missing"):
+                with pytest.raises(SessionNotFoundError):
+                    await runner.submit(session_id, owner="bob", prompt="denied")
+            assert runner.read_session(first.session_id, owner="alice").turns == ()
+            await runner.submit(first.session_id, owner="alice", prompt="work")
+            await runner.submit(second.session_id, owner="bob", prompt="work")
+            await asyncio.wait_for(both_started.wait(), 5)
+            now += timedelta(minutes=90)
+            with pytest.raises(SessionNotFoundError):
+                await runner.submit(first.session_id, owner="alice", prompt="expired")
+            release.set()
+            await asyncio.sleep(0)
+        assert calls == 2
+
+    asyncio.run(exercise())
+
+
+def test_runner_session_boundary_preserves_context_capacity_isolation_and_expiry() -> None:
+    async def exercise() -> None:
+        now = datetime(2026, 10, 20, tzinfo=UTC)
+        context: dict[str, JsonValue] = {"recipe": 42}
+        capability = ArtifactCapability(
+            type="example", description="Present data.", payloadSchema={"type": "object"},
+        )
+
+        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            prompts = [part.content for message in messages for part in message.parts
+                       if isinstance(part, UserPromptPart)]
+            assert len(prompts) == 2 and isinstance(prompts[0], str) and '"recipe":42' in prompts[0]
+            returns = [part for message in messages for part in message.parts if isinstance(part, ToolReturnPart)]
+            if returns:
+                assert returns[-1].outcome == "failed"
+                assert isinstance(returns[-1].content, str) and '"artifact_limit"' in returns[-1].content
+                return ModelResponse(parts=[TextPart("No publication capacity.")])
+            return ModelResponse(parts=[ToolCallPart("present_artifact", {"candidate": {
+                "type": "example", "payload": {"title": "Example", "payload": {}},
+            }}, "artifact")])
+
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        other_agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        runner = AgentTurnRunner(agent, session_lifetime=timedelta(minutes=3), clock=lambda: now)
+        other_runner = AgentTurnRunner(other_agent, clock=lambda: now)
+        created = runner.create_session(
+            owner="alice", initial_context=context, artifact_capabilities=[capability], max_artifacts=0,
+        )
+        assert created.expires_at == now + timedelta(minutes=3)
+        context["recipe"] = 99
+        capability.payload_schema["type"] = "array"
+        for reader, owner in ((runner, "bob"), (other_runner, "alice")):
+            with pytest.raises(SessionNotFoundError):
+                reader.read_session(created.session_id, owner=owner)
+        with pytest.raises(SessionNotFoundError):
+            runner.read_session("missing", owner="alice")
+        with pytest.raises(ValueError):
+            runner.create_session(owner=" ")
+
+        async with agent, other_agent, runner, other_runner:
+            await runner.submit(created.session_id, owner="alice", prompt="present")
+            await wait_until_settled(runner, created.session_id)
+            snapshot = runner.read_session(created.session_id, owner="alice")
+            assert snapshot.turns[-1].lifecycle.status == "completed" and snapshot.artifacts == ()
+            snapshot.messages[0].parts.clear()
+            assert runner.read_session(created.session_id, owner="alice").messages[0].parts
+
+        assert runner.read_session(created.session_id, owner="alice").turns[-1].lifecycle.status == "completed"
+        with pytest.raises(RunnerClosedError):
+            runner.create_session(owner="alice")
+        now = created.expires_at
+        with pytest.raises(SessionNotFoundError):
+            runner.read_session(created.session_id, owner="alice")
+
+    asyncio.run(exercise())

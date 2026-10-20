@@ -1,4 +1,4 @@
-"""Owner-scoped, expiring sessions for the native engine on one event loop."""
+"""Internal owner-scoped session storage for the native agent runner."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -79,12 +79,12 @@ class AgentSessionRegistry:
         self,
         *,
         lifetime: timedelta = DEFAULT_SESSION_LIFETIME,
-        clock: Callable[[], datetime] = _utc_now,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         if lifetime <= timedelta():
             raise ValueError("Session lifetime must be positive.")
         self._lifetime = lifetime
-        self._clock = clock
+        self._clock = clock if clock is not None else _utc_now
         self._sessions: dict[str, _Session] = {}
 
     def _now(self) -> datetime:
@@ -138,7 +138,7 @@ class AgentSessionRegistry:
             initial_context_message=conversation.initial_context_message,
         )
 
-    async def run_turn(
+    async def execute_turn(
         self,
         session_id: str,
         *,
@@ -147,11 +147,15 @@ class AgentSessionRegistry:
         prompt: str,
         usage_limits: UsageLimits | None = None,
         toolsets: Sequence[AbstractToolset[None]] = (),
+        on_admitted: Callable[[], None] | None = None,
     ) -> AgentRunResult[str]:
+        """Check access, then await the conversation through settlement."""
         session = self._find(session_id, owner)
-        return await session.conversation.run_turn(
+        return await session.conversation.execute_turn(
             agent,
             prompt,
             usage_limits=usage_limits,
             toolsets=toolsets,
+            on_admitted=on_admitted,
         )
+
