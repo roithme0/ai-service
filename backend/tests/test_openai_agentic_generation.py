@@ -316,7 +316,7 @@ def test_failed_stream_retains_complete_calls_without_executing_them(ending: str
                 replay = model_input(history)
                 if prior_success:
                     assert any(item.get("output") == results[0].output for item in replay)
-                    assert store.read(session_id).snapshot.artifacts[0].payload == "retained payload"
+                    assert tuple(item.artifact for turn in store.read(session_id).snapshot.turns for item in turn.timeline if item.kind == "artifact")[0].payload == "retained payload"
                 else:
                     assert replay[0] == {"role": "user", "content": "Run"}
                     assert replay[-1]["call_id"] == "call_1"
@@ -515,7 +515,7 @@ def test_completed_items_are_retained_before_stream_finishes_and_replayed(
                 first = store.history(session_id)
                 assert len(first) == 2 and isinstance(first[-1], MessageRecord)
                 assert first[-1].item["phase"] == "commentary"
-                assert store.read(session_id).snapshot.timeline[-1].kind == "intermediate"
+                assert tuple(item for turn in store.read(session_id).snapshot.turns for item in turn.timeline)[-1].kind == "intermediate"
                 body.release[0].set()
                 await asyncio.wait_for(body.paused[1].wait(), 1)
                 recorded = store.history(session_id)

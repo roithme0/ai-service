@@ -40,12 +40,11 @@ def verify(base_url: str) -> None:
                 ):
                     message_at = time.monotonic() - started_at
                     snapshot = client.get(url).json()
-                    assert (
-                        snapshot["active_turn_id"] == turn_id
-                    ), "Message was buffered until turn termination"
+                    turn = next(turn for turn in snapshot["turns"] if turn["turn_id"] == turn_id)
+                    assert turn["status"] in {"in_progress", "closing"}, "Message was buffered until turn termination"
                     assert any(
                         item.get("id") == event["item"]["id"]
-                        for item in snapshot["timeline"]
+                        for item in turn["timeline"]
                     )
                 if event["kind"] == "terminal":
                     assert event["outcome"] == "completed"

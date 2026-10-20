@@ -41,7 +41,6 @@ from app.sessions.models.history import (
     TurnActivityRecord,
 )
 from app.sessions.models.turns import (
-    ActiveTurnStatus,
     TerminalTurnKind,
     TurnExecutionKind,
 )
@@ -62,7 +61,7 @@ from app.sessions.models.session import (
     SessionReadUnknown,
     SessionSnapshot,
 )
-from app.sessions.timeline import timeline
+from app.sessions.timeline import timeline, turn_snapshots
 
 ContextT = TypeVar("ContextT")
 ArtifactT = TypeVar("ArtifactT")
@@ -143,24 +142,11 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             if not isinstance(outcome, SessionReadActive):
                 return outcome
             session = self._sessions[session_id]
-            active_turn_id = session.active_turn_id
-            active_turn_status: ActiveTurnStatus | None = None
-            if active_turn_id is not None:
-                active_turn_status = (
-                    "closing"
-                    if self._has_final_message(session_id, active_turn_id)
-                    else "in_progress"
-                )
-            terminal = self._latest_terminal(session_id)
+            projected_timeline = timeline(session.history, self._published_artifacts(session_id))
             return ConversationReadActive(
                 snapshot=ConversationSnapshot(
                     session=outcome.session,
-                    artifacts=self._published_artifacts(session_id),
-                    terminal_turn_id=terminal.turn_id if terminal else None,
-                    terminal_turn_kind=terminal.kind if terminal else None,
-                    timeline=timeline(session.history),
-                    active_turn_id=active_turn_id,
-                    active_turn_status=active_turn_status,
+                    turns=turn_snapshots(session.history, projected_timeline, session.active_turn_id),
                     sequence=len(session.history),
                 ),
             )
@@ -186,17 +172,10 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             if len(read.session.messages) >= MAX_MESSAGE_COUNT - 1:
                 return SessionMessageAppendLimitReached(session_id)
             accepted_text = cast(str, text)
-            self._append_history(
-                session_id,
-                MessageRecord(
-                    str(uuid4()),
-                    None,
-                    accepted_text,
-                    "user",
-                ),
-            )
+            record = MessageRecord(str(uuid4()), None, accepted_text, "user")
+            self._append_history(session_id, record)
             return SessionMessageAppendAccepted(
-                session_id, TextMessage("user", accepted_text)
+                session_id, TextMessage("user", accepted_text, record.turn_id)
             )
 
     def admit_turn(
@@ -289,16 +268,6 @@ class ConversationSessionStore(Generic[ContextT, ArtifactT]):
             if self._sessions[session_id].active_turn_id != reservation.turn_id:
                 return ConversationTurnResult("conflict", reservation.turn_id, None, ())
             return self._finish_turn(session_id, reservation, "generation_failed")
-
-    def turn_terminal(self, session_id: str, turn_id: str) -> TerminalRecord | None:
-        return next(
-            (
-                record
-                for record in reversed(self.history(session_id))
-                if isinstance(record, TerminalRecord) and record.turn_id == turn_id
-            ),
-            None,
-        )
 
     def history(self, session_id: str) -> tuple[HistoryRecord, ...]:
         with self._lock:

@@ -6,14 +6,28 @@ export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
   JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
-export interface ChatTextMessage {
+export type ChatTurnStatus = 'active' | 'completed' | 'failed' | 'unknown';
+
+export interface ChatTurn {
+  readonly id: string;
+  readonly userMessageId: string;
+  readonly status: ChatTurnStatus;
+  readonly content: readonly ChatContent[];
+}
+
+export interface ChatTurnContent {
+  readonly turnId?: string;
+}
+
+export interface ChatTextMessage extends ChatTurnContent {
   readonly kind: 'text';
   readonly id: string;
   readonly role: ChatMessageRole;
+  readonly isFinal: boolean;
   readonly text: string;
 }
 
-export interface ChatArtifact<TPayload extends JsonValue = JsonValue> {
+export interface ChatArtifact<TPayload extends JsonValue = JsonValue> extends ChatTurnContent {
   readonly kind: 'artifact';
   readonly id: string;
   readonly type: string;
@@ -26,20 +40,20 @@ export interface ChatArtifact<TPayload extends JsonValue = JsonValue> {
 export type ChatToolStatus =
   'requested' | 'running' | 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
 
-export interface ChatToolCall {
+export interface ChatToolCall extends ChatTurnContent {
   readonly kind: 'tool';
   readonly id: string;
   readonly name: string;
   readonly status: ChatToolStatus;
 }
 
-export interface ChatIntermediateMessage {
+export interface ChatIntermediateMessage extends ChatTurnContent {
   readonly kind: 'intermediate';
   readonly id: string;
   readonly text: string;
 }
 
-export interface ChatTurnFailure {
+export interface ChatTurnFailure extends ChatTurnContent {
   readonly kind: 'failure';
   readonly id: string;
   readonly text: string;

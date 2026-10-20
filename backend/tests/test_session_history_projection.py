@@ -14,8 +14,8 @@ def test_message_projections_use_retained_text_without_interpreting_replay_paylo
     assert [(message.role, message.text) for message in messages] == [
         ("user", "Question"), ("assistant", "Answer"),
     ]
-    assert messages[-1].turn_id == "turn"
-    items = timeline(history)
+    assert all(message.turn_id == "turn" for message in messages)
+    items = timeline(history, ())
     assert [(item.kind, item.text) for item in items if item.kind in {"message", "intermediate"}] == [
         ("message", "Question"), ("intermediate", "Working"), ("message", "Answer"),
     ]

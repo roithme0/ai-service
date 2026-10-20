@@ -1,6 +1,5 @@
 ﻿"""Start and fully observe a turn for model-flow assertions; never used for timing tests."""
 import json
-from typing import cast
 
 from fastapi.testclient import TestClient
 from httpx import Response
@@ -21,7 +20,9 @@ def observe_turn(client: TestClient, url: str, *, json_body: object = None) -> R
     snapshot = client.get(url.removesuffix('/turns')).json()
     if terminal['outcome'] != 'completed':
         return Response(502, json={'detail': 'Turn generation failed', 'kind': terminal['outcome'], 'turn_id': turn_id})
-    message = next(message for message in cast(list[dict[str, object]], snapshot['messages']) if message['turn_id'] == turn_id)
-    return Response(200, json={'kind': 'completed', 'turn_id': turn_id, 'message': message,
-        'artifacts': [artifact for artifact in snapshot['artifacts'] if artifact['turn_id'] == turn_id],
-        'timeline': [item for item in snapshot['timeline'] if item['turn_id'] == turn_id and not (item['kind'] == 'message' and item['role'] == 'user')]})
+    turn = next(turn for turn in snapshot['turns'] if turn['turn_id'] == turn_id)
+    timeline = turn['timeline']
+    message = next(item for item in timeline if item['kind'] == 'message' and item['role'] == 'assistant')
+    return Response(200, json={'kind': 'completed', 'turn_id': turn_id, 'message': {key: message[key] for key in ('role', 'text', 'turn_id')},
+        'artifacts': [item['artifact'] for item in timeline if item['kind'] == 'artifact'],
+        'timeline': [item for item in timeline if not (item['kind'] == 'message' and item['role'] == 'user')]})

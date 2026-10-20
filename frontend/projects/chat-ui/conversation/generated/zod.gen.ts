@@ -11,27 +11,6 @@ export const zAcceptedTurnResponse = z.object({
 });
 
 /**
- * ArtifactResponse
- */
-export const zArtifactResponse = z.object({
-    artifact_id: z.string(),
-    created_at: z.string(),
-    order: z.int(),
-    payload: z.record(z.string(), z.unknown()),
-    turn_id: z.string(),
-    type: z.string()
-});
-
-/**
- * AssistantMessageResponse
- */
-export const zAssistantMessageResponse = z.object({
-    role: z.literal('assistant'),
-    text: z.string(),
-    turn_id: z.string()
-});
-
-/**
  * ErrorResponse
  */
 export const zErrorResponse = z.object({
@@ -65,6 +44,18 @@ export const zHttpErrorResponse = z.object({
         'http_error',
         'internal_error'
     ])
+});
+
+/**
+ * PublishedArtifact
+ */
+export const zPublishedArtifactDictStrObject = z.object({
+    artifact_id: z.string(),
+    created_at: z.string(),
+    order: z.int(),
+    payload: z.record(z.string(), z.unknown()),
+    turn_id: z.string(),
+    type: z.string()
 });
 
 /**
@@ -110,8 +101,8 @@ export const zStreamTerminal = z.object({
 /**
  * TimelineArtifact
  */
-export const zTimelineArtifact = z.object({
-    artifact_id: z.string(),
+export const zTimelineArtifactDictStrObject = z.object({
+    artifact: zPublishedArtifactDictStrObject,
     kind: z.literal('artifact'),
     turn_id: z.string()
 });
@@ -139,6 +130,7 @@ export const zTimelineIntermediateMessage = z.object({
  */
 export const zTimelineMessage = z.object({
     id: z.string(),
+    is_final: z.boolean(),
     kind: z.literal('message'),
     role: z.enum(['user', 'assistant']),
     text: z.string(),
@@ -167,13 +159,12 @@ export const zTimelineTool = z.object({
  * StreamUpsert
  */
 export const zStreamUpsert = z.object({
-    artifact: zArtifactResponse.nullish(),
     identity: z.string(),
     item: z.discriminatedUnion('kind', [
         zTimelineMessage,
         zTimelineIntermediateMessage,
         zTimelineTool,
-        zTimelineArtifact,
+        zTimelineArtifactDictStrObject,
         zTimelineFailure
     ]),
     kind: z.literal('upsert'),
@@ -183,43 +174,36 @@ export const zStreamUpsert = z.object({
 });
 
 /**
- * UserMessageResponse
+ * TurnSnapshot
  */
-export const zUserMessageResponse = z.object({
-    role: z.literal('user'),
-    text: z.string(),
-    turn_id: z.null()
+export const zTurnSnapshotDictStrObject = z.object({
+    status: z.enum([
+        'pending',
+        'in_progress',
+        'closing',
+        'completed',
+        'generation_failed',
+        'conflict'
+    ]),
+    timeline: z.array(z.union([
+        zTimelineMessage,
+        zTimelineIntermediateMessage,
+        zTimelineTool,
+        zTimelineArtifactDictStrObject,
+        zTimelineFailure
+    ])),
+    turn_id: z.string(),
+    user_message_id: z.string()
 });
 
 /**
  * SessionSnapshotResponse
  */
 export const zSessionSnapshotResponse = z.object({
-    active_turn_id: z.string().nullable(),
-    active_turn_status: z.enum(['in_progress', 'closing']).nullable(),
-    artifacts: z.array(zArtifactResponse),
     expires_at: z.string(),
-    messages: z.array(z.union([zUserMessageResponse, zAssistantMessageResponse])),
     sequence: z.int().gte(0),
     session_id: z.string(),
-    terminal_turn_id: z.string().nullable(),
-    terminal_turn_kind: z.enum([
-        'completed',
-        'generation_failed',
-        'unknown',
-        'expired',
-        'not_ready',
-        'limit_reached',
-        'conflict',
-        'busy'
-    ]).nullable(),
-    timeline: z.array(z.union([
-        zTimelineMessage,
-        zTimelineIntermediateMessage,
-        zTimelineTool,
-        zTimelineArtifact,
-        zTimelineFailure
-    ]))
+    turns: z.array(zTurnSnapshotDictStrObject)
 });
 
 /**
@@ -241,6 +225,15 @@ export const zStreamEvent = z.discriminatedUnion('kind', [
     zStreamTerminal,
     zStreamError
 ]);
+
+/**
+ * UserMessageResponse
+ */
+export const zUserMessageResponse = z.object({
+    role: z.literal('user'),
+    text: z.string(),
+    turn_id: z.string()
+});
 
 /**
  * ValidationDetail

@@ -16,7 +16,7 @@ describe('DemoTransport', () => {
       if (url.endsWith('/sessions'))
         return Response.json({ session_id: 'demo-1', expires_at: '2026-10-04T20:00:00Z' });
       if (url.endsWith('/messages'))
-        return Response.json({ role: 'user', text: 'Next', turn_id: null });
+        return Response.json({ role: 'user', text: 'Next', turn_id: `turn-${turnCount + 1}` });
       if (url.endsWith('/turns')) {
         turnCount += 1;
         return Response.json({ kind: 'accepted', turn_id: `turn-${turnCount}` });

@@ -1,6 +1,8 @@
 import json
 from datetime import timedelta
 
+import pytest
+
 from app.agents.generation_history import record_generation_response, record_tool_call
 from app.agents.models.generation import AgenticGenerationResponse, AgenticToolCall
 from app.sessions.models.artifacts import ArtifactCandidate, ArtifactToolOutput
@@ -9,6 +11,9 @@ from app.sessions.session_store import ConversationSessionStore
 from app.agents.history_projection import model_input
 from app.sessions.models.timeline import TimelineArtifact, TimelineFailure, TimelineMessage, TimelineTool
 from app.sessions.models.execution import ToolExecution
+from app.sessions.models.history import HistoryRecord, MessageRecord, TerminalRecord
+from app.sessions.models.turns import TerminalTurnKind
+from app.sessions.timeline import timeline
 
 
 def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> None:
@@ -26,8 +31,8 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
         ArtifactToolOutput("presented"), ArtifactCandidate("example", "retained content")))
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert [item.kind for item in read.snapshot.timeline] == ["message", "intermediate", "tool", "artifact"]
-    assert len(read.snapshot.artifacts) == 1
+    assert [item.kind for item in read.snapshot.turns[0].timeline] == ["message", "intermediate", "tool", "artifact"]
+    assert len(tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact")) == 1
 
     calls = tuple(AgenticToolCall(str(index), name, "{}") for index, name in enumerate(
         ("explicit_failure", "domain_payload", "uncertain", "never_started")))
@@ -45,17 +50,16 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
 
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    items = read.snapshot.timeline
+    items = read.snapshot.turns[0].timeline
     assert [item.kind for item in items] == ["message", "intermediate", "tool", "artifact", "tool", "tool", "tool", "tool", "failure"]
     tools = [item for item in items if isinstance(item, TimelineTool)]
     assert [item.status for item in tools] == ["completed", "failed", "completed", "outcome_unknown", "not_executed"]
     assert tools[-1].execution_id == never_started.execution_id
     artifact = items[3]
     assert isinstance(artifact, TimelineArtifact)
-    assert artifact.artifact_id == read.snapshot.artifacts[0].artifact_id
     assert isinstance(accepted.output, str)
-    assert json.loads(accepted.output)["artifact_id"] == artifact.artifact_id
-    assert read.snapshot.artifacts[0].payload == "retained content"
+    assert json.loads(accepted.output)["artifact_id"] == artifact.artifact.artifact_id
+    assert artifact.artifact.payload == "retained content"
     assert "secret" not in repr(items) and "explicit error detail" not in repr(items)
     assert model_input(store.history(session_id))[3]["output"] == accepted.output
 
@@ -65,7 +69,31 @@ def test_timeline_preserves_placement_failure_survival_and_safe_statuses() -> No
     store.complete_turn(session_id, next_turn, "completed", "Done")
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert read.snapshot.timeline[:len(items)] == items
-    assert isinstance(read.snapshot.timeline[-3], TimelineFailure)
-    assert isinstance(read.snapshot.timeline[-1], TimelineMessage)
-    assert read.snapshot.timeline[-1].text == "Done"
+    assert read.snapshot.turns[0].timeline == items
+    assert isinstance(read.snapshot.turns[0].timeline[-1], TimelineFailure)
+    final = read.snapshot.turns[1].timeline[-1]
+    assert isinstance(final, TimelineMessage)
+    assert final.text == "Done"
+    assert all(item.turn_id == next_turn.turn_id for item in read.snapshot.turns[1].timeline)
+
+
+@pytest.mark.parametrize("outcome", ["completed", "generation_failed", "conflict"])
+def test_only_explicit_final_records_are_marked_final_regardless_of_position_or_outcome(
+    outcome: TerminalTurnKind,
+) -> None:
+    history: tuple[HistoryRecord, ...] = (
+        MessageRecord("turn", None, "Request", "user"),
+        MessageRecord("turn", None, "Unspecified before", "unspecified"),
+        MessageRecord("turn", None, "Progress", "intermediate"),
+        MessageRecord("turn", None, "Explicit final", "final"),
+        MessageRecord("turn", None, "Unspecified after", "unspecified"),
+        TerminalRecord("turn", outcome),
+    )
+    items = timeline(history, ())
+    assert [(item.text, item.role, item.is_final) for item in items if isinstance(item, TimelineMessage)] == [
+        ("Request", "user", False),
+        ("Unspecified before", "assistant", False),
+        ("Explicit final", "assistant", True),
+        ("Unspecified after", "assistant", False),
+    ]
+    assert items[2].kind == "intermediate"

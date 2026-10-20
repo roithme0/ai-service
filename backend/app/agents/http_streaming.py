@@ -1,15 +1,14 @@
 """HTTP streaming of retained agent conversation activity."""
 
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
 from typing import TypeVar
 
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.agents.http_responses import artifact_response, snapshot_response
-from app.sessions.models.conversation import ConversationReadActive, ConversationSnapshot
-from app.sessions.models.history import TerminalRecord
+from app.agents.http_responses import timeline_item_response, snapshot_response
+from app.sessions.models.conversation import ConversationReadActive
 from app.agents.models.http_streaming import (
     StreamClosing,
     StreamError,
@@ -20,14 +19,15 @@ from app.agents.models.http_streaming import (
 )
 from app.sessions.models.session import SessionReadExpired, SessionReadUnknown
 from app.sessions.models.timeline import TimelineItem
+from app.sessions.models.turns import TurnSnapshot
 
 ContextT = TypeVar("ContextT")
 PayloadT = TypeVar("PayloadT", bound=BaseModel)
 
 
 @dataclass
-class _StreamState:
-    previous: dict[str, TimelineItem] = field(default_factory=dict)
+class _StreamState[PayloadT]:
+    previous: dict[str, TimelineItem[PayloadT]] = field(default_factory=dict)
     snapshot_sent: bool = False
     closing_sent: bool = False
 
@@ -35,10 +35,9 @@ class _StreamState:
 def turn_event_stream(
     turn_id: str,
     updates: AsyncIterator[ConversationReadActive[ContextT, PayloadT] | SessionReadExpired | SessionReadUnknown | None],
-    terminal_lookup: Callable[[], TerminalRecord | None],
 ) -> StreamingResponse:
     return StreamingResponse(
-        _encode_events(_turn_events(turn_id, updates, terminal_lookup)),
+        _encode_events(_turn_events(turn_id, updates)),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -50,9 +49,8 @@ def turn_event_stream(
 async def _turn_events(
     turn_id: str,
     updates: AsyncIterator[ConversationReadActive[ContextT, PayloadT] | SessionReadExpired | SessionReadUnknown | None],
-    terminal_lookup: Callable[[], TerminalRecord | None],
 ) -> AsyncIterator[StreamEventPayload | None]:
-    state = _StreamState()
+    state = _StreamState[PayloadT]()
     async for update in updates:
         if not isinstance(update, ConversationReadActive):
             yield StreamError(
@@ -61,48 +59,40 @@ async def _turn_events(
             )
             return
         snapshot = update.snapshot
+        turn = next((turn for turn in snapshot.turns if turn.turn_id == turn_id), None)
+        if turn is None:
+            yield StreamError(kind="error", turn_id=turn_id, reason="unavailable")
+            return
         if not state.snapshot_sent:
             yield StreamSnapshot(kind="snapshot", turn_id=turn_id, snapshot=snapshot_response(snapshot))
             state.snapshot_sent = True
-            state.previous = {_identity(item): item for item in snapshot.timeline}
-            state.closing_sent = (
-                snapshot.active_turn_id == turn_id and snapshot.active_turn_status == "closing"
-            )
+            state.previous = {_identity(item): item for item in turn.timeline}
+            state.closing_sent = turn.status == "closing"
         else:
-            for event in _timeline_upserts(turn_id, snapshot, state.previous):
+            for event in _timeline_upserts(turn, snapshot.sequence, state.previous):
                 yield event
-        if (
-            not state.closing_sent
-            and snapshot.active_turn_id == turn_id
-            and snapshot.active_turn_status == "closing"
-        ):
+        if not state.closing_sent and turn.status == "closing":
             yield StreamClosing(kind="closing", turn_id=turn_id, sequence=snapshot.sequence)
             state.closing_sent = True
-        terminal = terminal_lookup()
-        if terminal is not None and snapshot.active_turn_id != turn_id:
+        if turn.status in {"completed", "generation_failed", "conflict"}:
             yield StreamTerminal(
-                kind="terminal", turn_id=turn_id, sequence=snapshot.sequence, outcome=terminal.kind,
+                kind="terminal", turn_id=turn_id, sequence=snapshot.sequence, outcome=turn.status,
             )
             return
         yield None
 
 
 def _timeline_upserts(
-    turn_id: str,
-    snapshot: ConversationSnapshot[ContextT, PayloadT],
-    previous: dict[str, TimelineItem],
+    turn: TurnSnapshot[PayloadT],
+    sequence: int,
+    previous: dict[str, TimelineItem[PayloadT]],
 ) -> Iterator[StreamUpsert]:
-    artifacts = {
-        artifact.artifact_id: artifact_response(artifact)
-        for artifact in snapshot.artifacts
-    }
-    for order, item in enumerate(snapshot.timeline):
+    for order, item in enumerate(turn.timeline):
         identity = _identity(item)
-        if item.turn_id == turn_id and previous.get(identity) != item:
+        if previous.get(identity) != item:
             yield StreamUpsert(
-                kind="upsert", turn_id=turn_id, identity=identity, order=order,
-                sequence=snapshot.sequence, item=item,
-                artifact=artifacts.get(item.artifact_id) if item.kind == "artifact" else None,
+                kind="upsert", turn_id=turn.turn_id, identity=identity, order=order,
+                sequence=sequence, item=timeline_item_response(item),
             )
         previous[identity] = item
 
@@ -112,13 +102,13 @@ async def _encode_events(events: AsyncIterator[StreamEventPayload | None]) -> As
         yield ": heartbeat\n\n" if event is None else _sse(event)
 
 
-def _identity(item: TimelineItem) -> str:
+def _identity(item: TimelineItem[PayloadT]) -> str:
     if item.kind in {"message", "intermediate"}:
         return item.id
     if item.kind == "tool":
         return f"tool-{item.execution_id}"
     if item.kind == "artifact":
-        return item.artifact_id
+        return item.artifact.artifact_id
     return f"failure-{item.turn_id}"
 
 

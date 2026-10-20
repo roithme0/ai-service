@@ -14,7 +14,6 @@ from app.sessions.models.conversation import (
     ConversationTurnResult,
 )
 from app.sessions.session_store import ConversationSessionStore
-from app.sessions.models.history import TerminalRecord
 from app.sessions.observation import SessionObservation
 from app.sessions.models.session import (
     SessionMessageAppendOutcome,
@@ -116,9 +115,6 @@ class ConfiguredAgentService(Generic[InputT, ContextT, ArtifactT, IssueT]):
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-
-    def turn_terminal(self, session_id: str, turn_id: str) -> TerminalRecord | None:
-        return self._store.turn_terminal(session_id, turn_id)
 
     def observation_available(self, session_id: str) -> bool:
         return self._observation.observation_available(session_id)

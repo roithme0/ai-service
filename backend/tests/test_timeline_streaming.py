@@ -106,18 +106,20 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
             session = client.post(base, json={'input': {'context': {}}}).json()['session_id']
             url = f'{base}/{session}'
             client.post(url + '/messages', json={'text': 'Show'})
-            accepted = client.post(url + '/turns')
+            accepted = client.post(url + '/turns')
             assert accepted.status_code == 202
             turn_id = accepted.json()['turn_id']
             assert provider_entered.wait(2) and not provider_release.is_set()
-            assert client.post(url + '/turns').json() == accepted.json()
+            assert client.post(url + '/turns').json() == accepted.json()
             assert client.post(url + '/messages', json={'text': 'Blocked'}).status_code == 409
-            with client.stream('GET', f'{url}/turns/{turn_id}/events') as response:
+            with client.stream('GET', f'{url}/turns/{turn_id}/events') as response:
                 events = event_lines(response)
                 initial = next(events)
                 assert initial['kind'] == 'snapshot'
-                assert initial['snapshot']['active_turn_status'] == 'in_progress'
-                initial_items = initial['snapshot']['timeline']
+                assert initial['snapshot']['turns'][-1]['status'] == 'in_progress'
+                initial_items = initial['snapshot']['turns'][-1]['timeline']
+                assert [(item['text'], item['is_final']) for item in initial_items if item['kind'] == 'message'] == [('Show', False), ('Phase-less', False)]
+                assert next(item for item in initial_items if item['kind'] == 'intermediate')['text'] == 'Already visible'
                 row = next(item for item in initial_items if item['kind'] == 'tool')
                 assert row['status'] == 'requested'
                 identity, order = f"tool-{row['execution_id']}", initial_items.index(row)
@@ -133,35 +135,44 @@ def test_real_socket_stream_is_incremental_and_disconnect_does_not_cancel_genera
                 while True:
                     event = next(events)
                     if event['kind'] == 'upsert' and event['item']['kind'] == 'artifact':
-                        assert event['artifact']['payload']['payload'] == {'value': 42}
+                        assert event['item']['artifact']['payload']['payload'] == {'value': 42}
                         break
                 assert final_entered.wait(2)
+                final_upsert = None
                 while True:
                     event = next(events)
+                    if event['kind'] == 'upsert' and event['item'].get('text') == 'Retained final':
+                        final_upsert = event['item']
+                        assert final_upsert['is_final'] is True
+
                     if event['kind'] == 'closing':
                         break
                 # Close an observer while the backend remains paused after accepted artifacts.
             snapshot = client.get(url).json()
-            assert snapshot['active_turn_id'] == turn_id
-            assert snapshot['active_turn_status'] == 'closing'
-            assert len(snapshot['artifacts']) == 1
-            with client.stream('GET', f'{url}/turns/{turn_id}/events') as response:
+            assert snapshot['turns'][-1]['turn_id'] == turn_id
+            assert snapshot['turns'][-1]['status'] == 'closing'
+            assert final_upsert is not None
+            assert final_upsert in snapshot['turns'][-1]['timeline']
+            assert len([item for turn in snapshot['turns'] for item in turn['timeline'] if item['kind'] == 'artifact']) == 1
+            with client.stream('GET', f'{url}/turns/{turn_id}/events') as response:
                 events = event_lines(response)
                 catch_up = next(events)
                 assert catch_up['kind'] == 'snapshot'
-                assert catch_up['snapshot']['active_turn_status'] == 'closing'
+                assert catch_up['snapshot']['turns'][-1]['status'] == 'closing'
+                assert final_upsert in catch_up['snapshot']['turns'][-1]['timeline']
                 final_release.set()
                 retained = list(events)
             assert retained[-1]['kind'] == 'terminal' and retained[-1]['outcome'] == 'generation_failed'
             snapshot = client.get(url).json()
-            assert snapshot['active_turn_status'] is None
-            assert any(item.get('text') == 'Retained final' for item in snapshot['timeline'])
-            assert snapshot['timeline'][-1]['kind'] == 'failure'
+            assert snapshot['turns'][-1]['status'] == 'generation_failed'
+            assert final_upsert in snapshot['turns'][-1]['timeline']
+            assert [(item['text'], item['is_final']) for item in snapshot['turns'][-1]['timeline'] if item['kind'] == 'message'] == [('Show', False), ('Phase-less', False), ('Retained final', True)]
+            assert snapshot['turns'][-1]['timeline'][-1]['kind'] == 'failure'
             assert calls == 2 and tool_calls == 1
-            assert client.post(url + '/turns').json() == accepted.json()
-            with client.stream('GET', f'{url}/turns/{turn_id}/events') as response:
+            assert client.post(url + '/turns').json() == accepted.json()
+            with client.stream('GET', f'{url}/turns/{turn_id}/events') as response:
                 terminal_before_subscribe = list(event_lines(response))
-            assert terminal_before_subscribe[0]['snapshot']['timeline'] == snapshot['timeline']
+            assert terminal_before_subscribe[0]['snapshot']['turns'][-1]['timeline'] == snapshot['turns'][-1]['timeline']
             assert terminal_before_subscribe[-1]['outcome'] == 'generation_failed'
             assert calls == 2 and tool_calls == 1
     finally:
@@ -189,9 +200,9 @@ def test_atomic_subscription_preserves_every_tool_transition_and_bounded_overflo
         while True:
             update = await asyncio.wait_for(anext(observer), 1)
             assert isinstance(update, ConversationReadActive)
-            rows = [item for item in update.snapshot.timeline if item.kind == 'tool']
+            rows = [item for item in update.snapshot.turns[-1].timeline if item.kind == 'tool']
             if rows: statuses.append(rows[0].status)
-            if update.snapshot.active_turn_id is None: break
+            if update.snapshot.turns[-1].status in {"completed", "generation_failed", "conflict"}: break
         assert statuses[:3] == ['requested', 'running', 'completed']
         await observer.aclose()
         assert store._listeners == {}
@@ -220,9 +231,8 @@ def test_background_task_cancelled_before_first_step_releases_reserved_turn() ->
         await agent.close()
         read = agent.read(session)
         assert isinstance(read, ConversationReadActive)
-        assert read.snapshot.active_turn_id is None
-        assert read.snapshot.terminal_turn_id == started.turn_id
-        assert read.snapshot.terminal_turn_kind == 'generation_failed'
+        assert read.snapshot.turns[-1].turn_id == started.turn_id
+        assert read.snapshot.turns[-1].status == 'generation_failed'
     asyncio.run(exercise())
 
 def test_records_arriving_after_initial_capture_before_first_delivery_are_not_lost_or_duplicated() -> None:
@@ -247,15 +257,15 @@ def test_records_arriving_after_initial_capture_before_first_delivery_are_not_lo
             observer = agent.observe(session)
             initial = await anext(observer)
             assert isinstance(initial, ConversationReadActive)
-            assert len(initial.snapshot.timeline) == 1
+            assert len(initial.snapshot.turns[-1].timeline) == 1
             seen_sequences = [initial.snapshot.sequence]
             messages: set[str] = set()
             while True:
                 current = await asyncio.wait_for(anext(observer), 1)
                 assert isinstance(current, ConversationReadActive)
                 seen_sequences.append(current.snapshot.sequence)
-                messages.update(item.id for item in current.snapshot.timeline if item.kind == 'message' and item.role == 'assistant')
-                if current.snapshot.active_turn_id is None: break
+                messages.update(item.id for item in current.snapshot.turns[-1].timeline if item.kind == 'message' and item.role == 'assistant')
+                if current.snapshot.turns[-1].status in {"completed", "generation_failed", "conflict"}: break
             assert seen_sequences == sorted(seen_sequences)
             assert len(messages) == 1
             await observer.aclose()

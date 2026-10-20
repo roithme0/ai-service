@@ -52,7 +52,7 @@ def test_failed_or_cancelled_model_turn_releases_session_without_replay(cancel: 
         assert len(requests) == count
         read = store.read(first.session_id)
         assert isinstance(read, ConversationReadActive)
-        assert read.snapshot.artifacts == ()
+        assert tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact") == ()
         assert [message.text for message in read.snapshot.session.messages] == ["first"]
         assert store.append_user_message(first.session_id, "recover").kind == "accepted"
         assert (await execute_reserved_turn(store, strategy, first.session_id)).kind == "completed"

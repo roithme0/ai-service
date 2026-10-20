@@ -1,6 +1,6 @@
 import type { ChatArtifact, JsonValue } from '@roithme0/chat-ui/ui';
 import { ConversationNetworkError } from './conversation-api';
-import type { ArtifactResponse } from '../generated/types.gen';
+import type { PublishedArtifactDictStrObject as ArtifactResponse } from '../generated/types.gen';
 
 export function presentJsonArtifact(artifact: ArtifactResponse): ChatArtifact {
   if (!isJsonValue(artifact.payload)) {

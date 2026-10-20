@@ -110,13 +110,7 @@ def test_create_and_read_return_accepted_snapshots_without_derived_index(client:
     assert read.json() == {
         "session_id": created["session_id"],
         "expires_at": created["expires_at"],
-        "messages": [],
-        "artifacts": [],
-        "terminal_turn_id": None,
-        "terminal_turn_kind": None,
-        "timeline": [],
-        "active_turn_id": None,
-        "active_turn_status": None,
+        "turns": [],
         "sequence": 0,
     }
     assert "availability_reference_index" not in read.json()
@@ -241,14 +235,11 @@ def test_user_messages_append_in_order_and_preserve_submitted_text(client: TestC
     read = client.get(session_url)
 
     assert first.status_code == 201
-    assert first.json() == {"role": "user", "text": "  Make it lighter.  ", "turn_id": None}
+    assert first.json() == {"role": "user", "text": "  Make it lighter.  ", "turn_id": read.json()["turns"][0]["turn_id"]}
     assert second.status_code == 201
-    assert second.json() == {"role": "user", "text": "Keep it filling.", "turn_id": None}
+    assert second.json() == {"role": "user", "text": "Keep it filling.", "turn_id": read.json()["turns"][1]["turn_id"]}
     assert read.status_code == 200
-    assert read.json()["messages"] == [
-        {"role": "user", "text": "  Make it lighter.  ", "turn_id": None},
-        {"role": "user", "text": "Keep it filling.", "turn_id": None},
-    ]
+    assert [(item["role"], item["text"]) for turn in read.json()["turns"] for item in turn["timeline"] if item["kind"] == "message"] == [("user", "  Make it lighter.  "), ("user", "Keep it filling.")]
 
 
 @pytest.mark.parametrize(
@@ -273,7 +264,7 @@ def test_rejected_user_messages_do_not_change_the_conversation(
 
     assert response.status_code == 422
     assert read.status_code == 200
-    assert read.json()["messages"] == []
+    assert [(item["role"], item["text"]) for turn in read.json()["turns"] for item in turn["timeline"] if item["kind"] == "message"] == []
 
 
 def test_message_limit_returns_conflict_without_appending(client: TestClient) -> None:
@@ -288,10 +279,8 @@ def test_message_limit_returns_conflict_without_appending(client: TestClient) ->
 
     assert rejected.status_code == 409
     assert read.status_code == 200
-    assert len(read.json()["messages"]) == MAX_MESSAGE_COUNT - 1
-    assert read.json()["messages"][-1] == {
-        "role": "user", "text": str(MAX_MESSAGE_COUNT - 2), "turn_id": None,
-    }
+    assert len([item for turn in read.json()["turns"] for item in turn["timeline"] if item["kind"] == "message"]) == MAX_MESSAGE_COUNT - 1
+    assert read.json()["turns"][-1]["timeline"][0]["text"] == str(MAX_MESSAGE_COUNT - 2)
 
 
 def test_unknown_and_expired_user_message_appends_do_not_expose_session_content() -> None:
@@ -372,14 +361,7 @@ def test_turn_endpoint_returns_and_stores_assistant_reply(
     assert generation_request.instructions == CONVERSATION_INSTRUCTIONS
     assert "register_recipe_proposal" not in generation_request.instructions
     assert generation_request.tools == ()
-    assert read.json()["messages"] == [
-        {"role": "user", "text": "  question  ", "turn_id": None},
-        {
-            "role": "assistant",
-            "text": "Test reply",
-            "turn_id": response.json()["turn_id"],
-        },
-    ]
+    assert [(item["role"], item["text"]) for turn in read.json()["turns"] for item in turn["timeline"] if item["kind"] == "message"] == [("user", "  question  "), ("assistant", "Test reply")]
 
 
 @pytest.mark.parametrize("missing", ["openai_api_key", "kochwiki_openai_model", "kochwiki_mcp_url"])
@@ -458,7 +440,7 @@ def test_turn_endpoint_reports_generation_failure_without_appending(
     assert response.status_code == 502
     assert response.json()["kind"] == "generation_failed"
     assert response.json()["turn_id"]
-    assert client.get(session_url).json()["messages"] == [{"role": "user", "text": "question", "turn_id": None}]
+    assert [(item["role"], item["text"]) for turn in client.get(session_url).json()["turns"] for item in turn["timeline"] if item["kind"] == "message"] == [("user", "question")]
 
 
 def test_turn_endpoint_rejects_reply_after_new_message(
@@ -481,14 +463,7 @@ def test_turn_endpoint_rejects_reply_after_new_message(
     response = observe_turn(client, f"{session_url}/turns")
 
     assert response.status_code == 200
-    assert client.get(session_url).json()["messages"] == [
-        {"role": "user", "text": "first", "turn_id": None},
-        {
-            "role": "assistant",
-            "text": "Test reply",
-            "turn_id": response.json()["turn_id"],
-        },
-    ]
+    assert [(item["role"], item["text"]) for turn in client.get(session_url).json()["turns"] for item in turn["timeline"] if item["kind"] == "message"] == [("user", "first"), ("assistant", "Test reply")]
 
 
 def test_turn_endpoint_reports_expiry_during_generation(fake_generator: FakeGenerator) -> None:
@@ -533,7 +508,7 @@ def test_turn_endpoint_uses_reserved_assistant_capacity(
         "turn_id": response.json()["turn_id"],
     }
     assert answered.status_code == 200
-    assert len(answered.json()["messages"]) == MAX_MESSAGE_COUNT
+    assert len([item for turn in answered.json()["turns"] for item in turn["timeline"] if item["kind"] == "message"]) == MAX_MESSAGE_COUNT
     assert further_message.status_code == 409
     assert further_turn.status_code == 200
     assert len(fake_generator.calls) == 1
@@ -569,9 +544,9 @@ def test_unknown_retired_tool_and_failed_final_keep_retry_stable(
     tool_output = fake_generator.calls[1].input_items[-1]["output"]
     assert isinstance(tool_output, str)
     assert json.loads(tool_output) == {"kind": "rejected", "reason": "unknown_tool"}
-    assert read.json()["artifacts"] == []
-    assert read.json()["terminal_turn_id"] == first.json()["turn_id"]
-    assert read.json()["messages"] == [{"role": "user", "text": "Propose one", "turn_id": None}]
+    assert [item["artifact"] for turn in read.json()["turns"] for item in turn["timeline"] if item["kind"] == "artifact"] == []
+    assert read.json()["turns"][-1]["turn_id"] == first.json()["turn_id"]
+    assert [(item["role"], item["text"]) for turn in read.json()["turns"] for item in turn["timeline"] if item["kind"] == "message"] == [("user", "Propose one")]
 
 
 def test_session_history_reports_expiry_then_unknown() -> None:
@@ -636,7 +611,7 @@ def test_advertised_presentation_is_validated_published_and_retained(client: Tes
     assert artifacts[0]["order"] == 11
     assert artifacts[0]["artifact_id"]
     assert artifacts[0]["turn_id"] == response.json()["turn_id"]
-    assert client.get(base).json()["artifacts"] == artifacts
+    assert [item["artifact"] for turn in client.get(base).json()["turns"] for item in turn["timeline"] if item["kind"] == "artifact"] == artifacts
     request = fake_generator.calls[0]
     assert [tool["name"] for tool in request.tools] == ["present_artifact"]
     assert "Show structured data deliberately" in request.instructions
@@ -667,17 +642,17 @@ def test_failed_turn_retains_completed_presentations(client: TestClient, fake_ge
     ]
     assert observe_turn(client, base + "/turns", json_body={}).status_code == 502
     snapshot = client.get(base).json()
-    assert len(snapshot["artifacts"]) == 1
-    assert snapshot["artifacts"][0]["payload"]["payload"] == {"value": [1, None]}
-    assert len(snapshot["messages"]) == 1
-    assert snapshot["terminal_turn_kind"] == "generation_failed"
-    assert [item["kind"] for item in snapshot["timeline"]] == ["message", "intermediate", "tool", "artifact", "failure"]
-    assert snapshot["timeline"][1]["text"] == "Preparing data."
-    assert snapshot["timeline"][2]["name"] == "present_artifact"
-    assert snapshot["timeline"][2]["status"] == "completed"
-    assert snapshot["timeline"][3]["artifact_id"] == snapshot["artifacts"][0]["artifact_id"]
-    assert "arguments" not in snapshot["timeline"][2]
-    assert "output" not in snapshot["timeline"][2]
+    assert len([item["artifact"] for turn in snapshot["turns"] for item in turn["timeline"] if item["kind"] == "artifact"]) == 1
+    assert [item["artifact"] for turn in snapshot["turns"] for item in turn["timeline"] if item["kind"] == "artifact"][0]["payload"]["payload"] == {"value": [1, None]}
+    assert len([item for turn in snapshot["turns"] for item in turn["timeline"] if item["kind"] == "message"]) == 1
+    assert snapshot["turns"][-1]["status"] == "generation_failed"
+    assert [item["kind"] for item in [item for turn in snapshot["turns"] for item in turn["timeline"]]] == ["message", "intermediate", "tool", "artifact", "failure"]
+    assert [item for turn in snapshot["turns"] for item in turn["timeline"]][1]["text"] == "Preparing data."
+    assert [item for turn in snapshot["turns"] for item in turn["timeline"]][2]["name"] == "present_artifact"
+    assert [item for turn in snapshot["turns"] for item in turn["timeline"]][2]["status"] == "completed"
+    assert [item for turn in snapshot["turns"] for item in turn["timeline"]][3]["artifact"]["artifact_id"] == [item["artifact"] for turn in snapshot["turns"] for item in turn["timeline"] if item["kind"] == "artifact"][0]["artifact_id"]
+    assert "arguments" not in [item for turn in snapshot["turns"] for item in turn["timeline"]][2]
+    assert "output" not in [item for turn in snapshot["turns"] for item in turn["timeline"]][2]
     assert observe_turn(client, base + "/turns", json_body={}).status_code == 502
     assert len(fake_generator.calls) == 2
 
@@ -695,9 +670,10 @@ def test_completed_turn_separates_commentary_from_standalone_answer(client: Test
     result = response.json()
     assert result["message"]["text"] == "Complete answer."
     assert [item["kind"] for item in result["timeline"]] == ["intermediate", "message"]
+    assert result["timeline"][-1]["is_final"] is True
     snapshot = client.get(base).json()
-    assert snapshot["timeline"][1:] == result["timeline"]
-    assert [item["text"] for item in snapshot["messages"]] == ["Check", "Complete answer."]
+    assert [item for turn in snapshot["turns"] for item in turn["timeline"]][1:] == result["timeline"]
+    assert [item["text"] for item in [item for turn in snapshot["turns"] for item in turn["timeline"] if item["kind"] == "message"]] == ["Check", "Complete answer."]
 
 
 def test_no_capabilities_means_no_artifact_tool(client: TestClient, fake_generator: FakeGenerator) -> None:

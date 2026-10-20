@@ -17,6 +17,7 @@ from app.agents.models.tools import RegisteredTool, ToolInvocation
 from app.agents.models.tools import LocalToolSource
 from app.sessions.models.execution import ToolExecution
 from app.sessions.models.timeline import TimelineIntermediateMessage, TimelineMessage
+from app.sessions.models.turns import TurnSnapshot
 
 
 def call_response(*calls: AgenticToolCall) -> AgenticGenerationResponse:
@@ -58,19 +59,19 @@ def test_commentary_only_continues_and_remains_visible_without_becoming_final(en
     assert result.kind == ("completed" if ending == "final" else "generation_failed")
     history = store.history(session_id)
     read = store.read(session_id)
-    updates = [item for item in read.snapshot.timeline if isinstance(item, TimelineIntermediateMessage)]
+    updates = [item for item in tuple(item for turn in read.snapshot.turns for item in turn.timeline) if isinstance(item, TimelineIntermediateMessage)]
     assert updates[0].text == "I will check."
     assert len({item.id for item in updates}) == len(updates)
     assert commentary in model_input(history)
     if ending == "final":
         assert result.text == "The answer is 42."
         assert [message.text for message in completed_text_messages(history)] == ["Check", "The answer is 42."]
-        assert [item.kind for item in read.snapshot.timeline] == ["message", "intermediate", "intermediate", "message"]
-        assert isinstance(read.snapshot.timeline[-1], TimelineMessage)
+        assert [item.kind for item in tuple(item for turn in read.snapshot.turns for item in turn.timeline)] == ["message", "intermediate", "intermediate", "message"]
+        assert isinstance(tuple(item for turn in read.snapshot.turns for item in turn.timeline)[-1], TimelineMessage)
     else:
         assert result.text is None
         assert [message.text for message in completed_text_messages(history)] == ["Check"]
-        assert read.snapshot.timeline[-1].kind == "failure"
+        assert tuple(item for turn in read.snapshot.turns for item in turn.timeline)[-1].kind == "failure"
 
 
 @pytest.mark.parametrize("failure", [False, True])
@@ -301,10 +302,10 @@ def test_history_drives_revision_terminal_status_and_repeated_failure_response()
     read = store.read(session_id).snapshot
     assert read.session.revision == 2
     assert read.session.messages[-1].text == completed.text == "Done"
-    assert read.terminal_turn_id == reservation.turn_id
-    assert read.terminal_turn_kind == "completed"
+    assert read.turns[-1].turn_id == reservation.turn_id
+    assert read.turns[-1].status == "completed"
     store.append_user_message(session_id, "second")
-    assert store.read(session_id).snapshot.terminal_turn_id is None
+    assert store.read(session_id).snapshot.turns[-1].status == "pending"
     next_turn = store.reserve_turn(session_id)
     assert isinstance(next_turn, ConversationTurnReservation)
     failed = store.fail_turn(session_id, next_turn)
@@ -360,7 +361,7 @@ def test_message_phase_is_immutable_through_turn_outcome(phase: str | None, fail
     assert first.item in model_input(history)
     read = store.read(session_id).snapshot
     assert read.session.revision == (1 if fail else 2)
-    visible = [item for item in read.timeline if isinstance(item, (TimelineMessage, TimelineIntermediateMessage))]
+    visible = [item for item in tuple(item for turn in read.turns for item in turn.timeline) if isinstance(item, (TimelineMessage, TimelineIntermediateMessage))]
     assert any(item.text == "First" for item in visible)
     if phase is None:
         assert isinstance(next(item for item in visible if item.text == "First"), TimelineMessage)
@@ -439,3 +440,52 @@ def test_multiple_final_messages_select_first_without_combining_or_aggregate_val
     assert calls == 1
     assert model_input(store.history(session_id))[1:] == (first, second)
     assert [message.text for message in store.read(session_id).snapshot.session.messages] == ["Run", "a" * 10000]
+
+
+def test_snapshot_preserves_ordered_turns_while_next_answer_is_closing() -> None:
+    store = ConversationSessionStore[str, str](timedelta(minutes=90))
+    session_id = store.create("initial", ConversationSessionSettings(2), owner="test:user").session_id
+    store.append_user_message(session_id, "first")
+    first = store.reserve_turn(session_id)
+    assert isinstance(first, ConversationTurnReservation)
+    store.complete_turn(session_id, first, "completed", "Done")
+    store.append_user_message(session_id, "second")
+    second = store.reserve_turn(session_id)
+    assert isinstance(second, ConversationTurnReservation)
+    store.fail_turn(session_id, second)
+    store.append_user_message(session_id, "third")
+    pending = store.read(session_id).snapshot
+    assert pending.turns[-1].status == "pending"
+    assert pending.turns == (
+        TurnSnapshot(first.turn_id, "confirmed-0-user", "completed", pending.turns[0].timeline),
+        TurnSnapshot(second.turn_id, "confirmed-1-user", "generation_failed", pending.turns[1].timeline),
+        TurnSnapshot(tuple(item for turn in pending.turns for item in turn.timeline)[-1].turn_id, "confirmed-2-user", "pending", pending.turns[-1].timeline),
+    )
+    third = store.reserve_turn(session_id)
+    assert isinstance(third, ConversationTurnReservation)
+    assert store.read(session_id).snapshot.turns[-1].status == "in_progress"
+    record_generation_response(store, session_id, third.turn_id, final_response("Final before terminal"))
+    closing = store.read(session_id).snapshot
+    assert closing.turns[:-1] == pending.turns[:-1]
+    assert closing.turns[-1] == TurnSnapshot(third.turn_id, "confirmed-2-user", "closing", closing.turns[-1].timeline)
+    assert [(item.id, item.turn_id) for item in tuple(item for turn in closing.turns for item in turn.timeline)
+            if isinstance(item, TimelineMessage) and item.role == "user"] == [
+        ("confirmed-0-user", first.turn_id), ("confirmed-1-user", second.turn_id),
+        ("confirmed-2-user", third.turn_id),
+    ]
+    store.complete_turn(session_id, third, "completed", "Final before terminal")
+    assert store.read(session_id).snapshot.turns == (
+        *pending.turns[:2], TurnSnapshot(third.turn_id, "confirmed-2-user", "completed", closing.turns[-1].timeline),
+    )
+
+
+def test_snapshot_retains_conflict_as_precise_terminal_outcome() -> None:
+    store = ConversationSessionStore[str, str](timedelta(minutes=90))
+    session_id = store.create("initial", ConversationSessionSettings(2), owner="test:user").session_id
+    store.append_user_message(session_id, "request")
+    reservation = store.reserve_turn(session_id)
+    assert isinstance(reservation, ConversationTurnReservation)
+    assert store.complete_turn(session_id, reservation, "completed", "").kind == "conflict"
+    assert store.read(session_id).snapshot.turns == (
+        TurnSnapshot(reservation.turn_id, "confirmed-0-user", "conflict", store.read(session_id).snapshot.turns[0].timeline),
+    )

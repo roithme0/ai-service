@@ -1,11 +1,14 @@
 """Visible conversation timeline contracts."""
 
 from dataclasses import dataclass
-from typing import ClassVar, Literal
+from typing import ClassVar, Generic, Literal, TypeVar
 
 from pydantic import ConfigDict
 
 from app.sessions.models.session import SessionRole
+from app.sessions.models.artifacts import PublishedArtifact
+
+ArtifactT = TypeVar("ArtifactT")
 
 
 TimelineToolStatus = Literal["requested", "running", "completed", "failed", "not_executed", "outcome_unknown"]
@@ -29,6 +32,7 @@ class TimelineMessage:
     id: str
     role: SessionRole
     text: str
+    is_final: bool
     kind: Literal["message"] = "message"
 
 
@@ -60,14 +64,14 @@ class TimelineTool:
 
 
 @dataclass(frozen=True)
-class TimelineArtifact:
+class TimelineArtifact(Generic[ArtifactT]):
     __pydantic_config__: ClassVar[ConfigDict] = ConfigDict(
         json_schema_serialization_defaults_required=True,
         json_schema_extra=_required_kind_schema,
     )
 
     turn_id: str
-    artifact_id: str
+    artifact: PublishedArtifact[ArtifactT]
     kind: Literal["artifact"] = "artifact"
 
 
@@ -82,5 +86,5 @@ class TimelineFailure:
     kind: Literal["failure"] = "failure"
 
 
-type TimelineItem = TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact | TimelineFailure
+type TimelineItem[ArtifactT] = TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifact[ArtifactT] | TimelineFailure
 

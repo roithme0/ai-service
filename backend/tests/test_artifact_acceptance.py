@@ -60,9 +60,9 @@ def test_acceptance_assigns_identity_atomically_and_failure_retains_capacity() -
     assert history[-1].execution_id == history[-2].execution_id == call.execution_id
     assert json.loads(output_text(finalized))["artifact_id"] == history[-1].artifact_id
     assert model_input(history)[-1]["output"] == finalized.output
-    assert len(store.read(session_id).snapshot.artifacts) == 1
+    assert len(tuple(item.artifact for turn in store.read(session_id).snapshot.turns for item in turn.timeline if item.kind == "artifact")) == 1
     store.fail_turn(session_id, turn)
-    retained = store.read(session_id).snapshot.artifacts
+    retained = tuple(item.artifact for turn in store.read(session_id).snapshot.turns for item in turn.timeline if item.kind == "artifact")
     assert retained[0].order == len(before) + 2
     assert retained[0].created_at.tzinfo == UTC
     store.append_user_message(session_id, "next")
@@ -75,7 +75,7 @@ def test_acceptance_assigns_identity_atomically_and_failure_retains_capacity() -
     assert json.loads(output_text(rejected)) == {"kind": "limit_reached"}
     assert rejected.artifact is None
     store.fail_turn(session_id, next_turn)
-    assert store.read(session_id).snapshot.artifacts == retained
+    assert tuple(item.artifact for turn in store.read(session_id).snapshot.turns for item in turn.timeline if item.kind == "artifact") == retained
     assert not any(isinstance(record, ExecutionReportRecord) for record in store.history(session_id))
 
 
@@ -111,11 +111,11 @@ def test_candidate_and_snapshot_payloads_are_detached_and_session_isolated() -> 
     store.complete_turn(session_id, turn, "completed", "done")
     read = store.read(session_id)
     assert isinstance(read, ConversationReadActive)
-    assert read.snapshot.artifacts[0].payload == ["data"]
-    read.snapshot.artifacts[0].payload.append("mutated snapshot")
-    assert store.read(session_id).snapshot.artifacts[0].payload == ["data"]
+    assert tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact")[0].payload == ["data"]
+    tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact")[0].payload.append("mutated snapshot")
+    assert tuple(item.artifact for turn in store.read(session_id).snapshot.turns for item in turn.timeline if item.kind == "artifact")[0].payload == ["data"]
     assert store.history(other) == ()
-    assert store.read(other).snapshot.artifacts == ()
+    assert tuple(item.artifact for turn in store.read(other).snapshot.turns for item in turn.timeline if item.kind == "artifact") == ()
 
 
 def test_history_position_follows_acceptance_order() -> None:
@@ -128,8 +128,8 @@ def test_history_position_follows_acceptance_order() -> None:
     records = [(index, record.artifact_id) for index, record in enumerate(store.history(session_id), 1)
                if isinstance(record, ArtifactRecord)]
     read = store.read(session_id)
-    assert [(artifact.order, artifact.artifact_id) for artifact in read.snapshot.artifacts] == records
-    assert [artifact.payload for artifact in read.snapshot.artifacts] == [["second"], ["first"]]
+    assert [(artifact.order, artifact.artifact_id) for artifact in tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact")] == records
+    assert [artifact.payload for artifact in tuple(item.artifact for turn in read.snapshot.turns for item in turn.timeline if item.kind == "artifact")] == [["second"], ["first"]]
 
 
 @pytest.mark.parametrize("cancel", [False, True])
@@ -193,7 +193,7 @@ def test_model_consumes_assigned_id_and_replay_preserves_same_output(later_failu
         "present", {"type": "function", "name": "present"}, execute),)),))
     result = asyncio.run(execute_reserved_turn(store, strategy, session_id))
     assert result.kind == ("generation_failed" if later_failure else "completed")
-    assert len(store.read(session_id).snapshot.artifacts) == 1
+    assert len(tuple(item.artifact for turn in store.read(session_id).snapshot.turns for item in turn.timeline if item.kind == "artifact")) == 1
     store.append_user_message(session_id, "next")
     assert asyncio.run(execute_reserved_turn(store, strategy, session_id)).kind == "completed"
     assert len(outputs) == 2 and outputs[0] == outputs[1]

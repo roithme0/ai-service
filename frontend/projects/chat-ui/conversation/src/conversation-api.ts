@@ -36,7 +36,7 @@ export const AgentConfiguration =
 export type AgentConfiguration =
   CreateSessionApiV1AgentsConfigurationSessionsPostData['path']['configuration'];
 
-export type ApiMessage = SessionSnapshotResponse['messages'][number];
+export type ApiMessage = UserMessageResponse;
 export type ApiErrorKind = ErrorResponse['kind'] | ValidationErrorResponse['kind'];
 
 export class ConversationApiError extends Error {
@@ -143,7 +143,8 @@ export class HttpConversationTransport implements ConversationTransport {
             .map((line) => line.slice(5).replace(/^ /, ''))
             .join('\n');
           if (data === '') continue;
-          yield parseResponse(zStreamEvent, JSON.parse(data) as unknown);
+          const event = parseResponse(zStreamEvent, JSON.parse(data) as unknown);
+          yield event;
         }
         scanFrom = Math.max(0, buffer.length - 1);
         if (chunk.done) return;

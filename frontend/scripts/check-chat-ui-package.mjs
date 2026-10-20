@@ -62,7 +62,7 @@ const source = resolve(consumer, 'consumer.mts');
 await writeFile(
   source,
   `
-import { ChatUiComponent, artifactRenderer, type ChatSubmission, type ChatContent } from '@roithme0/chat-ui/ui';
+import { ChatUiComponent, artifactRenderer, type ChatSubmission, type ChatTurn } from '@roithme0/chat-ui/ui';
 import { AgentConfiguration, ConversationController, HttpConversationTransport, presentJsonArtifact,
   ConversationApiError, ConversationNetworkError,
   type AgentConfiguration as Configuration, type ArtifactMapper, type ConversationViewState,
@@ -71,7 +71,7 @@ import { AgentConfiguration, ConversationController, HttpConversationTransport, 
 import * as Root from '@roithme0/chat-ui';
 const emptyRoot: keyof typeof Root extends never ? true : false = true;
 const config: Configuration = AgentConfiguration.demo;
-const publish = (state: ConversationViewState): void => { const content: readonly ChatContent[] = state.content; };
+const publish = (state: ConversationViewState): void => { const turns: readonly ChatTurn[] = state.turns; };
 const transport: ConversationTransport = new HttpConversationTransport('/api/v1', config, 'demo:default');
 const controller = new ConversationController(transport, publish);
 const mapper: ArtifactMapper = (artifact) => presentJsonArtifact(artifact);

@@ -27,14 +27,25 @@ describe('HttpConversationTransport', () => {
           response(200, {
             session_id: 'session-1',
             expires_at: '2026-09-17T12:00:00Z',
-            messages: [],
-            artifacts: [],
-            active_turn_id: null,
-            active_turn_status: null,
             sequence: 0,
-            terminal_turn_id: null,
-            terminal_turn_kind: null,
-            timeline: [row],
+            turns: [
+              {
+                turn_id: 'turn-1',
+                user_message_id: 'user',
+                status: 'in_progress',
+                timeline: [
+                  {
+                    kind: 'message',
+                    is_final: false,
+                    role: 'user',
+                    id: 'user',
+                    text: 'Hello',
+                    turn_id: 'turn-1',
+                  },
+                  row,
+                ],
+              },
+            ],
           }),
         ),
       );
@@ -65,19 +76,13 @@ describe('HttpConversationTransport', () => {
       fetchMock
         .mockResolvedValueOnce(
           response(200, {
-            timeline: [],
             session_id: 'session-1',
             expires_at: '2026-09-17T12:00:00Z',
-            messages: [],
-            artifacts: [],
-            active_turn_id: null,
-            active_turn_status: null,
             sequence: 0,
-            terminal_turn_id: null,
-            terminal_turn_kind: null,
+            turns: [],
           }),
         )
-        .mockResolvedValueOnce(response(201, { role: 'user', text: 'Hello', turn_id: null }))
+        .mockResolvedValueOnce(response(201, { role: 'user', text: 'Hello', turn_id: 'turn-1' }))
         .mockResolvedValueOnce(response(202, { kind: 'accepted', turn_id: 'turn-1' }));
       await transport.readSession('session-1');
       await transport.appendMessage('session-1', 'Hello');
@@ -211,19 +216,32 @@ describe('HttpConversationTransport', () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
         response(200, {
-          timeline: [],
           session_id: 'session-1',
           expires_at: '2026-09-17T12:00:00Z',
-          messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
-          artifacts: [artifact],
-          active_turn_id: null,
-          active_turn_status: null,
           sequence: 0,
-          terminal_turn_id: null,
-          terminal_turn_kind: null,
+          turns: [
+            {
+              turn_id: 'turn-1',
+              user_message_id: 'request',
+              status: 'completed',
+              timeline: [
+                {
+                  kind: 'message',
+                  is_final: false,
+                  role: 'user',
+                  turn_id: 'turn-1',
+                  id: 'request',
+                  text: 'Weniger Zucker',
+                },
+                { kind: 'artifact', turn_id: 'turn-1', artifact: artifact },
+              ],
+            },
+          ],
         }),
       )
-      .mockResolvedValueOnce(response(201, { role: 'user', text: 'Weniger Zucker', turn_id: null }))
+      .mockResolvedValueOnce(
+        response(201, { role: 'user', text: 'Weniger Zucker', turn_id: 'turn-1' }),
+      )
       .mockResolvedValueOnce(response(202, { turn_id: 'turn-1', kind: 'accepted' }));
     vi.stubGlobal('fetch', fetchMock);
     const transport = new HttpConversationTransport('/api/v1', 'kochwiki', 'test:user', {
@@ -231,21 +249,32 @@ describe('HttpConversationTransport', () => {
     });
 
     await expect(transport.readSession('session-1')).resolves.toEqual({
-      timeline: [],
       session_id: 'session-1',
       expires_at: '2026-09-17T12:00:00Z',
-      messages: [{ role: 'user', text: 'Weniger Zucker', turn_id: null }],
-      artifacts: [artifact],
-      active_turn_id: null,
-      active_turn_status: null,
       sequence: 0,
-      terminal_turn_id: null,
-      terminal_turn_kind: null,
+      turns: [
+        {
+          turn_id: 'turn-1',
+          user_message_id: 'request',
+          status: 'completed',
+          timeline: [
+            {
+              kind: 'message',
+              is_final: false,
+              role: 'user',
+              turn_id: 'turn-1',
+              id: 'request',
+              text: 'Weniger Zucker',
+            },
+            { kind: 'artifact', turn_id: 'turn-1', artifact: artifact },
+          ],
+        },
+      ],
     });
     await expect(transport.appendMessage('session-1', 'Weniger Zucker')).resolves.toEqual({
       role: 'user',
       text: 'Weniger Zucker',
-      turn_id: null,
+      turn_id: 'turn-1',
     });
     await expect(transport.generateTurn('session-1')).resolves.toEqual({
       turn_id: 'turn-1',
@@ -338,19 +367,7 @@ describe('HttpConversationTransport', () => {
   it('rejects a snapshot without its required expiry', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        response(200, {
-          timeline: [],
-          session_id: 'session-1',
-          messages: [],
-          artifacts: [],
-          active_turn_id: null,
-          active_turn_status: null,
-          sequence: 0,
-          terminal_turn_id: null,
-          terminal_turn_kind: null,
-        }),
-      ),
+      vi.fn().mockResolvedValue(response(200, { session_id: 'session-1', sequence: 0, turns: [] })),
     );
     await expect(
       new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'),
@@ -365,7 +382,7 @@ describe('HttpConversationTransport', () => {
           timeline: [],
           kind: 'completed',
           turn_id: 'turn-1',
-          message: { role: 'user', text: 'Hello', turn_id: null },
+          message: { role: 'user', text: 'Hello', turn_id: 'turn-1' },
           artifacts: [],
         }),
       ),
@@ -380,25 +397,38 @@ describe('HttpConversationTransport', () => {
       'fetch',
       vi.fn().mockResolvedValue(
         response(200, {
-          timeline: [],
           session_id: 'session-1',
           expires_at: '2026-09-17T12:00:00Z',
-          messages: [],
-          artifacts: [
+          sequence: 0,
+          turns: [
             {
-              artifact_id: 'artifact-1',
-              type: 'demo',
-              created_at: '2026-09-17T12:00:00Z',
-              order: 0,
               turn_id: 'turn-1',
-              payload: [],
+              user_message_id: 'request',
+              status: 'completed',
+              timeline: [
+                {
+                  kind: 'message',
+                  is_final: false,
+                  role: 'user',
+                  turn_id: 'turn-1',
+                  id: 'request',
+                  text: 'Hello',
+                },
+                {
+                  kind: 'artifact',
+                  turn_id: 'turn-1',
+                  artifact: {
+                    artifact_id: 'artifact-1',
+                    type: 'demo',
+                    created_at: '2026-09-17T12:00:00Z',
+                    order: 0,
+                    turn_id: 'turn-1',
+                    payload: [],
+                  },
+                },
+              ],
             },
           ],
-          active_turn_id: null,
-          active_turn_status: null,
-          sequence: 0,
-          terminal_turn_id: null,
-          terminal_turn_kind: null,
         }),
       ),
     );
@@ -407,21 +437,78 @@ describe('HttpConversationTransport', () => {
     ).rejects.toBeInstanceOf(ConversationNetworkError);
   });
 
-  it('rejects a terminal turn kind outside the backend contract', async () => {
+  it.each(['future_kind', 'unknown'])(
+    'rejects a turn lifecycle status outside the backend contract: %s',
+    async (status) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          response(200, {
+            session_id: 'session-1',
+            expires_at: '2026-09-17T12:00:00Z',
+            sequence: 1,
+            turns: [
+              {
+                turn_id: 'turn-1',
+                user_message_id: 'request',
+                status,
+                timeline: [
+                  {
+                    kind: 'message',
+                    is_final: false,
+                    role: 'user',
+                    id: 'request',
+                    text: 'Hello',
+                    turn_id: 'turn-1',
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+      );
+      await expect(
+        new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'),
+      ).rejects.toBeInstanceOf(ConversationNetworkError);
+    },
+  );
+
+  it('rejects an artifact row without its required kind', async () => {
+    const user = {
+      kind: 'message',
+      is_final: false,
+      role: 'user',
+      id: 'request',
+      text: 'Hello',
+      turn_id: 'turn-1',
+    };
+    const timeline: object[] = [user];
+    timeline.push({
+      turn_id: 'turn-1',
+      artifact: {
+        artifact_id: 'a',
+        type: 'json',
+        created_at: '2026-10-18T10:00:00Z',
+        order: 7,
+        turn_id: 'turn-1',
+        payload: { title: 'Data', payload: 1 },
+      },
+    });
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         response(200, {
-          timeline: [],
           session_id: 'session-1',
           expires_at: '2026-09-17T12:00:00Z',
-          messages: [],
-          artifacts: [],
-          active_turn_id: null,
-          active_turn_status: null,
-          sequence: 0,
-          terminal_turn_id: 'turn-1',
-          terminal_turn_kind: 'future_kind',
+          sequence: 2,
+          turns: [
+            {
+              turn_id: 'turn-1',
+              user_message_id: 'request',
+              status: 'in_progress',
+              timeline,
+            },
+          ],
         }),
       ),
     );
@@ -435,27 +522,41 @@ describe('HttpConversationTransport', () => {
       'fetch',
       vi.fn().mockResolvedValue(
         response(200, {
-          timeline: [],
           session_id: 'session-1',
           expires_at: '2026-09-17T12:00:00Z',
           future_field: true,
-          messages: [{ role: 'user', text: 'Hello', turn_id: null, future_field: true }],
-          artifacts: [
+          sequence: 0,
+          turns: [
             {
-              artifact_id: 'artifact-1',
-              type: 'demo',
-              created_at: '2026-09-17T12:00:00Z',
-              order: 0,
               turn_id: 'turn-1',
-              future_field: true,
-              payload: { future_field: true },
+              user_message_id: 'request',
+              status: 'completed',
+              timeline: [
+                {
+                  kind: 'message',
+                  is_final: false,
+                  role: 'user',
+                  turn_id: 'turn-1',
+                  id: 'request',
+                  text: 'Hello',
+                  future_field: true,
+                },
+                {
+                  kind: 'artifact',
+                  turn_id: 'turn-1',
+                  artifact: {
+                    artifact_id: 'artifact-1',
+                    type: 'demo',
+                    created_at: '2026-09-17T12:00:00Z',
+                    order: 0,
+                    turn_id: 'turn-1',
+                    future_field: true,
+                    payload: { future_field: true },
+                  },
+                },
+              ],
             },
           ],
-          active_turn_id: null,
-          active_turn_status: null,
-          sequence: 0,
-          terminal_turn_id: null,
-          terminal_turn_kind: null,
         }),
       ),
     );
@@ -463,25 +564,38 @@ describe('HttpConversationTransport', () => {
     await expect(
       new HttpConversationTransport('/api/v1', 'demo', 'test:user').readSession('session-1'),
     ).resolves.toEqual({
-      timeline: [],
       session_id: 'session-1',
       expires_at: '2026-09-17T12:00:00Z',
-      messages: [{ role: 'user', text: 'Hello', turn_id: null }],
-      artifacts: [
+      sequence: 0,
+      turns: [
         {
-          artifact_id: 'artifact-1',
-          type: 'demo',
-          created_at: '2026-09-17T12:00:00Z',
-          order: 0,
           turn_id: 'turn-1',
-          payload: { future_field: true },
+          user_message_id: 'request',
+          status: 'completed',
+          timeline: [
+            {
+              kind: 'message',
+              is_final: false,
+              role: 'user',
+              turn_id: 'turn-1',
+              id: 'request',
+              text: 'Hello',
+            },
+            {
+              kind: 'artifact',
+              turn_id: 'turn-1',
+              artifact: {
+                artifact_id: 'artifact-1',
+                type: 'demo',
+                created_at: '2026-09-17T12:00:00Z',
+                order: 0,
+                turn_id: 'turn-1',
+                payload: { future_field: true },
+              },
+            },
+          ],
         },
       ],
-      active_turn_id: null,
-      active_turn_status: null,
-      sequence: 0,
-      terminal_turn_id: null,
-      terminal_turn_kind: null,
     });
   });
 });

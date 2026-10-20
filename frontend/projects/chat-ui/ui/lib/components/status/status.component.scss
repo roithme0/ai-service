@@ -1,0 +1,58 @@
+:host,
+:host *,
+:host *::before,
+:host *::after {
+  box-sizing: border-box;
+}
+
+:host {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--ai-chat-muted-text, #c6b4bb);
+}
+
+:host(.error) {
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--ai-chat-error-border, #814152);
+  border-radius: 0.875rem;
+  background: var(--ai-chat-error-background, #321b22);
+  color: var(--ai-chat-error-text, #ffd9e2);
+}
+
+:host(.delayed) {
+  min-height: 1.6em;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fade {
+  animation: fade-in 180ms ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.action {
+  padding: 0.45rem 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+p {
+  margin: 0;
+  line-height: 1.6;
+}

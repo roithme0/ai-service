@@ -1,0 +1,29 @@
+<form (submit)="submit($event)">
+  <div class="surface">
+    <textarea
+      #composer
+      cdkTextareaAutosize
+      cdkAutosizeMinRows="1"
+      cdkAutosizeMaxRows="5"
+      [placeholder]="placeholder()"
+      aria-label="Nachricht"
+      enterkeyhint="send"
+      [value]="draft()"
+      [attr.aria-disabled]="editingDisabled() ? 'true' : null"
+      (beforeinput)="preventBlockedEdit($event)"
+      (input)="updateDraft(composer)"
+      (keydown)="submitFromKeyboard($event)"
+    ></textarea>
+    <div class="actions">
+      <button
+        class="send-button"
+        matIconButton
+        type="submit"
+        aria-label="Nachricht senden"
+        [disabled]="disabled() || editingDisabled() || draft().trim() === ''"
+      >
+        <mat-icon svgIcon="ai-chat:send" aria-hidden="true" />
+      </button>
+    </div>
+  </div>
+</form>

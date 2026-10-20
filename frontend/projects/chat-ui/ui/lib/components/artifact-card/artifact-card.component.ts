@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
-import type { ChatArtifact, ChatArtifactRenderer } from './chat-message';
+import type { ChatArtifact, ChatArtifactRenderer } from '../../models/chat-message';
 
 @Component({
   selector: 'ai-chat-artifact-card',

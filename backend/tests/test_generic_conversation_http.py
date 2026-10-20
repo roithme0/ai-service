@@ -161,7 +161,7 @@ def test_registry_and_creation_envelopes(client: TestClient) -> None:
     assert wrong_agent.json() == {"detail": "Session not found", "kind": "unknown"}
     assert client.get(f"{base}/kochwiki/sessions/{session_id}").status_code == 200
     assert client.post(f"{base}/kochwiki/sessions/{session_id}/turns", json={"model": "override"}).status_code == 422
-    assert client.get(f"{base}/kochwiki/sessions/{session_id}").json()["messages"] == []
+    assert [(item["role"], item["text"]) for turn in client.get(f"{base}/kochwiki/sessions/{session_id}").json()["turns"] for item in turn["timeline"] if item["kind"] == "message"] == []
     unmatched = client.post("/api/v1/recipe-improvement/sessions", json=valid_request())
     assert unmatched.status_code == 404
     assert unmatched.json() == {"detail": "Not Found", "kind": "not_found"}
@@ -212,20 +212,29 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
     for index in range(5):
         message = client.post(f"{session}/messages", json={"text": f"user {index}"})
         assert message.status_code == 201
-        assert message.json() == {"role": "user", "text": f"user {index}", "turn_id": None}
+        assert message.json() == {"role": "user", "text": f"user {index}", "turn_id": message.json()["turn_id"]}
+        pending = client.get(session).json()["turns"][-1]
+        assert isinstance(message.json()["turn_id"], str)
+        assert message.json()["turn_id"] == pending["turn_id"]
         turn = observe_turn(client, f"{session}/turns")
         body = turn.json()
+        assert body["turn_id"] == message.json()["turn_id"]
         if index == 2:
             assert turn.status_code == 502
             assert body["kind"] == "generation_failed"
             assert observe_turn(client, f"{session}/turns").json() == body
             failed_history = client.get(session).json()
-            assert failed_history["terminal_turn_kind"] == "generation_failed"
-            assert len(failed_history["artifacts"]) == 2
-            failed_activity = [item for item in failed_history["timeline"] if item["turn_id"] == body["turn_id"]]
+            assert [turn["status"] for turn in failed_history["turns"]] == ["completed", "completed", "generation_failed"]
+            assert failed_history["turns"][-1] == {
+                "turn_id": body["turn_id"], "user_message_id": "confirmed-2-user", "status": "generation_failed",
+                "timeline": failed_history["turns"][-1]["timeline"],
+            }
+            assert len([item["artifact"] for turn in failed_history["turns"] for item in turn["timeline"] if item["kind"] == "artifact"]) == 2
+            failed_activity = failed_history["turns"][-1]["timeline"]
+            assert all(item["turn_id"] == body["turn_id"] for item in failed_activity)
             assert [item["kind"] for item in failed_activity] == ["message", "intermediate", "failure"]
             assert "without a final answer" in failed_activity[1]["text"]
-            assert client.get(session).json()["timeline"] == failed_history["timeline"]
+            assert client.get(session).json()["turns"] == failed_history["turns"]
             continue
         assert turn.status_code == 200
         assert body["kind"] == "completed"
@@ -245,8 +254,9 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
             ]
             assert [item["status"] for item in body["timeline"] if item["kind"] == "tool"] == ["completed", "completed", "failed"]
             assert "failed validation" in body["message"]["text"]
-            projected = [item for item in client.get(session).json()["timeline"]
-                         if item["turn_id"] == body["turn_id"] and not (item["kind"] == "message" and item["role"] == "user")]
+            projected_turn = client.get(session).json()["turns"][-1]
+            assert projected_turn["turn_id"] == body["turn_id"]
+            projected = projected_turn["timeline"][1:]
             assert projected == body["timeline"]
             greeting, greetings = body["artifacts"]
             assert greeting["type"] == "demo.greeting"
@@ -261,10 +271,10 @@ def test_demo_http_sequence_and_new_session(client: TestClient) -> None:
         else:
             assert body["artifacts"] == []
     history = client.get(session).json()
-    assert len(history["messages"]) == 9
-    assert history["messages"][0] == {"role": "user", "text": "user 0", "turn_id": None}
-    assert history["artifacts"] == artifacts
-    assert [item for item in history["timeline"] if item["turn_id"] == failed_activity[0]["turn_id"]] == failed_activity
+    assert len([item for turn in history["turns"] for item in turn["timeline"] if item["kind"] == "message"]) == 9
+    assert history["turns"][0]["timeline"][0]["text"] == "user 0"
+    assert [item["artifact"] for turn in history["turns"] for item in turn["timeline"] if item["kind"] == "artifact"] == artifacts
+    assert history["turns"][2]["timeline"] == failed_activity
     assert "source" not in history
     fresh = client.post(base, json={}).json()
     fresh_session = f"{base}/{fresh['session_id']}"
@@ -293,8 +303,13 @@ def test_success_schemas_are_published(client: TestClient) -> None:
         "#/components/schemas/AcceptedTurnResponse"
     )
     assert "turn_id" in schemas["UserMessageResponse"]["required"]
-    assert schemas["UserMessageResponse"]["properties"]["turn_id"]["type"] == "null"
-    assert schemas["SessionSnapshotResponse"]["properties"]["messages"]["items"]["discriminator"]["propertyName"] == "role"
+    assert schemas["UserMessageResponse"]["properties"]["turn_id"]["type"] == "string"
+    assert set(schemas["SessionSnapshotResponse"]["properties"]) == {"session_id", "expires_at", "turns", "sequence"}
+    turn_schema = schemas["SessionSnapshotResponse"]["properties"]["turns"]["items"]["$ref"].rsplit("/", 1)[-1]
+    timeline_items = schemas[turn_schema]["properties"]["timeline"]["items"]
+    assert timeline_items["discriminator"]["propertyName"] == "kind"
+    artifact_schema = timeline_items["discriminator"]["mapping"]["artifact"].rsplit("/", 1)[-1]
+    assert "kind" in schemas[artifact_schema]["required"]
     assert schemas["AcceptedTurnResponse"]["properties"]["kind"]["const"] == "accepted"
 
 
@@ -503,10 +518,10 @@ def test_demo_concurrent_sessions_and_busy_turn() -> None:
             client.headers["X-Application-User"] = "test:user"
             for _ in range(100):
                 snapshot = (await client.get(f"{base}/{first}")).json()
-                if snapshot["terminal_turn_kind"] is not None:
+                if snapshot["turns"][-1]["status"] in {"completed", "generation_failed", "conflict"}:
                     break
                 await asyncio.sleep(0.01)
-            assert snapshot["terminal_turn_kind"] == "completed"
+            assert snapshot["turns"][-1]["status"] == "completed"
             observed = await client.get(f"{base}/{first}/turns/{turn_id}/events")
             assert observed.status_code == 200
             assert '"kind":"terminal"' in observed.text

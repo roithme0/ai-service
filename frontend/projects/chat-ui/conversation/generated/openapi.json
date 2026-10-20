@@ -20,69 +20,6 @@
         "title": "AcceptedTurnResponse",
         "type": "object"
       },
-      "ArtifactResponse": {
-        "properties": {
-          "artifact_id": {
-            "title": "Artifact Id",
-            "type": "string"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          },
-          "order": {
-            "title": "Order",
-            "type": "integer"
-          },
-          "payload": {
-            "additionalProperties": true,
-            "title": "Payload",
-            "type": "object"
-          },
-          "turn_id": {
-            "title": "Turn Id",
-            "type": "string"
-          },
-          "type": {
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "artifact_id",
-          "type",
-          "created_at",
-          "order",
-          "turn_id",
-          "payload"
-        ],
-        "title": "ArtifactResponse",
-        "type": "object"
-      },
-      "AssistantMessageResponse": {
-        "properties": {
-          "role": {
-            "const": "assistant",
-            "title": "Role",
-            "type": "string"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          },
-          "turn_id": {
-            "title": "Turn Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "role",
-          "text",
-          "turn_id"
-        ],
-        "title": "AssistantMessageResponse",
-        "type": "object"
-      },
       "ErrorResponse": {
         "additionalProperties": false,
         "properties": {
@@ -155,6 +92,45 @@
         "title": "HttpErrorResponse",
         "type": "object"
       },
+      "PublishedArtifact_dict_str__object__": {
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "type",
+          "created_at",
+          "turn_id",
+          "payload",
+          "order"
+        ],
+        "title": "PublishedArtifact",
+        "type": "object"
+      },
       "SessionCreationResponse": {
         "properties": {
           "expires_at": {
@@ -175,63 +151,9 @@
       },
       "SessionSnapshotResponse": {
         "properties": {
-          "active_turn_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Active Turn Id"
-          },
-          "active_turn_status": {
-            "anyOf": [
-              {
-                "enum": [
-                  "in_progress",
-                  "closing"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Active Turn Status"
-          },
-          "artifacts": {
-            "items": {
-              "$ref": "#/components/schemas/ArtifactResponse"
-            },
-            "title": "Artifacts",
-            "type": "array"
-          },
           "expires_at": {
             "title": "Expires At",
             "type": "string"
-          },
-          "messages": {
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "assistant": "#/components/schemas/AssistantMessageResponse",
-                  "user": "#/components/schemas/UserMessageResponse"
-                },
-                "propertyName": "role"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/UserMessageResponse"
-                },
-                {
-                  "$ref": "#/components/schemas/AssistantMessageResponse"
-                }
-              ]
-            },
-            "title": "Messages",
-            "type": "array"
           },
           "sequence": {
             "minimum": 0.0,
@@ -242,82 +164,18 @@
             "title": "Session Id",
             "type": "string"
           },
-          "terminal_turn_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Terminal Turn Id"
-          },
-          "terminal_turn_kind": {
-            "anyOf": [
-              {
-                "enum": [
-                  "completed",
-                  "generation_failed",
-                  "unknown",
-                  "expired",
-                  "not_ready",
-                  "limit_reached",
-                  "conflict",
-                  "busy"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Terminal Turn Kind"
-          },
-          "timeline": {
+          "turns": {
             "items": {
-              "discriminator": {
-                "mapping": {
-                  "artifact": "#/components/schemas/TimelineArtifact",
-                  "failure": "#/components/schemas/TimelineFailure",
-                  "intermediate": "#/components/schemas/TimelineIntermediateMessage",
-                  "message": "#/components/schemas/TimelineMessage",
-                  "tool": "#/components/schemas/TimelineTool"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/TimelineMessage"
-                },
-                {
-                  "$ref": "#/components/schemas/TimelineIntermediateMessage"
-                },
-                {
-                  "$ref": "#/components/schemas/TimelineTool"
-                },
-                {
-                  "$ref": "#/components/schemas/TimelineArtifact"
-                },
-                {
-                  "$ref": "#/components/schemas/TimelineFailure"
-                }
-              ]
+              "$ref": "#/components/schemas/TurnSnapshot_dict_str__object__"
             },
-            "title": "Timeline",
+            "title": "Turns",
             "type": "array"
           }
         },
         "required": [
           "session_id",
           "expires_at",
-          "messages",
-          "artifacts",
-          "terminal_turn_id",
-          "terminal_turn_kind",
-          "timeline",
-          "active_turn_id",
-          "active_turn_status",
+          "turns",
           "sequence"
         ],
         "title": "SessionSnapshotResponse",
@@ -466,16 +324,6 @@
       },
       "StreamUpsert": {
         "properties": {
-          "artifact": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ArtifactResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "identity": {
             "title": "Identity",
             "type": "string"
@@ -483,7 +331,7 @@
           "item": {
             "discriminator": {
               "mapping": {
-                "artifact": "#/components/schemas/TimelineArtifact",
+                "artifact": "#/components/schemas/TimelineArtifact_dict_str__object__",
                 "failure": "#/components/schemas/TimelineFailure",
                 "intermediate": "#/components/schemas/TimelineIntermediateMessage",
                 "message": "#/components/schemas/TimelineMessage",
@@ -502,7 +350,7 @@
                 "$ref": "#/components/schemas/TimelineTool"
               },
               {
-                "$ref": "#/components/schemas/TimelineArtifact"
+                "$ref": "#/components/schemas/TimelineArtifact_dict_str__object__"
               },
               {
                 "$ref": "#/components/schemas/TimelineFailure"
@@ -541,11 +389,10 @@
         "title": "StreamUpsert",
         "type": "object"
       },
-      "TimelineArtifact": {
+      "TimelineArtifact_dict_str__object__": {
         "properties": {
-          "artifact_id": {
-            "title": "Artifact Id",
-            "type": "string"
+          "artifact": {
+            "$ref": "#/components/schemas/PublishedArtifact_dict_str__object__"
           },
           "kind": {
             "const": "artifact",
@@ -559,7 +406,7 @@
         },
         "required": [
           "turn_id",
-          "artifact_id",
+          "artifact",
           "kind"
         ],
         "title": "TimelineArtifact",
@@ -619,6 +466,10 @@
             "title": "Id",
             "type": "string"
           },
+          "is_final": {
+            "title": "Is Final",
+            "type": "boolean"
+          },
           "kind": {
             "const": "message",
             "title": "Kind",
@@ -646,6 +497,7 @@
           "id",
           "role",
           "text",
+          "is_final",
           "kind"
         ],
         "title": "TimelineMessage",
@@ -693,6 +545,71 @@
         "title": "TimelineTool",
         "type": "object"
       },
+      "TurnSnapshot_dict_str__object__": {
+        "properties": {
+          "status": {
+            "enum": [
+              "pending",
+              "in_progress",
+              "closing",
+              "completed",
+              "generation_failed",
+              "conflict"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "timeline": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "artifact": "#/components/schemas/TimelineArtifact_dict_str__object__",
+                  "failure": "#/components/schemas/TimelineFailure",
+                  "intermediate": "#/components/schemas/TimelineIntermediateMessage",
+                  "message": "#/components/schemas/TimelineMessage",
+                  "tool": "#/components/schemas/TimelineTool"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/TimelineMessage"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineIntermediateMessage"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineTool"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineArtifact_dict_str__object__"
+                },
+                {
+                  "$ref": "#/components/schemas/TimelineFailure"
+                }
+              ]
+            },
+            "title": "Timeline",
+            "type": "array"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "user_message_id": {
+            "title": "User Message Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "user_message_id",
+          "status",
+          "timeline"
+        ],
+        "title": "TurnSnapshot",
+        "type": "object"
+      },
       "UserMessageResponse": {
         "properties": {
           "role": {
@@ -706,7 +623,7 @@
           },
           "turn_id": {
             "title": "Turn Id",
-            "type": "null"
+            "type": "string"
           }
         },
         "required": [

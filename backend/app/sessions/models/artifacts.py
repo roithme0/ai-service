@@ -6,11 +6,11 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Annotated, Generic, TypeVar
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, PlainSerializer, field_validator
 from referencing import Resource
 from referencing.jsonschema import DRAFT202012
 
@@ -29,7 +29,7 @@ class ArtifactCandidate(Generic[ArtifactT]):
 class ArtifactEnvelope(Generic[ArtifactT]):
     artifact_id: str
     type: str
-    created_at: datetime
+    created_at: Annotated[datetime, PlainSerializer(datetime.isoformat, return_type=str, when_used="json")]
     turn_id: str
     payload: ArtifactT
 

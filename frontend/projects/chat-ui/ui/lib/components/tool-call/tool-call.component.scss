@@ -1,0 +1,33 @@
+:host {
+  align-self: stretch;
+  color: var(--ai-chat-assistant-text, var(--ai-chat-text, #f8eef1));
+  line-height: 1.6;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+}
+
+mat-icon {
+  display: flex;
+  width: 1rem;
+  height: 1rem;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.name {
+  min-width: 0;
+}
+
+.status {
+  color: var(--ai-chat-muted-text, #c6b4bb);
+  font-size: 0.75rem;
+}

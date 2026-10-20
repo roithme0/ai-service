@@ -270,7 +270,7 @@ def test_unavailable_runtime_keeps_history_and_observation_but_blocks_writes(mon
                 started = await http.post(f"{session}/turns")
                 assert started.status_code == 202
                 async with asyncio.timeout(2):
-                    while not agent.turn_terminal(created.json()["session_id"], started.json()["turn_id"]):
+                    while agent.read(created.json()["session_id"]).snapshot.turns[-1].status not in {"completed", "generation_failed", "conflict"}:
                         await asyncio.sleep(0)
                 before = (await http.get(session)).json()
                 connection.updates.put_nowait(TimeoutError("offline"))

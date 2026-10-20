@@ -1,0 +1,71 @@
+<section class="chat-ui" aria-label="Chat-Unterhaltung">
+  <div #history class="history" role="log" aria-live="polite">
+    <section class="banner">
+      <h2>{{ bannerTitle() }}</h2>
+      <p>{{ bannerDescription() }}</p>
+    </section>
+
+    <div class="messages">
+      @for (turn of turns(); track turn.id; let lastTurn = $last) {
+        @for (item of turn.content; track item.id; let last = $last) {
+          @if (
+            item.kind !== 'failure' || !lastTurn || !last || conversationStatus()?.kind !== 'error'
+          ) {
+            <ai-chat-history-item
+              [collapsed]="
+                (item.kind === 'tool' || item.kind === 'intermediate') && detailsHidden(turn.id)
+              "
+            >
+              @switch (item.kind) {
+                @case ('artifact') {
+                  <ai-chat-artifact-card [artifact]="item" [renderer]="rendererFor(item.type)" />
+                }
+                @case ('tool') {
+                  <ai-chat-tool-call [toolCall]="item" />
+                }
+                @case ('failure') {
+                  <ai-chat-status
+                    [status]="{ kind: 'error', placement: 'assistant', message: item.text }"
+                    aria-label="Fehlgeschlagene Antwort"
+                  />
+                }
+                @case ('intermediate') {
+                  <ai-chat-intermediate-message [message]="item" />
+                }
+                @case ('text') {
+                  @if (item.role === 'user') {
+                    <ai-chat-user-message [message]="item" />
+                  } @else {
+                    <ai-chat-assistant-message
+                      [message]="item"
+                      [showDetailsToggle]="disclosureAnswers().get(turn.id) === item.id"
+                      [detailsExpanded]="detailsExpanded(turn.id)"
+                      (detailsToggled)="toggleDetails(turn.id)"
+                    />
+                  }
+                }
+              }
+            </ai-chat-history-item>
+          }
+        }
+      }
+
+      @if (conversationStatus(); as status) {
+        <ai-chat-history-item>
+          <ai-chat-status
+            [status]="status"
+            (actionTriggered)="statusActionTriggered.emit($event)"
+            (contentRevealed)="requestHistoryScroll()"
+          />
+        </ai-chat-history-item>
+      }
+    </div>
+  </div>
+
+  <ai-chat-composer
+    [disabled]="composerDisabled()"
+    [editingDisabled]="composerEditingDisabled()"
+    [placeholder]="composerPlaceholder()"
+    (messageSubmitted)="messageSubmitted.emit($event)"
+  />
+</section>

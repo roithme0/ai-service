@@ -2,7 +2,7 @@ import type {
   ChatArtifact,
   ChatContent,
   ChatConversationStatus,
-  ChatTextMessage,
+  ChatTurn,
 } from '@roithme0/chat-ui/ui';
 import {
   ConversationApiError,
@@ -11,30 +11,48 @@ import {
   type ApiMessage,
   type ConversationTransport,
 } from './conversation-api';
-import type { ArtifactResponse, SessionSnapshotResponse } from '../generated/types.gen';
+import type {
+  PublishedArtifactDictStrObject as ArtifactResponse,
+  SessionSnapshotResponse,
+} from '../generated/types.gen';
 
 import { presentArtifact } from './generic-artifact-mapper';
+import { itemIdentity, validateSnapshot } from './conversation-timeline';
 
 export type ArtifactMapper = (artifact: ArtifactResponse) => ChatArtifact | null;
 
 export interface ConversationViewState {
-  readonly content: readonly ChatContent[];
+  readonly turns: readonly ChatTurn[];
   readonly composerDisabled: boolean;
+  readonly composerEditingDisabled: boolean;
   readonly status: ChatConversationStatus | null;
 }
 
+type ApiTurn = SessionSnapshotResponse['turns'][number];
+type RetainedTurn = Readonly<Omit<ApiTurn, 'status' | 'timeline'>> & {
+  readonly status: ApiTurn['status'] | 'unknown';
+  readonly timeline: readonly ApiTurn['timeline'][number][];
+};
+
+interface PresentedTurns {
+  readonly turns: readonly ChatTurn[];
+  readonly responseTurnIds: ReadonlySet<string>;
+}
+
 const INITIAL_STATE: ConversationViewState = {
-  content: [],
+  turns: [],
   composerDisabled: true,
+  composerEditingDisabled: false,
   status: loading('Unterhaltung wird gestartet …', 'conversation'),
 };
 
 export class ConversationController {
+  private currentTurnId: string | null = null;
   private sessionId: string | null = null;
   private stateValue = INITIAL_STATE;
+  private turns: readonly RetainedTurn[] = [];
   private epoch = 0;
   private observation: AbortController | null = null;
-  private confirmedMessages: readonly ApiMessage[] = [];
 
   constructor(
     private readonly transport: ConversationTransport,
@@ -51,30 +69,30 @@ export class ConversationController {
     this.observation?.abort();
     this.observation = null;
     this.sessionId = null;
+    this.currentTurnId = null;
   }
 
   async start(): Promise<void> {
     this.dispose();
     const epoch = this.epoch;
-    this.setState({
-      ...this.stateValue,
+    this.updateState({
       composerDisabled: true,
+      composerEditingDisabled: false,
       status: loading('Unterhaltung wird gestartet …', 'conversation'),
     });
     try {
       const created = await this.transport.createSession();
       if (epoch !== this.epoch) return;
-      this.confirmedMessages = [];
       this.sessionId = created.session_id;
-      this.setState({ content: [], composerDisabled: false, status: null });
+      this.setTurns([]);
+      this.updateState({ composerDisabled: false, status: null });
     } catch (error: unknown) {
       if (epoch !== this.epoch) return;
       if (isUnsupportedApiRequest(error)) {
         this.setUnsupportedApiRequest(error);
         return;
       }
-      this.setState({
-        ...this.stateValue,
+      this.updateState({
         composerDisabled: true,
         status: failure(
           messageFor(error, 'Die Unterhaltung konnte nicht gestartet werden.'),
@@ -89,12 +107,13 @@ export class ConversationController {
   async submit(text: string, acknowledge: () => void): Promise<void> {
     const sessionId = this.sessionId;
     if (sessionId === null || this.stateValue.composerDisabled) return;
-    const previousMessages = this.confirmedMessages.filter((message) => message.role === 'user');
+    this.currentTurnId = null;
+    const previousTurns = this.turns;
     const epoch = this.epoch;
-    this.setState({
-      ...this.stateValue,
+    this.updateState({
       composerDisabled: true,
-      status: { ...loading('Nachricht wird gesendet …', 'assistant'), reveal: 'delayed' },
+      composerEditingDisabled: true,
+      status: null,
     });
     try {
       const accepted = await this.transport.appendMessage(sessionId, text);
@@ -105,10 +124,14 @@ export class ConversationController {
     } catch (error: unknown) {
       if (epoch !== this.epoch) return;
       if (error instanceof ConversationNetworkError) {
-        await this.reconcileAppend(sessionId, previousMessages, text, acknowledge);
+        await this.reconcileAppend(sessionId, previousTurns, text, acknowledge);
         return;
       }
       this.handleAppendFailure(error);
+    } finally {
+      if (epoch === this.epoch && this.stateValue.composerEditingDisabled) {
+        this.updateState({ composerEditingDisabled: false });
+      }
     }
   }
 
@@ -120,11 +143,20 @@ export class ConversationController {
 
   private acceptMessage(message: ApiMessage, acknowledge: () => void): void {
     const epoch = this.epoch;
-    const userIndex = this.confirmedMessages.filter((item) => item.role === 'user').length;
-    this.confirmedMessages = [...this.confirmedMessages, message];
-    this.setState({
-      content: [...this.stateValue.content, presentMessage(message, userIndex)],
+    const userMessageId = `confirmed-${this.turns.length}-user`;
+    this.currentTurnId = message.turn_id;
+    this.setTurns([
+      ...this.turns,
+      {
+        turn_id: message.turn_id,
+        user_message_id: userMessageId,
+        status: 'pending',
+        timeline: [{ kind: 'message', is_final: false, id: userMessageId, ...message }],
+      },
+    ]);
+    this.updateState({
       composerDisabled: true,
+      composerEditingDisabled: false,
       status: loading('Antwort wird erstellt …', 'assistant'),
     });
     if (epoch === this.epoch) acknowledge();
@@ -132,12 +164,12 @@ export class ConversationController {
 
   private async generate(sessionId: string): Promise<void> {
     const epoch = this.epoch;
-    this.setState({
-      ...this.stateValue,
+    this.updateState({
       composerDisabled: true,
       status: loading('Antwort wird erstellt …', 'assistant'),
     });
     let turnId: string;
+    let responseStarted = false;
     try {
       turnId = (await this.transport.generateTurn(sessionId)).turn_id;
     } catch (error: unknown) {
@@ -146,16 +178,32 @@ export class ConversationController {
         try {
           const snapshot = await this.transport.readSession(sessionId);
           if (epoch !== this.epoch) return;
-          this.confirmedMessages = snapshot.messages;
-          this.setState({
-            ...this.stateValue,
-            content: presentSnapshot(snapshot, this.mapArtifact),
+          validateSnapshot(snapshot, sessionId);
+          const presented = this.setTurns(snapshot.turns);
+          const turn = snapshot.turns.at(-1);
+          this.currentTurnId = turn?.turn_id ?? null;
+          responseStarted = turn !== undefined && presented.responseTurnIds.has(turn.turn_id);
+          const terminal =
+            turn !== undefined &&
+            (turn.status === 'completed' ||
+              turn.status === 'generation_failed' ||
+              turn.status === 'conflict');
+          this.updateState({
+            composerDisabled: !terminal,
+            status: terminal
+              ? turn.status === 'completed'
+                ? null
+                : failure(
+                    'Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.',
+                    'assistant',
+                  )
+              : turn?.status === 'closing' || responseStarted
+                ? null
+                : this.stateValue.status,
           });
-          if (snapshot.active_turn_id !== null) {
-            turnId = snapshot.active_turn_id;
-          } else if (snapshot.terminal_turn_id !== null) {
-            this.applyTurnSnapshot(snapshot);
-            return;
+          if (terminal) return;
+          if (turn?.status === 'in_progress' || turn?.status === 'closing') {
+            turnId = turn.turn_id;
           } else {
             this.observationLost();
             return;
@@ -170,15 +218,12 @@ export class ConversationController {
       }
     }
     if (epoch !== this.epoch) return;
+    this.currentTurnId = turnId;
     const observation = new AbortController();
     this.observation = observation;
-    const items = new Map<
-      string,
-      { order: number; sequence: number; item: SessionSnapshotResponse['timeline'][number] }
-    >();
-    const artifacts = new Map<string, ArtifactResponse>();
+    const sequences = new Map<string, number>();
+    let snapshotSequence = -1;
     let initialized = false;
-    let closing = false;
     let latestSequence = -1;
     try {
       for await (const event of this.transport.observeTurn(sessionId, turnId, observation.signal)) {
@@ -187,25 +232,23 @@ export class ConversationController {
           throw new ConversationNetworkError('Ungültige Turn-Zuordnung.');
         if (event.kind === 'error') {
           if (event.reason === 'unavailable')
-            this.setTerminal(new ConversationApiError(410, 'expired'));
+            this.handleTurnFailure(new ConversationApiError(410, 'expired'));
           else this.observationLost();
           return;
         }
+        let presented: PresentedTurns;
         if (event.kind === 'snapshot') {
-          if (initialized || event.snapshot.session_id !== sessionId)
-            throw new ConversationNetworkError('Ungültiger Anfangszustand.');
+          if (initialized) throw new ConversationNetworkError('Ungültiger Anfangszustand.');
+          validateSnapshot(event.snapshot, sessionId);
+          if (!event.snapshot.turns.some((turn) => turn.turn_id === turnId))
+            throw new ConversationNetworkError('Ungültige Turn-Zuordnung.');
           initialized = true;
-          closing =
-            event.snapshot.active_turn_id === turnId &&
-            event.snapshot.active_turn_status === 'closing';
           latestSequence = event.snapshot.sequence;
-          this.confirmedMessages = event.snapshot.messages;
-          event.snapshot.artifacts.forEach((artifact) =>
-            artifacts.set(artifact.artifact_id, artifact),
-          );
-          event.snapshot.timeline.forEach((item, order) =>
-            items.set(itemIdentity(item), { item, order, sequence: event.snapshot.sequence }),
-          );
+          presented = this.setTurns(event.snapshot.turns);
+          snapshotSequence = event.snapshot.sequence;
+          for (const turn of this.turns) {
+            for (const item of turn.timeline) sequences.set(itemIdentity(item), snapshotSequence);
+          }
         } else if (event.kind === 'upsert') {
           if (
             !initialized ||
@@ -213,37 +256,42 @@ export class ConversationController {
             event.identity !== itemIdentity(event.item)
           )
             throw new ConversationNetworkError('Ungültiger Timeline-Eintrag.');
-          const previous = items.get(event.identity);
-          if (previous !== undefined && event.sequence <= previous.sequence) continue;
-          if (previous !== undefined && event.order !== previous.order)
+          const turn = this.turns.find((turn) => turn.turn_id === turnId);
+          if (turn === undefined) throw new ConversationNetworkError('Ungültige Turn-Zuordnung.');
+          const position = turn.timeline.findIndex((item) => itemIdentity(item) === event.identity);
+          if (
+            (position !== -1 && event.order !== position) ||
+            (position === -1 &&
+              (event.order !== turn.timeline.length ||
+                this.turns.some(
+                  (other) =>
+                    other.turn_id !== turnId &&
+                    other.timeline.some((item) => itemIdentity(item) === event.identity),
+                )))
+          )
             throw new ConversationNetworkError('Ungültige Reihenfolge.');
-          if (event.item.kind === 'artifact') {
-            if (
-              event.artifact == null ||
-              event.artifact.artifact_id !== event.item.artifact_id ||
-              event.artifact.turn_id !== turnId
-            )
-              throw new ConversationNetworkError('Ungültiges Artefakt.');
-            artifacts.set(event.artifact.artifact_id, event.artifact);
-          } else if (event.artifact != null)
-            throw new ConversationNetworkError('Unerwartetes Artefakt.');
+          if (event.item.kind === 'artifact' && event.item.artifact.turn_id !== turnId)
+            throw new ConversationNetworkError('Ungültiges Artefakt.');
+          if (event.sequence <= (sequences.get(event.identity) ?? snapshotSequence)) continue;
           latestSequence = Math.max(latestSequence, event.sequence);
-          items.set(event.identity, {
-            item: event.item,
-            order: event.order,
-            sequence: event.sequence,
-          });
+          sequences.set(event.identity, event.sequence);
+          const timeline = [...turn.timeline];
+          if (position === -1) timeline.push(event.item);
+          else timeline[position] = event.item;
+          presented = this.setTurns(
+            this.turns.map((current) => (current === turn ? { ...turn, timeline } : current)),
+          );
         } else if (event.kind === 'closing') {
           if (!initialized || event.sequence < latestSequence)
             throw new ConversationNetworkError('Ungültiger Abschlusszustand.');
           latestSequence = event.sequence;
-          closing = true;
+          presented = this.updateCurrentTurnStatus('closing');
         } else {
           if (!initialized || event.sequence < latestSequence)
             throw new ConversationNetworkError('Ungültiger Endzustand.');
+          this.updateCurrentTurnStatus(event.outcome);
           const failed = event.outcome !== 'completed';
-          this.setState({
-            ...this.stateValue,
+          this.updateState({
             composerDisabled: false,
             status: failed
               ? failure(
@@ -254,13 +302,14 @@ export class ConversationController {
           });
           return;
         }
-        const timeline = [...items.values()]
-          .sort((a, b) => a.order - b.order)
-          .map((entry) => entry.item);
-        this.setState({
-          content: presentTimeline(timeline, [...artifacts.values()], this.mapArtifact),
+        responseStarted ||= presented.responseTurnIds.has(turnId);
+        this.updateState({
           composerDisabled: true,
-          status: closing ? null : loading('Antwort wird erstellt …', 'assistant'),
+          status:
+            this.turns.find((turn) => turn.turn_id === turnId)?.status === 'closing' ||
+            responseStarted
+              ? null
+              : loading('Antwort wird erstellt …', 'assistant'),
         });
       }
       if (epoch === this.epoch) this.observationLost();
@@ -274,9 +323,23 @@ export class ConversationController {
     }
   }
 
+  private updateCurrentTurnStatus(status: RetainedTurn['status']): PresentedTurns {
+    return this.setTurns(
+      this.turns.map((turn) =>
+        turn.turn_id !== this.currentTurnId ||
+        (status === 'unknown' &&
+          (turn.status === 'completed' ||
+            turn.status === 'generation_failed' ||
+            turn.status === 'conflict'))
+          ? turn
+          : { ...turn, status },
+      ),
+    );
+  }
+
   private observationLost(): void {
-    this.setState({
-      ...this.stateValue,
+    this.updateCurrentTurnStatus('unknown');
+    this.updateState({
       composerDisabled: true,
       status: failure(
         'Die Verbindung zur Antwort wurde unterbrochen. Der Ausgang ist unbekannt.',
@@ -287,7 +350,7 @@ export class ConversationController {
 
   private async reconcileAppend(
     sessionId: string,
-    previousMessages: readonly ApiMessage[],
+    previousTurns: readonly RetainedTurn[],
     text: string,
     acknowledge: () => void,
   ): Promise<void> {
@@ -295,27 +358,29 @@ export class ConversationController {
     try {
       const snapshot = await this.transport.readSession(sessionId);
       if (epoch !== this.epoch) return;
-      const users = snapshot.messages.filter((message) => message.role === 'user');
+      validateSnapshot(snapshot, sessionId);
+      const previousMessages = userMessages(previousTurns);
+      const users = userMessages(snapshot.turns);
       const appended = users[previousMessages.length];
+      this.setTurns(snapshot.turns);
       if (
         prefixMatches(previousMessages, users) &&
         appended?.role === 'user' &&
         appended.text === text
       ) {
-        this.setState({
-          content: presentSnapshot(snapshot, this.mapArtifact),
+        this.currentTurnId = appended.turn_id;
+        this.updateState({
           composerDisabled: true,
+          composerEditingDisabled: false,
           status: loading('Antwort wird erstellt …', 'assistant'),
         });
         if (epoch !== this.epoch) return;
-        this.confirmedMessages = snapshot.messages;
         acknowledge();
         if (epoch !== this.epoch) return;
         await this.generate(sessionId);
         return;
       }
-      this.setState({
-        content: presentSnapshot(snapshot, this.mapArtifact),
+      this.updateState({
         composerDisabled: false,
         status: failure(
           'Die Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.',
@@ -329,30 +394,6 @@ export class ConversationController {
     }
   }
 
-  private applyTurnSnapshot(snapshot: SessionSnapshotResponse): void {
-    const content = presentSnapshot(snapshot, this.mapArtifact);
-    if (snapshot.terminal_turn_kind === 'completed') {
-      this.setState({ content, composerDisabled: false, status: null });
-      return;
-    }
-    if (snapshot.terminal_turn_kind === 'generation_failed') {
-      this.setState({
-        content,
-        composerDisabled: false,
-        status: failure(
-          'Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.',
-          'assistant',
-        ),
-      });
-      return;
-    }
-    this.setState({
-      content,
-      composerDisabled: true,
-      status: failure('Der Status der Antwort ist noch unklar.', 'assistant'),
-    });
-  }
-
   private handleAppendFailure(error: unknown): void {
     if (isUnsupportedApiRequest(error)) {
       this.setUnsupportedApiRequest(error);
@@ -364,8 +405,7 @@ export class ConversationController {
       this.setTerminal(error);
       return;
     }
-    this.setState({
-      ...this.stateValue,
+    this.updateState({
       composerDisabled: false,
       status: failure(
         messageFor(error, 'Die Nachricht konnte nicht gesendet werden. Bitte versuche es erneut.'),
@@ -375,6 +415,9 @@ export class ConversationController {
   }
 
   private handleTurnFailure(error: unknown): void {
+    this.updateCurrentTurnStatus(
+      isKind(error, 'generation_failed') ? 'generation_failed' : 'unknown',
+    );
     if (isUnsupportedApiRequest(error)) {
       this.setUnsupportedApiRequest(error);
     } else if (isTerminal(error)) {
@@ -382,8 +425,7 @@ export class ConversationController {
     } else if (isKind(error, 'agent_unavailable')) {
       this.setAgentUnavailable();
     } else if (isKind(error, 'generation_failed')) {
-      this.setState({
-        ...this.stateValue,
+      this.updateState({
         composerDisabled: false,
         status: failure(
           'Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.',
@@ -391,8 +433,7 @@ export class ConversationController {
         ),
       });
     } else {
-      this.setState({
-        ...this.stateValue,
+      this.updateState({
         composerDisabled: true,
         status: failure(
           messageFor(error, 'Die Antwort konnte nicht abgeglichen werden.'),
@@ -403,8 +444,7 @@ export class ConversationController {
   }
 
   private setAgentUnavailable(): void {
-    this.setState({
-      ...this.stateValue,
+    this.updateState({
       composerDisabled: true,
       status: failure(
         'Der KI-Agent ist derzeit nicht verfügbar.',
@@ -416,8 +456,7 @@ export class ConversationController {
   }
 
   private setUnsupportedApiRequest(error: unknown): void {
-    this.setState({
-      ...this.stateValue,
+    this.updateState({
       composerDisabled: true,
       status: failure(
         isKind(error, 'method_not_allowed')
@@ -430,8 +469,7 @@ export class ConversationController {
 
   private setTerminal(error: unknown): void {
     const exhausted = isKind(error, 'limit_reached');
-    this.setState({
-      ...this.stateValue,
+    this.updateState({
       composerDisabled: true,
       status: failure(
         exhausted
@@ -444,73 +482,88 @@ export class ConversationController {
     });
   }
 
-  private setState(state: ConversationViewState): void {
-    this.stateValue = state;
-    this.publish(state);
+  private setTurns(turns: readonly RetainedTurn[]): PresentedTurns {
+    const presented = presentTurns(turns, this.mapArtifact);
+    this.turns = turns;
+    this.stateValue = { ...this.stateValue, turns: presented.turns };
+    return presented;
+  }
+
+  private updateState(state: Partial<Omit<ConversationViewState, 'turns'>>): void {
+    this.stateValue = { ...this.stateValue, ...state };
+    this.publish(this.stateValue);
   }
 }
 
-function presentMessage(message: ApiMessage, index: number): ChatTextMessage {
-  return {
-    kind: 'text',
-    id: message.turn_id === null ? `confirmed-${index}-user` : `assistant-${message.turn_id}`,
-    role: message.role,
-    text: message.text,
-  };
-}
-
-function presentSnapshot(
-  snapshot: SessionSnapshotResponse,
-  mapArtifact: ArtifactMapper,
-): readonly ChatContent[] {
-  return presentTimeline(snapshot.timeline, snapshot.artifacts, mapArtifact);
-}
-
-function presentTimeline(
-  timeline: SessionSnapshotResponse['timeline'],
-  artifacts: readonly ArtifactResponse[],
-  mapArtifact: ArtifactMapper,
-): readonly ChatContent[] {
-  const envelopes = new Map(artifacts.map((artifact) => [artifact.artifact_id, artifact]));
-  return timeline.flatMap((item): ChatContent[] => {
-    switch (item.kind) {
-      case 'message':
-        return [{ kind: 'text', id: item.id, role: item.role, text: item.text }];
-      case 'intermediate':
-        return [{ kind: 'intermediate', id: item.id, text: item.text }];
-      case 'tool':
-        return [
-          { kind: 'tool', id: `tool-${item.execution_id}`, name: item.name, status: item.status },
-        ];
-      case 'artifact': {
-        const envelope = envelopes.get(item.artifact_id);
-        const artifact = envelope === undefined ? null : mapArtifact(envelope);
-        return artifact === null ? [] : [artifact];
+function presentTurns(turns: readonly RetainedTurn[], mapArtifact: ArtifactMapper): PresentedTurns {
+  const responseTurnIds = new Set<string>();
+  const presented = turns.map((turn): ChatTurn => ({
+    id: turn.turn_id,
+    userMessageId: turn.user_message_id,
+    status:
+      turn.status === 'unknown'
+        ? 'unknown'
+        : turn.status === 'completed'
+          ? 'completed'
+          : turn.status === 'generation_failed' || turn.status === 'conflict'
+            ? 'failed'
+            : 'active',
+    content: turn.timeline.flatMap((item): ChatContent[] => {
+      if (item.kind !== 'artifact' && (item.kind !== 'message' || item.role === 'assistant')) {
+        responseTurnIds.add(item.turn_id);
       }
-      case 'failure':
-        return [
-          {
-            kind: 'failure',
-            id: `failure-${item.turn_id}`,
-            text: 'Die Antwort konnte nicht erstellt werden.',
-          },
-        ];
-    }
-  });
+      switch (item.kind) {
+        case 'message':
+          return [
+            {
+              kind: 'text',
+              id: item.id,
+              role: item.role,
+              isFinal: item.is_final,
+              text: item.text,
+              turnId: item.turn_id,
+            },
+          ];
+        case 'intermediate':
+          return [{ kind: 'intermediate', id: item.id, text: item.text, turnId: item.turn_id }];
+        case 'tool':
+          return [
+            {
+              kind: 'tool',
+              id: itemIdentity(item),
+              name: item.name,
+              status: item.status,
+              turnId: item.turn_id,
+            },
+          ];
+        case 'artifact': {
+          const artifact = mapArtifact(item.artifact);
+          if (artifact !== null) responseTurnIds.add(item.turn_id);
+          return artifact === null ? [] : [{ ...artifact, turnId: item.turn_id }];
+        }
+        case 'failure':
+          return [
+            {
+              kind: 'failure',
+              id: itemIdentity(item),
+              turnId: item.turn_id,
+              text: 'Die Antwort konnte nicht erstellt werden.',
+            },
+          ];
+      }
+    }),
+  }));
+  return { turns: presented, responseTurnIds };
 }
 
-function itemIdentity(item: SessionSnapshotResponse['timeline'][number]): string {
-  switch (item.kind) {
-    case 'message':
-    case 'intermediate':
-      return item.id;
-    case 'tool':
-      return `tool-${item.execution_id}`;
-    case 'artifact':
-      return item.artifact_id;
-    case 'failure':
-      return `failure-${item.turn_id}`;
-  }
+function userMessages(turns: readonly RetainedTurn[]): readonly ApiMessage[] {
+  return turns.flatMap((turn) =>
+    turn.timeline.flatMap((item): ApiMessage[] =>
+      item.kind === 'message' && item.role === 'user'
+        ? [{ role: 'user', text: item.text, turn_id: item.turn_id }]
+        : [],
+    ),
+  );
 }
 
 function prefixMatches(previous: readonly ApiMessage[], current: readonly ApiMessage[]): boolean {
