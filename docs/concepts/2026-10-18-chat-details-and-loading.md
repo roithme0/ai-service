@@ -2,7 +2,7 @@
 
 ## Status
 
-Evolving concept as of 2026-10-18. Loading-indicator lifetime, automatic detail collapse, post-completion disclosure and manual-toggle scrolling are agreed. The concept is sufficiently detailed to begin implementation in agreed, narrow slices. Remaining interaction and edge-case rules will be resolved before their affected slices.
+Implemented as of 2026-10-20. Loading feedback, automatic detail collapse, post-completion disclosure and animated expansion/collapse are implemented. Manual toggles do not initiate scrolling. No additional turn-details implementation is planned; the focused-link edge case described below is explicitly accepted without special handling.
 
 ## Delivery Approach
 
@@ -16,13 +16,15 @@ The third agreed slice provides turn association and lifecycle metadata without 
 
 Snapshots expose ordered backend-provided `turns` records with actual turn identity, initiating user message identity and lifecycle status. The turn-owned timeline foundation now places each ordered timeline, including embedded artifact envelopes, directly within its turn in both internal and HTTP snapshots. SSE upserts use the same self-contained items and turn-local positions. The controller maps each backend turn into a UI turn with ordered content and reconciles accepted submissions from user items in those timelines. The backend reuses its authoritative timeline identities, internal admission identity and retained terminal history. Turn records carry precise `pending`, `in_progress`, `closing`, `completed`, `generation_failed` or `conflict` lifecycle; they replace the separate latest-terminal and active-turn snapshot fields. Terminal outcomes outrank received final text, and pending work is distinct from admitted work. Historical completion is never inferred from a final message or proximity. The controller maps pending, in-progress and closing states to UI active, completed to completed, and generation failure or conflict to failed. Unknown remains a client observation outcome. Recovery considers the latest submitted turn, so newly pending work cannot be confused with an older terminal turn. The controller marks only the affected active turn unknown when observation is interrupted. It does not reconstruct turn associations or fabricate an initiating user anchor at admission. If observation fails before its first snapshot, the accepted user message remains in its acknowledged turn with an unknown outcome and the error remains visible. Unknown outcomes retain received details visibly, including when a final answer was received. Disclosure behavior is implemented in the fourth slice below.
 
-The explicit final-answer prerequisite carries required `is_final` on backend timeline messages through snapshots and SSE to required UI text `isFinal`. Only retained `MessageRecord` values with `kind: final` set it true. User and unspecified assistant messages remain non-final; intermediate content keeps its separate kind. Position and successful completion never identify a final answer. The marker and final content survive a later failure and do not change turn lifecycle or rendering. Future disclosure places its toggle after the explicit final answer and uses the first timeline item as the expansion scroll anchor; this prerequisite slice implements no disclosure or scrolling changes.
+The explicit final-answer prerequisite carries required `is_final` on backend timeline messages through snapshots and SSE to required UI text `isFinal`. Only retained `MessageRecord` values with `kind: final` set it true. User and unspecified assistant messages remain non-final; intermediate content keeps its separate kind. Position and successful completion never identify a final answer. The marker and final content survive a later failure and do not change turn lifecycle or rendering. Disclosure places its toggle after the explicit final answer; the prerequisite slice introduced no disclosure or scrolling changes.
 
 ## Context
 
-The fourth slice implements disclosure in the rendering component. Only completed turns with details and an explicit final assistant text are eligible, including historical turns and successful turns with recoverable failed tools. Details are hidden in place, retaining interleaved artifacts and their renderer/card instances. One native keyboard-accessible list-tree icon button appears immediately beneath the first explicitly final assistant text, with German show/hide names and `aria-expanded`. Multiple explicit finals from a rendering-only host use the first marker deterministically; empty turns have no toggle. Expansion state is local to the component, keyed by turn ID, survives later submissions and resets on recreation. Active, failed and unknown turns always retain details without controls. Expansion measures the first timeline item's position after rendering and smoothly aligns it within the history scroll range. Collapse restores the prior offset after layout, clamped to the shorter history, preventing native scroll anchoring from shifting the viewport. Content/status-driven bottom scrolling remains independent of toggle state. Formatting, lint, 13 tooling tests, 4 application tests and 168 chat UI tests pass. Supervisor review confirmed the focused Edge flow on port 4204: live details without controls, automatic collapse after completion, artifacts retained in order, first-item alignment with a long user message, native keyboard expansion/collapse, preserved collapse offset and retained artifact expansion. The review tab remains open. The local backend container was rebuilt to serve the current contract; no configuration changes were made.
+The fourth slice implements disclosure in the rendering component. Only completed turns with details and an explicit final assistant text are eligible, including historical turns and successful turns with recoverable failed tools. Details are hidden in place, retaining interleaved artifacts and their renderer/card instances. One native keyboard-accessible list-tree icon button appears immediately beneath the first explicitly final assistant text, with German show/hide names and `aria-expanded`. Multiple explicit finals from a rendering-only host use the first marker deterministically; empty turns have no toggle. Expansion state is local to the component, keyed by turn ID, survives later submissions and resets on recreation. Active, failed and unknown turns always retain details without controls. Manual expansion and collapse animate each detail item without initiating a scroll. Content/status-driven bottom scrolling remains independent of toggle state.
 
-The shared chat UI displays intermediate assistant messages, tool calls, assistant answers and artifacts in ordered, turn-owned content. Assistant loading feedback uses three animated dots. Intermediate messages and tool rows remain visible after completion.
+Subsequent refinements extracted dedicated user, intermediate and assistant message components, with the answer action bar owned by the assistant component. The shared history-item wrapper animates its grid row over 200 ms; spacing lives inside the collapsing content, replacing the history flex gap. Reduced-motion preferences disable this transition. Collapsed content remains mounted but is inert and hidden from assistive technology. Scroll anchoring is disabled for the history, and toggle handling performs no offset restoration or viewport compensation. The composer no longer moves focus on initialization, state changes or acknowledgement. Latest implementation validation passed formatting, lint, 13 tooling tests, 4 application tests and 173 chat UI tests. No browser verification was performed for these refinements.
+
+The shared chat UI displays intermediate assistant messages, tool calls, assistant answers and artifacts in ordered, turn-owned content. Assistant loading feedback uses three animated dots. Intermediate messages and tool rows collapse after successful completion when an explicit final answer is present.
 
 The supplied references in the root `.temp` folder are:
 
@@ -40,7 +42,7 @@ Allow users to collapse and expand intermediate assistant messages and tool call
 
 ## Proposed Direction
 
-Treat intermediate messages and tool calls as details associated with an assistant turn. Keep final answer text and artifacts available independently of whether those details are expanded. This interpretation follows the completed-answer reference and remains subject to discussion for interleaved content.
+Treat intermediate messages and tool calls as details associated with an assistant turn. Keep final answer text and artifacts available independently of whether those details are expanded. Interleaved artifacts remain visible and retain their renderer/card state when details collapse.
 
 ### Loading and Execution
 
@@ -64,11 +66,9 @@ If a turn has no intermediate messages or tool calls, do not show a details butt
 
 Keep the existing unconditional scroll-to-bottom behavior during execution. Detecting whether users are reading earlier content or allowing them to suspend following live activity is outside scope.
 
-On manual expansion, reveal the details and then smoothly scroll the turn's first timeline item to the top of the history viewport, within the available scroll range. This gives users the request context before the expanded details.
+Manual expansion and collapse only animate the affected history items. Neither action requests scrolling, restores an earlier offset nor aligns a timeline item with the viewport. The browser may clamp the current offset when the shorter content cannot support it. Native scroll anchoring is disabled for the history.
 
-On manual collapse, preserve the history's current scroll offset without initiating another scroll. The browser may clamp that offset if the shorter content cannot support it. No viewport-anchor compensation is required.
-
-Keep toggle handling explicit and separate from the existing content/status-driven scrolling. A stable reference to the first timeline item and scrolling after expansion has rendered should be sufficient; exact mechanics belong to implementation.
+Toggle handling remains separate from content/status-driven bottom scrolling. Spacing is padding inside the animated content, so it expands and collapses together with each detail item.
 
 ### Tool Failures
 
@@ -92,7 +92,7 @@ The backend timeline provides actual turn IDs and stable initiating user identit
 
 The rendering-only `/ui` entry point must remain usable with host-supplied content, independently of the `/conversation` controller and HTTP transport. Grouping and presentation rules need a clear contract for both consumers.
 
-The component currently scrolls to the bottom after content or status changes. Preserve that behavior during execution and add the agreed manual-toggle behavior without broadening this change into a live-scroll redesign.
+The component currently scrolls to the bottom after content or status changes. Preserve that behavior during execution; manual toggles do not request scrolling.
 
 The existing demo can exercise the agreed behavior through its real intermediate messages, tool calls, artifacts and failure flow. Recipe rendering is not required to demonstrate this change.
 
@@ -102,11 +102,11 @@ This concept covers chat detail disclosure, loading feedback, replacement of the
 
 Token streaming, cancellation, reconnection, persistence and a general chat redesign are not established requirements of this change. Tool-specific icons and friendlier tool labels appear in the references but are explicitly out of scope.
 
-## Open Questions
+## Accepted Interaction Boundaries
 
-- Intermediate Markdown can contain links. Should automatic collapse move focus to the disclosure button when a focused link becomes hidden? Manual toggle activation retains focus on the toggle.
-- Is composer styling beyond replacement of the send icon part of this change, or illustrative context?
+- No special focus transfer is implemented when automatic collapse makes a focused intermediate Markdown link inert. This edge case is explicitly accepted without further work. Manual toggle activation retains focus on the toggle.
+- Broader composer styling is outside this concept. The separately implemented editing lock permits drafting during an assistant response while keeping submission blocked, and the composer does not move focus programmatically.
 
 ## Risks
 
-The agreed presentation relies on the agent explaining essential tool failures in its final response; the UI does not independently surface individual tool failures outside collapsed details. Failed turns without a final response retain visible details and an error, and unknown outcomes likewise retain all received details visibly. Unconditional scrolling during execution can interrupt reading earlier content; this existing limitation is explicitly accepted. Collapsing details may clamp the scroll offset when the content becomes shorter. Grouping by proximity alone can associate details with the wrong answer; preserve actual turn association. Reference assets currently live in `.temp`, so eventual implementation must retain required assets in maintained source locations.
+The agreed presentation relies on the agent explaining essential tool failures in its final response; the UI does not independently surface individual tool failures outside collapsed details. Failed turns without a final response retain visible details and an error, and unknown outcomes likewise retain all received details visibly. Unconditional scrolling during execution can interrupt reading earlier content; this existing limitation is explicitly accepted. Collapsing details may clamp the scroll offset when the content becomes shorter. Grouping by proximity alone can associate details with the wrong answer; preserve actual turn association. The supplied icons and loading animation are retained in the maintained frontend source; `.temp` contains the original references.
