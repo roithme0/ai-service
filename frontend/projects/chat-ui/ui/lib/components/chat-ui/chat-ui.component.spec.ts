@@ -70,6 +70,55 @@ describe('ChatUiComponent', () => {
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
 
+  it('keeps the mascot working through final text until the active turn finishes', () => {
+    const fixture = createFixture([]);
+    const mascot = fixtureElement(fixture).querySelector<HTMLImageElement>('.mascot')!;
+    expect(mascot.getAttribute('src')).toBe('images/mascot-idle.png');
+    expect(mascot.alt).toBe('');
+    expect(mascot.getAttribute('aria-hidden')).toBe('true');
+
+    const turn: ChatTurn = {
+      id: 'active',
+      userMessageId: 'request',
+      status: 'active',
+      content: [],
+    };
+    fixture.componentRef.setInput('turns', [turn]);
+    fixture.detectChanges();
+    expect(mascot.getAttribute('src')).toBe('images/maskot-working.png');
+
+    fixture.componentRef.setInput('turns', [{ ...turn, content: DISCLOSURE_CONTENT }]);
+    fixture.componentRef.setInput('conversationStatus', null);
+    fixture.detectChanges();
+    expect(mascot.getAttribute('src')).toBe('images/maskot-working.png');
+
+    for (const status of ['completed', 'failed', 'unknown'] as const) {
+      fixture.componentRef.setInput('turns', [{ ...turn, status }]);
+      fixture.detectChanges();
+      expect(mascot.getAttribute('src')).toBe('images/mascot-idle.png');
+    }
+  });
+
+  it('uses the consumer asset folder and ignores composer locks and conversation loading', () => {
+    const fixture = createFixture([], { disabled: true });
+    fixture.componentRef.setInput('mascotAssetPath', 'assets/chat-ui/images/');
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      placement: 'conversation',
+      message: 'Starting',
+    });
+    fixture.detectChanges();
+    const mascot = fixtureElement(fixture).querySelector<HTMLImageElement>('.mascot')!;
+    expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/mascot-idle.png');
+
+    fixture.componentRef.setInput('turns', [
+      { id: 'active', userMessageId: 'request', status: 'active', content: [] },
+      { id: 'completed', userMessageId: 'other', status: 'completed', content: [] },
+    ]);
+    fixture.detectChanges();
+    expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/maskot-working.png');
+  });
+
   it('collapses details only after completion and places an accessible toggle below the explicit answer', () => {
     const fixture = createFixture([]);
     const turn: ChatTurn = {

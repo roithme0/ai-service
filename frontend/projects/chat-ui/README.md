@@ -36,8 +36,9 @@ The component trims a valid submission and emits it once as a `ChatSubmission`. 
 ## Assets
 
 The package includes reusable library assets under `public/`, including
-`public/images/mascot.png`. The demo application serves the same source folder
-(`projects/chat-ui/public`) and uses `images/mascot.png` as its favicon.
+`public/images/mascot-idle.png` and `public/images/maskot-working.png`.
+The demo application serves the same source folder (`projects/chat-ui/public`)
+and uses `images/mascot-idle.png` as its favicon.
 Angular consumer apps can copy the packaged assets by adding this
 entry to their application's build `assets` array in `angular.json`:
 
@@ -49,10 +50,18 @@ entry to their application's build `assets` array in `angular.json`:
 }
 ```
 
-Use `assets/chat-ui/images/mascot.png` as an image URL or as a favicon:
+Set `mascotAssetPath="assets/chat-ui/images"` on `<ai-chat-ui>` when using this
+asset mapping. The default path is `images`, relative to the application's base
+URL. The decorative duck sits above the composer's right edge and shows the
+working image while any supplied turn has status `active`, including after
+final text arrives until the turn finishes. It returns to idle for completed,
+failed, or unknown turns; loading indicators and composer locks do not select
+the working image.
+
+Use `assets/chat-ui/images/mascot-idle.png` as an image URL or as a favicon:
 
 ```html
-<link rel="icon" type="image/png" href="assets/chat-ui/images/mascot.png" />
+<link rel="icon" type="image/png" href="assets/chat-ui/images/mascot-idle.png" />
 ```
 
 ## AI Service conversation integration
