@@ -94,7 +94,12 @@ describe('ChatUiComponent', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(toggle.getAttribute('aria-label')).toBe('Details anzeigen');
     expect(toggle.querySelector('mat-icon')?.getAttribute('svgIcon')).toBe('ai-chat:list-tree');
-    expect(toggle.parentElement?.previousElementSibling?.textContent).toContain('Answer');
+    expect(
+      toggle.closest('ai-chat-assistant-message')?.querySelector('.markdown')?.textContent,
+    ).toBe('Answer');
+    expect(toggle.closest('ai-chat-assistant-message')?.getAttribute('aria-label')).toBe(
+      'Antwort des Assistenten',
+    );
     toggle.click();
     fixture.detectChanges();
     expect(detail.hidden).toBe(false);
@@ -156,7 +161,7 @@ describe('ChatUiComponent', () => {
       ...element.querySelectorAll<HTMLElement>(
         '[role="article"]:not([hidden]), article:not([hidden]), ai-chat-status',
       ),
-    ].map((item) => item.textContent);
+    ].map((item) => item.querySelector('.markdown')?.textContent ?? item.textContent);
     expect(visibleText).toEqual([
       'Request',
       'Answer',
@@ -294,6 +299,8 @@ describe('ChatUiComponent', () => {
     expect(messageElements[0].querySelector('strong')).toBeNull();
     expect(messageElements[0].querySelector('img')).toBeNull();
     expect(messageElements[0].textContent).toContain('<img src=x>\nNext line');
+    expect(messageElements[1].matches('ai-chat-assistant-message')).toBe(true);
+    expect(messageElements[1].getAttribute('role')).toBe('article');
     expect(messageElements[1].classList.contains('message--assistant')).toBe(true);
     expect(messageElements[1].querySelector('strong')?.textContent).toBe(
       'formatted assistant text',

@@ -46,28 +46,13 @@
                   [attr.data-turn-start]="first ? turn.id : null"
                 />
               } @else {
-                <article
-                  class="message message--assistant markdown"
+                <ai-chat-assistant-message
+                  [message]="item"
                   [attr.data-turn-start]="first ? turn.id : null"
-                  aria-label="Antwort des Assistenten"
-                  [innerHTML]="renderAssistantMarkdown(item.text)"
-                ></article>
-                @if (disclosureAnswers().get(turn.id) === item.id) {
-                  <div class="answer-actions">
-                    <button
-                      type="button"
-                      class="details-toggle"
-                      [attr.aria-expanded]="detailsExpanded(turn.id)"
-                      [attr.aria-label]="
-                        detailsExpanded(turn.id) ? 'Details ausblenden' : 'Details anzeigen'
-                      "
-                      [title]="detailsExpanded(turn.id) ? 'Details ausblenden' : 'Details anzeigen'"
-                      (click)="toggleDetails(turn.id)"
-                    >
-                      <mat-icon svgIcon="ai-chat:list-tree" aria-hidden="true" />
-                    </button>
-                  </div>
-                }
+                  [showDetailsToggle]="disclosureAnswers().get(turn.id) === item.id"
+                  [detailsExpanded]="detailsExpanded(turn.id)"
+                  (detailsToggled)="toggleDetails(turn.id)"
+                />
               }
             }
           }
