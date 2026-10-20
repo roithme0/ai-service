@@ -14,7 +14,7 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.native_tools import WebSearchTool
 
 from app.agentic import wiring
-from app.agentic.artifacts import ArtifactAccepted, ArtifactSubmission, create_artifact_toolset
+from app.agentic.artifacts import ArtifactAccepted
 from app.agentic.conversations import AgentConversation
 from app.agentic.mcp import create_mcp_toolset
 from app.core.config import Settings
@@ -70,7 +70,9 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
 ) -> None:
     server = MCPServer("Kochwiki", instructions="Use lookup_recipe for recipe data.")
     lookups: list[str] = []
-    accepted: list[ArtifactSubmission] = []
+    first = AgentConversation(artifact_capabilities=[ArtifactCapability(
+        type="json", description="Show recipe data.", payloadSchema={"type": "object"},
+    )])
     toolsets: list[MCPToolset[None]] = []
 
     @server.tool()
@@ -78,10 +80,6 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
         """Find a recipe by name."""
         lookups.append(name)
         return {"name": name}
-
-    def accept(submission: ArtifactSubmission, /) -> ArtifactAccepted:
-        accepted.append(submission)
-        return ArtifactAccepted(artifact_id="artifact-1")
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         prompts = [part.content for msg in messages for part in msg.parts if isinstance(part, UserPromptPart)]
@@ -100,13 +98,14 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
                 return ModelResponse(parts=[ToolCallPart("present_artifact", {
                     "candidate": {"type": "json", "payload": {"title": "Soup", "payload": {"name": "Soup"}}},
                 }, "present-1")])
-            assert len(accepted) == 1
-            assert results[-1].content == ArtifactAccepted(artifact_id="artifact-1")
+            assert len(first.artifacts) == 1
+            assert results[-1].content == ArtifactAccepted(artifact_id=first.artifacts[0].artifact_id)
         else:
-            assert names == {"lookup_recipe"}
             if prompts == ["Find and present soup.", "Repeat that."]:
+                assert names == {"lookup_recipe", "present_artifact"}
                 assert len(results) == 2
             else:
+                assert names == {"lookup_recipe"}
                 assert prompts == ["Hello."]
                 assert results == []
         return ModelResponse(parts=[TextPart("Soup is ready.")])
@@ -137,17 +136,12 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
             assert model.settings["openai_store"] is False
             assert model.client.api_key == "test-key"
             assert not toolsets[0].client.is_connected()
-            first = AgentConversation()
             independent = AgentConversation()
             async with agent:
                 assert toolsets[0].client.is_connected()
                 assert not model.client.is_closed()
                 with agent.override(model=FunctionModel(respond)):
-                    result = await first.run_turn(agent, "Find and present soup.", toolsets=[
-                        create_artifact_toolset([ArtifactCapability(
-                            type="json", description="Show recipe data.", payloadSchema={"type": "object"},
-                        )], accept),
-                    ])
+                    result = await first.run_turn(agent, "Find and present soup.")
                     followup = await first.run_turn(agent, "Repeat that.")
                     separate = await independent.run_turn(agent, "Hello.")
                 assert result.output == followup.output == separate.output == "Soup is ready."
@@ -156,9 +150,10 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
             assert model.client.is_closed()
             assert not toolsets[0].client.is_connected()
             assert not http.is_closed
-            assert len(accepted) == 1
-            assert accepted[0].tool_call_id == "present-1"
-            assert accepted[0].run_id == result.run_id
+            assert len(first.artifacts) == 1
+            assert first.artifacts[0].tool_call_id == "present-1"
+            assert first.artifacts[0].turn_id == result.run_id
+            assert independent.artifacts == ()
             assert first.last_turn is not None and independent.last_turn is not None
             assert first.last_turn.conversation_id != independent.last_turn.conversation_id
         assert http.is_closed

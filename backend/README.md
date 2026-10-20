@@ -78,9 +78,9 @@ MCP and manages the model/provider lifetime; exit closes owned resources.
 MCP startup errors propagate instead of producing an unavailable placeholder,
 polling, or retrying in application code. There is no production startup/routing
 change or automatic fallback. Session context and application availability policy
-remain integration work. Artifact capabilities and acceptance stay run-scoped:
-pass `create_artifact_toolset(capabilities, accept)` through `run_turn(toolsets=...)`
-once the caller can supply atomic acceptance. They are not shared agent state.
+remain integration work. Pass `artifact_capabilities` to `AgentConversation` for
+conversation-owned artifact acceptance and retention. Each turn receives its own
+native publication toolset; presentation configuration is not shared agent state.
 Configured composition coverage runs with
 `python -m pytest tests/test_pydantic_wiring.py`; it uses no live credentials.
 
@@ -95,7 +95,7 @@ async with agent:
 ```
 
 `run_turn()` returns the native `AgentRunResult[str]` and accepts per-turn
-`usage_limits` and `toolsets`, including the artifact publication toolset.
+`usage_limits` and additional `toolsets`.
 `conversation.messages` returns a detached tuple of native messages;
 `conversation.last_turn` returns detached `TurnObservation` inspection data.
 Optional `initial_context` must be a JSON object. Creation validates and serializes
@@ -108,8 +108,36 @@ Omission adds no context message; an explicit empty object is retained. Before
 the first turn, `messages` exposes a detached context snapshot and `last_turn`
 is `None`. Context is internal model input, not a public timeline item. The label
 and agent guidance establish a data boundary; they do not guarantee resistance
-to instructions embedded in caller data. Artifact capabilities remain separate,
-run-scoped toolset configuration.
+to instructions embedded in caller data.
+
+Optional `artifact_capabilities` are also snapshotted at conversation creation.
+`run_turn()` automatically attaches the native `present_artifact` tool when
+capabilities are advertised. Acceptance atomically checks the conversation's
+`max_artifacts` capacity (default 100, configurable down to zero), assigns a UUID
+and UTC timestamp, and retains a detached payload before returning the accepted ID
+to the model. Duplicate capability types and invalid limits fail at creation.
+`conversation.artifacts` returns detached `ConversationArtifact` snapshots in
+zero-based publication order, including artifacts accepted during active execution.
+They reuse the shared published-artifact envelope and retain the native tool-call
+ID. Their `turn_id` is the native run ID at this internal boundary; eventual
+production integration must associate it with the application's admitted turn.
+Publication order is not a position in the public timeline. Accepted artifacts
+survive later failure or cancellation and continue consuming capacity. Rejection
+publishes nothing and becomes a native failed tool result. Repeated reads and
+history continuation do not publish artifacts again; the model can still request
+a new publication. No duplicate-publication prevention is added.
+
+```python
+conversation = AgentConversation(
+    initial_context={"recipe": {"id": "recipe-42"}},
+    artifact_capabilities=capabilities,
+)
+async with agent:
+    await conversation.run_turn(agent, "Present the recipe.")
+artifacts = conversation.artifacts
+```
+
+Do not also attach another `present_artifact` toolset to that conversation.
 The latest settled observation owns the authoritative history. Failed or cancelled
 execution retains its completed messages, confirmed results and uncertain started
 calls before propagating the original exception. Setup failure before the first
@@ -117,12 +145,12 @@ execution node preserves the previous history. An overlapping turn raises
 `ConversationBusyError` immediately, without admitting its prompt or queueing it;
 independent conversations can run concurrently on one open agent.
 
-While a turn is running, reads show the previous settled turn. Returned results
+While a turn is running, history reads show the previous settled turn. Returned results
 and snapshots do not share mutable data with the retained conversation. This is
 an internal process-local building block, without session authorization, expiry,
 durable storage or public timeline projection. The production session store is
 not connected. Focused coverage runs with
-`python -m pytest tests/test_pydantic_conversations.py`.
+`python -m pytest tests/test_pydantic_conversations.py tests/test_pydantic_conversation_artifacts.py`.
 
 Continuation passes native `message_history` without previous usage, so request
 and tool budgets start fresh for every turn. The framework inherits conversation
@@ -193,8 +221,9 @@ application turn IDs. The callback must atomically assign identity, timestamp an
 ordering and retain the artifact before returning `ArtifactAccepted(artifact_id=...)`.
 Capacity or other expected admission failures return `ArtifactRejected(reason=...)`
 without retaining the candidate. Acceptance must not perform blocking I/O or schedule
-background publication. Only the tests supply an in-memory acceptance implementation;
-production sessions and the frontend are not connected yet.
+background publication. `AgentConversation` supplies process-local acceptance
+automatically; standalone execution can supply another callback. Production
+sessions and the frontend are not connected yet.
 
 Payload validation supports local JSON Schema references without network resolution.
 Metadata validation additionally checks supported formats and treats omitted metadata
