@@ -52,11 +52,43 @@ tool execution, MCP and conversation history. It is not wired into HTTP sessions
 Production artifact wiring and frontend timeline integration follow in
 separate slices before the eventual cutover and legacy removal.
 
-The caller keeps the native agent open with `async with agent:` and passes
-`result.all_messages()` into the next `execute_turn()` call. Native message JSON
-can also be serialized and restored with `ModelMessagesTypeAdapter`. Results
-expose output, messages and usage; `capture_run_messages()` supports inspecting
-a failed run. No hosted telemetry exporter is configured by this slice.
+The caller keeps the native agent open with `async with agent:`. Use
+`app.agentic.conversations.AgentConversation` to retain native history across turns:
+
+```python
+conversation = AgentConversation()
+async with agent:
+    first = await conversation.run_turn(agent, "Find the value.")
+    second = await conversation.run_turn(agent, "Explain that result.")
+```
+
+`run_turn()` returns the native `AgentRunResult[str]` and accepts per-turn
+`usage_limits` and `toolsets`, including the artifact publication toolset.
+`conversation.messages` returns a detached tuple of native messages;
+`conversation.last_turn` returns detached `TurnObservation` inspection data.
+The latest settled observation owns the authoritative history. Failed or cancelled
+execution retains its completed messages, confirmed results and uncertain started
+calls before propagating the original exception. Setup failure before the first
+execution node preserves the previous history. An overlapping turn raises
+`ConversationBusyError` immediately, without admitting its prompt or queueing it;
+independent conversations can run concurrently on one open agent.
+
+While a turn is running, reads show the previous settled turn. Returned results
+and snapshots do not share mutable data with the retained conversation. This is
+an internal process-local building block, without session authorization, expiry,
+durable storage or public timeline projection. The production session store is
+not connected. Focused coverage runs with
+`python -m pytest tests/test_pydantic_conversations.py`.
+
+Continuation passes native `message_history` without previous usage, so request
+and tool budgets start fresh for every turn. The framework inherits conversation
+identity from history and assigns a new run ID. Its native `Conversation` envelope
+also carries cumulative usage and is deliberately not forwarded here; see
+[native history and usage](https://pydantic.dev/docs/ai/core-concepts/message-history/).
+The lower-level `execute_turn()` remains available for callers managing history
+themselves. Native message JSON can be serialized and restored with
+`ModelMessagesTypeAdapter` (convert the snapshot tuple to a list before serializing).
+No hosted telemetry exporter is configured by this slice.
 
 Pass a fresh `app.agentic.observation.TurnObservation` to
 `execute_turn(..., observation=observation)` to retain inspection data on success,
