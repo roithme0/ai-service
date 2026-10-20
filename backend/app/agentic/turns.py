@@ -78,11 +78,13 @@ async def execute_turn(
     message_history: Sequence[ModelMessage] = (),
     usage_limits: UsageLimits | None = None,
     observation: TurnObservation | None = None,
+    toolsets: Sequence[AbstractToolset[None]] = (),
 ) -> AgentRunResult[str]:
     with observation.capture() if observation is not None else nullcontext() as hooks:
         return await agent.run(
             prompt,
             message_history=message_history,
+            toolsets=toolsets,
             usage_limits=usage_limits if usage_limits is not None else UsageLimits(
                 request_limit=MAX_MODEL_REQUESTS,
                 tool_calls_limit=MAX_TOOL_CALLS,

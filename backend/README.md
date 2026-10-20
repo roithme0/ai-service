@@ -49,7 +49,7 @@ them in tool descriptions or artifact capabilities.
 The new executor in `app/agentic/turns.py` is developed alongside the current
 production engine. It uses Pydantic AI 2.58.0 directly for OpenAI Responses,
 tool execution, MCP and conversation history. It is not wired into HTTP sessions yet.
-Hosted web search, artifacts and frontend timeline integration follow in
+Hosted web search, production artifact wiring and frontend timeline integration follow in
 separate slices before the eventual cutover and legacy removal.
 
 The caller keeps the native agent open with `async with agent:` and passes
@@ -83,6 +83,56 @@ not a public timeline payload. No legacy timeline projection, session/SSE wiring
 HTTP schema or frontend change is included. The presentation contract will follow
 native semantics in a later slice. Run focused observation coverage with
 `python -m pytest tests/test_pydantic_observation.py`.
+
+Artifact publication is available independently through
+`app.agentic.artifacts.create_artifact_toolset(capabilities, accept)`. Create it for
+the current turn and pass it to `execute_turn(..., toolsets=[artifact_toolset])`;
+run-scoped toolsets supplement the agent's existing tools, including MCP. The
+toolset snapshots advertised capabilities and provides a native `present_artifact`
+function tool with generated argument validation and capability instructions.
+The input uses `ArtifactCandidate[ArtifactPayload]` directly; there is no separate
+request model or conversion. Native tool arguments have this structure:
+
+```json
+{
+  "candidate": {
+    "type": "example",
+    "payload": {
+      "title": "Oats",
+      "payload": {"name": "Oats"}
+    }
+  }
+}
+```
+
+The inner `ArtifactPayload` also supports optional `subtitle` and `metadata`.
+It rejects non-finite JSON values at the shared model boundary.
+With no capabilities, it offers no tool. Presentation is core turn functionality,
+so its schema is available eagerly rather than loaded on demand.
+
+The synchronous, typed `accept` callback receives an `ArtifactSubmission` containing
+the validated candidate and native run/tool-call IDs. Bind application session and
+turn ownership in that callback; native IDs do not authorize access or replace
+application turn IDs. The callback must atomically assign identity, timestamp and
+ordering and retain the artifact before returning `ArtifactAccepted(artifact_id=...)`.
+Capacity or other expected admission failures return `ArtifactRejected(reason=...)`
+without retaining the candidate. Acceptance must not perform blocking I/O or schedule
+background publication. Only the tests supply an in-memory acceptance implementation;
+production sessions and the frontend are not connected yet.
+
+Payload validation supports local JSON Schema references without network resolution.
+Metadata validation additionally checks supported formats and treats omitted metadata
+as an empty object when a metadata schema is advertised. Metadata is rejected without
+an advertised schema. These capability/admission rejections become native failed
+tool results through `ToolFailed`; malformed arguments use native validation and the
+configured zero-retry budget, which ends the run. Successful results contain the
+assigned ID, without echoing the artifact payload. The framework's sequential-tool
+barrier orders publication before subsequent calls and model continuation.
+Accepted artifacts belong to application storage and survive later model failure or
+cancellation. Unexpected acceptance exceptions propagate without fabricated success;
+the callback must avoid partially committing and then raising. No automatic replay
+or duplicate-publication protection is added. Run focused coverage with
+`python -m pytest tests/test_pydantic_artifacts.py`.
 
 Execution defaults are collected in `app/agentic/config.py`: 40 model requests,
 32 framework-counted tool calls, a 120-second

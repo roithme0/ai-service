@@ -6,7 +6,7 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Generic, TypeVar
+from typing import Annotated, ClassVar, Generic, TypeVar
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
@@ -21,6 +21,7 @@ ArtifactT = TypeVar("ArtifactT")
 
 @dataclass(frozen=True)
 class ArtifactCandidate(Generic[ArtifactT]):
+    __pydantic_config__: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
     type: str
     payload: ArtifactT
 
@@ -101,6 +102,12 @@ class ArtifactPayload(BaseModel):
     subtitle: str | None = Field(default=None, min_length=1, max_length=MAX_ARTIFACT_HEADER_LENGTH)
     payload: JsonValue
     metadata: dict[str, JsonValue] | None = None
+
+    @field_validator("payload", "metadata")
+    @classmethod
+    def finite_json(cls, value: JsonValue) -> JsonValue:
+        json.dumps(value, allow_nan=False)
+        return value
 
     @field_validator("title")
     @classmethod
