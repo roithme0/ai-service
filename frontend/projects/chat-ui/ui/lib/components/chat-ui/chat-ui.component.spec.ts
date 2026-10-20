@@ -548,6 +548,7 @@ describe('ChatUiComponent', () => {
     const emit = vi.spyOn(component.messageSubmitted, 'emit');
     const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
 
+    textarea.focus();
     textarea.value = '  hello there  ';
     textarea.dispatchEvent(new Event('input'));
     fixture.detectChanges();
@@ -571,60 +572,157 @@ describe('ChatUiComponent', () => {
     expect(document.activeElement).toBe(textarea);
   });
 
-  it('restores composer focus after a disabled interval', () => {
+  it.each(['insertText', 'insertFromPaste', 'deleteContentBackward', 'insertCompositionText'])(
+    'blocks %s while sending without disabling or blurring the textarea',
+    (inputType) => {
+      const fixture = createFixture([]);
+      const element = fixtureElement(fixture);
+      const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
+      const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
+      textarea.value = 'Retained draft';
+      textarea.dispatchEvent(new Event('input'));
+      textarea.focus();
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(emit).toHaveBeenCalledOnce();
+      fixture.componentRef.setInput('composerDisabled', true);
+      fixture.componentRef.setInput('composerEditingDisabled', true);
+      fixture.detectChanges();
+
+      const beforeInput = new InputEvent('beforeinput', {
+        inputType,
+        data: 'x',
+        bubbles: true,
+        cancelable: true,
+      });
+      textarea.dispatchEvent(beforeInput);
+      expect(beforeInput.defaultPrevented).toBe(true);
+      expect(textarea.disabled).toBe(false);
+      expect(textarea.readOnly).toBe(false);
+      expect(textarea.getAttribute('aria-disabled')).toBe('true');
+      expect(document.activeElement).toBe(textarea);
+      expect((element.querySelector('.send-button') as HTMLButtonElement).disabled).toBe(true);
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      element.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+      expect(emit).toHaveBeenCalledOnce();
+
+      fixture.componentRef.setInput('composerDisabled', false);
+      fixture.componentRef.setInput('composerEditingDisabled', false);
+      fixture.detectChanges();
+      const allowedInput = new InputEvent('beforeinput', {
+        inputType: 'insertText',
+        cancelable: true,
+      });
+      textarea.dispatchEvent(allowedInput);
+      expect(allowedInput.defaultPrevented).toBe(false);
+      expect(textarea.hasAttribute('aria-disabled')).toBe(false);
+      textarea.value = 'Editable again';
+      textarea.dispatchEvent(new Event('input'));
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(emit).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'Editable again' }));
+    },
+  );
+
+  it('restores the draft after non-cancellable edits and keeps acknowledgement clearing intact', () => {
     const fixture = createFixture([]);
     const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
+    const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
+    textarea.value = 'Original draft';
+    textarea.dispatchEvent(new Event('input'));
     textarea.focus();
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     fixture.componentRef.setInput('composerDisabled', true);
+    fixture.componentRef.setInput('composerEditingDisabled', true);
     fixture.detectChanges();
-    textarea.blur();
-    fixture.componentRef.setInput('composerDisabled', false);
+    const beforeInput = new InputEvent('beforeinput', {
+      inputType: 'insertCompositionText',
+      cancelable: false,
+    });
+    textarea.dispatchEvent(beforeInput);
+    textarea.value = 'Unexpected composition edit';
+    textarea.dispatchEvent(
+      new InputEvent('input', { inputType: 'insertCompositionText', isComposing: true }),
+    );
     fixture.detectChanges();
+    expect(textarea.value).toBe('Original draft');
+    expect(document.activeElement).toBe(textarea);
+
+    emit.mock.calls[0][0].acknowledge();
+    fixture.detectChanges();
+    expect(textarea.value).toBe('');
+    textarea.value = 'Autocorrect without beforeinput';
+    textarea.dispatchEvent(new Event('input'));
+    expect(textarea.value).toBe('');
     expect(document.activeElement).toBe(textarea);
   });
 
-  it('focuses the composer once when an initially disabled conversation becomes ready', () => {
-    const fixture = createFixture([], { disabled: true, focusOnReady: true });
-    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
-    expect(document.activeElement).not.toBe(textarea);
+  it('allows drafting during an assistant response while keeping submission blocked', () => {
+    const fixture = createFixture([]);
+    const element = fixtureElement(fixture);
+    const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
+    const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.componentRef.setInput('composerEditingDisabled', false);
+    fixture.detectChanges();
+    const edit = new InputEvent('beforeinput', { cancelable: true, inputType: 'insertText' });
+    textarea.dispatchEvent(edit);
+    expect(edit.defaultPrevented).toBe(false);
+    textarea.value = 'Next question';
+    textarea.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(textarea.value).toBe('Next question');
+    expect((element.querySelector('.send-button') as HTMLButtonElement).disabled).toBe(true);
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(emit).not.toHaveBeenCalled();
     fixture.componentRef.setInput('composerDisabled', false);
     fixture.detectChanges();
-    expect(document.activeElement).toBe(textarea);
-
-    textarea.blur();
-    fixture.detectChanges();
-    expect(document.activeElement).not.toBe(textarea);
+    expect(textarea.value).toBe('Next question');
+    (element.querySelector('.send-button') as HTMLButtonElement).click();
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ text: 'Next question' }));
   });
 
-  it('preserves focus changes made while initial readiness is pending', () => {
-    const fixture = createFixture([], { disabled: true, focusOnReady: true });
+  it('does not focus the composer on initialization or readiness and lock changes', () => {
+    const fixture = createFixture([], { disabled: true });
     const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
-    const other = document.createElement('button');
-    document.body.append(other);
-    try {
-      other.focus();
-      other.blur();
-      fixture.componentRef.setInput('composerDisabled', false);
-      fixture.detectChanges();
-      expect(document.activeElement).not.toBe(textarea);
-    } finally {
-      other.remove();
-    }
+    expect(document.activeElement).not.toBe(textarea);
+    const focus = vi.spyOn(textarea, 'focus');
+    fixture.componentRef.setInput('composerDisabled', false);
+    fixture.detectChanges();
+    expect(document.activeElement).not.toBe(textarea);
+    textarea.focus();
+    focus.mockClear();
+    fixture.componentRef.setInput('composerEditingDisabled', true);
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(textarea);
+    textarea.blur();
+    fixture.componentRef.setInput('composerEditingDisabled', false);
+    fixture.detectChanges();
+    expect(document.activeElement).not.toBe(textarea);
+    expect(focus).not.toHaveBeenCalled();
   });
 
   it.each([false, true])(
-    'preserves another focus target even if it subsequently blurs (%s)',
+    'does not reclaim focus on acknowledgement after the user moves away (%s)',
     (blur) => {
       const fixture = createFixture([]);
       const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
+      const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
       const other = document.createElement('button');
       document.body.append(other);
       try {
         textarea.focus();
+        textarea.value = 'Hello';
+        textarea.dispatchEvent(new Event('input'));
+        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
         fixture.componentRef.setInput('composerDisabled', true);
+        fixture.componentRef.setInput('composerEditingDisabled', true);
         fixture.detectChanges();
         other.focus();
         if (blur) other.blur();
+        emit.mock.calls[0][0].acknowledge();
+        fixture.componentRef.setInput('composerEditingDisabled', false);
+        fixture.detectChanges();
+        expect(textarea.value).toBe('');
+        expect(document.activeElement).toBe(blur ? document.body : other);
         fixture.componentRef.setInput('composerDisabled', false);
         fixture.detectChanges();
         expect(document.activeElement).toBe(blur ? document.body : other);
@@ -633,17 +731,6 @@ describe('ChatUiComponent', () => {
       }
     },
   );
-
-  it('does not claim focus when the composer was unfocused before disabling', () => {
-    const fixture = createFixture([]);
-    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
-    const focus = vi.spyOn(textarea, 'focus');
-    fixture.componentRef.setInput('composerDisabled', true);
-    fixture.detectChanges();
-    fixture.componentRef.setInput('composerDisabled', false);
-    fixture.detectChanges();
-    expect(focus).not.toHaveBeenCalled();
-  });
 
   it('autosizes the composer from one up to five lines', () => {
     const fixture = createFixture([]);
@@ -802,7 +889,7 @@ describe('ChatUiComponent', () => {
     expect(fixtureElement(fixture).querySelector('.content')).toBeNull();
     expect(
       (fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement).disabled,
-    ).toBe(true);
+    ).toBe(false);
     vi.advanceTimersByTime(299);
     fixture.detectChanges();
     expect(fixtureElement(fixture).querySelector('.content')).toBeNull();
@@ -887,7 +974,7 @@ describe('ChatUiComponent', () => {
 
     expect(
       (fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement).disabled,
-    ).toBe(true);
+    ).toBe(false);
     expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
       'Antwort wird erstellt …',
     );
@@ -911,14 +998,13 @@ describe('ChatUiComponent', () => {
 
 function createFixture(
   messages: readonly ChatContent[],
-  options: { disabled?: boolean; focusOnReady?: boolean } = {},
+  options: { disabled?: boolean } = {},
 ): ComponentFixture<ChatUiComponent> {
   const fixture = TestBed.createComponent(ChatUiComponent);
   fixture.componentRef.setInput('bannerTitle', 'Welcome');
   fixture.componentRef.setInput('bannerDescription', 'Description');
   setContent(fixture, messages);
   fixture.componentRef.setInput('composerDisabled', options.disabled ?? false);
-  fixture.componentRef.setInput('focusOnReady', options.focusOnReady ?? false);
   fixture.detectChanges();
   return fixture;
 }

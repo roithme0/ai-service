@@ -24,6 +24,7 @@ export type ArtifactMapper = (artifact: ArtifactResponse) => ChatArtifact | null
 export interface ConversationViewState {
   readonly turns: readonly ChatTurn[];
   readonly composerDisabled: boolean;
+  readonly composerEditingDisabled: boolean;
   readonly status: ChatConversationStatus | null;
 }
 
@@ -41,6 +42,7 @@ interface PresentedTurns {
 const INITIAL_STATE: ConversationViewState = {
   turns: [],
   composerDisabled: true,
+  composerEditingDisabled: false,
   status: loading('Unterhaltung wird gestartet …', 'conversation'),
 };
 
@@ -75,6 +77,7 @@ export class ConversationController {
     const epoch = this.epoch;
     this.updateState({
       composerDisabled: true,
+      composerEditingDisabled: false,
       status: loading('Unterhaltung wird gestartet …', 'conversation'),
     });
     try {
@@ -109,6 +112,7 @@ export class ConversationController {
     const epoch = this.epoch;
     this.updateState({
       composerDisabled: true,
+      composerEditingDisabled: true,
       status: null,
     });
     try {
@@ -124,6 +128,10 @@ export class ConversationController {
         return;
       }
       this.handleAppendFailure(error);
+    } finally {
+      if (epoch === this.epoch && this.stateValue.composerEditingDisabled) {
+        this.updateState({ composerEditingDisabled: false });
+      }
     }
   }
 
@@ -148,6 +156,7 @@ export class ConversationController {
     ]);
     this.updateState({
       composerDisabled: true,
+      composerEditingDisabled: false,
       status: loading('Antwort wird erstellt …', 'assistant'),
     });
     if (epoch === this.epoch) acknowledge();
@@ -362,6 +371,7 @@ export class ConversationController {
         this.currentTurnId = appended.turn_id;
         this.updateState({
           composerDisabled: true,
+          composerEditingDisabled: false,
           status: loading('Antwort wird erstellt …', 'assistant'),
         });
         if (epoch !== this.epoch) return;

@@ -132,7 +132,7 @@ describe('Demo application', () => {
       );
       expect(chat.turns().flatMap((turn) => turn.content)).toEqual([]);
       expect(chat.composerDisabled()).toBe(false);
-      expect(document.activeElement).toBe(fixtureElement(fixture).querySelector('textarea'));
+      expect(document.activeElement).not.toBe(fixtureElement(fixture).querySelector('textarea'));
       const acknowledge = vi.fn();
       const submission: ChatSubmission = { text: 'Any text', acknowledge };
       chat.messageSubmitted.emit(submission);

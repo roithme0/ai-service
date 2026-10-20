@@ -14,6 +14,7 @@ const DEMO_ACTION_ID = 'demo-noop';
 const INITIAL_STATE: ConversationViewState = {
   turns: [],
   composerDisabled: true,
+  composerEditingDisabled: false,
   status: {
     kind: 'loading',
     message: 'Unterhaltung wird gestartet …',

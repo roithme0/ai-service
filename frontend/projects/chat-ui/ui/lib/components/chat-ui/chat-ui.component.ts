@@ -57,7 +57,7 @@ export class ChatUiComponent {
   readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
   readonly composerDisabled = input(false);
-  readonly focusOnReady = input(false);
+  readonly composerEditingDisabled = input(false);
   readonly composerPlaceholder = input('Nachricht schreiben');
 
   readonly messageSubmitted = output<ChatSubmission>();

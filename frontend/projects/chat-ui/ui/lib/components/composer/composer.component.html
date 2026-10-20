@@ -9,8 +9,9 @@
       aria-label="Nachricht"
       enterkeyhint="send"
       [value]="draft()"
-      [disabled]="disabled()"
-      (input)="updateDraft(composer.value)"
+      [attr.aria-disabled]="editingDisabled() ? 'true' : null"
+      (beforeinput)="preventBlockedEdit($event)"
+      (input)="updateDraft(composer)"
       (keydown)="submitFromKeyboard($event)"
     ></textarea>
     <div class="actions">
@@ -19,7 +20,7 @@
         matIconButton
         type="submit"
         aria-label="Nachricht senden"
-        [disabled]="disabled() || draft().trim() === ''"
+        [disabled]="disabled() || editingDisabled() || draft().trim() === ''"
       >
         <mat-icon svgIcon="ai-chat:send" aria-hidden="true" />
       </button>

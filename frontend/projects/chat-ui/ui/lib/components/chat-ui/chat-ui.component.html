@@ -64,7 +64,7 @@
 
   <ai-chat-composer
     [disabled]="composerDisabled()"
-    [focusOnReady]="focusOnReady()"
+    [editingDisabled]="composerEditingDisabled()"
     [placeholder]="composerPlaceholder()"
     (messageSubmitted)="messageSubmitted.emit($event)"
   />

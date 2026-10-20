@@ -228,6 +228,46 @@ describe('live conversation controller', () => {
     },
   );
 
+  it('unlocks editing on acceptance while retaining the submission lock until the response finishes', async () => {
+    const transport = new FakeTransport();
+    const accepted = deferred<UserMessageResponse>();
+    const generation = deferred<AcceptedTurnResponse>();
+    transport.appendMessage.mockReturnValue(accepted.promise);
+    transport.generateTurn.mockReturnValue(generation.promise);
+    transport.observeTurn.mockReturnValue(stream([initial(), terminal()]));
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    expect(controller.state.composerEditingDisabled).toBe(false);
+    const acknowledge = vi.fn(() => {
+      expect(controller.state.composerEditingDisabled).toBe(false);
+      expect(controller.state.composerDisabled).toBe(true);
+    });
+    const submission = controller.submit('Hello', acknowledge);
+    expect(controller.state.composerEditingDisabled).toBe(true);
+    expect(controller.state.composerDisabled).toBe(true);
+    accepted.resolve({ role: 'user', text: 'Hello', turn_id: 't' });
+    await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledOnce());
+    expect(controller.state.composerEditingDisabled).toBe(false);
+    await controller.submit('Too early', vi.fn());
+    expect(transport.appendMessage).toHaveBeenCalledTimes(1);
+    generation.resolve({ kind: 'accepted', turn_id: 't' });
+    await submission;
+    expect(controller.state.composerDisabled).toBe(false);
+    expect(controller.state.composerEditingDisabled).toBe(false);
+  });
+
+  it('unlocks editing after a rejected message so the draft can be corrected', async () => {
+    const transport = new FakeTransport();
+    transport.appendMessage.mockRejectedValue(new Error('Rejected'));
+    const controller = new ConversationController(transport, () => undefined);
+    await controller.start();
+    const acknowledge = vi.fn();
+    await controller.submit('Hello', acknowledge);
+    expect(controller.state.composerEditingDisabled).toBe(false);
+    expect(controller.state.composerDisabled).toBe(false);
+    expect(acknowledge).not.toHaveBeenCalled();
+  });
+
   it('shows no sending indicator and starts dots only with the accepted user message in history', async () => {
     const transport = new FakeTransport();
     const accepted = deferred<UserMessageResponse>();
