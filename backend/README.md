@@ -58,6 +58,32 @@ can also be serialized and restored with `ModelMessagesTypeAdapter`. Results
 expose output, messages and usage; `capture_run_messages()` supports inspecting
 a failed run. No hosted telemetry exporter is configured by this slice.
 
+Pass a fresh `app.agentic.observation.TurnObservation` to
+`execute_turn(..., observation=observation)` to retain inspection data on success,
+failure or cancellation. Its `messages` are detached native `ModelMessage` objects,
+including prior history, completed assistant text, confirmed tool results and any
+native interrupted-request marker. `usage`, `run_id` and `conversation_id` identify
+the execution. `started_calls` contains native `ToolCallPart` objects recorded at
+the framework's pre-execution hook; it does not treat a model's requested call as
+proof of execution. The capture is single-use and scoped to one invocation, so
+concurrent turns on the same agent stay separate. Messages and usage are finalized
+when `execute_turn` exits; started calls accumulate during execution.
+
+Observation uses native lifecycle hooks with ordinary non-streamed `agent.run()`.
+It does not install an event-stream handler, change dispatch or suppress failures.
+A requested call with no start was not dispatched; a started call without a
+confirmed return has an uncertain outcome after interruption. An explicit tool
+failure retains native `outcome="failed"`. Feeding captured interrupted history
+into a later turn lets Pydantic AI synthesize `outcome="interrupted"` results for
+unanswered calls, preserving confirmed returns without replaying old calls. This
+is history repair, not a guarantee that the model cannot choose another mutation.
+
+These records are backend inspection data, including tool arguments and results,
+not a public timeline payload. No legacy timeline projection, session/SSE wiring,
+HTTP schema or frontend change is included. The presentation contract will follow
+native semantics in a later slice. Run focused observation coverage with
+`python -m pytest tests/test_pydantic_observation.py`.
+
 Execution defaults are collected in `app/agentic/config.py`: 40 model requests,
 32 framework-counted tool calls, a 120-second
 model-request deadline and a 60-second tool timeout. These are framework budgets,

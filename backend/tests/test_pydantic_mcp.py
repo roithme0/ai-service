@@ -21,6 +21,7 @@ from pydantic_ai.mcp import MCPToolset
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from app.agentic.mcp import create_mcp_toolset
+from app.agentic.observation import TurnObservation
 from app.agentic.turns import create_turn_agent, execute_turn
 
 
@@ -162,11 +163,15 @@ def test_lost_mcp_response_does_not_replay_completed_operation() -> None:
     async def exercise() -> None:
         async with connected_toolset(server, response_hook=lose_tool_response) as (toolset, _):
             agent = create_turn_agent(FunctionModel(respond), instructions="Help.", toolsets=[toolset])
+            observation = TurnObservation()
             with pytest.raises(httpx2.ReadError, match="Response lost after execution"):
                 async with agent:
                     with pytest.raises(httpx2.ReadError, match="Response lost after execution"):
-                        await execute_turn(agent, "Update the value.")
+                        await execute_turn(agent, "Update the value.", observation=observation)
             assert not toolset.client.is_connected()
+            assert [call.tool_call_id for call in observation.started_calls] == ["call-1"]
+            assert observation.messages[-1].state == "interrupted"
+            assert not any(isinstance(part, ToolReturnPart) for msg in observation.messages for part in msg.parts)
 
     asyncio.run(exercise())
     assert calls == 1

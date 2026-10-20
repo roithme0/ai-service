@@ -1,6 +1,7 @@
 """Pydantic AI turns, independent of the legacy execution and session models."""
 
 from collections.abc import Sequence
+from contextlib import nullcontext
 
 from openai.types.shared import ReasoningEffort
 from pydantic import SecretStr
@@ -24,6 +25,7 @@ from app.agentic.config import (
     TOOL_TIMEOUT_SECONDS,
     VALIDATION_MAX_RETRIES,
 )
+from app.agentic.observation import TurnObservation
 
 
 def create_openai_model(
@@ -75,12 +77,15 @@ async def execute_turn(
     *,
     message_history: Sequence[ModelMessage] = (),
     usage_limits: UsageLimits | None = None,
+    observation: TurnObservation | None = None,
 ) -> AgentRunResult[str]:
-    return await agent.run(
-        prompt,
-        message_history=message_history,
-        usage_limits=usage_limits if usage_limits is not None else UsageLimits(
-            request_limit=MAX_MODEL_REQUESTS,
-            tool_calls_limit=MAX_TOOL_CALLS,
-        ),
-    )
+    with observation.capture() if observation is not None else nullcontext() as hooks:
+        return await agent.run(
+            prompt,
+            message_history=message_history,
+            usage_limits=usage_limits if usage_limits is not None else UsageLimits(
+                request_limit=MAX_MODEL_REQUESTS,
+                tool_calls_limit=MAX_TOOL_CALLS,
+            ),
+            capabilities=[hooks] if hooks is not None else (),
+        )
