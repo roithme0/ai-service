@@ -73,16 +73,6 @@ p {
   max-width: 100%;
 }
 
-.message--user {
-  align-self: flex-end;
-  max-width: min(82%, 34rem);
-  padding: 0.75rem 1rem;
-  border-radius: 1.125rem 1.125rem 0.25rem 1.125rem;
-  background: var(--ai-chat-user-background, #a9004f);
-  color: var(--ai-chat-user-text, #ffffff);
-  white-space: pre-wrap;
-}
-
 .message--assistant {
   align-self: stretch;
   color: var(--ai-chat-assistant-text, var(--ai-chat-text, #f8eef1));

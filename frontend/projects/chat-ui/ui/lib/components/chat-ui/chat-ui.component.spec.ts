@@ -15,7 +15,13 @@ import {
 import { ChatUiComponent } from './chat-ui.component';
 
 const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
-  { kind: 'text', isFinal: false, id: 'user-1', role: 'user', text: '**literal user text**' },
+  {
+    kind: 'text',
+    isFinal: false,
+    id: 'user-1',
+    role: 'user',
+    text: '**literal user text** <img src=x>\nNext line',
+  },
   {
     kind: 'text',
     isFinal: false,
@@ -147,7 +153,9 @@ describe('ChatUiComponent', () => {
       'Answer',
     );
     const visibleText = [
-      ...element.querySelectorAll<HTMLElement>('article:not([hidden]), ai-chat-status'),
+      ...element.querySelectorAll<HTMLElement>(
+        '[role="article"]:not([hidden]), article:not([hidden]), ai-chat-status',
+      ),
     ].map((item) => item.textContent);
     expect(visibleText).toEqual([
       'Request',
@@ -277,9 +285,15 @@ describe('ChatUiComponent', () => {
     const messageElements = fixtureElement(fixture).querySelectorAll<HTMLElement>('.message');
 
     expect(messageElements).toHaveLength(2);
+    expect(messageElements[0].matches('ai-chat-user-message')).toBe(true);
+    expect(messageElements[0].getAttribute('role')).toBe('article');
+    expect(messageElements[0].getAttribute('aria-label')).toBe('Nachricht des Benutzers');
+    expect(messageElements[0].getAttribute('data-turn-start')).toBe('turn-1');
     expect(messageElements[0].classList.contains('message--user')).toBe(true);
     expect(messageElements[0].textContent).toContain('**literal user text**');
     expect(messageElements[0].querySelector('strong')).toBeNull();
+    expect(messageElements[0].querySelector('img')).toBeNull();
+    expect(messageElements[0].textContent).toContain('<img src=x>\nNext line');
     expect(messageElements[1].classList.contains('message--assistant')).toBe(true);
     expect(messageElements[1].querySelector('strong')?.textContent).toBe(
       'formatted assistant text',
@@ -326,9 +340,9 @@ describe('ChatUiComponent', () => {
     const element = fixtureElement(fixture);
     const rows = [...element.querySelector('.messages')!.children];
     expect(rows.map((row) => row.tagName)).toEqual([
-      'ARTICLE',
+      'AI-CHAT-USER-MESSAGE',
       'AI-CHAT-STATUS',
-      'ARTICLE',
+      'AI-CHAT-USER-MESSAGE',
       'AI-CHAT-INTERMEDIATE-MESSAGE',
       'AI-CHAT-TOOL-CALL',
       'AI-CHAT-ARTIFACT-CARD',
@@ -373,7 +387,7 @@ describe('ChatUiComponent', () => {
     const element = fixtureElement(fixture);
     expect([...element.querySelector('.messages')!.children].map((child) => child.tagName)).toEqual(
       [
-        'ARTICLE',
+        'AI-CHAT-USER-MESSAGE',
         'AI-CHAT-TOOL-CALL',
         'AI-CHAT-ARTIFACT-CARD',
         'AI-CHAT-TOOL-CALL',

@@ -16,6 +16,7 @@ import { renderAssistantMarkdown } from '../../assistant-markdown';
 import { registerChatIcons } from '../../chat-icons';
 import { ToolCallComponent } from '../tool-call/tool-call.component';
 import { IntermediateMessageComponent } from '../intermediate-message/intermediate-message.component';
+import { UserMessageComponent } from '../user-message/user-message.component';
 import { ComposerComponent } from '../composer/composer.component';
 import { ArtifactCardComponent } from '../artifact-card/artifact-card.component';
 import { StatusComponent } from '../status/status.component';
@@ -35,6 +36,7 @@ import type {
     ComposerComponent,
     ToolCallComponent,
     IntermediateMessageComponent,
+    UserMessageComponent,
   ],
   templateUrl: './chat-ui.component.html',
   styleUrl: './chat-ui.component.scss',

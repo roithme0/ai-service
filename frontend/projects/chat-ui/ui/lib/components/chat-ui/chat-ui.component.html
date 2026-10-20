@@ -41,13 +41,10 @@
             }
             @case ('text') {
               @if (item.role === 'user') {
-                <article
-                  class="message message--user"
-                  aria-label="Nachricht des Benutzers"
+                <ai-chat-user-message
+                  [message]="item"
                   [attr.data-turn-start]="first ? turn.id : null"
-                >
-                  <p>{{ item.text }}</p>
-                </article>
+                />
               } @else {
                 <article
                   class="message message--assistant markdown"
