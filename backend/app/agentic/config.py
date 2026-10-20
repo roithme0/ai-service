@@ -1,5 +1,6 @@
 """Execution defaults for the Pydantic AI engine."""
 
+from datetime import timedelta
 from typing import Final
 
 
@@ -9,6 +10,7 @@ MAX_NATIVE_TOOL_CALLS_PER_RESPONSE: Final[int] = 16
 MAX_OUTPUT_TOKENS: Final[int] = 16_384
 MAX_CONTEXT_LENGTH: Final[int] = 64_000
 MAX_ARTIFACTS: Final[int] = 100
+DEFAULT_SESSION_LIFETIME: Final[timedelta] = timedelta(minutes=90)
 
 MODEL_NETWORK_TIMEOUT_SECONDS: Final[float] = 120.0
 MODEL_REQUEST_TIMEOUT_SECONDS: Final[float] = 120.0

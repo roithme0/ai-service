@@ -77,8 +77,8 @@ Keep one agent context open across conversations. Native context entry connects
 MCP and manages the model/provider lifetime; exit closes owned resources.
 MCP startup errors propagate instead of producing an unavailable placeholder,
 polling, or retrying in application code. There is no production startup/routing
-change or automatic fallback. Session context and application availability policy
-remain integration work. Pass `artifact_capabilities` to `AgentConversation` for
+change or automatic fallback. Production session wiring and application availability
+policy remain integration work. Pass `artifact_capabilities` to `AgentConversation` for
 conversation-owned artifact acceptance and retention. Each turn receives its own
 native publication toolset; presentation configuration is not shared agent state.
 Configured composition coverage runs with
@@ -151,6 +151,41 @@ an internal process-local building block, without session authorization, expiry,
 durable storage or public timeline projection. The production session store is
 not connected. Focused coverage runs with
 `python -m pytest tests/test_pydantic_conversations.py tests/test_pydantic_conversation_artifacts.py`.
+
+`app.agentic.sessions.AgentSessionRegistry` adds application session ownership and
+expiry around those conversations, independently of the production store:
+
+```python
+from app.agentic.sessions import AgentSessionRegistry
+
+sessions = AgentSessionRegistry()
+created = sessions.create(owner="recipe-app:user-42", initial_context={"recipe": {"id": "recipe-42"}})
+async with agent:
+    result = await sessions.run_turn(
+        created.session_id, owner="recipe-app:user-42", agent=agent, prompt="Explain the recipe.",
+    )
+snapshot = sessions.read(created.session_id, owner="recipe-app:user-42")
+```
+
+The registry owns session IDs and a fixed 90-minute lifetime, configured in
+`app/agentic/config.py`. Creation also accepts artifact capabilities and capacity.
+Every read and turn admission checks the exact owner and expiry; unknown,
+other-owner and expired sessions raise the same `SessionNotFoundError`. Owner
+identity must come from the application boundary; this check is not authentication.
+Reads return detached internal messages, last-turn inspection and artifacts, never
+the retained conversation. Session IDs are distinct from native run/conversation IDs.
+
+Expiry is inclusive (`now >= expires_at`), and activity does not extend it. An
+admitted turn may finish and publish artifacts after expiry, returning its native
+result or propagating failure/cancellation normally. Further reads and turns remain
+unavailable. Expired registry entries are removed on subsequent registry operations;
+an active turn retains its conversation only until settlement. There is no background
+cleanup task or cancellation on expiry. Use the registry from one event loop.
+Tests inject a timezone-aware clock and lifetime to cover boundaries without sleeps.
+History and artifacts remain owned by `AgentConversation`; the registry adds no
+execution log, timeline projection or second history store. HTTP, SSE, frontend and
+production cutover remain outside this slice. Run focused coverage with
+`python -m pytest tests/test_pydantic_sessions.py`.
 
 Continuation passes native `message_history` without previous usage, so request
 and tool budgets start fresh for every turn. The framework inherits conversation
