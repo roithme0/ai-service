@@ -1,11 +1,13 @@
 """Process-local conversation history around native turn execution."""
 
 import json
+from asyncio import CancelledError
 from collections.abc import Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from threading import Lock
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import ConfigDict, JsonValue, TypeAdapter
@@ -45,6 +47,35 @@ class ConversationBusyError(RuntimeError):
     """The conversation already has a running turn."""
 
 
+type TurnStatus = Literal["running", "completed", "failed", "cancelled"]
+
+
+@dataclass(frozen=True)
+class TurnLifecycle:
+    """Application lifecycle only; identity comes from the native run."""
+
+    run_id: str | None
+    status: TurnStatus
+    started_at: datetime
+    finished_at: datetime | None
+
+
+@dataclass(frozen=True)
+class ConversationTurn:
+    """Lifecycle and its retained native capture; public reads detach the capture."""
+
+    lifecycle: TurnLifecycle
+    observation: TurnObservation | None
+
+
+def latest_settled_observation(turns: Sequence[ConversationTurn]) -> TurnObservation | None:
+    return next((
+        turn.observation for turn in reversed(turns)
+        if turn.lifecycle.status != "running"
+        and turn.observation is not None and turn.observation.run_id is not None
+    ), None)
+
+
 @dataclass(frozen=True)
 class ConversationArtifact(PublishedArtifact[ArtifactPayload]):
     """Accepted artifact; turn_id is the native run ID, order is publication order."""
@@ -75,14 +106,32 @@ class AgentConversation:
         self._max_artifacts = max_artifacts
         self._artifacts: tuple[ConversationArtifact, ...] = ()
         self._artifact_lock = Lock()
-        self._last_turn: TurnObservation | None = None
+        self._turns: tuple[ConversationTurn, ...] = ()
         self._turn_lock = Lock()
+
+    @property
+    def turns(self) -> tuple[ConversationTurn, ...]:
+        """Admission-ordered snapshots with immutable lifecycle and detached capture."""
+        return tuple(
+            ConversationTurn(
+                lifecycle=replace(turn.lifecycle, run_id=turn.observation.run_id)
+                if turn.observation is not None else turn.lifecycle,
+                observation=deepcopy(turn.observation),
+            )
+            for turn in self._turns
+        )
+
+    @property
+    def initial_context_message(self) -> ModelRequest | None:
+        """Detached seed, retained only until captured history replaces it."""
+        return deepcopy(self._initial_context_message)
 
     @property
     def messages(self) -> tuple[ModelMessage, ...]:
         """Detached settled history, or initial context before execution."""
-        if self._last_turn is not None:
-            return tuple(deepcopy(self._last_turn.messages))
+        observation = latest_settled_observation(self._turns)
+        if observation is not None:
+            return tuple(deepcopy(observation.messages))
         if self._initial_context_message is not None:
             return (deepcopy(self._initial_context_message),)
         return ()
@@ -90,7 +139,7 @@ class AgentConversation:
     @property
     def last_turn(self) -> TurnObservation | None:
         """Detached inspection of the last settled turn, including failed turns."""
-        return deepcopy(self._last_turn)
+        return deepcopy(latest_settled_observation(self._turns))
 
     @property
     def artifacts(self) -> tuple[ConversationArtifact, ...]:
@@ -126,9 +175,15 @@ class AgentConversation:
         if not self._turn_lock.acquire(blocking=False):
             raise ConversationBusyError("The conversation already has a running turn.")
         observation = TurnObservation()
+        turn = ConversationTurn(
+            lifecycle=TurnLifecycle(run_id=None, status="running", started_at=datetime.now(UTC), finished_at=None),
+            observation=observation,
+        )
+        self._turns = (*self._turns, turn)
+        status: TurnStatus = "failed"
         try:
             artifact_toolset = create_artifact_toolset(self._artifact_capabilities, self._accept_artifact)
-            return await execute_turn(
+            result = await execute_turn(
                 agent,
                 prompt,
                 message_history=self.messages,
@@ -136,8 +191,26 @@ class AgentConversation:
                 observation=observation,
                 toolsets=[*toolsets, artifact_toolset],
             )
+        except CancelledError:
+            status = "cancelled"
+            raise
+        else:
+            status = "completed"
+            return result
         finally:
+            previous_turns = self._turns[:-1]
             if observation.run_id is not None:
-                self._last_turn = observation
                 self._initial_context_message = None
+                # Superseded captures contain cumulative history; retain only the latest.
+                previous_turns = tuple(replace(previous, observation=None) for previous in previous_turns)
+            settled = replace(
+                turn.lifecycle,
+                run_id=observation.run_id,
+                status=status,
+                finished_at=datetime.now(UTC),
+            )
+            self._turns = (*previous_turns, ConversationTurn(
+                lifecycle=settled,
+                observation=observation if observation.run_id is not None else None,
+            ))
             self._turn_lock.release()

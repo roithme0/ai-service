@@ -145,6 +145,11 @@ execution node preserves the previous history. An overlapping turn raises
 `ConversationBusyError` immediately, without admitting its prompt or queueing it;
 independent conversations can run concurrently on one open agent.
 
+One internal turn collection owns lifecycle records and their observations. Active
+execution and the latest settled observation are derived from those entries.
+Once a newer captured history settles, the superseded observation is released;
+earlier lifecycle records remain without retaining repeated cumulative histories.
+
 While a turn is running, history reads show the previous settled turn. Returned results
 and snapshots do not share mutable data with the retained conversation. This is
 an internal process-local building block, without session authorization, expiry,
@@ -172,8 +177,11 @@ The registry owns session IDs and a fixed 90-minute lifetime, configured in
 Every read and turn admission checks the exact owner and expiry; unknown,
 other-owner and expired sessions raise the same `SessionNotFoundError`. Owner
 identity must come from the application boundary; this check is not authentication.
-Reads return detached internal messages, last-turn inspection and artifacts, never
-the retained conversation. Session IDs are distinct from native run/conversation IDs.
+Reads return detached turn entries and artifacts, never the retained conversation.
+Session IDs are distinct from native run/conversation IDs. `snapshot.last_turn` and
+`snapshot.messages` derive their data from the latest settled observation in
+`snapshot.turns`; they are not separately stored copies. Before captured history
+exists, messages come from the detached `snapshot.initial_context_message` seed.
 
 Expiry is inclusive (`now >= expires_at`), and activity does not extend it. An
 admitted turn may finish and publish artifacts after expiry, returning its native
@@ -186,6 +194,31 @@ History and artifacts remain owned by `AgentConversation`; the registry adds no
 execution log, timeline projection or second history store. HTTP, SSE, frontend and
 production cutover remain outside this slice. Run focused coverage with
 `python -m pytest tests/test_pydantic_sessions.py`.
+
+`conversation.turns` and `snapshot.turns` expose admission-ordered `ConversationTurn`
+entries. Each entry contains an immutable `lifecycle` (`TurnLifecycle`: `run_id`,
+`status`, `started_at`, `finished_at`) and an optional detached native `observation`.
+For example, inspect `snapshot.turns[-1].lifecycle.status`. Superseded captures are
+released from newer snapshots once a later captured history settles; earlier
+snapshots retain their detached observations. Setup failures have no retained
+capture. Active captures are detached inspection data and do not supply settled
+messages; history reads continue to use the previous settled capture.
+An admitted request immediately appears as `running`, then settles as `completed`,
+`failed` or `cancelled`, with UTC timestamps. There is no separate application turn
+ID. Active reads obtain the native run ID from the existing observation hook;
+before that hook runs, the ID is `None`. Setup failures and cancellations can
+therefore settle without an ID, while preserving prior native history. Rejected
+overlapping or unauthorized requests create no record. Execution does not mutate
+existing snapshots; callers may edit their detached observations without affecting
+the conversation. Derived message and last-turn views share that snapshot-owned data.
+
+Lifecycle records contain no duplicate messages, tool results or usage. They remain
+conversation-owned for the session lifetime and do not change exception propagation
+or artifact correlation: artifacts still use the native run ID. A failed or
+cancelled execution retains accepted artifacts and captured history; cancellation
+does not establish whether an interrupted tool's external effects occurred. Execution
+remains awaited, with no background runner or public API changes. Focused coverage:
+`python -m pytest tests/test_pydantic_turn_lifecycle.py`.
 
 Continuation passes native `message_history` without previous usage, so request
 and tool budgets start fresh for every turn. The framework inherits conversation

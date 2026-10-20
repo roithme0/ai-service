@@ -7,13 +7,18 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage
+from pydantic_ai.messages import ModelMessage, ModelRequest
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
 from app.agentic.config import DEFAULT_SESSION_LIFETIME, MAX_ARTIFACTS
-from app.agentic.conversations import AgentConversation, ConversationArtifact
+from app.agentic.conversations import (
+    AgentConversation,
+    ConversationArtifact,
+    ConversationTurn,
+    latest_settled_observation,
+)
 from app.agentic.observation import TurnObservation
 from app.sessions.models.artifacts import ArtifactCapability
 
@@ -38,9 +43,22 @@ class SessionSnapshot:
 
     session_id: str
     expires_at: datetime
-    messages: tuple[ModelMessage, ...]
-    last_turn: TurnObservation | None
     artifacts: tuple[ConversationArtifact, ...]
+    turns: tuple[ConversationTurn, ...]
+    initial_context_message: ModelRequest | None
+
+    @property
+    def last_turn(self) -> TurnObservation | None:
+        return latest_settled_observation(self.turns)
+
+    @property
+    def messages(self) -> tuple[ModelMessage, ...]:
+        observation = self.last_turn
+        if observation is not None:
+            return tuple(observation.messages)
+        if self.initial_context_message is not None:
+            return (self.initial_context_message,)
+        return ()
 
 
 @dataclass(frozen=True)
@@ -113,8 +131,11 @@ class AgentSessionRegistry:
         session = self._find(session_id, owner)
         conversation = session.conversation
         return SessionSnapshot(
-            session_id, session.expires_at,
-            conversation.messages, conversation.last_turn, conversation.artifacts,
+            session_id=session_id,
+            expires_at=session.expires_at,
+            artifacts=conversation.artifacts,
+            turns=conversation.turns,
+            initial_context_message=conversation.initial_context_message,
         )
 
     async def run_turn(
@@ -129,5 +150,8 @@ class AgentSessionRegistry:
     ) -> AgentRunResult[str]:
         session = self._find(session_id, owner)
         return await session.conversation.run_turn(
-            agent, prompt, usage_limits=usage_limits, toolsets=toolsets,
+            agent,
+            prompt,
+            usage_limits=usage_limits,
+            toolsets=toolsets,
         )

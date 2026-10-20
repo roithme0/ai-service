@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from pydantic_ai import Tool, models
+from pydantic_ai import RunContext, Tool, models
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.toolsets import FunctionToolset
 
 from app.agentic.artifacts import ArtifactAccepted
 from app.agentic.conversations import ConversationBusyError
@@ -54,6 +55,8 @@ def test_owner_checks_isolation_and_detached_snapshots() -> None:
             snapshot.messages[0].parts.clear()
             assert snapshot.last_turn is not None
             snapshot.last_turn.messages.clear()
+            assert snapshot.messages == ()
+            assert snapshot.last_turn is snapshot.turns[-1].observation
             fresh = registry.read(first.session_id, owner="alice")
             assert fresh.messages[0].parts and fresh.last_turn is not None and fresh.last_turn.messages
             reply = await registry.run_turn(first.session_id, owner="alice", agent=agent, prompt="followup")
@@ -62,6 +65,49 @@ def test_owner_checks_isolation_and_detached_snapshots() -> None:
             assert "recipe" not in other.output and "hello" not in other.output
             assert other.conversation_id != reply.conversation_id
         assert registry.read(first.session_id, owner="alice").expires_at == first.expires_at
+
+    asyncio.run(exercise())
+
+
+def test_snapshot_initial_context_survives_setup_failure_and_is_replaced_by_history() -> None:
+    registry = AgentSessionRegistry()
+    created = registry.create(owner="alice", initial_context={"recipe": 42})
+    seed = registry.read(created.session_id, owner="alice")
+    assert seed.initial_context_message is not None and seed.last_turn is None
+    assert seed.messages == (seed.initial_context_message,) and seed.turns == ()
+    seed.messages[0].parts.clear()
+    pristine = registry.read(created.session_id, owner="alice")
+    assert pristine.messages[0].parts
+
+    class UnavailableTools(FunctionToolset[None]):
+        async def for_run(self, ctx: RunContext[None]) -> FunctionToolset[None]:
+            raise RuntimeError("Toolset unavailable")
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        prompts = [part.content for message in messages for part in message.parts if isinstance(part, UserPromptPart)]
+        assert len(prompts) == 2 and isinstance(prompts[0], str) and '"recipe":42' in prompts[0]
+        return ModelResponse(parts=[TextPart("Hello.")])
+
+    async def exercise() -> None:
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        async with agent:
+            with pytest.raises(RuntimeError, match="Toolset unavailable"):
+                await registry.run_turn(
+                    created.session_id, owner="alice", agent=agent, prompt="invalid", toolsets=[UnavailableTools()],
+                )
+            failed = registry.read(created.session_id, owner="alice")
+            assert failed.last_turn is None and failed.messages == pristine.messages
+            assert failed.turns[0].observation is None
+            await registry.run_turn(created.session_id, owner="alice", agent=agent, prompt="hello")
+            settled = registry.read(created.session_id, owner="alice")
+            assert settled.initial_context_message is None
+            assert settled.last_turn is settled.turns[-1].observation
+            observation = settled.turns[-1].observation
+            assert observation is not None and settled.messages == tuple(observation.messages)
+            observation.messages.clear()
+            assert settled.messages == ()
+            assert registry.read(created.session_id, owner="alice").messages
+            assert failed.messages == pristine.messages and failed.last_turn is None
 
     asyncio.run(exercise())
 
