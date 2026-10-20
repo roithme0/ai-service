@@ -1,0 +1,12 @@
+:host {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  align-self: stretch;
+  color: var(--ai-chat-assistant-text, var(--ai-chat-text, #f8eef1));
+  line-height: 1.6;
+}
+
+:host([hidden]) {
+  display: none;
+}

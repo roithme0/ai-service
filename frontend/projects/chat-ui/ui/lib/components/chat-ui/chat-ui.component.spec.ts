@@ -329,7 +329,7 @@ describe('ChatUiComponent', () => {
       'ARTICLE',
       'AI-CHAT-STATUS',
       'ARTICLE',
-      'ARTICLE',
+      'AI-CHAT-INTERMEDIATE-MESSAGE',
       'AI-CHAT-TOOL-CALL',
       'AI-CHAT-ARTIFACT-CARD',
       'AI-CHAT-STATUS',
@@ -351,6 +351,7 @@ describe('ChatUiComponent', () => {
     ]);
     const element = fixtureElement(fixture);
     const rows = [...element.querySelector('.messages')!.children];
+    expect(rows[0].matches('ai-chat-intermediate-message')).toBe(true);
     expect(rows[0].classList.contains('message--intermediate')).toBe(true);
     expect(rows[0].getAttribute('aria-label')).toBe('Zwischenmeldung des Assistenten');
     expect(rows[0].querySelector('strong')?.textContent).toBe('Checking');

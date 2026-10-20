@@ -83,15 +83,10 @@ p {
   white-space: pre-wrap;
 }
 
-.message--assistant,
-.message--intermediate {
+.message--assistant {
   align-self: stretch;
   color: var(--ai-chat-assistant-text, var(--ai-chat-text, #f8eef1));
   line-height: 1.6;
-}
-
-.message--intermediate[hidden] {
-  display: none;
 }
 
 .answer-actions {
