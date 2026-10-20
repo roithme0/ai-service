@@ -52,6 +52,38 @@ tool execution, MCP and conversation history. It is not wired into HTTP sessions
 Production artifact wiring and frontend timeline integration follow in
 separate slices before the eventual cutover and legacy removal.
 
+`app.agentic.wiring.create_kochwiki_agent()` composes the new engine from existing
+`Settings`: `OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`,
+`KOCHWIKI_OPENAI_REASONING_EFFORT` and `KOCHWIKI_MCP_URL`. It returns a native
+agent with application conversation guidance, MCP tools/server instructions and
+web search enabled. Missing credentials/model or an invalid HTTP(S) MCP endpoint
+raise `ValueError` before resource construction; error messages name settings
+without including their values. The optional reasoning effort uses its existing
+settings validation.
+
+```python
+from app.agentic.conversations import AgentConversation
+from app.agentic.wiring import create_kochwiki_agent
+from app.core.config import get_settings
+
+agent = create_kochwiki_agent(get_settings())
+conversation = AgentConversation()
+async with agent:
+    first = await conversation.run_turn(agent, "Find a soup recipe.")
+    second = await conversation.run_turn(agent, "Explain that recipe.")
+```
+
+Keep one agent context open across conversations. Native context entry connects
+MCP and manages the model/provider lifetime; exit closes owned resources.
+MCP startup errors propagate instead of producing an unavailable placeholder,
+polling, or retrying in application code. There is no production startup/routing
+change or automatic fallback. Session context and application availability policy
+remain integration work. Artifact capabilities and acceptance stay run-scoped:
+pass `create_artifact_toolset(capabilities, accept)` through `run_turn(toolsets=...)`
+once the caller can supply atomic acceptance. They are not shared agent state.
+Configured composition coverage runs with
+`python -m pytest tests/test_pydantic_wiring.py`; it uses no live credentials.
+
 The caller keeps the native agent open with `async with agent:`. Use
 `app.agentic.conversations.AgentConversation` to retain native history across turns:
 
