@@ -81,7 +81,7 @@ describe('ChatUiComponent', () => {
     fixture.componentRef.setInput('turns', [turn]);
     fixture.detectChanges();
     const element = fixtureElement(fixture);
-    const detail = element.querySelector<HTMLElement>('.message--intermediate')!;
+    const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
     expect(detail.hidden).toBe(false);
     expect(element.querySelector('.details-toggle')).toBeNull();
 
@@ -97,9 +97,7 @@ describe('ChatUiComponent', () => {
     expect(
       toggle.closest('ai-chat-assistant-message')?.querySelector('.markdown')?.textContent,
     ).toBe('Answer');
-    expect(toggle.closest('ai-chat-assistant-message')?.getAttribute('aria-label')).toBe(
-      'Antwort des Assistenten',
-    );
+    expect(toggle.closest('article')?.getAttribute('aria-label')).toBe('Antwort des Assistenten');
     toggle.click();
     fixture.detectChanges();
     expect(detail.hidden).toBe(false);
@@ -116,7 +114,9 @@ describe('ChatUiComponent', () => {
       ]);
       fixture.detectChanges();
       const element = fixtureElement(fixture);
-      expect(element.querySelector<HTMLElement>('.message--intermediate')!.hidden).toBe(false);
+      expect(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!.hidden).toBe(
+        false,
+      );
       expect(element.querySelector<HTMLElement>('ai-chat-tool-call')!.hidden).toBe(false);
       expect(element.querySelector('.details-toggle')).toBeNull();
     },
@@ -159,7 +159,7 @@ describe('ChatUiComponent', () => {
     );
     const visibleText = [
       ...element.querySelectorAll<HTMLElement>(
-        '[role="article"]:not([hidden]), article:not([hidden]), ai-chat-status',
+        'ai-chat-user-message, ai-chat-assistant-message, ai-chat-intermediate-message:not([hidden]), ai-chat-status',
       ),
     ].map((item) => item.querySelector('.markdown')?.textContent ?? item.textContent);
     expect(visibleText).toEqual([
@@ -249,7 +249,7 @@ describe('ChatUiComponent', () => {
     const element = fixtureElement(fixture);
     const history = element.querySelector<HTMLElement>('.history')!;
     const anchor = element.querySelector<HTMLElement>('[data-turn-start]')!;
-    const detail = element.querySelector<HTMLElement>('.message--intermediate')!;
+    const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
     const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
     Object.defineProperties(history, {
       scrollHeight: { configurable: true, value: 2000 },
@@ -287,21 +287,23 @@ describe('ChatUiComponent', () => {
 
   it('renders ordered host messages and applies Markdown only to assistant text', () => {
     const fixture = createFixture(INITIAL_MESSAGES);
-    const messageElements = fixtureElement(fixture).querySelectorAll<HTMLElement>('.message');
+    const messageElements = fixtureElement(fixture).querySelectorAll<HTMLElement>(
+      'ai-chat-user-message, ai-chat-assistant-message, ai-chat-intermediate-message',
+    );
 
     expect(messageElements).toHaveLength(2);
     expect(messageElements[0].matches('ai-chat-user-message')).toBe(true);
-    expect(messageElements[0].getAttribute('role')).toBe('article');
-    expect(messageElements[0].getAttribute('aria-label')).toBe('Nachricht des Benutzers');
+    expect(messageElements[0].querySelector('article')).not.toBeNull();
+    expect(messageElements[0].querySelector('article')?.getAttribute('aria-label')).toBe(
+      'Nachricht des Benutzers',
+    );
     expect(messageElements[0].getAttribute('data-turn-start')).toBe('turn-1');
-    expect(messageElements[0].classList.contains('message--user')).toBe(true);
     expect(messageElements[0].textContent).toContain('**literal user text**');
     expect(messageElements[0].querySelector('strong')).toBeNull();
     expect(messageElements[0].querySelector('img')).toBeNull();
     expect(messageElements[0].textContent).toContain('<img src=x>\nNext line');
     expect(messageElements[1].matches('ai-chat-assistant-message')).toBe(true);
-    expect(messageElements[1].getAttribute('role')).toBe('article');
-    expect(messageElements[1].classList.contains('message--assistant')).toBe(true);
+    expect(messageElements[1].querySelector('article')).not.toBeNull();
     expect(messageElements[1].querySelector('strong')?.textContent).toBe(
       'formatted assistant text',
     );
@@ -373,12 +375,14 @@ describe('ChatUiComponent', () => {
     const element = fixtureElement(fixture);
     const rows = [...element.querySelector('.messages')!.children];
     expect(rows[0].matches('ai-chat-intermediate-message')).toBe(true);
-    expect(rows[0].classList.contains('message--intermediate')).toBe(true);
-    expect(rows[0].getAttribute('aria-label')).toBe('Zwischenmeldung des Assistenten');
+    expect(rows[0].querySelector('article')).not.toBeNull();
+    expect(rows[0].querySelector('article')?.getAttribute('aria-label')).toBe(
+      'Zwischenmeldung des Assistenten',
+    );
     expect(rows[0].querySelector('strong')?.textContent).toBe('Checking');
     expect(rows[0].querySelector('script')).toBeNull();
     expect(rows[1].matches('ai-chat-tool-call')).toBe(true);
-    expect(rows[2].classList.contains('message--assistant')).toBe(true);
+    expect(rows[2].matches('ai-chat-assistant-message')).toBe(true);
   });
 
   it('renders compact tool rows and artifacts in host order with all four status labels', () => {
@@ -583,7 +587,11 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
 
     expect(textarea.value).toBe('');
-    expect(fixtureElement(fixture).querySelectorAll('.message')).toHaveLength(0);
+    expect(
+      fixtureElement(fixture).querySelectorAll(
+        'ai-chat-user-message, ai-chat-assistant-message, ai-chat-intermediate-message',
+      ),
+    ).toHaveLength(0);
     expect(document.activeElement).toBe(textarea);
   });
 
@@ -732,7 +740,11 @@ describe('ChatUiComponent', () => {
     textarea.dispatchEvent(new Event('input'));
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     fixture.detectChanges();
-    expect(fixtureElement(fixture).querySelectorAll('.message')).toHaveLength(0);
+    expect(
+      fixtureElement(fixture).querySelectorAll(
+        'ai-chat-user-message, ai-chat-assistant-message, ai-chat-intermediate-message',
+      ),
+    ).toHaveLength(0);
 
     setContent(fixture, [
       {
@@ -745,7 +757,9 @@ describe('ChatUiComponent', () => {
     ] satisfies readonly ChatTextMessage[]);
     fixture.detectChanges();
 
-    const messages = fixtureElement(fixture).querySelectorAll<HTMLElement>('.message');
+    const messages = fixtureElement(fixture).querySelectorAll<HTMLElement>(
+      'ai-chat-user-message, ai-chat-assistant-message, ai-chat-intermediate-message',
+    );
     expect(messages).toHaveLength(1);
     expect(messages[0].textContent).toContain('Replacement state');
   });

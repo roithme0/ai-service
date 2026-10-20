@@ -186,16 +186,16 @@ describe('Demo application', () => {
         payload: { value: payload },
       });
       const element = fixtureElement(fixture);
-      expect(element.querySelector('.message--intermediate')?.textContent).toContain(
+      expect(element.querySelector('ai-chat-intermediate-message')?.textContent).toContain(
         "I'll create a greeting artifact.",
       );
       const rows = [...element.querySelector('.messages')!.children];
-      expect(rows[1].matches('.message--intermediate')).toBe(true);
+      expect(rows[1].matches('ai-chat-intermediate-message')).toBe(true);
       expect(rows[2].matches('ai-chat-tool-call')).toBe(true);
       expect(rows[3].tagName).toBe('AI-CHAT-ARTIFACT-CARD');
-      expect(rows[4].matches('.message--intermediate')).toBe(true);
+      expect(rows[4].matches('ai-chat-intermediate-message')).toBe(true);
       expect(rows[5].querySelector('.status')?.textContent).toContain('Fehlgeschlagen');
-      expect(rows[6].matches('.message--assistant')).toBe(true);
+      expect(rows[6].matches('ai-chat-assistant-message')).toBe(true);
       expect(element.querySelector('pre')?.textContent).toContain(text);
       expect(element.textContent).toContain('festen Skript ohne KI-Modell');
       expect(element.textContent).toContain('simulierten API-Fehler');
@@ -266,10 +266,10 @@ describe('Demo application', () => {
     );
     const action = fixtureElement(fixture).querySelector('.action') as HTMLButtonElement;
     const element = fixtureElement(fixture);
-    expect(element.querySelector('.message--intermediate')?.textContent).toContain(
+    expect(element.querySelector('ai-chat-intermediate-message')?.textContent).toContain(
       'This update remains visible after generation fails.',
     );
-    expect(element.querySelector('.message--assistant')).toBeNull();
+    expect(element.querySelector('ai-chat-assistant-message')).toBeNull();
     expect(element.querySelectorAll('ai-chat-status.error')).toHaveLength(1);
     expect(action.textContent).toContain('Demo-Aktion (ohne Funktion)');
     action.click();
@@ -277,7 +277,7 @@ describe('Demo application', () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(chat.conversationStatus()?.action?.id).toBe('demo-noop');
     expect(chat.composerDisabled()).toBe(false);
-    expect(element.querySelector('.message--intermediate')?.textContent).toContain(
+    expect(element.querySelector('ai-chat-intermediate-message')?.textContent).toContain(
       'This update remains visible after generation fails.',
     );
   });
