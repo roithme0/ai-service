@@ -88,7 +88,7 @@ The caller keeps the native agent open with `async with agent:`. Use
 `app.agentic.conversations.AgentConversation` to retain native history across turns:
 
 ```python
-conversation = AgentConversation()
+conversation = AgentConversation(initial_context={"recipe": {"id": "recipe-42"}})
 async with agent:
     first = await conversation.run_turn(agent, "Find the value.")
     second = await conversation.run_turn(agent, "Explain that result.")
@@ -98,6 +98,18 @@ async with agent:
 `usage_limits` and `toolsets`, including the artifact publication toolset.
 `conversation.messages` returns a detached tuple of native messages;
 `conversation.last_turn` returns detached `TurnObservation` inspection data.
+Optional `initial_context` must be a JSON object. Creation validates and serializes
+it once, preserving nested JSON types and rejecting non-finite numbers and cycles.
+The serialized context, including its data-only prefix, is limited to 64,000
+characters by `app/agentic/config.py`. Later caller mutations cannot change it.
+It seeds a native user-data message, rather than system or agent instructions,
+and follow-up turns reuse it through history without appending another copy.
+Omission adds no context message; an explicit empty object is retained. Before
+the first turn, `messages` exposes a detached context snapshot and `last_turn`
+is `None`. Context is internal model input, not a public timeline item. The label
+and agent guidance establish a data boundary; they do not guarantee resistance
+to instructions embedded in caller data. Artifact capabilities remain separate,
+run-scoped toolset configuration.
 The latest settled observation owns the authoritative history. Failed or cancelled
 execution retains its completed messages, confirmed results and uncertain started
 calls before propagating the original exception. Setup failure before the first
