@@ -6,7 +6,7 @@ from contextlib import nullcontext
 from openai.types.shared import ReasoningEffort
 from pydantic import SecretStr
 from pydantic_ai import Agent, Tool
-from pydantic_ai.capabilities import Caching
+from pydantic_ai.capabilities import Caching, WebSearch
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
@@ -17,6 +17,7 @@ from pydantic_ai.usage import UsageLimits
 
 from app.agentic.config import (
     MAX_MODEL_REQUESTS,
+    MAX_NATIVE_TOOL_CALLS_PER_RESPONSE,
     MAX_OUTPUT_TOKENS,
     MAX_TOOL_CALLS,
     MODEL_MAX_RETRIES,
@@ -40,6 +41,9 @@ def create_openai_model(
         settings=OpenAIResponsesModelSettings(
             openai_store=False,
             openai_reasoning_effort=reasoning_effort,
+            openai_include_web_search_sources=True,
+            openai_include_raw_annotations=True,
+            extra_body={"max_tool_calls": MAX_NATIVE_TOOL_CALLS_PER_RESPONSE},
         ),
     )
 
@@ -50,6 +54,7 @@ def create_turn_agent(
     instructions: str,
     tools: Sequence[Tool[None]] = (),
     toolsets: Sequence[AbstractToolset[None]] = (),
+    web_search: bool = False,
 ) -> Agent[None, str]:
     return Agent(
         model,
@@ -67,7 +72,7 @@ def create_turn_agent(
             "request_timeout": MODEL_REQUEST_TIMEOUT_SECONDS,
             "max_retries": MODEL_MAX_RETRIES,
         },
-        capabilities=[Caching()],
+        capabilities=[Caching(), WebSearch()] if web_search else [Caching()],
     )
 
 

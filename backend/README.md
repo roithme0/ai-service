@@ -49,7 +49,7 @@ them in tool descriptions or artifact capabilities.
 The new executor in `app/agentic/turns.py` is developed alongside the current
 production engine. It uses Pydantic AI 2.58.0 directly for OpenAI Responses,
 tool execution, MCP and conversation history. It is not wired into HTTP sessions yet.
-Hosted web search, production artifact wiring and frontend timeline integration follow in
+Production artifact wiring and frontend timeline integration follow in
 separate slices before the eventual cutover and legacy removal.
 
 The caller keeps the native agent open with `async with agent:` and passes
@@ -141,6 +141,46 @@ not replicas of the legacy attempt counters. Automatic provider and validation
 retries are disabled. Tools can report an expected failure with `ToolFailed`;
 unexpected exceptions propagate. The model can still choose another call, so
 these settings do not provide duplicate-mutation prevention.
+
+Enable provider-native web search with `create_turn_agent(..., web_search=True)`.
+Search is disabled by default. The eagerly available Pydantic AI `WebSearch()`
+capability uses the provider's native implementation; no local search fallback,
+custom search executor or extra dependency is installed. With the OpenAI Responses
+model from `create_openai_model()`, OpenAI executes searches within its response.
+Ordinary local tools and backend MCP tools remain available alongside search.
+
+`MAX_NATIVE_TOOL_CALLS_PER_RESPONSE` defaults to 16. The OpenAI model factory sends
+it as Responses `max_tool_calls` through the framework's `extra_body` setting;
+this caps all provider-executed built-in calls in each response, separately from
+the framework's local tool-call budget. The allowance resets for every response.
+Together with the default 40 model requests, the normal run permits at most 640
+built-in calls, rather than the legacy engine's separate 16-per-turn search limit.
+OpenAI Responses does not support `WebSearch(max_uses=...)` in the pinned framework.
+There is no custom turn-wide search counter or automatic search retry. Other
+models supplied directly do not acquire this OpenAI-specific provider limit.
+See the [Responses limit](https://developers.openai.com/api/reference/resources/responses/methods/create)
+and [native tool support](https://pydantic.dev/docs/ai/tools-toolsets/native-tools/).
+
+Native `NativeToolCallPart` and `NativeToolReturnPart` objects retain search
+actions and provider status. They are present in observation messages and native
+serialized history, but do not enter `started_calls`, which tracks local dispatch.
+The OpenAI model factory requests search sources and preserves raw citation
+annotations in `TextPart.provider_details["annotations"]`. These remain internal
+inspection data; citation rendering is not added. Native history replay omits
+source metadata that OpenAI does not accept as input and does not repeat searches.
+The model may independently choose a new search when the capability is enabled.
+
+A failed search item's provider status remains in the native return's `content`;
+the framework does not translate it into local-tool `outcome="failed"`. Provider
+request errors propagate with zero SDK retries. Earlier confirmed search activity
+survives later failure. A response containing only search activity, with neither
+an answer nor a function call, fails under the existing zero-output-retry policy.
+There is no custom continuation loop. Deterministic HTTP transport coverage,
+including local/MCP coexistence and follow-up history, runs with
+`python -m pytest tests/test_pydantic_web_search.py`. The mocks verify request
+configuration and native parsing, not live search quality or provider enforcement.
+No live search was performed for this slice. Production wiring, streaming and
+frontend handling remain unchanged.
 
 After installing the backend dependencies, run the isolated live smoke test from
 `backend` with `OPENAI_API_KEY` and `KOCHWIKI_OPENAI_MODEL` configured in `.env`:

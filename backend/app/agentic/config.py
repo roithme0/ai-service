@@ -5,6 +5,7 @@ from typing import Final
 
 MAX_MODEL_REQUESTS: Final[int] = 40
 MAX_TOOL_CALLS: Final[int] = 32
+MAX_NATIVE_TOOL_CALLS_PER_RESPONSE: Final[int] = 16
 MAX_OUTPUT_TOKENS: Final[int] = 16_384
 
 MODEL_NETWORK_TIMEOUT_SECONDS: Final[float] = 120.0
