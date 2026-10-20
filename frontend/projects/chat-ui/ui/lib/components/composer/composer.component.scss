@@ -24,6 +24,7 @@ textarea,
 }
 
 .surface {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -31,6 +32,16 @@ textarea,
   border: 1px solid var(--ai-chat-composer-border, #50363f);
   border-radius: 1.25rem;
   background: var(--ai-chat-composer-background, #291c21);
+}
+
+.mascot {
+  position: absolute;
+  right: 1.25rem;
+  bottom: calc(100% - 1px);
+  width: 5.5rem;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
 }
 
 textarea {

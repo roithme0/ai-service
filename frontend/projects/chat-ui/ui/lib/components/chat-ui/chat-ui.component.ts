@@ -59,6 +59,14 @@ export class ChatUiComponent {
   readonly composerDisabled = input(false);
   readonly composerEditingDisabled = input(false);
   readonly composerPlaceholder = input('Nachricht schreiben');
+  readonly mascotAssetPath = input('images');
+
+  protected readonly mascotSource = computed(() => {
+    const filename = this.turns().some((turn) => turn.status === 'active')
+      ? 'maskot-working.png'
+      : 'mascot-idle.png';
+    return `${this.mascotAssetPath().replace(/\/$/, '')}/${filename}`;
+  });
 
   readonly messageSubmitted = output<ChatSubmission>();
   readonly statusActionTriggered = output<string>();

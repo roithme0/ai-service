@@ -14,6 +14,7 @@ export class ComposerComponent {
   readonly disabled = input(false);
   readonly editingDisabled = input(false);
   readonly placeholder = input('Nachricht schreiben');
+  readonly mascotSource = input.required<string>();
   readonly messageSubmitted = output<ChatSubmission>();
   protected readonly draft = signal('');
 

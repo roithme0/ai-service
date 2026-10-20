@@ -33,6 +33,37 @@ The component trims a valid submission and emits it once as a `ChatSubmission`. 
 
 `conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. Conversation loading renders as text; assistant loading renders as the supplied three-dot animation, with the status message as its accessible label. Conversation loading text fades in over 180 ms; the dots use only their SVG animation. Dots inherit the muted theme color. A reusable Angular component uses the supplied animated SVG as its external template; the animation does not vary with the reduced-motion setting. Loading states can opt into `reveal: 'delayed'`: the UI reserves a line and waits 300 ms before revealing the loading content. Replacing the status cancels the pending reveal. The conversation controller shows no indicator while sending. It starts assistant loading immediately once the accepted user message is displayed in history. Errors appear immediately without animation. Changing the conversation loading label restarts its fade. Animations run regardless of the reduced-motion setting. Rendering-only hosts own the loading lifetime: clear assistant loading as soon as any response content from that turn can be displayed. `composerDisabled` blocks submissions. `composerEditingDisabled` separately blocks text edits while keeping the textarea enabled and focusable. The controller blocks editing only while sending and, after an ambiguous network failure, reconciling backend acceptance; it unlocks editing before acknowledging an accepted message, so the next draft can be written during the assistant response. Cancellable edits are prevented before input; other edits restore the retained draft. The send button remains disabled while submissions or edits are blocked, and the textarea exposes its editing lock through `aria-disabled`. This avoids disabling the focused textarea during sending; mobile keyboard persistence still depends on the browser. The composer does not move focus on initialization, state changes, or message acknowledgement; focus remains under user control. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
 
+## Assets
+
+The package includes reusable library assets under `public/`, including
+`public/images/mascot-idle.png` and `public/images/maskot-working.png`.
+The demo application serves the same source folder (`projects/chat-ui/public`)
+and uses `images/mascot-idle.png` as its favicon.
+Angular consumer apps can copy the packaged assets by adding this
+entry to their application's build `assets` array in `angular.json`:
+
+```json
+{
+  "glob": "**/*",
+  "input": "node_modules/@roithme0/chat-ui/public",
+  "output": "assets/chat-ui"
+}
+```
+
+Set `mascotAssetPath="assets/chat-ui/images"` on `<ai-chat-ui>` when using this
+asset mapping. The default path is `images`, relative to the application's base
+URL. The decorative duck sits above the composer's right edge and shows the
+working image while any supplied turn has status `active`, including after
+final text arrives until the turn finishes. It returns to idle for completed,
+failed, or unknown turns; loading indicators and composer locks do not select
+the working image.
+
+Use `assets/chat-ui/images/mascot-idle.png` as an image URL or as a favicon:
+
+```html
+<link rel="icon" type="image/png" href="assets/chat-ui/images/mascot-idle.png" />
+```
+
 ## AI Service conversation integration
 
 The root entry point exports no API. This is a breaking import migration: replace root imports with `@roithme0/chat-ui/ui`. Import conversation support from `@roithme0/chat-ui/conversation`. Upgrade consumer imports together with the package; there are no compatibility re-exports. Both entry points share the existing package version and release lifecycle.

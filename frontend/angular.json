@@ -93,6 +93,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "**/*",
+                "input": "projects/chat-ui/public",
+                "output": "/"
               }
             ],
             "styles": ["src/styles.css"]

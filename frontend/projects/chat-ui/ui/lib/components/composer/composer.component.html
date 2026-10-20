@@ -1,5 +1,6 @@
 <form (submit)="submit($event)">
   <div class="surface">
+    <img class="mascot" [src]="mascotSource()" alt="" aria-hidden="true" draggable="false" />
     <textarea
       #composer
       cdkTextareaAutosize
