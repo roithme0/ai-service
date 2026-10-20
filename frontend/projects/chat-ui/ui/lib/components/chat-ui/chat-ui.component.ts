@@ -13,6 +13,7 @@ import {
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material/icon';
 import { registerChatIcons } from '../../chat-icons';
+import { HistoryItemComponent } from '../history-item/history-item.component';
 import { ToolCallComponent } from '../tool-call/tool-call.component';
 import { IntermediateMessageComponent } from '../intermediate-message/intermediate-message.component';
 import { UserMessageComponent } from '../user-message/user-message.component';
@@ -30,6 +31,7 @@ import type {
 @Component({
   selector: 'ai-chat-ui',
   imports: [
+    HistoryItemComponent,
     ArtifactCardComponent,
     StatusComponent,
     AssistantMessageComponent,
@@ -47,8 +49,6 @@ export class ChatUiComponent {
   private readonly history = viewChild.required<ElementRef<HTMLElement>>('history');
 
   private scrollHistoryToBottom = false;
-  private expandedTurnToScroll: string | null = null;
-  private collapsedScrollTop: number | null = null;
   private readonly expandedTurns = signal<ReadonlySet<string>>(new Set());
 
   readonly bannerTitle = input.required<string>();
@@ -84,32 +84,6 @@ export class ChatUiComponent {
 
   constructor() {
     registerChatIcons(this.iconRegistry, this.sanitizer);
-    afterEveryRender(() => {
-      const history = this.history().nativeElement;
-      if (this.collapsedScrollTop !== null) {
-        history.scrollTop = Math.max(
-          0,
-          Math.min(this.collapsedScrollTop, history.scrollHeight - history.clientHeight),
-        );
-        this.collapsedScrollTop = null;
-      }
-      const turnId = this.expandedTurnToScroll;
-      if (turnId === null) return;
-      this.expandedTurnToScroll = null;
-      const anchor = [...history.querySelectorAll<HTMLElement>('[data-turn-start]')].find(
-        (item) => item.dataset['turnStart'] === turnId,
-      );
-      if (!anchor) return;
-      const top =
-        history.scrollTop +
-        anchor.getBoundingClientRect().top -
-        history.getBoundingClientRect().top -
-        history.clientTop;
-      history.scrollTo({
-        top: Math.max(0, Math.min(top, history.scrollHeight - history.clientHeight)),
-        behavior: 'smooth',
-      });
-    });
     effect(() => {
       this.turns();
       this.conversationStatus();
@@ -143,13 +117,9 @@ export class ChatUiComponent {
     if (!this.disclosureAnswers().has(turnId)) return;
     const expanded = new Set(this.expandedTurns());
     if (expanded.has(turnId)) {
-      this.collapsedScrollTop = this.history().nativeElement.scrollTop;
       expanded.delete(turnId);
-      this.expandedTurnToScroll = null;
     } else {
-      this.collapsedScrollTop = null;
       expanded.add(turnId);
-      this.expandedTurnToScroll = turnId;
     }
     this.expandedTurns.set(expanded);
   }

@@ -82,13 +82,16 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     const element = fixtureElement(fixture);
     const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
-    expect(detail.hidden).toBe(false);
+    expect(isCollapsed(detail)).toBe(false);
     expect(element.querySelector('.details-toggle')).toBeNull();
 
     fixture.componentRef.setInput('turns', [{ ...turn, status: 'completed' }]);
     fixture.detectChanges();
-    expect(detail.hidden).toBe(true);
-    expect(element.querySelector<HTMLElement>('ai-chat-tool-call')!.hidden).toBe(true);
+    expect(isCollapsed(detail)).toBe(true);
+    expect(
+      detail.closest('ai-chat-history-item')?.querySelector<HTMLElement>('.collapse')?.inert,
+    ).toBe(true);
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(true);
     const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
     expect(toggle.type).toBe('button');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
@@ -100,7 +103,7 @@ describe('ChatUiComponent', () => {
     expect(toggle.closest('article')?.getAttribute('aria-label')).toBe('Antwort des Assistenten');
     toggle.click();
     fixture.detectChanges();
-    expect(detail.hidden).toBe(false);
+    expect(isCollapsed(detail)).toBe(false);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(toggle.getAttribute('aria-label')).toBe('Details ausblenden');
   });
@@ -114,10 +117,10 @@ describe('ChatUiComponent', () => {
       ]);
       fixture.detectChanges();
       const element = fixtureElement(fixture);
-      expect(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!.hidden).toBe(
+      expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!)).toBe(
         false,
       );
-      expect(element.querySelector<HTMLElement>('ai-chat-tool-call')!.hidden).toBe(false);
+      expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(false);
       expect(element.querySelector('.details-toggle')).toBeNull();
     },
   );
@@ -157,11 +160,9 @@ describe('ChatUiComponent', () => {
     expect(element.querySelector('.answer-actions')?.previousElementSibling?.textContent).toBe(
       'Answer',
     );
-    const visibleText = [
-      ...element.querySelectorAll<HTMLElement>(
-        'ai-chat-user-message, ai-chat-assistant-message, ai-chat-intermediate-message:not([hidden]), ai-chat-status',
-      ),
-    ].map((item) => item.querySelector('.markdown')?.textContent ?? item.textContent);
+    const visibleText = timelineRows(element)
+      .filter((item) => !isCollapsed(item))
+      .map((item) => item.querySelector('.markdown')?.textContent ?? item.textContent);
     expect(visibleText).toEqual([
       'Request',
       'Answer',
@@ -232,7 +233,7 @@ describe('ChatUiComponent', () => {
     const localInput = document.createElement('input');
     localInput.value = 'renderer local state';
     rendererBody.append(localInput);
-    const rows = [...element.querySelector('.messages')!.children];
+    const rows = timelineRows(element);
     const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
     for (let index = 0; index < 2; index++) {
       toggle.click();
@@ -240,49 +241,27 @@ describe('ChatUiComponent', () => {
       expect(element.querySelector('ai-chat-artifact-card')).toBe(card);
       expect(card.querySelector('.artifact-body')).toBe(rendererBody);
       expect(card.querySelector('input')?.value).toBe('renderer local state');
-      expect([...element.querySelector('.messages')!.children]).toEqual(rows);
+      expect(timelineRows(element)).toEqual(rows);
     }
   });
 
-  it('expands before scrolling the first timeline item to the viewport top and preserves collapse offset', () => {
+  it('expands and collapses details without requesting a scroll or changing the scroll offset', async () => {
     const fixture = createFixture(DISCLOSURE_CONTENT);
     const element = fixtureElement(fixture);
     const history = element.querySelector<HTMLElement>('.history')!;
-    const anchor = element.querySelector<HTMLElement>('[data-turn-start]')!;
     const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
     const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
-    Object.defineProperties(history, {
-      scrollHeight: { configurable: true, value: 2000 },
-      clientHeight: { configurable: true, value: 400 },
-      clientTop: { configurable: true, value: 2 },
-    });
     history.scrollTop = 300;
-    vi.spyOn(history, 'getBoundingClientRect').mockReturnValue({ top: 50 } as DOMRect);
-    vi.spyOn(anchor, 'getBoundingClientRect').mockImplementation(() => {
-      expect(detail.hidden).toBe(false);
-      return { top: 202 } as DOMRect;
-    });
-    scrollTo.mockClear();
-    toggle.click();
-    fixture.detectChanges();
-    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 450, behavior: 'smooth' });
     scrollTo.mockClear();
 
-    history.scrollTop = 600;
-    toggle.click();
-    history.scrollTop = 450;
-    fixture.detectChanges();
-    expect(history.scrollTop).toBe(600);
-    expect(scrollTo).not.toHaveBeenCalled();
-
-    toggle.click();
-    fixture.detectChanges();
-    scrollTo.mockClear();
-    history.scrollTop = 1800;
-    toggle.click();
-    fixture.detectChanges();
-    expect(history.scrollTop).toBe(1600);
-    expect(scrollTo).not.toHaveBeenCalled();
+    for (const collapsed of [false, true, false, true]) {
+      toggle.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(isCollapsed(detail)).toBe(collapsed);
+      expect(history.scrollTop).toBe(300);
+      expect(scrollTo).not.toHaveBeenCalled();
+    }
   });
 
   it('renders ordered host messages and applies Markdown only to assistant text', () => {
@@ -297,7 +276,6 @@ describe('ChatUiComponent', () => {
     expect(messageElements[0].querySelector('article')?.getAttribute('aria-label')).toBe(
       'Nachricht des Benutzers',
     );
-    expect(messageElements[0].getAttribute('data-turn-start')).toBe('turn-1');
     expect(messageElements[0].textContent).toContain('**literal user text**');
     expect(messageElements[0].querySelector('strong')).toBeNull();
     expect(messageElements[0].querySelector('img')).toBeNull();
@@ -347,7 +325,7 @@ describe('ChatUiComponent', () => {
     });
     fixture.detectChanges();
     const element = fixtureElement(fixture);
-    const rows = [...element.querySelector('.messages')!.children];
+    const rows = timelineRows(element);
     expect(rows.map((row) => row.tagName)).toEqual([
       'AI-CHAT-USER-MESSAGE',
       'AI-CHAT-STATUS',
@@ -373,7 +351,7 @@ describe('ChatUiComponent', () => {
       { kind: 'text', isFinal: true, id: 'final', role: 'assistant', text: 'Standalone result.' },
     ]);
     const element = fixtureElement(fixture);
-    const rows = [...element.querySelector('.messages')!.children];
+    const rows = timelineRows(element);
     expect(rows[0].matches('ai-chat-intermediate-message')).toBe(true);
     expect(rows[0].querySelector('article')).not.toBeNull();
     expect(rows[0].querySelector('article')?.getAttribute('aria-label')).toBe(
@@ -396,17 +374,15 @@ describe('ChatUiComponent', () => {
       { kind: 'failure', id: 'failure', text: 'Die Antwort konnte nicht erstellt werden.' },
     ]);
     const element = fixtureElement(fixture);
-    expect([...element.querySelector('.messages')!.children].map((child) => child.tagName)).toEqual(
-      [
-        'AI-CHAT-USER-MESSAGE',
-        'AI-CHAT-TOOL-CALL',
-        'AI-CHAT-ARTIFACT-CARD',
-        'AI-CHAT-TOOL-CALL',
-        'AI-CHAT-TOOL-CALL',
-        'AI-CHAT-TOOL-CALL',
-        'AI-CHAT-STATUS',
-      ],
-    );
+    expect(timelineRows(element).map((child) => child.tagName)).toEqual([
+      'AI-CHAT-USER-MESSAGE',
+      'AI-CHAT-TOOL-CALL',
+      'AI-CHAT-ARTIFACT-CARD',
+      'AI-CHAT-TOOL-CALL',
+      'AI-CHAT-TOOL-CALL',
+      'AI-CHAT-TOOL-CALL',
+      'AI-CHAT-STATUS',
+    ]);
     const rows = [...element.querySelectorAll('ai-chat-tool-call')];
     expect(rows.map((row) => row.querySelector('.status')?.textContent?.trim())).toEqual([
       'Abgeschlossen',
@@ -960,5 +936,22 @@ function setContent(
     content.length === 0
       ? []
       : [{ id: 'turn-1', userMessageId: 'user-1', status: 'completed', content }],
+  );
+}
+
+function timelineRows(element: HTMLElement): HTMLElement[] {
+  return [
+    ...element.querySelectorAll<HTMLElement>(
+      '.messages > ai-chat-history-item > .collapse > .clip > .item-content > *',
+    ),
+  ];
+}
+
+function isCollapsed(element: HTMLElement): boolean {
+  return (
+    element
+      .closest('ai-chat-history-item')
+      ?.querySelector('.collapse')
+      ?.getAttribute('aria-hidden') === 'true'
   );
 }

@@ -189,7 +189,11 @@ describe('Demo application', () => {
       expect(element.querySelector('ai-chat-intermediate-message')?.textContent).toContain(
         "I'll create a greeting artifact.",
       );
-      const rows = [...element.querySelector('.messages')!.children];
+      const rows = [
+        ...element.querySelectorAll<HTMLElement>(
+          '.messages > ai-chat-history-item > .collapse > .clip > .item-content > *',
+        ),
+      ];
       expect(rows[1].matches('ai-chat-intermediate-message')).toBe(true);
       expect(rows[2].matches('ai-chat-tool-call')).toBe(true);
       expect(rows[3].tagName).toBe('AI-CHAT-ARTIFACT-CARD');

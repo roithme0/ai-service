@@ -31,7 +31,3 @@ mat-icon {
   color: var(--ai-chat-muted-text, #c6b4bb);
   font-size: 0.75rem;
 }
-
-:host([hidden]) {
-  display: none;
-}
