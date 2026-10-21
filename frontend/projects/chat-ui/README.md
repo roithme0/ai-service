@@ -268,23 +268,19 @@ supply them beside caller context when creating a model-backed session:
 
 ```typescript
 import { JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
+import { HttpSessionTransport } from '@roithme0/chat-ui/conversation';
 
-const input = {
-  context: { selectedItem: item },
-  artifactCapabilities: [JSON_ARTIFACT_CAPABILITY],
-};
-const transport = new HttpConversationTransport(
-  '/ai/api/v1',
-  AgentConfiguration.kochwiki,
-  'kochwiki:42',
-  input,
-);
+const transport = new HttpSessionTransport('/ai/api/v1', 'kochwiki', 'kochwiki:42');
+const session = await transport.createSession({
+  initial_context: { selectedItem: item },
+  artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
+});
 ```
 
 The AI Service supplies the agent with a local `present_artifact` tool. The agent
 chooses when presentation helps and sends complete data; the renderer does not
 fetch missing details. JSON presentation uses type `json` and payload
-`{ value: <any JSON value> }`. With the default `presentArtifact` mapper, a backend
+`{ value: <any JSON value> }`. With the default `presentSessionArtifact` mapper, a backend
 presentation title becomes the card headline, and its optional `subtitle` appears
 as plain secondary text beneath it. The subtitle remains visible when the body
 is collapsed. Omitting capabilities keeps a
@@ -310,10 +306,10 @@ passes metadata to `ChatArtifact.metadata`; custom templates access it through
 `let-artifact="artifact"`. Metadata has no built-in rendering or action behavior;
 the consumer frontend interprets it and owns any domain actions.
 
-## Native session transport (parallel implementation)
+## Native session transport
 
-The `/conversation` entry point also exports `HttpSessionTransport` and its
-`SessionTransport` interface for the new Pydantic AI HTTP boundary. The obsolete `ConversationController` has been removed. The demo application uses the native API at `/api/native/api/v1`; Kochwiki and
+The `/conversation` entry point exports `HttpSessionTransport` and its
+`SessionTransport` interface for the Pydantic AI HTTP boundary. The obsolete legacy controller and transport have been removed. The demo application uses the native API at `/api/native/api/v1`; Kochwiki and
 the legacy HTTP routes remain on their existing implementation.
 
 ```ts

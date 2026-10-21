@@ -237,6 +237,35 @@ describe('HttpSessionTransport', () => {
 describe('session observation', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('parses large chunked snapshots with split separators and subsequent frames', async () => {
+    const largeSnapshot: SessionEvent = {
+      kind: 'snapshot',
+      snapshot: {
+        ...snapshot,
+        history: [{ part_kind: 'user-prompt', content: ['x'.repeat(4 * 1024 * 1024)] }],
+      },
+    };
+    const encoder = new TextEncoder();
+    const data = encoder.encode(frame(largeSnapshot));
+    let offset = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset < data.length - 1) {
+          const end = Math.min(offset + 1024, data.length - 1);
+          controller.enqueue(data.subarray(offset, end));
+          offset = end;
+        } else {
+          controller.enqueue(encoder.encode(`\n${frame(snapshotEvent)}${frame(snapshotEvent)}`));
+          controller.close();
+        }
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(stream(body)));
+
+    await expect(collect(events())).resolves.toEqual([largeSnapshot, snapshotEvent, snapshotEvent]);
+    expect(body.locked).toBe(false);
+  });
+
   it('delivers snapshots before EOF across every UTF-8 and CRLF boundary, and keeps observing settled turns', async () => {
     let push!: ReadableStreamDefaultController<Uint8Array>;
     const body = new ReadableStream<Uint8Array>({

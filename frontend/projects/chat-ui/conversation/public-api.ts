@@ -1,10 +1,3 @@
-export {
-  AgentConfiguration,
-  HttpConversationTransport,
-  ConversationApiError,
-  ConversationNetworkError,
-} from './src/conversation-api';
-export type { ApiErrorKind, ApiMessage, ConversationTransport } from './src/conversation-api';
 export type {
   UserMessageResponse,
   SessionCreationResponse,
@@ -13,7 +6,6 @@ export type {
   StreamEvent,
   PublishedArtifactDictStrObject as ArtifactResponse,
 } from './generated/types.gen';
-export { presentArtifact, presentJsonArtifact } from './src/generic-artifact-mapper';
 export {
   HttpSessionTransport,
   SessionHttpError,

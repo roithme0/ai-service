@@ -153,6 +153,7 @@ async function* readSseData(body: ReadableStream<Uint8Array>): AsyncIterable<str
   const reader = body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
   let buffer = '';
+  let scanFrom = 0;
   let pendingCarriageReturn = false;
   try {
     while (true) {
@@ -167,9 +168,10 @@ async function* readSseData(body: ReadableStream<Uint8Array>): AsyncIterable<str
         buffer += decoded.replace(/\r\n?/g, '\n');
       }
       let end: number;
-      while ((end = buffer.indexOf('\n\n')) !== -1) {
+      while ((end = buffer.indexOf('\n\n', scanFrom)) !== -1) {
         const frame = buffer.slice(0, end);
         buffer = buffer.slice(end + 2);
+        scanFrom = 0;
         const data = frame
           .split('\n')
           .filter((line) => line.startsWith('data:'))
@@ -177,6 +179,7 @@ async function* readSseData(body: ReadableStream<Uint8Array>): AsyncIterable<str
           .join('\n');
         if (data !== '') yield data;
       }
+      scanFrom = Math.max(0, buffer.length - 1);
       if (chunk.done) {
         if (buffer.trim() !== '') throw new SessionTransportError('invalid_response');
         return;
