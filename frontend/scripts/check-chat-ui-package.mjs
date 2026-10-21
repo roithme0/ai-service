@@ -17,34 +17,60 @@ assert.deepEqual(Object.keys(root), [], 'Root must export no API');
 const conversation = await import(
   pathToFileURL(resolve(packageRoot, manifest.exports['./conversation'].default)).href
 );
-for (const [name, value] of Object.entries(conversation.AgentConfiguration)) {
-  assert.equal(name, value);
-}
 const requests = [];
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async (url, options) => {
   requests.push({ url, options });
-  return Response.json({ session_id: 'built-session', expires_at: '2026-09-26T12:00:00Z' });
-};
-try {
-  const controller = new conversation.ConversationController(
-    new conversation.HttpConversationTransport(
-      '/ai/api/v1/',
-      conversation.AgentConfiguration.demo,
-      'demo:default',
-    ),
-    () => {},
+  if (options.method === 'POST') {
+    return Response.json(
+      { session_id: 'built-session', expires_at: '2026-09-26T12:00:00Z' },
+      { status: 201 },
+    );
+  }
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            `data: ${JSON.stringify({
+              kind: 'snapshot',
+              snapshot: {
+                session_id: 'built-session',
+                expires_at: '2026-09-26T12:00:00Z',
+                history: [],
+              },
+            })}\n\n`,
+          ),
+        );
+        options.signal.addEventListener('abort', () => controller.close(), { once: true });
+      },
+    }),
+    { headers: { 'Content-Type': 'text/event-stream' } },
   );
+};
+const controller = new conversation.SessionController(
+  new conversation.HttpSessionTransport('/ai/api/v1/', 'demo', 'demo:default'),
+  () => {},
+);
+try {
   await controller.start();
-  await controller.performAction('new-session');
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(controller.state.composerDisabled, false);
-  assert.equal(requests.length, 2);
+  await controller.performAction('new-session');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(controller.state.composerDisabled, false);
+  assert.equal(requests.length, 4);
   for (const request of requests) {
-    assert.equal(request.url, '/ai/api/v1/agents/demo/sessions');
-    assert.deepEqual(JSON.parse(request.options.body), { input: {} });
+    if (request.options.method === 'POST') {
+      assert.equal(request.url, '/ai/api/v1/agents/demo/sessions');
+      assert.deepEqual(JSON.parse(request.options.body), {});
+    } else {
+      assert.equal(request.url, '/ai/api/v1/agents/demo/sessions/built-session/events');
+    }
     assert.equal(request.options.headers['X-Application-User'], 'demo:default');
   }
 } finally {
+  controller.dispose();
   globalThis.fetch = originalFetch;
 }
 
@@ -62,30 +88,26 @@ const source = resolve(consumer, 'consumer.mts');
 await writeFile(
   source,
   `
-import { ChatUiComponent, artifactRenderer, type ChatSubmission, type ChatContent } from '@roithme0/chat-ui/ui';
-import { AgentConfiguration, ConversationController, HttpConversationTransport, presentJsonArtifact,
-  ConversationApiError, ConversationNetworkError,
-  type AgentConfiguration as Configuration, type ArtifactMapper, type ConversationViewState,
-  type ConversationTransport
+import { ChatUiComponent, artifactRenderer, type ChatSubmission, type ChatTurn } from '@roithme0/chat-ui/ui';
+import { SessionController, HttpSessionTransport, presentSessionArtifact,
+  SessionHttpError, SessionTransportError,
+  type SessionArtifactMapper, type SessionViewState, type SessionTransport
 } from '@roithme0/chat-ui/conversation';
 import * as Root from '@roithme0/chat-ui';
 const emptyRoot: keyof typeof Root extends never ? true : false = true;
-const config: Configuration = AgentConfiguration.demo;
-const publish = (state: ConversationViewState): void => { const content: readonly ChatContent[] = state.content; };
-const transport: ConversationTransport = new HttpConversationTransport('/api/v1', config, 'demo:default');
-const controller = new ConversationController(transport, publish);
-const mapper: ArtifactMapper = (artifact) => presentJsonArtifact(artifact);
-new ConversationController(new HttpConversationTransport('/ai/api/v1/', AgentConfiguration.kochwiki, 'kochwiki:42', { source: {} }), publish, mapper);
-// @ts-expect-error Arbitrary agent keys are not public configuration.
-new HttpConversationTransport('/api/v1', 'arbitrary', 'demo:default');
+const publish = (state: SessionViewState): void => { const turns: readonly ChatTurn[] = state.turns; };
+const transport: SessionTransport = new HttpSessionTransport('/api/v1', 'demo', 'demo:default');
+const controller = new SessionController(transport, publish);
+const mapper: SessionArtifactMapper = presentSessionArtifact;
+new SessionController(new HttpSessionTransport('/ai/api/v1/', 'kochwiki', 'kochwiki:42'), publish, mapper);
 // @ts-expect-error Application identity is required.
-new HttpConversationTransport('/api/v1', config);
+new HttpSessionTransport('/api/v1', 'demo');
 // @ts-expect-error Root compatibility exports must be absent.
 Root.ChatUiComponent;
 // @ts-expect-error Internal parsing is not public API.
 import { parseSessionSnapshot } from '@roithme0/chat-ui/conversation';
 // @ts-expect-error Private implementation subpaths must remain inaccessible.
-import { ConversationController as PrivateController } from '@roithme0/chat-ui/conversation/src/conversation-controller';
+import { SessionController as PrivateController } from '@roithme0/chat-ui/conversation/src/session-controller';
 `,
 );
 const program = ts.createProgram([source], {

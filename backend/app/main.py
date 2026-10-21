@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Mapping
+from contextlib import AsyncExitStack
 from types import TracebackType
 
 from fastapi import FastAPI
@@ -7,17 +9,20 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
-from app.agents.wiring import get_configured_agents
-from app.core.http import router as core_router
+from app.agentic.http import create_session_router
+from app.agentic.runner import AgentTurnRunner
+from app.agentic.wiring import create_kochwiki_agent
+from app.core.config import get_settings
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
-from app.agents.enums.configuration import AgentConfiguration
-from app.agents.http import create_session_router, get_agent_registry
+from app.demo.agent import create_demo_agent
 
 
 class AgentLifespan:
-    def __init__(self, _application: FastAPI) -> None:
+    def __init__(self, application: FastAPI) -> None:
         self._configure_logging()
-        self._agents = get_configured_agents()
+        self._runners: dict[str, AgentTurnRunner | None] = {"kochwiki": None, "demo": None}
+        application.state.agent_runners = self._runners
+        self._resource_stack = AsyncExitStack()
 
     @staticmethod
     def _configure_logging() -> None:
@@ -30,7 +35,25 @@ class AgentLifespan:
             application_logger.addHandler(handler)
 
     async def __aenter__(self) -> None:
-        await self._agents.start()
+        try:
+            await self._start_kochwiki()
+            demo_agent = await self._resource_stack.enter_async_context(create_demo_agent())
+            self._runners["demo"] = await self._resource_stack.enter_async_context(AgentTurnRunner(demo_agent))
+        except BaseException:
+            await self._resource_stack.aclose()
+            raise
+
+    async def _start_kochwiki(self) -> None:
+        try:
+            async with AsyncExitStack() as resources:
+                agent = await resources.enter_async_context(create_kochwiki_agent(get_settings()))
+                runner = await resources.enter_async_context(AgentTurnRunner(agent))
+                self._resource_stack.push_async_callback(resources.pop_all().aclose)
+                self._runners["kochwiki"] = runner
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                "Kochwiki agent unavailable during initialization (%s).", type(error).__name__,
+            )
 
     async def __aexit__(
         self,
@@ -38,10 +61,13 @@ class AgentLifespan:
         _exception: BaseException | None,
         _traceback: TracebackType | None,
     ) -> None:
-        try:
-            await self._agents.close()
-        finally:
-            get_configured_agents.cache_clear()
+        self._runners["kochwiki"] = None
+        self._runners["demo"] = None
+        await self._resource_stack.aclose()
+
+
+def get_agent_registry(request: Request) -> Mapping[str, AgentTurnRunner | None]:
+    return request.app.state.agent_runners
 
 
 app = FastAPI(
@@ -50,13 +76,7 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
 )
-app.include_router(create_session_router(
-    get_agent_registry, tuple(configuration.value for configuration in AgentConfiguration),
-), responses={
-    405: {"model": HttpErrorResponse},
-    500: {"model": HttpErrorResponse},
-})
-app.include_router(core_router, responses={
+app.include_router(create_session_router(get_agent_registry), responses={
     405: {"model": HttpErrorResponse},
     500: {"model": HttpErrorResponse},
 })

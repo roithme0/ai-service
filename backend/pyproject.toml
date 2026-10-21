@@ -9,7 +9,8 @@ description = "Backend for the AI Service."
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "fastapi[standard]==0.141.1",
-    "openai>=2,<3",
+    "openai>=3.26,<4",
+    "pydantic-ai-slim[openai,mcp]==2.58.0",
     "mcp==2.2.0",
     "jsonschema>=4.26,<5",
     "pydantic==2.13.5",

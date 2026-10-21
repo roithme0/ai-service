@@ -1,0 +1,1184 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Component, TemplateRef, viewChild } from '@angular/core';
+import { By } from '@angular/platform-browser';
+import { CdkTextareaAutosize } from '@angular/cdk/text-field';
+import { MatIconRegistry } from '@angular/material/icon';
+import { firstValueFrom } from 'rxjs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  artifactRenderer,
+  type ChatArtifactRenderContext,
+  type ChatContent,
+  type ChatTextMessage,
+  type ChatTurn,
+} from '../../models/chat-message';
+import { ArtifactCardComponent } from '../artifact-card/artifact-card.component';
+import { ChatUiComponent } from './chat-ui.component';
+import { presentSession } from '../../../../conversation/src/session-presentation';
+import type { PresentedSession, PresentedTurn } from '../../../../conversation/generated/types.gen';
+
+const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
+  {
+    kind: 'text',
+    isFinal: false,
+    id: 'user-1',
+    role: 'user',
+    text: '**literal user text** <img src=x>\nNext line',
+  },
+  {
+    kind: 'text',
+    isFinal: false,
+    id: 'assistant-1',
+    role: 'assistant',
+    text: '**formatted assistant text**',
+  },
+];
+
+const DETAILS_CONTENT: readonly ChatContent[] = [
+  { kind: 'text', isFinal: false, id: 'request', role: 'user', text: 'Request' },
+  { kind: 'intermediate', id: 'detail', text: 'Checking' },
+  { kind: 'tool', id: 'recoverable', name: 'check', status: 'failed' },
+  { kind: 'text', isFinal: true, id: 'answer', role: 'assistant', text: 'Answer' },
+];
+
+@Component({
+  template:
+    '<ng-template #template let-payload let-artifact="artifact">Custom: {{ payload.label }} {{ artifact.metadata?.reference }}</ng-template>',
+})
+class RendererTemplateHost {
+  readonly template =
+    viewChild.required<TemplateRef<ChatArtifactRenderContext<{ readonly label: string }>>>(
+      'template',
+    );
+}
+
+describe('ChatUiComponent', () => {
+  const scrollTo = vi.fn<Element['scrollTo']>();
+  let originalScrollTo: PropertyDescriptor | undefined;
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    if (originalScrollTo) {
+      Object.defineProperty(Element.prototype, 'scrollTo', originalScrollTo);
+    } else {
+      Reflect.deleteProperty(Element.prototype, 'scrollTo');
+    }
+  });
+
+  beforeEach(() => {
+    scrollTo.mockClear();
+    originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
+    Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scrollTo });
+    TestBed.configureTestingModule({ imports: [ChatUiComponent] });
+  });
+
+  it('keeps the mascot working through final text until the active turn finishes', () => {
+    const fixture = createFixture([]);
+    const mascot = fixtureElement(fixture).querySelector<HTMLImageElement>('.mascot')!;
+    expect(mascot.getAttribute('src')).toBe('images/mascot-idle.png');
+    expect(mascot.alt).toBe('');
+    expect(mascot.getAttribute('aria-hidden')).toBe('true');
+
+    const turn: ChatTurn = {
+      runKey: 'active',
+      status: 'active',
+      content: [],
+    };
+    fixture.componentRef.setInput('turns', [turn]);
+    fixture.detectChanges();
+    expect(mascot.getAttribute('src')).toBe('images/maskot-working.png');
+
+    fixture.componentRef.setInput('turns', [{ ...turn, content: DETAILS_CONTENT }]);
+    fixture.componentRef.setInput('conversationStatus', null);
+    fixture.detectChanges();
+    expect(mascot.getAttribute('src')).toBe('images/maskot-working.png');
+
+    for (const status of ['completed', 'failed', 'unknown'] as const) {
+      fixture.componentRef.setInput('turns', [{ ...turn, status }]);
+      fixture.detectChanges();
+      expect(mascot.getAttribute('src')).toBe('images/mascot-idle.png');
+    }
+  });
+
+  it('uses the consumer asset folder and ignores composer locks and conversation loading', () => {
+    const fixture = createFixture([], { disabled: true });
+    fixture.componentRef.setInput('mascotAssetPath', 'assets/chat-ui/images/');
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      placement: 'conversation',
+      message: 'Starting',
+    });
+    fixture.detectChanges();
+    const mascot = fixtureElement(fixture).querySelector<HTMLImageElement>('.mascot')!;
+    expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/mascot-idle.png');
+
+    fixture.componentRef.setInput('turns', [
+      { runKey: 'active', status: 'active', content: [] },
+      { runKey: 'completed', status: 'completed', content: [] },
+    ]);
+    fixture.detectChanges();
+    expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/maskot-working.png');
+  });
+
+  it('collapses details only after completion and places an accessible toggle below the explicit answer', () => {
+    const fixture = createFixture([]);
+    const turn: ChatTurn = {
+      runKey: 'first',
+      status: 'active',
+      content: DETAILS_CONTENT,
+    };
+    fixture.componentRef.setInput('turns', [turn]);
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
+    expect(isCollapsed(detail)).toBe(false);
+    expect(element.querySelector('.details-toggle')).toBeNull();
+
+    fixture.componentRef.setInput('turns', [{ ...turn, status: 'completed' }]);
+    fixture.detectChanges();
+    expect(isCollapsed(detail)).toBe(true);
+    expect(
+      detail.closest('ai-chat-history-item')?.querySelector<HTMLElement>('.collapse')?.inert,
+    ).toBe(true);
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(true);
+    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    expect(toggle.type).toBe('button');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle.getAttribute('aria-label')).toBe('Details anzeigen');
+    expect(toggle.querySelector('mat-icon')?.getAttribute('svgIcon')).toBe('ai-chat:list-tree');
+    expect(
+      toggle.closest('ai-chat-assistant-message')?.querySelector('.markdown')?.textContent,
+    ).toBe('Answer');
+    expect(toggle.closest('article')?.getAttribute('aria-label')).toBe('Antwort des Assistenten');
+    toggle.click();
+    fixture.detectChanges();
+    expect(isCollapsed(detail)).toBe(false);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.getAttribute('aria-label')).toBe('Details ausblenden');
+  });
+
+  it.each(['failed', 'unknown'] as const)(
+    'keeps details visible for a %s turn even with explicit final text',
+    (status) => {
+      const fixture = createFixture([]);
+      fixture.componentRef.setInput('turns', [
+        { runKey: 'first', status, content: DETAILS_CONTENT },
+      ]);
+      fixture.detectChanges();
+      const element = fixtureElement(fixture);
+      expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!)).toBe(
+        false,
+      );
+      expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(false);
+      expect(element.querySelector('.details-toggle')).toBeNull();
+    },
+  );
+
+  it.each([
+    { content: [] },
+    {
+      content: DETAILS_CONTENT.filter(
+        (item) => item.kind !== 'tool' && item.kind !== 'intermediate',
+      ),
+    },
+    { content: DETAILS_CONTENT.filter((item) => item.kind !== 'text' || !item.isFinal) },
+  ])(
+    'does not offer a details toggle without both details and an explicit final answer (%j)',
+    ({ content }) => {
+      const fixture = createFixture(content);
+      expect(fixtureElement(fixture).querySelector('.details-toggle')).toBeNull();
+      expect(fixtureElement(fixture).querySelector('[hidden]')).toBeNull();
+    },
+  );
+
+  it('uses the first explicitly final answer rather than later unspecified or additional final text', () => {
+    const fixture = createFixture([
+      ...DETAILS_CONTENT,
+      {
+        kind: 'text',
+        isFinal: true,
+        id: 'another-final',
+        role: 'assistant',
+        text: 'Another final',
+      },
+      { kind: 'text', isFinal: false, id: 'later', role: 'assistant', text: 'Later ordinary text' },
+      { kind: 'failure', id: 'failure', text: 'Retained failure' },
+    ]);
+    const element = fixtureElement(fixture);
+    expect(element.querySelectorAll('.details-toggle')).toHaveLength(1);
+    expect(element.querySelector('.answer-actions')?.previousElementSibling?.textContent).toBe(
+      'Answer',
+    );
+    const visibleText = timelineRows(element)
+      .filter((item) => !isCollapsed(item))
+      .map((item) => item.querySelector('.markdown')?.textContent ?? item.textContent);
+    expect(visibleText).toEqual([
+      'Request',
+      'Answer',
+      'Another final',
+      'Later ordinary text',
+      'Retained failure',
+    ]);
+  });
+
+  it('remembers manual detail expansion per historical run across new inputs and resets on recreation', () => {
+    const fixture = createFixture(DETAILS_CONTENT);
+    const element = fixtureElement(fixture);
+    element.querySelector<HTMLButtonElement>('.details-toggle')!.click();
+    fixture.detectChanges();
+    const historical = fixture.componentInstance.turns()[0];
+    const next: ChatTurn = { ...historical, runKey: 'next', content: [...DETAILS_CONTENT] };
+    fixture.componentRef.setInput('turns', [
+      { ...historical, content: [...historical.content] },
+      next,
+    ]);
+    fixture.detectChanges();
+    const toggles = element.querySelectorAll<HTMLButtonElement>('.details-toggle');
+    expect([...toggles].map((toggle) => toggle.getAttribute('aria-expanded'))).toEqual([
+      'true',
+      'false',
+    ]);
+    toggles[0].click();
+    fixture.detectChanges();
+    fixture.componentRef.setInput('turns', [
+      ...fixture.componentInstance.turns(),
+      { runKey: 'pending', status: 'active', content: [] },
+    ]);
+    fixture.detectChanges();
+    expect(toggles[0].getAttribute('aria-expanded')).toBe('false');
+    toggles[1].click();
+    fixture.detectChanges();
+    expect(toggles[1].getAttribute('aria-expanded')).toBe('true');
+    fixture.destroy();
+    const recreated = createFixture(DETAILS_CONTENT);
+    expect(
+      fixtureElement(recreated).querySelector('.details-toggle')?.getAttribute('aria-expanded'),
+    ).toBe('false');
+  });
+
+  it('retains native artifacts and shared run detail expansion through replacement snapshots and nullable ID capture', () => {
+    const lifecycle: PresentedTurn['lifecycle'] = {
+      run_id: null,
+      status: 'running',
+      started_at: '2026-10-21T12:00:00Z',
+      finished_at: null,
+    };
+    const first: PresentedTurn = {
+      part_kind: 'turn',
+      lifecycle,
+      parts: [
+        { part_kind: 'tool-call', tool_call_id: 'call', tool_name: 'publish', status: 'running' },
+        {
+          part_kind: 'artifact',
+          artifact: {
+            artifact_id: 'card',
+            type: 'json',
+            run_id: 'run',
+            created_at: lifecycle.started_at,
+            content: { title: 'Result', payload: { value: 'Long result' } },
+          },
+        },
+      ],
+    };
+    const snapshot: PresentedSession = {
+      error: null,
+      session_id: 's',
+      expires_at: lifecycle.started_at,
+      history: [first],
+    };
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('turns', presentSession(snapshot));
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const card = element.querySelector('ai-chat-artifact-card')!;
+    const body = card.querySelector<HTMLElement>('.artifact-body')!;
+    Object.defineProperty(body, 'scrollHeight', { configurable: true, value: 500 });
+    Object.defineProperty(body, 'clientHeight', { configurable: true, value: 100 });
+    const artifactComponent = fixture.debugElement
+      .query(By.directive(ArtifactCardComponent))
+      .injector.get(ArtifactCardComponent);
+    artifactComponent['measure']();
+    fixture.detectChanges();
+    card.querySelector<HTMLButtonElement>('.artifact-toggle')!.click();
+    fixture.detectChanges();
+    const completed = { ...lifecycle, run_id: 'run', status: 'completed' as const };
+    const updated: PresentedSession = {
+      ...snapshot,
+      history: [
+        {
+          ...first,
+          lifecycle: completed,
+          parts: [
+            {
+              part_kind: 'tool-call',
+              tool_call_id: 'call',
+              tool_name: 'publish',
+              status: 'success',
+            },
+            first.parts[1],
+          ],
+        },
+        { part_kind: 'user-prompt', content: ['same', 'same'] },
+        {
+          part_kind: 'turn',
+          lifecycle: completed,
+          parts: [{ part_kind: 'text', phase: null, content: 'Answer' }],
+        },
+      ],
+    };
+    fixture.componentRef.setInput('turns', presentSession(updated));
+    fixture.detectChanges();
+    expect(element.querySelector('ai-chat-artifact-card')).toBe(card);
+    expect(card.querySelector('.artifact-body')).toBe(body);
+    expect(card.querySelector('.artifact-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    expect(element.querySelector('ai-chat-tool-call')?.textContent).toContain('publish');
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(true);
+    element.querySelector<HTMLButtonElement>('.details-toggle')!.click();
+    fixture.detectChanges();
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(false);
+    fixture.componentRef.setInput('turns', presentSession(structuredClone(updated)));
+    fixture.detectChanges();
+    expect(element.querySelector('.details-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    expect(card.querySelector('.artifact-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    expect(element.querySelectorAll('ai-chat-user-message')).toHaveLength(2);
+    expect(element.querySelector('ai-chat-artifact-card')).toBe(card);
+    fixture.componentRef.setInput(
+      'turns',
+      presentSession({ ...updated, session_id: 'another-session' }),
+    );
+    fixture.detectChanges();
+    expect(element.querySelector('.details-toggle')?.getAttribute('aria-expanded')).toBe('false');
+    expect(element.querySelector('ai-chat-artifact-card')).not.toBe(card);
+  });
+
+  it('preserves interleaved artifact nodes, renderer DOM state and order across toggles', () => {
+    const templateFixture = TestBed.createComponent(RendererTemplateHost);
+    templateFixture.detectChanges();
+    const fixture = createFixture([
+      DETAILS_CONTENT[0],
+      DETAILS_CONTENT[1],
+      {
+        kind: 'artifact',
+        id: 'card',
+        type: 'known',
+        headline: 'Card',
+        payload: { label: 'retained' },
+      },
+      DETAILS_CONTENT[2],
+      DETAILS_CONTENT[3],
+    ]);
+    fixture.componentRef.setInput('artifactRenderers', {
+      known: artifactRenderer(templateFixture.componentInstance.template()),
+    });
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const card = element.querySelector('ai-chat-artifact-card')!;
+    const rendererBody = card.querySelector('.artifact-body')!;
+    const localInput = document.createElement('input');
+    localInput.value = 'renderer local state';
+    rendererBody.append(localInput);
+    const rows = timelineRows(element);
+    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    for (let index = 0; index < 2; index++) {
+      toggle.click();
+      fixture.detectChanges();
+      expect(element.querySelector('ai-chat-artifact-card')).toBe(card);
+      expect(card.querySelector('.artifact-body')).toBe(rendererBody);
+      expect(card.querySelector('input')?.value).toBe('renderer local state');
+      expect(timelineRows(element)).toEqual(rows);
+    }
+  });
+
+  it('expands and collapses details without requesting a scroll or changing the scroll offset', async () => {
+    const fixture = createFixture(DETAILS_CONTENT);
+    const element = fixtureElement(fixture);
+    const history = element.querySelector<HTMLElement>('.history')!;
+    const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
+    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    history.scrollTop = 300;
+    scrollTo.mockClear();
+
+    for (const collapsed of [false, true, false, true]) {
+      toggle.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(isCollapsed(detail)).toBe(collapsed);
+      expect(history.scrollTop).toBe(300);
+      expect(scrollTo).not.toHaveBeenCalled();
+    }
+  });
+
+  it('renders ordered host messages and applies Markdown only to assistant text', () => {
+    const fixture = createFixture(INITIAL_MESSAGES);
+    const messageElements = fixtureElement(fixture).querySelectorAll<HTMLElement>(
+      'ai-chat-user-message, ai-chat-assistant-message, ai-chat-intermediate-message',
+    );
+
+    expect(messageElements).toHaveLength(2);
+    expect(messageElements[0].matches('ai-chat-user-message')).toBe(true);
+    expect(messageElements[0].querySelector('article')).not.toBeNull();
+    expect(messageElements[0].querySelector('article')?.getAttribute('aria-label')).toBe(
+      'Nachricht des Benutzers',
+    );
+    expect(messageElements[0].textContent).toContain('**literal user text**');
+    expect(messageElements[0].querySelector('strong')).toBeNull();
+    expect(messageElements[0].querySelector('img')).toBeNull();
+    expect(messageElements[0].textContent).toContain('<img src=x>\nNext line');
+    expect(messageElements[1].matches('ai-chat-assistant-message')).toBe(true);
+    expect(messageElements[1].querySelector('article')).not.toBeNull();
+    expect(messageElements[1].querySelector('strong')?.textContent).toBe(
+      'formatted assistant text',
+    );
+  });
+
+  it('renders turn-owned content in order and preserves historical failures with a current error', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('turns', [
+      {
+        runKey: 'first',
+        status: 'failed',
+        content: [
+          { kind: 'text', isFinal: false, id: 'first-user', role: 'user', text: 'First' },
+          { kind: 'failure', id: 'first-failure', text: 'Historical failure' },
+        ],
+      },
+      {
+        runKey: 'second',
+        status: 'failed',
+        content: [
+          { kind: 'text', isFinal: false, id: 'second-user', role: 'user', text: 'Second' },
+          { kind: 'intermediate', id: 'detail', text: 'Checking' },
+          { kind: 'tool', id: 'tool', name: 'check', status: 'failed' },
+          {
+            kind: 'artifact',
+            id: 'result',
+            type: 'json',
+            headline: 'Result',
+            payload: { value: 1 },
+          },
+          { kind: 'failure', id: 'second-failure', text: 'Covered failure' },
+        ],
+      },
+    ]);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      placement: 'assistant',
+      message: 'Current error',
+    });
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const rows = timelineRows(element);
+    expect(rows.map((row) => row.tagName)).toEqual([
+      'AI-CHAT-USER-MESSAGE',
+      'AI-CHAT-STATUS',
+      'AI-CHAT-USER-MESSAGE',
+      'AI-CHAT-INTERMEDIATE-MESSAGE',
+      'AI-CHAT-TOOL-CALL',
+      'AI-CHAT-ARTIFACT-CARD',
+      'AI-CHAT-STATUS',
+    ]);
+    expect(rows[0].textContent).toContain('First');
+    expect(rows[1].textContent).toContain('Historical failure');
+    expect(rows[2].textContent).toContain('Second');
+    expect(rows[3].textContent).toContain('Checking');
+    expect(rows[4].textContent).toContain('check');
+    expect(rows[6].textContent).toContain('Current error');
+    expect(element.textContent).not.toContain('Covered failure');
+  });
+
+  it('renders safe intermediate Markdown in conversation order', () => {
+    const fixture = createFixture([
+      { kind: 'intermediate', id: 'update', text: '**Checking** <script>alert(1)</script>' },
+      { kind: 'tool', id: 'tool', name: 'check', status: 'completed' },
+      { kind: 'text', isFinal: true, id: 'final', role: 'assistant', text: 'Standalone result.' },
+    ]);
+    const element = fixtureElement(fixture);
+    const rows = timelineRows(element);
+    expect(rows[0].matches('ai-chat-intermediate-message')).toBe(true);
+    expect(rows[0].querySelector('article')).not.toBeNull();
+    expect(rows[0].querySelector('article')?.getAttribute('aria-label')).toBe(
+      'Zwischenmeldung des Assistenten',
+    );
+    expect(rows[0].querySelector('strong')?.textContent).toBe('Checking');
+    expect(rows[0].querySelector('script')).toBeNull();
+    expect(rows[1].matches('ai-chat-tool-call')).toBe(true);
+    expect(rows[2].matches('ai-chat-assistant-message')).toBe(true);
+  });
+
+  it('renders compact tool rows and artifacts in host order with all four status labels', () => {
+    const fixture = createFixture([
+      { kind: 'text', isFinal: false, id: 'user', role: 'user', text: 'Show' },
+      { kind: 'tool', id: 'tool-1', name: '<b>present</b>', status: 'completed' },
+      { kind: 'artifact', id: 'artifact', type: 'json', headline: 'Result', payload: { value: 1 } },
+      { kind: 'tool', id: 'tool-2', name: 'save', status: 'failed' },
+      { kind: 'tool', id: 'tool-3', name: 'update', status: 'outcome_unknown' },
+      { kind: 'tool', id: 'tool-4', name: 'check', status: 'not_executed' },
+      { kind: 'failure', id: 'failure', text: 'Die Antwort konnte nicht erstellt werden.' },
+    ]);
+    const element = fixtureElement(fixture);
+    expect(timelineRows(element).map((child) => child.tagName)).toEqual([
+      'AI-CHAT-USER-MESSAGE',
+      'AI-CHAT-TOOL-CALL',
+      'AI-CHAT-ARTIFACT-CARD',
+      'AI-CHAT-TOOL-CALL',
+      'AI-CHAT-TOOL-CALL',
+      'AI-CHAT-TOOL-CALL',
+      'AI-CHAT-STATUS',
+    ]);
+    const rows = [...element.querySelectorAll('ai-chat-tool-call')];
+    expect(rows.map((row) => row.querySelector('.status')?.textContent?.trim())).toEqual([
+      'Abgeschlossen',
+      'Fehlgeschlagen',
+      'Ergebnis unklar',
+      'Nicht ausgeführt',
+    ]);
+    expect(
+      rows.every(
+        (row) => row.querySelector('mat-icon')?.getAttribute('svgIcon') === 'ai-chat:tool',
+      ),
+    ).toBe(true);
+    expect(rows[0].textContent).toContain('<b>present</b>');
+    expect(rows[0].querySelector('b')).toBeNull();
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      placement: 'assistant',
+      message: 'Current failure',
+    });
+    fixture.detectChanges();
+    expect(element.querySelectorAll('ai-chat-status.error')).toHaveLength(1);
+    setContent(fixture, [
+      ...fixture.componentInstance.turns()[0].content,
+      { kind: 'text', isFinal: false, id: 'next-user', role: 'user', text: 'Continue' },
+    ]);
+    fixture.componentRef.setInput('conversationStatus', null);
+    fixture.detectChanges();
+    expect(element.querySelectorAll('ai-chat-status.error')).toHaveLength(1);
+  });
+
+  it('uses a matching renderer and renders explicit JSON safely', () => {
+    const templateFixture = TestBed.createComponent(RendererTemplateHost);
+    templateFixture.detectChanges();
+    const content: readonly ChatContent[] = [
+      {
+        kind: 'artifact',
+        id: 'custom',
+        type: 'known',
+        headline: 'Known',
+        payload: { label: 'typed' },
+        metadata: { reference: 'host-action-reference' },
+      },
+      {
+        kind: 'artifact',
+        id: 'fallback',
+        type: 'json',
+        headline: 'JSON',
+        payload: {
+          value: {
+            nested: [true, null],
+            empty: {},
+            text: '<script>unsafe()</script>',
+          },
+        },
+      },
+    ];
+    const fixture = createFixture(content);
+    fixture.componentRef.setInput('artifactRenderers', {
+      known: artifactRenderer(templateFixture.componentInstance.template()),
+    });
+    fixture.detectChanges();
+
+    const cards = fixtureElement(fixture).querySelectorAll<HTMLElement>('.artifact');
+    expect(cards).toHaveLength(2);
+    expect(cards[0].textContent).toContain('Custom: typed');
+    expect(cards[0].textContent).toContain('host-action-reference');
+    expect(cards[1].querySelector('script')).toBeNull();
+    expect(cards[1].querySelector('pre')?.textContent).toContain('"nested"');
+    expect(cards[1].textContent).toContain('<script>unsafe()</script>');
+  });
+
+  it('does not silently render unsupported types as JSON', () => {
+    const fixture = createFixture([
+      {
+        kind: 'artifact',
+        id: 'unsupported',
+        type: 'unknown',
+        headline: 'Unknown',
+        payload: { secret: 'not presented' },
+      },
+    ]);
+    const element = fixtureElement(fixture);
+    expect(element.querySelector('pre')).toBeNull();
+    expect(element.textContent).toContain('Diese Darstellung wird nicht unterst\u00fctzt.');
+    expect(element.textContent).not.toContain('not presented');
+  });
+
+  it('renders a subtitle literally beneath the artifact title, outside the collapsible body', () => {
+    const fixture = createFixture([
+      {
+        kind: 'artifact',
+        id: 'with-subtitle',
+        type: 'json',
+        headline: 'Oats',
+        subtitle: '<strong>Example brand</strong>',
+        payload: { value: {} },
+      },
+      {
+        kind: 'artifact',
+        id: 'without-subtitle',
+        type: 'json',
+        headline: 'Water',
+        payload: { value: {} },
+      },
+    ]);
+    const cards = fixtureElement(fixture).querySelectorAll('.artifact');
+    expect(cards[0].querySelector('.artifact-header h3')?.textContent).toBe('Oats');
+    expect(cards[0].querySelector('.artifact-header .artifact-subtitle')?.textContent).toBe(
+      '<strong>Example brand</strong>',
+    );
+    expect(cards[0].querySelector('strong')).toBeNull();
+    expect(cards[0].querySelector('.artifact-body .artifact-subtitle')).toBeNull();
+    expect(cards[1].querySelector('.artifact-subtitle')).toBeNull();
+  });
+
+  it('offers library-owned German expansion only for overflowing renderer bodies', async () => {
+    class OverflowObserver {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+
+      observe(target: Element): void {
+        Object.defineProperties(target, {
+          scrollHeight: { configurable: true, value: 500 },
+          clientHeight: { configurable: true, value: 200 },
+        });
+        this.callback([], this);
+      }
+
+      disconnect(): void {}
+      unobserve(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', OverflowObserver);
+    const fixture = createFixture([
+      {
+        kind: 'artifact',
+        id: 'large',
+        type: 'json',
+        headline: 'Large',
+        payload: { value: { rows: [1, 2, 3] } },
+      },
+    ]);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const toggle = fixtureElement(fixture).querySelector('.artifact-toggle') as HTMLButtonElement;
+    expect(toggle.textContent).toContain('Mehr anzeigen');
+    expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 9 6 6 6-6');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    const body = fixtureElement(fixture).querySelector('.artifact-body') as HTMLElement;
+    expect(body.classList.contains('artifact-body--faded')).toBe(true);
+    toggle.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(toggle.textContent).toContain('Weniger anzeigen');
+    expect(toggle.querySelector('mat-icon svg path')?.getAttribute('d')).toBe('m6 15 6-6 6 6');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(body.classList.contains('artifact-body--faded')).toBe(false);
+    expect(fixtureElement(fixture).querySelector('.artifact-body--expanded')).not.toBeNull();
+  });
+
+  it('retains a submission until the host acknowledges it', () => {
+    const fixture = createFixture([]);
+    const component = fixture.componentInstance;
+    const emit = vi.spyOn(component.messageSubmitted, 'emit');
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
+
+    textarea.focus();
+    textarea.value = '  hello there  ';
+    textarea.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    (fixtureElement(fixture).querySelector('button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(emit).toHaveBeenCalledOnce();
+    const submission = emit.mock.calls[0][0];
+    expect(submission.text).toBe('hello there');
+    expect(textarea.value).toBe('  hello there  ');
+
+    submission.acknowledge();
+    fixture.detectChanges();
+
+    expect(textarea.value).toBe('');
+    expect(
+      fixtureElement(fixture).querySelectorAll(
+        'ai-chat-user-message, ai-chat-assistant-message, ai-chat-intermediate-message',
+      ),
+    ).toHaveLength(0);
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  it.each(['insertText', 'insertFromPaste', 'deleteContentBackward', 'insertCompositionText'])(
+    'blocks %s while sending without disabling or blurring the textarea',
+    (inputType) => {
+      const fixture = createFixture([]);
+      const element = fixtureElement(fixture);
+      const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
+      const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
+      textarea.value = 'Retained draft';
+      textarea.dispatchEvent(new Event('input'));
+      textarea.focus();
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(emit).toHaveBeenCalledOnce();
+      fixture.componentRef.setInput('composerDisabled', true);
+      fixture.componentRef.setInput('composerEditingDisabled', true);
+      fixture.detectChanges();
+
+      const beforeInput = new InputEvent('beforeinput', {
+        inputType,
+        data: 'x',
+        bubbles: true,
+        cancelable: true,
+      });
+      textarea.dispatchEvent(beforeInput);
+      expect(beforeInput.defaultPrevented).toBe(true);
+      expect(textarea.disabled).toBe(false);
+      expect(textarea.readOnly).toBe(false);
+      expect(textarea.getAttribute('aria-disabled')).toBe('true');
+      expect(document.activeElement).toBe(textarea);
+      expect((element.querySelector('.send-button') as HTMLButtonElement).disabled).toBe(true);
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      element.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+      expect(emit).toHaveBeenCalledOnce();
+
+      fixture.componentRef.setInput('composerDisabled', false);
+      fixture.componentRef.setInput('composerEditingDisabled', false);
+      fixture.detectChanges();
+      const allowedInput = new InputEvent('beforeinput', {
+        inputType: 'insertText',
+        cancelable: true,
+      });
+      textarea.dispatchEvent(allowedInput);
+      expect(allowedInput.defaultPrevented).toBe(false);
+      expect(textarea.hasAttribute('aria-disabled')).toBe(false);
+      textarea.value = 'Editable again';
+      textarea.dispatchEvent(new Event('input'));
+      textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(emit).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'Editable again' }));
+    },
+  );
+
+  it('restores the draft after non-cancellable edits and keeps acknowledgement clearing intact', () => {
+    const fixture = createFixture([]);
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
+    const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
+    textarea.value = 'Original draft';
+    textarea.dispatchEvent(new Event('input'));
+    textarea.focus();
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.componentRef.setInput('composerEditingDisabled', true);
+    fixture.detectChanges();
+    const beforeInput = new InputEvent('beforeinput', {
+      inputType: 'insertCompositionText',
+      cancelable: false,
+    });
+    textarea.dispatchEvent(beforeInput);
+    textarea.value = 'Unexpected composition edit';
+    textarea.dispatchEvent(
+      new InputEvent('input', { inputType: 'insertCompositionText', isComposing: true }),
+    );
+    fixture.detectChanges();
+    expect(textarea.value).toBe('Original draft');
+    expect(document.activeElement).toBe(textarea);
+
+    emit.mock.calls[0][0].acknowledge();
+    fixture.detectChanges();
+    expect(textarea.value).toBe('');
+    textarea.value = 'Autocorrect without beforeinput';
+    textarea.dispatchEvent(new Event('input'));
+    expect(textarea.value).toBe('');
+    expect(document.activeElement).toBe(textarea);
+  });
+
+  it('allows drafting during an assistant response while keeping submission blocked', () => {
+    const fixture = createFixture([]);
+    const element = fixtureElement(fixture);
+    const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
+    const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.componentRef.setInput('composerEditingDisabled', false);
+    fixture.detectChanges();
+    const edit = new InputEvent('beforeinput', { cancelable: true, inputType: 'insertText' });
+    textarea.dispatchEvent(edit);
+    expect(edit.defaultPrevented).toBe(false);
+    textarea.value = 'Next question';
+    textarea.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(textarea.value).toBe('Next question');
+    expect((element.querySelector('.send-button') as HTMLButtonElement).disabled).toBe(true);
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(emit).not.toHaveBeenCalled();
+    fixture.componentRef.setInput('composerDisabled', false);
+    fixture.detectChanges();
+    expect(textarea.value).toBe('Next question');
+    (element.querySelector('.send-button') as HTMLButtonElement).click();
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ text: 'Next question' }));
+  });
+
+  it('does not focus the composer on initialization or readiness and lock changes', () => {
+    const fixture = createFixture([], { disabled: true });
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
+    expect(document.activeElement).not.toBe(textarea);
+    const focus = vi.spyOn(textarea, 'focus');
+    fixture.componentRef.setInput('composerDisabled', false);
+    fixture.detectChanges();
+    expect(document.activeElement).not.toBe(textarea);
+    textarea.focus();
+    focus.mockClear();
+    fixture.componentRef.setInput('composerEditingDisabled', true);
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(textarea);
+    textarea.blur();
+    fixture.componentRef.setInput('composerEditingDisabled', false);
+    fixture.detectChanges();
+    expect(document.activeElement).not.toBe(textarea);
+    expect(focus).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    'does not reclaim focus on acknowledgement after the user moves away (%s)',
+    (blur) => {
+      const fixture = createFixture([]);
+      const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
+      const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
+      const other = document.createElement('button');
+      document.body.append(other);
+      try {
+        textarea.focus();
+        textarea.value = 'Hello';
+        textarea.dispatchEvent(new Event('input'));
+        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        fixture.componentRef.setInput('composerDisabled', true);
+        fixture.componentRef.setInput('composerEditingDisabled', true);
+        fixture.detectChanges();
+        other.focus();
+        if (blur) other.blur();
+        emit.mock.calls[0][0].acknowledge();
+        fixture.componentRef.setInput('composerEditingDisabled', false);
+        fixture.detectChanges();
+        expect(textarea.value).toBe('');
+        expect(document.activeElement).toBe(blur ? document.body : other);
+        fixture.componentRef.setInput('composerDisabled', false);
+        fixture.detectChanges();
+        expect(document.activeElement).toBe(blur ? document.body : other);
+      } finally {
+        other.remove();
+      }
+    },
+  );
+
+  it('autosizes the composer from one up to five lines', () => {
+    const fixture = createFixture([]);
+    const autosize = fixture.debugElement
+      .query(By.directive(CdkTextareaAutosize))
+      .injector.get(CdkTextareaAutosize);
+
+    expect(autosize.minRows).toBe(1);
+    expect(autosize.maxRows).toBe(5);
+  });
+
+  it('renders the packaged send icon through the Material control', () => {
+    const fixture = createFixture([]);
+    const button = fixtureElement(fixture).querySelector('button[matIconButton]');
+    const icon = fixtureElement(fixture).querySelector('mat-icon[svgIcon="ai-chat:send"]');
+
+    expect(button).not.toBeNull();
+    expect(icon).not.toBeNull();
+  });
+
+  it('renders only the send action inside the composer surface', () => {
+    const fixture = createFixture([]);
+    const surface = fixtureElement(fixture).querySelector('.surface') as HTMLElement;
+    const actions = surface.querySelector('.actions') as HTMLElement;
+
+    expect(surface.querySelector('textarea')).not.toBeNull();
+    expect(actions.querySelectorAll('button')).toHaveLength(1);
+    expect(actions.querySelector('.send-button')).not.toBeNull();
+  });
+
+  it('registers the packaged icons in the chat namespace', async () => {
+    createFixture([]);
+    const registry = TestBed.inject(MatIconRegistry);
+
+    for (const name of ['send', 'retry', 'tts', 'add-file', 'tool']) {
+      const icon = await firstValueFrom(registry.getNamedSvgIcon(name, 'ai-chat'));
+      expect(icon.getAttribute('viewBox')).toBe('0 0 24 24');
+    }
+  });
+
+  it('submits once on Enter and does not emit blank input', () => {
+    const fixture = createFixture([]);
+    const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
+
+    textarea.value = '   ';
+    textarea.dispatchEvent(new Event('input'));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(emit).not.toHaveBeenCalled();
+
+    textarea.value = 'keyboard message';
+    textarea.dispatchEvent(new Event('input'));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(emit).toHaveBeenCalledOnce();
+    expect(emit.mock.calls[0][0].text).toBe('keyboard message');
+
+    textarea.value = 'multiline draft';
+    textarea.dispatchEvent(new Event('input'));
+    textarea.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }),
+    );
+    expect(emit).toHaveBeenCalledOnce();
+  });
+
+  it('renders replacement host state without retaining submitted messages', () => {
+    const fixture = createFixture([]);
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'host decides';
+    textarea.dispatchEvent(new Event('input'));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+    expect(
+      fixtureElement(fixture).querySelectorAll(
+        'ai-chat-user-message, ai-chat-assistant-message, ai-chat-intermediate-message',
+      ),
+    ).toHaveLength(0);
+
+    setContent(fixture, [
+      {
+        kind: 'text',
+        isFinal: false,
+        id: 'replacement',
+        role: 'assistant',
+        text: 'Replacement state',
+      },
+    ] satisfies readonly ChatTextMessage[]);
+    fixture.detectChanges();
+
+    const messages = fixtureElement(fixture).querySelectorAll<HTMLElement>(
+      'ai-chat-user-message, ai-chat-assistant-message, ai-chat-intermediate-message',
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0].textContent).toContain('Replacement state');
+  });
+
+  it('scrolls history to new messages, statuses, and errors after rendering', () => {
+    vi.useFakeTimers();
+    const fixture = createFixture([]);
+    const history = fixtureElement(fixture).querySelector('.history') as HTMLElement;
+    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+    const scrollToBottom = (): void => {
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
+      scrollTo.mockClear();
+    };
+
+    setContent(fixture, [
+      { kind: 'text', isFinal: false, id: 'user-1', role: 'user', text: 'Hello' },
+    ] satisfies readonly ChatTextMessage[]);
+    fixture.detectChanges();
+    scrollToBottom();
+
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      message: 'Sending',
+      placement: 'assistant',
+      reveal: 'delayed',
+    });
+    fixture.detectChanges();
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
+      'Sending',
+    );
+    scrollToBottom();
+
+    setContent(fixture, [
+      { kind: 'text', isFinal: false, id: 'user-1', role: 'user', text: 'Hello' },
+      { kind: 'text', isFinal: false, id: 'assistant-1', role: 'assistant', text: 'Hi' },
+    ] satisfies readonly ChatTextMessage[]);
+    fixture.componentRef.setInput('conversationStatus', null);
+    fixture.detectChanges();
+    scrollToBottom();
+
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      message: 'Failed',
+      placement: 'assistant',
+    });
+    fixture.detectChanges();
+    scrollToBottom();
+  });
+
+  it('reveals accessible sending dots after 300 ms and updates their label immediately', () => {
+    vi.useFakeTimers();
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      message: 'Sending',
+      placement: 'assistant',
+      reveal: 'delayed',
+    });
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('ai-chat-status.delayed')).not.toBeNull();
+    expect(fixtureElement(fixture).querySelector('.content')).toBeNull();
+    expect(
+      (fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement).disabled,
+    ).toBe(false);
+    vi.advanceTimersByTime(299);
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('.content')).toBeNull();
+    vi.advanceTimersByTime(1);
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
+      'Sending',
+    );
+    expect(fixtureElement(fixture).querySelector('ai-chat-status p')).toBeNull();
+    const sendingLabel = fixtureElement(fixture).querySelector('.content');
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      message: 'Generating',
+      placement: 'assistant',
+    });
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
+      'Generating',
+    );
+    const generatingLabel = fixtureElement(fixture).querySelector('.content');
+    expect(generatingLabel!.classList.contains('fade')).toBe(false);
+    expect(generatingLabel).not.toBe(sendingLabel);
+  });
+
+  it('cancels a quick sending reveal and starts a fresh delay for the next send', () => {
+    vi.useFakeTimers();
+    const fixture = createFixture([]);
+    const sending = {
+      kind: 'loading',
+      message: 'Sending',
+      placement: 'assistant',
+      reveal: 'delayed',
+    } as const;
+    fixture.componentRef.setInput('conversationStatus', sending);
+    fixture.detectChanges();
+    vi.advanceTimersByTime(100);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      message: 'Failed',
+      placement: 'assistant',
+    });
+    fixture.detectChanges();
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('ai-chat-status')?.textContent).toContain(
+      'Failed',
+    );
+    fixture.componentRef.setInput('conversationStatus', sending);
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('.content')).toBeNull();
+    vi.advanceTimersByTime(300);
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
+      'Sending',
+    );
+    fixture.destroy();
+  });
+
+  it('keeps conversation startup as text without response dots', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      message: 'Starting conversation',
+      placement: 'conversation',
+    });
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('.loading-dots')).toBeNull();
+    expect(fixtureElement(fixture).querySelector('ai-chat-status p')?.textContent).toBe(
+      'Starting conversation',
+    );
+  });
+
+  it('disables submission and renders host-controlled loading and recovery states', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'loading',
+      message: 'Antwort wird erstellt …',
+      placement: 'assistant',
+    });
+    fixture.detectChanges();
+
+    expect(
+      (fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement).disabled,
+    ).toBe(false);
+    expect(fixtureElement(fixture).querySelector('.loading-dots')?.getAttribute('aria-label')).toBe(
+      'Antwort wird erstellt …',
+    );
+
+    const actionEmit = vi.spyOn(fixture.componentInstance.statusActionTriggered, 'emit');
+    fixture.componentRef.setInput('conversationStatus', {
+      kind: 'error',
+      message: 'Das Modell ist nicht verfügbar.',
+      placement: 'assistant',
+      action: { id: 'retry-turn', label: 'Erneut versuchen' },
+    });
+    fixture.detectChanges();
+    (fixtureElement(fixture).querySelector('.action') as HTMLButtonElement).click();
+
+    expect(actionEmit).toHaveBeenCalledWith('retry-turn');
+    expect(fixtureElement(fixture).querySelector('.content')!.classList.contains('fade')).toBe(
+      false,
+    );
+  });
+});
+
+function createFixture(
+  messages: readonly ChatContent[],
+  options: { disabled?: boolean } = {},
+): ComponentFixture<ChatUiComponent> {
+  const fixture = TestBed.createComponent(ChatUiComponent);
+  fixture.componentRef.setInput('bannerTitle', 'Welcome');
+  fixture.componentRef.setInput('bannerDescription', 'Description');
+  setContent(fixture, messages);
+  fixture.componentRef.setInput('composerDisabled', options.disabled ?? false);
+  fixture.detectChanges();
+  return fixture;
+}
+
+function fixtureElement<T>(fixture: ComponentFixture<T>): HTMLElement {
+  return fixture.nativeElement as HTMLElement;
+}
+
+function setContent(
+  fixture: ComponentFixture<ChatUiComponent>,
+  content: readonly ChatContent[],
+): void {
+  fixture.componentRef.setInput(
+    'turns',
+    content.length === 0 ? [] : [{ runKey: 'turn-1', status: 'completed', content }],
+  );
+}
+
+function timelineRows(element: HTMLElement): HTMLElement[] {
+  return [
+    ...element.querySelectorAll<HTMLElement>(
+      '.messages > ai-chat-history-item > .collapse > .clip > .item-content > *',
+    ),
+  ];
+}
+
+function isCollapsed(element: HTMLElement): boolean {
+  return (
+    element
+      .closest('ai-chat-history-item')
+      ?.querySelector('.collapse')
+      ?.getAttribute('aria-hidden') === 'true'
+  );
+}

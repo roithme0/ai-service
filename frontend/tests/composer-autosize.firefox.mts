@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 // Run with node tests/composer-autosize.firefox.mts; FIREFOX_BIN can override the browser path.
 const root = new URL('../', import.meta.url);
 const styles = await readFile(
-  new URL('projects/chat-ui/ui/lib/chat-ui.component.scss', root),
+  new URL('projects/chat-ui/ui/lib/components/chat-ui/chat-ui.component.scss', root),
   'utf8',
 );
 const textareaStyles = styles.match(/^textarea \{[\s\S]*?^\}/m)?.[0];

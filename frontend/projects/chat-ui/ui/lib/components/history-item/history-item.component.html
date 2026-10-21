@@ -1,0 +1,10 @@
+<div
+  class="collapse"
+  [class.collapsed]="collapsed()"
+  [attr.aria-hidden]="collapsed() ? 'true' : null"
+  [inert]="collapsed()"
+>
+  <div class="clip">
+    <div class="item-content"><ng-content /></div>
+  </div>
+</div>

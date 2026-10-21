@@ -1,0 +1,114 @@
+:host,
+:host *,
+:host *::before,
+:host *::after {
+  box-sizing: border-box;
+}
+
+:host {
+  display: block;
+  min-width: 0;
+  font: inherit;
+  position: relative;
+  z-index: 1;
+  padding: 2.5rem 1rem max(1rem, env(safe-area-inset-bottom));
+  margin-top: -4rem;
+  background: linear-gradient(to bottom, transparent, var(--ai-chat-background, #130d0f) 2.5rem);
+  pointer-events: none;
+}
+
+.surface,
+textarea,
+.send-button {
+  pointer-events: auto;
+}
+
+.surface {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--ai-chat-composer-border, #50363f);
+  border-radius: 1.25rem;
+  background: var(--ai-chat-composer-background, #291c21);
+}
+
+.mascot {
+  position: absolute;
+  right: 1.25rem;
+  bottom: calc(100% - 1px);
+  width: 5.5rem;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+textarea {
+  display: block;
+  width: calc(100% - 0.3rem);
+  min-width: 0;
+  margin: 0 0.15rem;
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  background: transparent;
+  color: var(--ai-chat-composer-text, #f8eef1);
+  font: inherit;
+  line-height: 1.35;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 2.75rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+textarea::placeholder {
+  color: var(--ai-chat-muted-text, #c6b4bb);
+}
+
+.send-button.mat-mdc-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ai-chat-send-background, #c00059);
+  color: var(--ai-chat-send-text, #ffffff);
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.send-button:hover:not(:disabled) {
+  background: var(--ai-chat-send-hover-background, #df0067);
+}
+
+.send-button:focus-visible {
+  outline: 0.15rem solid var(--ai-chat-focus, #ff9fc1);
+  outline-offset: 0.15rem;
+}
+
+.send-button:disabled {
+  background: transparent;
+  color: var(--ai-chat-muted-text, #c6b4bb);
+  cursor: default;
+  opacity: 1;
+}
+
+.send-button mat-icon {
+  display: flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0;
+  font-size: 1.5rem;
+}

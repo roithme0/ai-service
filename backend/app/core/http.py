@@ -1,9 +1,14 @@
-from fastapi import APIRouter
+"""Shared HTTP boundary dependencies."""
+
+from typing import Annotated
+
+from fastapi import Header
+
+ApplicationUserHeader = Annotated[
+    str,
+    Header(alias="X-Application-User", pattern=r"^[^\s:]+:[^\s:]+$"),
+]
 
 
-router = APIRouter()
-
-
-@router.get("/")
-async def hello_world() -> dict[str, str]:
-    return {"message": "Hello World"}
+def require_application_user(application_user: ApplicationUserHeader) -> str:
+    return application_user

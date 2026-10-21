@@ -1,57 +1,80 @@
-"""Deterministic demo agent configuration."""
-
-from __future__ import annotations
+"""Scripted demo agent exercising messages, artifacts, and failures."""
 
 import asyncio
-from collections.abc import Awaitable, Callable
 
-from app.demo.tools import DemoToolFactory
-from app.demo.tools.greeting import create_greeting_tool
-from app.demo.tools.greetings import create_greetings_tool
-from app.demo.session import DemoContext, DemoPayload, DemoSessionStore, MAX_ARTIFACTS, new_demo_session_store
-from app.demo.turns import TURN_DELAY_SECONDS, run_demo_turn
-from app.agents.models.input import AgentInputAccepted, AgentInputRejected
-from app.agents.service import ConfiguredAgentService
-from app.sessions.models.conversation import ConversationSessionSettings, ConversationTurnReservation, ConversationTurnResult
+from pydantic import JsonValue
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, UserPromptPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+from app.agentic.turns import create_turn_agent
 
 
-DemoSessionInput = object
-DemoAgent = ConfiguredAgentService[DemoSessionInput, DemoContext, DemoPayload, str]
+TURN_DELAY_SECONDS = 1.5
+FIRST_REPLY = "Hello! This is a scripted chat UI demo. Send another message to see two tools create artifacts."
+SECOND_REPLY = "This scripted demo created two greetings artifacts. Expand the longer list to see them all. An additional artifact call deliberately omitted the required JSON value and failed validation, so it created no artifact. Send another message to see an error state."
+FAILED_GENERATION_UPDATE = "I'll start another response. This demo will deliberately stop generation after this update, leaving it visible without a final answer."
+COMPLETE_REPLY = "This scripted demo is complete. Refresh the page to restart it."
 
 
-def validate_demo_input(
-    value: DemoSessionInput,
-) -> AgentInputAccepted[DemoContext] | AgentInputRejected[str]:
-    if value is None or (isinstance(value, dict) and not value):
-        return AgentInputAccepted(DemoContext())
-    return AgentInputRejected(("demo input must be absent or an empty object",))
-
-
-def create_demo_agent(
-    store: DemoSessionStore | None = None,
-    *,
-    delay_seconds: float = TURN_DELAY_SECONDS,
-    max_artifacts: int = MAX_ARTIFACTS,
-    pause: Callable[[float], Awaitable[None]] = asyncio.sleep,
-    single_greeting_tool_factory: DemoToolFactory = create_greeting_tool,
-    greeting_list_tool_factory: DemoToolFactory = create_greetings_tool,
-) -> DemoAgent:
+def create_demo_agent(*, delay_seconds: float = TURN_DELAY_SECONDS) -> Agent[None, str]:
     if delay_seconds < 0:
         raise ValueError("delay_seconds must not be negative")
-    owned_store = store if store is not None else new_demo_session_store()
 
-    async def execute(session_id: str, reservation: ConversationTurnReservation[DemoContext, DemoPayload]) -> ConversationTurnResult[DemoPayload]:
-        return await run_demo_turn(
-            owned_store,
-            session_id,
-            delay_seconds=delay_seconds,
-            reservation=reservation,
-            pause=pause,
-            single_greeting_tool_factory=single_greeting_tool_factory,
-            greeting_list_tool_factory=greeting_list_tool_factory,
-        )
+    async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        await asyncio.sleep(delay_seconds)
+        prompts = [
+            index for index, message in enumerate(messages)
+            for part in message.parts
+            if isinstance(part, UserPromptPart) and isinstance(part.content, str)
+        ]
+        turn = len(prompts)
+        responses = [message for message in messages[prompts[-1]:] if isinstance(message, ModelResponse)]
+        match turn:
+            case 1:
+                return _text(FIRST_REPLY, "final_answer")
+            case 2:
+                return _artifact_step(len(responses))
+            case 3:
+                return _text(FAILED_GENERATION_UPDATE, "commentary")
+            case _:
+                return _text(COMPLETE_REPLY, "final_answer")
 
-    return ConfiguredAgentService(
-        owned_store, validate_demo_input, execute,
-        ConversationSessionSettings(max_artifacts=max_artifacts),
-    )
+    agent = create_turn_agent(FunctionModel(respond), instructions="Follow the deterministic demo script.")
+
+    @agent.output_validator
+    async def validate_output(ctx: RunContext[None], output: str) -> str:
+        if output == FAILED_GENERATION_UPDATE:
+            await asyncio.sleep(delay_seconds)
+            raise RuntimeError("Scripted demo generation failure")
+        return output
+
+    agent.name = "demo"
+    return agent
+
+
+def _text(content: str, phase: str) -> ModelResponse:
+    return ModelResponse(parts=[TextPart(content, provider_details={"phase": phase})])
+
+
+def _artifact_step(step: int) -> ModelResponse:
+    payload: dict[str, JsonValue]
+    match step:
+        case 0:
+            commentary = "I'll create a single greeting first."
+            title = "demo.greeting"
+            payload = {"value": {"message": "Hello, World!"}}
+        case 1:
+            commentary = "The single greeting is ready. Next I'll create a list of 30 greetings to demonstrate expanding a larger artifact."
+            title = "demo.greetings"
+            payload = {"value": {"messages": [f"Hello, Visitor {index}!" for index in range(1, 31)]}}
+        case 2:
+            commentary = "Both artifacts are ready. I'll now deliberately omit the required JSON value to show how a failed tool call appears."
+            title = "demo.greeting"
+            payload = {}
+        case _:
+            return _text(SECOND_REPLY, "final_answer")
+    return ModelResponse(parts=[
+        TextPart(commentary, provider_details={"phase": "commentary"}),
+        ToolCallPart("present_artifact", {"type": "json", "content": {"title": title, "payload": payload}}, f"demo-artifact-{step}"),
+    ])

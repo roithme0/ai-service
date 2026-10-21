@@ -1,0 +1,36 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 200ms ease;
+}
+
+.collapsed {
+  grid-template-rows: 0fr;
+}
+
+.clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.item-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-top: 1.25rem;
+}
+
+:host(:first-child) .item-content {
+  padding-top: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse {
+    transition: none;
+  }
+}
