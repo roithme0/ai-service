@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   PresentedSession,
   SessionCreated,
@@ -179,7 +179,7 @@ describe('SessionController', () => {
       expect(controller.state.snapshot?.history.at(-1)).toMatchObject({ lifecycle: { status } });
       expect(controller.state.turns[1].status).toBe(status === 'running' ? 'unknown' : status);
       expect(controller.state.composerDisabled).toBe(true);
-      expect(transport.signal?.aborted).toBe(true);
+      expect(transport.signal?.aborted).toBe(false);
       controller.dispose();
     },
   );
@@ -268,6 +268,7 @@ describe('SessionController', () => {
     transport.createSession.mockRejectedValueOnce(new SessionHttpError(503, 'agent_unavailable'));
     const controller = new SessionController(transport, vi.fn());
     await controller.start({ initial_context: { source: 'test' } });
+    expect(controller.state.status?.message).toBe('Der KI-Agent ist derzeit nicht verfügbar.');
     expect(controller.state.status?.action?.id).toBe('new-session');
     expect(controller.state.composerDisabled).toBe(true);
     await controller.performAction('new-session');
@@ -275,6 +276,63 @@ describe('SessionController', () => {
     expect(transport.createSession).toHaveBeenLastCalledWith({
       initial_context: { source: 'test' },
     });
+    controller.dispose();
+  });
+
+  it('treats incompatible session creation as terminal without offering a retry', async () => {
+    const transport = new Transport();
+    transport.createSession.mockRejectedValueOnce(new SessionHttpError(405, 'method_not_allowed'));
+    const observe = vi.spyOn(transport, 'observeSession');
+    const controller = new SessionController(transport, vi.fn());
+    await controller.start();
+    expect(controller.state.status?.message).toBe('App und Backend sind nicht kompatibel.');
+    expect(controller.state.status?.action).toBeUndefined();
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.composerEditingDisabled).toBe(false);
+    expect(observe).not.toHaveBeenCalled();
+    expect(transport.createSession).toHaveBeenCalledOnce();
+    controller.dispose();
+  });
+
+  it('retains history and draft after an incompatible submission, including later snapshots', async () => {
+    const { transport, controller } = await setup();
+    transport.emit(snapshot('completed'));
+    await flush();
+    const turns = controller.state.turns;
+    transport.submitPrompt.mockRejectedValueOnce(new SessionHttpError(405, 'method_not_allowed'));
+    const acknowledge = vi.fn();
+    await controller.submit('Keep this draft', acknowledge);
+    transport.emit(snapshot('completed'));
+    await flush();
+    expect(controller.state.admission).toBe('rejected');
+    expect(controller.state.turns).toEqual(turns);
+    expect(controller.state.status?.message).toBe('App und Backend sind nicht kompatibel.');
+    expect(controller.state.status?.action).toBeUndefined();
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.composerEditingDisabled).toBe(false);
+    expect(acknowledge).not.toHaveBeenCalled();
+    await controller.submit('Another prompt', acknowledge);
+    expect(transport.submitPrompt).toHaveBeenCalledOnce();
+    expect(transport.readSession).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it('treats incompatible observer attachment as terminal without offering a retry', async () => {
+    const transport = new Transport();
+    const observe = vi.spyOn(transport, 'observeSession').mockImplementation(async function* () {
+      await Promise.resolve();
+      yield* [];
+      throw new SessionHttpError(405, 'method_not_allowed');
+    });
+    const controller = new SessionController(transport, vi.fn());
+    await controller.start();
+    await flush();
+    expect(controller.state.status?.message).toBe('App und Backend sind nicht kompatibel.');
+    expect(controller.state.status?.action).toBeUndefined();
+    expect(controller.state.observation).toBe('lost');
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(observe).toHaveBeenCalledOnce();
+    expect(transport.readSession).not.toHaveBeenCalled();
     controller.dispose();
   });
 
@@ -428,5 +486,154 @@ describe('SessionController', () => {
     creation.resolve({ session_id: 'late', expires_at: time });
     await start;
     expect(transport.signal?.aborted).toBe(true);
+  });
+});
+
+describe('session observation reconnection', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it.each(['running', 'completed', 'failed', 'cancelled'] as const)(
+    'restores the authoritative %s snapshot after a connection ends',
+    async (status) => {
+      vi.useFakeTimers();
+      const transport = new Transport();
+      const observe = vi.spyOn(transport, 'observeSession');
+      const controller = new SessionController(transport, vi.fn());
+      await controller.start();
+      transport.emit(snapshot());
+      await vi.advanceTimersByTimeAsync(0);
+      const acknowledge = vi.fn();
+      await controller.submit('same', acknowledge);
+      transport.emit(snapshot('running'));
+      transport.end();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controller.state.observation).toBe('lost');
+      expect(controller.state.turns[1].status).toBe('unknown');
+      expect(controller.state.composerDisabled).toBe(true);
+      transport.emit(snapshot(status));
+      await vi.advanceTimersByTimeAsync(999);
+      expect(observe).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(observe).toHaveBeenCalledTimes(2);
+      expect(controller.state.observation).toBe('connected');
+      expect(controller.state.snapshot).toEqual(snapshot(status));
+      expect(controller.state.turns[1].status).toBe(status === 'running' ? 'active' : status);
+      expect(controller.state.composerDisabled).toBe(status === 'running');
+      expect(acknowledge).toHaveBeenCalledOnce();
+      expect(transport.submitPrompt).toHaveBeenCalledOnce();
+      expect(transport.createSession).toHaveBeenCalledOnce();
+      expect(transport.readSession).not.toHaveBeenCalled();
+      controller.dispose();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('recovers observation between turns without clearing uncertain admission', async () => {
+    vi.useFakeTimers();
+    const transport = new Transport();
+    const controller = new SessionController(transport, vi.fn());
+    await controller.start();
+    transport.emit(snapshot('completed'));
+    await vi.advanceTimersByTimeAsync(0);
+    transport.submitPrompt.mockRejectedValueOnce(new SessionTransportError('network'));
+    const acknowledge = vi.fn();
+    await controller.submit('Keep this draft', acknowledge);
+    transport.end();
+    await vi.advanceTimersByTimeAsync(0);
+    transport.emit(snapshot('completed'));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(controller.state.observation).toBe('connected');
+    expect(controller.state.admission).toBe('uncertain');
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.status?.message).toContain('angenommen wurde, ist unbekannt');
+    expect(acknowledge).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it('re-enables submission after reconnecting between completed turns', async () => {
+    vi.useFakeTimers();
+    const transport = new Transport();
+    const controller = new SessionController(transport, vi.fn());
+    await controller.start();
+    transport.emit(snapshot('completed'));
+    transport.end();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(controller.state.composerDisabled).toBe(true);
+    transport.emit(snapshot('completed'));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(controller.state.composerDisabled).toBe(false);
+    expect(controller.state.status).toBeNull();
+    controller.dispose();
+  });
+
+  it.each(['network', 'observation_limit', 'observation_overflow', 'internal_error'] as const)(
+    'retries %s observation failures with a delay',
+    async (reason) => {
+      vi.useFakeTimers();
+      const transport = new Transport();
+      const observe = vi.spyOn(transport, 'observeSession');
+      observe.mockImplementationOnce(async function* () {
+        await Promise.resolve();
+        if (reason === 'network') throw new SessionTransportError('network');
+        if (reason === 'observation_limit') throw new SessionHttpError(429, 'observation_limit');
+        yield { kind: 'error', reason };
+      });
+      const controller = new SessionController(transport, vi.fn());
+      await controller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controller.state.observation).toBe('lost');
+      expect(observe).toHaveBeenCalledOnce();
+      transport.emit(snapshot());
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(observe).toHaveBeenCalledTimes(2);
+      expect(controller.state.observation).toBe('connected');
+      expect(controller.state.composerDisabled).toBe(false);
+      controller.dispose();
+    },
+  );
+
+  it.each([
+    new SessionHttpError(405, 'method_not_allowed'),
+    new SessionHttpError(404, 'unknown'),
+    new SessionHttpError(404, 'unknown_configuration'),
+    new SessionHttpError(503, 'agent_unavailable'),
+    new SessionTransportError('invalid_response'),
+  ])('does not reconnect after a non-transient failure: %s', async (error) => {
+    vi.useFakeTimers();
+    const transport = new Transport();
+    const observe = vi.spyOn(transport, 'observeSession').mockImplementation(async function* () {
+      await Promise.resolve();
+      yield* [];
+      throw error;
+    });
+    const controller = new SessionController(transport, vi.fn());
+    await controller.start();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(observe).toHaveBeenCalledOnce();
+    expect(controller.state.observation).toBe('lost');
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    controller.dispose();
+  });
+
+  it('spaces repeated failures and cancels pending reconnection on disposal', async () => {
+    vi.useFakeTimers();
+    const transport = new Transport();
+    const observe = vi.spyOn(transport, 'observeSession').mockImplementation(async function* () {
+      await Promise.resolve();
+      yield* [];
+      throw new SessionTransportError('network');
+    });
+    const publish = vi.fn();
+    const controller = new SessionController(transport, publish);
+    await controller.start();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(observe).toHaveBeenCalledTimes(4);
+    controller.dispose();
+    const publications = publish.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(observe).toHaveBeenCalledTimes(4);
+    expect(publish).toHaveBeenCalledTimes(publications);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

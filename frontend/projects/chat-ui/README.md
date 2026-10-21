@@ -74,11 +74,9 @@ A complete minimal standalone host (with the Material theme described below):
 import { Component, OnInit, OnDestroy, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
 import {
-  AgentConfiguration,
-  ConversationController,
-  HttpConversationTransport,
-  presentJsonArtifact,
-  type ConversationViewState,
+  SessionController,
+  HttpSessionTransport,
+  type SessionViewState,
 } from '@roithme0/chat-ui/conversation';
 
 @Component({
@@ -96,16 +94,18 @@ import {
   />`,
 })
 export class ChatHost implements OnInit, OnDestroy {
-  readonly chat = signal<ConversationViewState>({
+  readonly chat = signal<SessionViewState>({
+    snapshot: null,
+    admission: 'idle',
+    observation: 'connecting',
     turns: [],
     composerDisabled: true,
     composerEditingDisabled: false,
     status: null,
   });
-  private readonly controller = new ConversationController(
-    new HttpConversationTransport('/api/v1', AgentConfiguration.demo, 'demo:default'),
+  private readonly controller = new SessionController(
+    new HttpSessionTransport('/api/native/api/v1', 'demo', 'demo:default'),
     (state) => this.chat.set(state),
-    presentJsonArtifact,
   );
 
   ngOnInit(): void {
@@ -123,29 +123,15 @@ export class ChatHost implements OnInit, OnDestroy {
 }
 ```
 
-The required base URL is the prefix immediately before `/agents`: `/api/v1` yields `/api/v1/agents/demo/sessions`; `/ai/api/v1/` yields `/ai/api/v1/agents/demo/sessions`. Trailing joining slashes are normalized; another `/api/v1` is never appended. Absolute URLs use the same joining behavior. Normal deployment uses a same-origin relative prefix.
+The base URL is the prefix immediately before `/agents`; the demo uses `/api/native/api/v1`. The transport takes a configuration key and an explicit application identity as `X-Application-User`. Server validation is authoritative. Supply initial context and advertised artifact capabilities to `start(initialization)` when needed; replacement sessions retain that initialization.
 
-`AgentConfiguration` exports the backend-derived `demo` and `kochwiki` values, plus the derived union type of the same name. Arbitrary string keys are rejected by the TypeScript contract. Known keys do not guarantee runtime availability; the server can return `agent_unavailable`.
+The controller receives complete backend snapshots and derives UI content through `presentSession`. Its optional third constructor argument is a `SessionArtifactMapper`, which receives the native artifact envelope and returns a `ChatArtifact` or `null` to omit it. The default `presentSessionArtifact` preserves artifact identity and type and unwraps its presentation payload. The host owns view-state binding and renderer registration. See the native session integration below for admission, observation and recovery behavior.
 
-The transport binds the URL, agent key, and required third constructor argument for application identity, and optional fourth constructor argument for initialization input. Omitted input sends `{ input: {} }`; supplied input uses `{ input: suppliedInput }`. Replacement sessions use the same transport settings. Server validation is authoritative, and configurations requiring domain input can reject an empty input. No recipe types or fixtures are packaged.
-
-The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentArtifact` is the default mapper: it preserves the advertised type and identity and unwraps the backend presentation payload `{ title, payload }`. `presentJsonArtifact` is an explicit adapter for legacy hosts that deliberately present arbitrary tool payloads using type `json` and `{ value: originalPayload }`; the controller follows the backend timeline exactly and maps the envelope embedded in each artifact item, preserving tool/artifact placement even without a final assistant answer. The host owns view-state binding, introductory text and custom renderer registration.
-
-Session snapshots contain session identity, expiry, sequence and ordered `turns`, with no parallel messages, artifacts or timeline collections. Each turn owns its ordered `timeline`, including its initiating user message and self-contained artifact envelopes, plus `turn_id`, `user_message_id` and precise `status`: `pending`, `in_progress`, `closing`, `completed`, `generation_failed` or `conflict`. These records are the sole snapshot lifecycle contract. The backend projects initiating user identities from its authoritative timeline, admission from its internal active turn and terminal outcomes from retained history. Timeline messages carry required `is_final`, projected only from retained explicit final records and mapped directly to UI `isFinal`. Intermediate messages keep their separate kind. Terminal outcomes take precedence over received final text; final content and its marker survive later failure. The controller maps pending, in-progress and closing work to UI `active`, and generation failure or conflict to UI `failed`, without reconstructing associations or inferring completion from answer text. Observer interruption marks only the observed active turn `unknown` and retains received content. The accepted user message is placed in its acknowledged turn immediately, using a provisional message identity until the first snapshot supplies the authoritative identity. If observation fails before that snapshot, this turn and message remain visible with an unknown outcome.
-
-The supported HTTP contract is this repository's AI Service conversation API. `ConversationTransport` exposes `generateTurn` for accepted start identity and `observeTurn` as an abortable async iterable of typed stream events. The HTTP transport validates generated runtime schemas for response bodies and decoded SSE events, and never reconnects automatically. The controller owns snapshot consistency checks for every transport, including custom ones: session ownership, initiating user anchors, turn/item identity uniqueness, and embedded artifact ownership. Snapshot checks, upserts, and built-in tool/failure presentation IDs use one shared timeline identity function. Stateful stream ordering and sequence checks remain in the controller. The controller retains one turn collection in the API timeline shape and derives the UI turns from it. Acceptance, snapshots, timeline upserts, closing, terminal outcomes, and observation loss all update this collection; there is no separate lifecycle patch on UI turns or closing flag. Its internal status also permits `unknown` for unfinished work whose observation was lost, while preserving already known terminal outcomes. The controller first attaches to its accepted turn, applies the retained snapshot, and inserts or replaces items within the supplied turn by stable identity and turn-local position. Invalid ownership, identity or position ends observation. The controller derives reconciliation users from these timelines and maps each supplied turn into a UI turn with its own ordered content. There is no separate flat content input. Artifact envelopes are available atomically with their rows. The controller hides assistant loading once the current turn has a visible intermediate message, tool call, artifact, answer or failure. An artifact omitted by the host mapper does not count as visible output; previous-turn content does not suppress a new turn?s indicator. Once hidden, it stays hidden for that turn. Backend closing also hides the indicator, including when supplied in the initial snapshot. Stream closing and terminal events derive from the same immutable snapshot as their preceding timeline upserts, so final output is delivered before terminal completion. Submission stays disabled until typed terminal state, while drafting is available once the user message is accepted; EOF, malformed events, and observation loss retain output and report an unknown outcome without reconnect or retry actions.
-
-Append/start request uncertainty uses authoritative session state once to avoid duplicate execution. Start recovery considers the latest submitted turn; a newly pending turn cannot be mistaken for an older terminal one, and no automatic retry is introduced. This is separate from observer interruption: no read or replacement request restores a lost observer. `start()` creates a fresh session; `dispose()` and replacement sessions abort observation and ignore stale callbacks while backend work continues. There is no resume API, refresh recovery, browser session persistence, generation retry, or cancellation control. The `/ui` entry point remains entirely controlled and network-independent.
-
-`HttpConversationTransport(apiBaseUrl, configuration, applicationUser, input?)` requires an explicit application identity. Every request, including SSE observation, carries it as `X-Application-User`. The backend accepts a `source:id` value with exactly one colon and non-empty portions without whitespace; prefixes are unrestricted and users are not looked up. Missing or malformed headers return HTTP 422 with a typed `request_validation` error. This trusted-LAN identity is not authenticated, and the backend binds each created session to that exact identity. Reads, messages, turn starts, and SSE observation require the same owner; another identity receives the existing HTTP 404 `unknown` error. Changing the caller identity does not transfer sessions or cancel admitted work. Create a transport for the host's selected identity; the demo uses `demo:default`.
-
-For selected-user changes, the host must immediately clear its visible content, status, and draft, dispose the previous controller, and discard it. `dispose()` invalidates pending request callbacks and aborts observation; it does not publish an empty view or cancel backend work. Require a selected user before creating a conversation. Construct a fresh transport and controller using the new stable identity (Kochwiki uses `kochwiki:<stable-user-id>`), then start a fresh conversation when the host needs one. Do not reuse the previous transport, mutate its identity, or resume its session when returning to a previously selected user.
-
-Expected routing is host frontend ? same-origin backend/proxy ? AI Service gateway. Relays must forward `X-Application-User`, preserve response bodies and status codes, allow agent-turn durations, and avoid automatic retries of state-changing message/turn requests. Consumer relay implementation and authentication/session authorization are deferred. Same-origin routing is not an authorization guarantee.
+For selected-user changes, clear visible content, status and draft, dispose the old controller and create a new transport and controller for the selected identity. Disposal aborts observation and ignores stale asynchronous results; it does not cancel backend execution. Sessions are not transferred between identities.
 
 ## Built-package verification
 
-From `frontend`, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This checks actual package exports and declarations with ordinary package resolution, exercises the built conversation module, rejects arbitrary configuration keys and checks that the root exports no API. Workspace source aliases are not used.
+From `frontend`, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This checks actual package exports and declarations with ordinary package resolution, exercises the built conversation module, checks required application identity and verifies that the root exports no API. Workspace source aliases are not used.
 
 ## Host theme
 
@@ -327,8 +313,7 @@ the consumer frontend interprets it and owns any domain actions.
 ## Native session transport (parallel implementation)
 
 The `/conversation` entry point also exports `HttpSessionTransport` and its
-`SessionTransport` interface for the new Pydantic AI HTTP boundary. The existing
-`ConversationController` still uses the legacy transport. The demo application uses the native API at `/api/native/api/v1`; Kochwiki and
+`SessionTransport` interface for the new Pydantic AI HTTP boundary. The obsolete `ConversationController` has been removed. The demo application uses the native API at `/api/native/api/v1`; Kochwiki and
 the legacy HTTP routes remain on their existing implementation.
 
 ```ts
@@ -348,10 +333,12 @@ backend's ordered `history` of independent user prompts and run groups, includin
 empty groups whose native run ID is not yet available. Observation errors describe
 the connection; turn outcomes come from snapshot lifecycle status. Clean EOF means
 the observation ended, not that a turn completed. Aborting or leaving the iterable
-releases the reader and does not cancel execution. There are no automatic retries,
-reconnections, optimistic messages, or frontend lifecycle reconstruction.
+releases the reader and does not cancel execution. The transport does not retry;
+`SessionController` owns observation reconnection. There are no optimistic messages
+or frontend lifecycle reconstruction.
 
-HTTP failures throw `SessionHttpError` with status and kind; FastAPI 422 responses
+HTTP failures throw `SessionHttpError` with status and kind; HTTP 405 uses
+`method_not_allowed` independently of its response body, and FastAPI 422 responses
 use `validation_error`. Network and malformed-response failures throw
 `SessionTransportError`. Observation error frames remain typed `SessionEvent`
 values, followed by the end of the iterable. The transport uses the generated
@@ -375,10 +362,10 @@ npm.cmd run check:conversation-contract
 
 ## Parallel native session integration
 
-`SessionController` and `HttpSessionTransport` provide the native snapshot integration independently of the legacy `ConversationController`. The demo application now uses the native controller and the isolated native demo backend. Kochwiki cutover and removal of the legacy implementation remain separate work.
+`SessionController` and `HttpSessionTransport` provide the native snapshot integration. The obsolete legacy controller has been removed. The demo application now uses the native controller and the isolated native demo backend. Kochwiki cutover and removal of the legacy implementation remain separate work.
 
 Create a `SessionController(transport, publish)` and bind its `SessionViewState.turns`, composer flags and `status` to the controlled component. Call `start(initialization?)`, forward submissions to `submit(text, acknowledge)`, forward status actions to `performAction(id)`, and call `dispose()` on teardown. `snapshot` exposes the latest generated `PresentedSession` contract; `admission` and `observation` report request and connection outcomes separately from its authoritative execution lifecycles. `SessionArtifactMapper` receives the generated native artifact type and can omit artifacts with `null`; the default `presentSessionArtifact` maps its typed payload envelope directly.
 
 Admission success calls the submission acknowledgement without inserting a prompt. Only observer snapshots supply conversation content. A missing admission response retains the draft, reports uncertainty and disables submission; healthy observation continues, without reconciliation reads, text matching, retries or guessed acknowledgement. Disposal aborts observation and ignores late HTTP results, without cancelling backend execution.
 
-`presentSession` derives ordered prompt fragments and execution groups directly from the native snapshot. Run keys use session identity and presentation ordinals, never prompt text or run IDs as application execution identity; section tracking keys remain internal to the renderer. Completed runs anchor shared detail toggles on the first explicit final answer, otherwise the last unphased text; commentary alone is not an answer. Failed, cancelled and execution-uncertain groups remain expanded. Known terminal lifecycle outcomes remain intact after observation loss.
+`presentSession` derives ordered prompt fragments and execution groups directly from the native snapshot. Run keys use session identity and presentation ordinals, never prompt text or run IDs as application execution identity; section tracking keys remain internal to the renderer. Completed runs anchor shared detail toggles on the first explicit final answer, otherwise the last unphased text; commentary alone is not an answer. Failed, cancelled and execution-uncertain groups remain expanded. Known terminal lifecycle outcomes remain intact after observation loss. The controller reconnects after a one-second delay on network failures, unexpected EOF, observer capacity limits, overflow and internal observation errors. Sending stays disabled until a fresh snapshot arrives; its lifecycle determines whether execution is still active or finished. Compatibility failures, unavailable sessions and malformed responses stop reconnection. Disposal cancels pending reconnection. Observation recovery never resubmits a prompt or resolves uncertain admission.

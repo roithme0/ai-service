@@ -17,7 +17,7 @@ import type {
   PresentedSession,
 } from '../generated/native/types.gen';
 
-export type SessionErrorKind = BoundaryError['kind'] | 'validation_error';
+export type SessionErrorKind = BoundaryError['kind'] | 'validation_error' | 'method_not_allowed';
 
 export class SessionHttpError extends Error {
   constructor(
@@ -106,7 +106,7 @@ export class HttpSessionTransport implements SessionTransport {
     }).catch((error: unknown) => {
       throw new SessionTransportError('network', { cause: error });
     });
-    if (!response.ok) throwHttpError(response.status, (await response.json()) as unknown);
+    if (!response.ok) await throwHttpError(response);
     if (
       response.status !== 200 ||
       response.headers.get('Content-Type')?.split(';')[0].trim() !== 'text/event-stream' ||
@@ -137,13 +137,13 @@ export class HttpSessionTransport implements SessionTransport {
     } catch (error: unknown) {
       throw new SessionTransportError('network', { cause: error });
     }
+    if (!response.ok) await throwHttpError(response);
     let payload: unknown;
     try {
       payload = await response.json();
     } catch (error: unknown) {
       throw new SessionTransportError('invalid_response', { cause: error });
     }
-    if (!response.ok) throwHttpError(response.status, payload);
     if (response.status !== status) throw new SessionTransportError('invalid_response');
     return payload;
   }
@@ -204,7 +204,18 @@ function checkSession(snapshot: PresentedSession, sessionId: string): void {
   if (snapshot.session_id !== sessionId) throw new SessionTransportError('invalid_response');
 }
 
-function throwHttpError(status: number, payload: unknown): never {
+async function throwHttpError(response: Response): Promise<never> {
+  const status = response.status;
+  if (status === 405) {
+    await response.body?.cancel();
+    throw new SessionHttpError(status, 'method_not_allowed');
+  }
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch (error: unknown) {
+    throw new SessionTransportError('invalid_response', { cause: error });
+  }
   if (status === 422) {
     parse(zHttpValidationError, payload);
     throw new SessionHttpError(status, 'validation_error');

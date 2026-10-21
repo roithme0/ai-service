@@ -4,7 +4,11 @@ import type {
   PresentedTurn,
   SessionCreationRequest,
 } from '../generated/native/types.gen';
-import { SessionHttpError, type SessionTransport } from './session-transport';
+import {
+  SessionHttpError,
+  SessionTransportError,
+  type SessionTransport,
+} from './session-transport';
 import {
   presentSession,
   presentSessionArtifact,
@@ -20,6 +24,8 @@ export interface SessionViewState {
   readonly composerEditingDisabled: boolean;
   readonly status: ChatConversationStatus | null;
 }
+
+const OBSERVATION_RETRY_DELAY_MS = 1000;
 
 export class SessionController {
   private epoch = 0;
@@ -59,17 +65,18 @@ export class SessionController {
       const observer = new AbortController();
       this.observer = observer;
       void this.observe(created.session_id, observer, epoch);
-    } catch {
+    } catch (error: unknown) {
       if (epoch !== this.epoch) return;
-      this.value = {
-        ...this.value,
-        observation: 'lost',
-        status: {
-          ...errorStatus('Die Unterhaltung konnte nicht gestartet werden.'),
-          action: { id: 'new-session', label: 'Erneut versuchen' },
-        },
-      };
-      this.publish(this.value);
+      if (error instanceof SessionHttpError && error.kind === 'method_not_allowed') {
+        this.setCompatibilityFailure();
+      } else if (error instanceof SessionHttpError && error.kind === 'agent_unavailable') {
+        this.setUnavailable(true);
+      } else {
+        this.sessionFailure = 'Die Unterhaltung konnte nicht gestartet werden.';
+        this.admissionAction = { id: 'new-session', label: 'Erneut versuchen' };
+      }
+      this.value = { ...this.value, observation: 'lost' };
+      this.update();
     }
   }
 
@@ -132,6 +139,12 @@ export class SessionController {
   }
 
   private rejectAdmission(error: SessionHttpError): void {
+    this.value = { ...this.value, admission: 'rejected' };
+    if (error.kind === 'method_not_allowed') {
+      this.awaitingLifecycle = false;
+      this.setCompatibilityFailure();
+      return;
+    }
     this.awaitingLifecycle =
       error.kind === 'busy' && lifecycleSignature(this.value.snapshot) === this.admissionLifecycle;
     this.sessionUnavailable =
@@ -145,7 +158,6 @@ export class SessionController {
           error.kind === 'agent_unavailable' ? 'Erneut versuchen' : 'Neue Unterhaltung starten',
       };
     }
-    this.value = { ...this.value, admission: 'rejected' };
     this.admissionError = admissionRejectionMessage(error.kind);
   }
 
@@ -155,34 +167,58 @@ export class SessionController {
     epoch: number,
   ): Promise<void> {
     try {
-      for await (const event of this.transport.observeSession(sessionId, observer.signal)) {
-        if (epoch !== this.epoch) return;
+      while (epoch === this.epoch && !observer.signal.aborted) {
+        const retry = await this.observeConnection(sessionId, observer.signal, epoch);
+        if (epoch !== this.epoch || observer.signal.aborted) return;
+        this.value = { ...this.value, observation: 'lost' };
+        this.update();
+        if (!retry || this.sessionUnavailable) return;
+        await waitForObservationRetry(observer.signal);
+      }
+    } finally {
+      observer.abort();
+      if (this.observer === observer) this.observer = null;
+    }
+  }
+
+  private async observeConnection(
+    sessionId: string,
+    signal: AbortSignal,
+    epoch: number,
+  ): Promise<boolean> {
+    try {
+      for await (const event of this.transport.observeSession(sessionId, signal)) {
+        if (epoch !== this.epoch || signal.aborted) return false;
         if (event.kind === 'error') {
-          if (event.reason === 'unknown') this.setUnavailable();
-          break;
+          if (event.reason === 'unknown') {
+            this.setUnavailable();
+            return false;
+          }
+          return true;
         }
-        if (event.snapshot.session_id !== sessionId) break;
+        if (event.snapshot.session_id !== sessionId) return false;
         this.value = { ...this.value, snapshot: event.snapshot, observation: 'connected' };
         if (lifecycleSignature(event.snapshot) !== this.admissionLifecycle)
           this.awaitingLifecycle = false;
         this.update();
       }
     } catch (error: unknown) {
-      if (epoch !== this.epoch) return;
-      if (
+      if (epoch !== this.epoch || signal.aborted) return false;
+      if (error instanceof SessionHttpError && error.kind === 'method_not_allowed') {
+        this.setCompatibilityFailure();
+      } else if (
         error instanceof SessionHttpError &&
         (error.kind === 'unknown' ||
           error.kind === 'unknown_configuration' ||
           error.kind === 'agent_unavailable')
       )
         this.setUnavailable(error.kind === 'agent_unavailable');
-    } finally {
-      observer.abort();
-      if (this.observer === observer) this.observer = null;
+      return (
+        (error instanceof SessionTransportError && error.reason === 'network') ||
+        (error instanceof SessionHttpError && error.kind === 'observation_limit')
+      );
     }
-    if (epoch !== this.epoch) return;
-    this.value = { ...this.value, observation: 'lost' };
-    this.update();
+    return true;
   }
 
   private setUnavailable(agentUnavailable = false): void {
@@ -194,6 +230,12 @@ export class SessionController {
       id: 'new-session',
       label: agentUnavailable ? 'Erneut versuchen' : 'Neue Unterhaltung starten',
     };
+  }
+
+  private setCompatibilityFailure(): void {
+    this.sessionUnavailable = true;
+    this.sessionFailure = 'App und Backend sind nicht kompatibel.';
+    this.admissionAction = undefined;
   }
 
   private update(): void {
@@ -275,6 +317,19 @@ export class SessionController {
     }
     return null;
   }
+}
+
+function waitForObservationRetry(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const finish = (): void => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', finish);
+      resolve();
+    };
+    const timer = setTimeout(finish, OBSERVATION_RETRY_DELAY_MS);
+    signal.addEventListener('abort', finish, { once: true });
+    if (signal.aborted) finish();
+  });
 }
 
 function latestRunStatus(

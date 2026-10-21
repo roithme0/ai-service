@@ -154,6 +154,22 @@ describe('HttpSessionTransport', () => {
     );
   });
 
+  it.each(['{"detail":"Method Not Allowed"}', '<html>Method Not Allowed</html>', ''])(
+    'classifies HTTP 405 independently of its response body %j across all endpoints',
+    async (body) => {
+      const fetchMock = vi
+        .fn<typeof fetch>()
+        .mockImplementation(() => Promise.resolve(new Response(body, { status: 405 })));
+      vi.stubGlobal('fetch', fetchMock);
+      const error = new SessionHttpError(405, 'method_not_allowed');
+      await expect(transport().createSession()).rejects.toEqual(error);
+      await expect(transport().readSession('s/1')).rejects.toEqual(error);
+      await expect(transport().submitPrompt('s/1', 'Hello')).rejects.toEqual(error);
+      await expect(collect(events())).rejects.toEqual(error);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    },
+  );
+
   it('distinguishes network failure from invalid JSON and unexpected success status', async () => {
     vi.stubGlobal(
       'fetch',
