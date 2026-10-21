@@ -290,6 +290,20 @@ def test_prompt_visibility_uses_native_metadata_rather_than_text_or_run_attribut
     assert PresentedSession.model_validate_json(projected.model_dump_json()) == projected
 
 
+def test_initial_context_stays_hidden_with_additional_metadata() -> None:
+    internal = snapshot([ModelRequest(parts=[UserPromptPart([
+        TextContent("SECRET_CONTEXT", metadata={
+            "origin": INITIAL_CONTEXT_ORIGIN, "source": "application",
+        }),
+        TextContent("Visible input", metadata={"source": "user"}),
+    ])])])
+
+    projected = present_session(internal)
+
+    assert projected.history[0] == UserPrompt(content=("Visible input",))
+    assert "SECRET_CONTEXT" not in projected.model_dump_json()
+
+
 def test_prompt_between_responses_keeps_native_order_without_rebuilding_turn_boundaries() -> None:
     internal = snapshot([
         ModelRequest(parts=[UserPromptPart("Start")]),

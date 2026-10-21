@@ -75,12 +75,12 @@ class PresentedSession(ResponseModel):
 
 
 @dataclass
-class _RunParts:
+class _RunSection:
     run_id: str
     parts: list[PresentationPart] = field(default_factory=list)
 
 
-def _history(snapshot: SessionSnapshot) -> Sequence[ModelMessage]:
+def _latest_native_messages(snapshot: SessionSnapshot) -> Sequence[ModelMessage]:
     return next(
         (
             turn.observation.messages
@@ -161,6 +161,32 @@ def _apply_tool_result(
     return activity.model_copy(update={"status": status})
 
 
+def _update_tool_activity(
+    result: ToolReturnPart | NativeToolReturnPart | RetryPromptPart,
+    tool_call_locations: dict[tuple[bool, str, str], tuple[_RunSection, int]],
+) -> None:
+    if result.tool_call_id is None:
+        return
+    native = isinstance(result, NativeToolReturnPart)
+    key = (native, result.tool_call_id, result.tool_name or "")
+    if location := tool_call_locations.get(key):
+        section, index = location
+        activity = section.parts[index]
+        assert isinstance(activity, ToolActivity)
+        section.parts[index] = _apply_tool_result(activity, result)
+
+
+def _current_run_section(
+    history_sections: list[UserPrompt | _RunSection], run_id: str,
+) -> _RunSection:
+    previous = history_sections[-1] if history_sections else None
+    if isinstance(previous, _RunSection) and previous.run_id == run_id:
+        return previous
+    section = _RunSection(run_id)
+    history_sections.append(section)
+    return section
+
+
 def _present_user_prompt(part: UserPromptPart) -> UserPrompt | None:
     if isinstance(part.content, str):
         return UserPrompt(content=part.content)
@@ -168,13 +194,16 @@ def _present_user_prompt(part: UserPromptPart) -> UserPrompt | None:
     for item in part.content:
         if isinstance(item, str):
             text.append(item)
-        elif isinstance(item, TextContent) and item.metadata != {"origin": INITIAL_CONTEXT_ORIGIN}:
+        elif (
+            isinstance(item, TextContent)
+            and (item.metadata or {}).get("origin") != INITIAL_CONTEXT_ORIGIN
+        ):
             text.append(item.content)
     return UserPrompt(content=tuple(text)) if text else None
 
 
 def _present_history(
-    history: Sequence[UserPrompt | _RunParts],
+    history: Sequence[UserPrompt | _RunSection],
     lifecycles: Sequence[TurnLifecycle],
 ) -> tuple[HistoryItem, ...]:
     turn_positions = {
@@ -209,73 +238,62 @@ def present_session(snapshot: SessionSnapshot) -> PresentedSession:
     Before native capture, admission has lifecycle metadata only. Interrupted
     activity promises no execution outcome.
     """
-    lifecycles = {
+    lifecycles_by_run_id = {
         turn.lifecycle.run_id: turn.lifecycle
         for turn in snapshot.turns
         if turn.lifecycle.run_id is not None
     }
-    history_order: list[UserPrompt | _RunParts] = []
-    started = {
+    history_sections: list[UserPrompt | _RunSection] = []
+    started_tool_calls = {
         (turn.lifecycle.run_id, call.tool_call_id)
         for turn in snapshot.turns
         if turn.observation is not None
         for call in turn.observation.started_tool_calls
     }
-    artifacts: dict[tuple[str, str], list[ConversationArtifact]] = {}
+    artifacts_by_call: dict[tuple[str, str], list[ConversationArtifact]] = {}
     for artifact in snapshot.artifacts:
-        artifacts.setdefault((artifact.run_id, artifact.tool_call_id), []).append(
+        artifacts_by_call.setdefault((artifact.run_id, artifact.tool_call_id), []).append(
             artifact
         )
-    calls: dict[tuple[bool, str, str], tuple[_RunParts, int]] = {}
+    tool_call_locations: dict[tuple[bool, str, str], tuple[_RunSection, int]] = {}
 
-    for message in _history(snapshot):
+    for message in _latest_native_messages(snapshot):
         run_id = message.run_id
         for part in message.parts:
             if isinstance(
                 part, (ToolReturnPart, NativeToolReturnPart, RetryPromptPart)
             ):
-                native = isinstance(part, NativeToolReturnPart)
-                key = (native, part.tool_call_id, part.tool_name or "")
-                if location := calls.get(key):
-                    call_run, index = location
-                    activity = call_run.parts[index]
-                    assert isinstance(activity, ToolActivity)
-                    call_run.parts[index] = _apply_tool_result(activity, part)
+                _update_tool_activity(part, tool_call_locations)
                 continue
             if isinstance(part, UserPromptPart):
                 if prompt := _present_user_prompt(part):
-                    history_order.append(prompt)
+                    history_sections.append(prompt)
                 continue
-            if run_id is None or run_id not in lifecycles:
+            if run_id is None or run_id not in lifecycles_by_run_id:
                 continue
             if not isinstance(part, (TextPart, ToolCallPart, NativeToolCallPart)):
                 continue
-            previous = history_order[-1] if history_order else None
-            if isinstance(previous, _RunParts) and previous.run_id == run_id:
-                group = previous
-            else:
-                group = _RunParts(run_id)
-                history_order.append(group)
-            parts = group.parts
+            section = _current_run_section(history_sections, run_id)
+            parts = section.parts
             if isinstance(part, TextPart):
                 parts.append(_present_text(part))
             elif isinstance(part, (ToolCallPart, NativeToolCallPart)):
                 native = isinstance(part, NativeToolCallPart)
-                calls[(native, part.tool_call_id, part.tool_name)] = (
-                    group,
+                tool_call_locations[(native, part.tool_call_id, part.tool_name)] = (
+                    section,
                     len(parts),
                 )
                 parts.extend(_present_tool_call(
                     part,
-                    turn_status=lifecycles[run_id].status,
-                    started=(run_id, part.tool_call_id) in started,
-                    artifacts=artifacts.get((run_id, part.tool_call_id), ()),
+                    turn_status=lifecycles_by_run_id[run_id].status,
+                    started=(run_id, part.tool_call_id) in started_tool_calls,
+                    artifacts=artifacts_by_call.get((run_id, part.tool_call_id), ()),
                 ))
 
     return PresentedSession(
         session_id=snapshot.session_id,
         expires_at=snapshot.expires_at,
         history=_present_history(
-            history_order, tuple(turn.lifecycle for turn in snapshot.turns),
+            history_sections, tuple(turn.lifecycle for turn in snapshot.turns),
         ),
     )
