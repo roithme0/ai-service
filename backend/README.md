@@ -22,24 +22,16 @@ To enable the Kochwiki agent, copy `.env.example` to `.env` and set
 The backend loads this ignored file automatically. The MCP URL identifies
 Kochwiki's Streamable HTTP endpoint, for example `http://localhost:8002/mcp/`
 when running on the host, or `http://host.docker.internal:8002/mcp/` when the
-backend container connects to a host service. `KOCHWIKI_BASE_URL` is no longer used.
+backend container connects to a host service.
 Optionally set `KOCHWIKI_OPENAI_REASONING_EFFORT`; leave it blank to use the
 model's default. Settings validate the SDK's accepted values, while OpenAI
 validates whether the selected model supports the requested effort.
 In deployed environments, supply these values through the process environment or
 secret store; never put a real key in tracked configuration. Missing or invalid
 local Kochwiki configuration makes every Kochwiki session endpoint return
-`503 agent_unavailable`. The deterministic demo HTTP configuration remains available
-without model credentials or Kochwiki access. The frontend now uses this demo:
-any text advances its introduction, two greeting artifacts in one turn, one scripted failure, and completion sequence.
-The artifact turn includes intermediate updates before each tool call to demonstrate
-their placement among tool activity, artifacts, and the standalone final answer.
-It then invokes the artifact tool without the required JSON value to display an explicit failed
-call without creating an artifact; the turn completes with an explanation.
-The following scripted generation failure retains an intermediate update without
-a final answer, demonstrating that the update survives the failure and later turns.
-The frontend simulates a 405 compatibility error on the next message after completion; the backend still accepts further submissions. Refresh the page to restart with a new session.
-The generator receives the conversation and the retained caller-provided context. Kochwiki supplies all domain tools and workflow instructions through
+`503 agent_unavailable`. The deterministic demo remains available without model
+credentials or Kochwiki access; its behavior is described below.
+Kochwiki supplies all domain tools and workflow instructions through
 MCP; the AI Service supplies only generic conversational guidance.
 
 Guidance has separate owners: MCP server instructions describe domain workflows;
@@ -62,7 +54,7 @@ leaves that configuration unavailable (`503 agent_unavailable`) while the demo a
 the rest of the application start normally. Correcting startup configuration
 requires an application restart.
 
-The native demo subapplication is mounted at `/api/native`, with sessions at
+The demo subapplication is mounted at `/api/native`, with sessions at
 `/api/native/api/v1/agents/demo/sessions` and its own OpenAPI document at
 `/api/native/openapi.json`. It owns one shared `FunctionModel` agent and runner
 for the application lifespan. Shutdown closes the runner before the agent.
@@ -73,7 +65,7 @@ retained commentary and a subsequent successful turn. Script selection reads
 the native history; it has no cross-session mutable step counter. No model
 credentials, network model requests or Kochwiki access are needed.
 
-`app.agentic.wiring.create_kochwiki_agent()` composes the new engine from existing
+`app.agentic.wiring.create_kochwiki_agent()` composes the agent from
 `Settings`: `OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`,
 `KOCHWIKI_OPENAI_REASONING_EFFORT` and `KOCHWIKI_MCP_URL`. It returns a native
 agent with application conversation guidance, MCP tools/server instructions and
@@ -100,7 +92,7 @@ lifetime. Kochwiki uses Pydantic AI's `DynamicToolset` factory with
 closes that connection. Application startup makes no MCP requests. A connection
 failure fails the admitted turn; a later turn opens a fresh connection and can
 recover after the MCP server returns. Interrupted tool calls are not automatically
-replayed. There is no application reconnect loop or legacy fallback.
+replayed. There is no application reconnect loop.
 Pass `artifact_capabilities` to `AgentConversation` for
 conversation-owned artifact acceptance and retention. Each turn receives its own
 native publication toolset; presentation configuration is not shared agent state.
@@ -326,8 +318,7 @@ remains the original publication order.
 Projection reads the newest available cumulative native history, including active
 execution, without retaining another history or accumulating usage. Native request
 merging is accepted directly: user-prompt parts remain visible even when their
-containing request has no run ID. There is no prompt index, prompt-to-turn
-reconstruction or second application prompt store. Initial application context is
+containing request has no run ID. Initial application context is
 represented by native `TextContent` with application-only `metadata` identifying
 its origin. The metadata survives native history merging/serialization and is not
 sent to the model; presentation omits this content by its marker, never by matching
@@ -339,8 +330,7 @@ response has a turn entry with its lifecycle and empty `parts`, including admitt
 work or setup failure without a run ID. Such entries retain admission order:
 earlier unrepresented turns appear before the next represented turn, and remaining
 ones appear at the end. Prompts keep their native order; these empty entries do
-not establish prompt-to-turn attribution. HTTP/frontend integration must
-account for this boundary. The runner applies this projection to both reads and
+not establish prompt-to-turn attribution. The runner applies this projection to both reads and
 observation, exposing only `PresentedSession` to consumers. The registry's native
 snapshots remain internal. Projection creates no retained history. The observation
 wrapper closes the registry subscription on disconnect, cancellation or projection
@@ -365,8 +355,8 @@ Paths are relative to `/api/v1/agents/{configuration}/sessions`:
 | POST | `/{session_id}/turns` | `{prompt}`; 202 with `{kind: "accepted"}` after admission |
 | GET | `/{session_id}/events` | Session-level SSE with complete snapshots across turns |
 
-Creation accepts generic JSON context and shared artifact capability declarations;
-agent-specific domain input preparation remains composition work for cutover.
+Creation accepts generic JSON context and artifact capability declarations.
+Callers prepare domain-specific context before creating the session.
 Execution limits stay server-owned. Prompts must be nonblank strings of at most
 16,000 characters (`MAX_PROMPT_LENGTH`); their original whitespace is preserved.
 Unknown request fields are rejected. FastAPI reports malformed bodies and headers
@@ -399,8 +389,7 @@ server-side reconnection, delta protocol, token streaming or periodic heartbeat.
 The frontend controller reconnects after transient observation failures and consumes
 a fresh snapshot.
 OpenAPI describes both snapshot and error frame models under `text/event-stream`.
-The generated frontend contract, Kochwiki and demo use this boundary. The legacy
-append-message and separate turn-admission API is no longer routed. Focused coverage:
+The generated frontend contract, Kochwiki and demo use this boundary. Focused coverage:
 `python -m pytest tests/test_pydantic_http.py`.
 
 The runner consumes background exceptions and logs failure exception types without
@@ -430,7 +419,7 @@ also carries cumulative usage and is deliberately not forwarded here; see
 The lower-level `execute_turn()` remains available for callers managing history
 themselves. Native message JSON can be serialized and restored with
 `ModelMessagesTypeAdapter` (convert the snapshot tuple to a list before serializing).
-No hosted telemetry exporter is configured by this slice.
+No hosted telemetry exporter is configured.
 
 Pass a fresh `app.agentic.observation.TurnObservation` to
 `execute_turn(..., observation=observation)` to retain inspection data on success,
@@ -463,8 +452,7 @@ the current turn and pass it to `execute_turn(..., toolsets=[artifact_toolset])`
 run-scoped toolsets supplement the agent's existing tools, including MCP. The
 toolset snapshots advertised capabilities and provides a native `present_artifact`
 function tool with generated argument validation and capability instructions.
-The input uses `ArtifactCandidate[ArtifactPayload]` directly; there is no separate
-request model or conversion. Native tool arguments have this structure:
+The input uses `ArtifactCandidate[ArtifactPayload]` directly. Tool arguments have this structure:
 
 ```json
 {
@@ -485,14 +473,12 @@ so its schema is available eagerly rather than loaded on demand.
 
 The synchronous, typed `accept` callback receives an `ArtifactSubmission` containing
 the validated candidate and native run/tool-call IDs. Bind application session and
-turn ownership in that callback; native IDs do not authorize access or replace
-application turn IDs. The callback must atomically assign identity, timestamp and
-ordering and retain the artifact before returning `ArtifactAccepted(artifact_id=...)`.
+run ownership in that callback; native IDs do not authorize access. The callback
+must atomically assign identity, timestamp and ordering and retain the artifact before returning `ArtifactAccepted(artifact_id=...)`.
 Capacity or other expected admission failures return `ArtifactRejected(reason=...)`
 without retaining the candidate. Acceptance must not perform blocking I/O or schedule
 background publication. `AgentConversation` supplies process-local acceptance
-automatically; standalone execution can supply another callback. Production
-sessions and the frontend are not connected yet.
+automatically; standalone execution can supply another callback.
 
 Payload validation supports local JSON Schema references without network resolution.
 Metadata validation additionally checks supported formats and treats omitted metadata
@@ -553,8 +539,6 @@ There is no custom continuation loop. Deterministic HTTP transport coverage,
 including local/MCP coexistence and follow-up history, runs with
 `python -m pytest tests/test_pydantic_web_search.py`. The mocks verify request
 configuration and native parsing, not live search quality or provider enforcement.
-No live search was performed for this slice. Production wiring, streaming and
-frontend handling remain unchanged.
 
 After installing the backend dependencies, run the isolated live smoke test from
 `backend` with `OPENAI_API_KEY` and `KOCHWIKI_OPENAI_MODEL` configured in `.env`:
@@ -575,8 +559,7 @@ connection setup and cleanup for that turn. A directly supplied static toolset
 instead shares the agent context lifetime. An explicitly supplied HTTP client
 remains caller-owned. Server instructions and discovered tool
 schemas reach the model directly; domain tools load eagerly because they are
-the agent's core functionality. There is no legacy registry, polling loop or
-application reconnect policy in this path. Defaults in `app/agentic/config.py`
+the agent's core functionality. Defaults in `app/agentic/config.py`
 give MCP connection setup five seconds and reads 60 seconds.
 
 Completed MCP tool errors become native failed tool results. Tool retries are

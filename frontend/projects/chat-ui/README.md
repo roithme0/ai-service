@@ -66,7 +66,7 @@ Use `assets/chat-ui/images/mascot-idle.png` as an image URL or as a favicon:
 
 ## AI Service conversation integration
 
-The root entry point exports no API. This is a breaking import migration: replace root imports with `@roithme0/chat-ui/ui`. Import conversation support from `@roithme0/chat-ui/conversation`. Upgrade consumer imports together with the package; there are no compatibility re-exports. Both entry points share the existing package version and release lifecycle.
+Import rendering components from `@roithme0/chat-ui/ui` and conversation support from `@roithme0/chat-ui/conversation`. The root entry point exports no API. Both entry points share the package version and release lifecycle.
 
 A complete minimal standalone host (with the Material theme described below):
 
@@ -177,7 +177,7 @@ The component inherits typography. Its chat-specific styles are compiled into th
 
 The library publishes to `https://npm.pkg.github.com` and is associated with `roithme0/ai-service`. The `Build and publish app and chat UI` workflow builds the library on pull requests and pushed `v`-prefixed version tags in its distinct `build-chat-ui` job, uploading the built package as a workflow artifact. The `publish-chat-ui` job runs only for release tags and downloads that same artifact. Only this publish job receives `packages: write` permission. The same workflow publishes both Docker images through separate application jobs; every release publishes all three artifacts from the same commit, even when a component has not changed.
 
-The tag determines the published version and npm channel: `v1.2.0` publishes `1.2.0` under `latest`; `v1.2.0-alpha` or `v1.2.0-alpha.123` publishes the corresponding prerelease under `alpha`. Tags must start with `v` followed by three numeric version parts, optionally followed by `-alpha` or `-alpha.N`, where `N` contains one or more digits. Numeric parts cannot have leading zeroes except for `0`; other suffixes are rejected. The leading `v` is stripped from published versions. Prefix-free tags and the old `app-v*` and `chat-ui-v*` tags do not trigger releases. Release tags are validated before frontend dependency installation and the library build. The publish job sets the version in `dist/chat-ui/package.json` and publishes using its `GITHUB_TOKEN` with an explicit npm dist-tag. The source package keeps the local placeholder version `0.0.0` and is not modified by the workflow.
+The tag determines the published version and npm channel: `v1.2.0` publishes `1.2.0` under `latest`; `v1.2.0-alpha` or `v1.2.0-alpha.123` publishes the corresponding prerelease under `alpha`. Tags must start with `v` followed by three numeric version parts, optionally followed by `-alpha` or `-alpha.N`, where `N` contains one or more digits. Numeric parts cannot have leading zeroes except for `0`; other suffixes are rejected. The leading `v` is stripped from published versions. Release tags are validated before frontend dependency installation and the library build. The publish job sets the version in `dist/chat-ui/package.json` and publishes using its `GITHUB_TOKEN` with an explicit npm dist-tag. The source package keeps the local placeholder version `0.0.0` and is not modified by the workflow.
 
 To release the repository, commit the changes, then tag that commit and push the tag. For example:
 
@@ -193,11 +193,11 @@ git tag v1.3.0-alpha.1
 git push origin v1.3.0-alpha.1
 ```
 
-Each release needs a new version; choose the next shared version based on changes to either the application or library, including breaking changes. The first shared version should advance beyond the previously released versions of both components. Both publication jobs wait for the application and library builds to succeed, including the application build's contract checks and backend tests. A failed build prevents all publication. Publication remains independent between jobs, so a registry failure can still leave a partial release; check the entire workflow succeeded before treating a release as complete. Kochwiki has read access under the package's **Manage Actions access** settings and consumes the package from GitHub Packages. Its CI passes the repository's short-lived `GITHUB_TOKEN` to Docker as a BuildKit secret.
+Each release needs a new version; choose the next shared version based on changes to either the application or library, including breaking changes. Both publication jobs wait for the application and library builds to succeed, including the application build's contract checks and backend tests. A failed build prevents all publication. Publication remains independent between jobs, so a registry failure can still leave a partial release; check the entire workflow succeeded before treating a release as complete. Kochwiki has read access under the package's **Manage Actions access** settings and consumes the package from GitHub Packages. Its CI passes the repository's short-lived `GITHUB_TOKEN` to Docker as a BuildKit secret.
 
 ## Local development with Kochwiki
 
-After Kochwiki has migrated to the published package name, use a direct local link for interactive development. No global npm link is created.
+Use a direct local link for interactive development. No global npm link is created.
 
 Build the library once before creating the link, then leave its watcher running:
 
@@ -219,45 +219,11 @@ Kochwiki preserves the package symlink and excludes `@roithme0/chat-ui` from dev
 
 Docker, CI, and production builds always install the declared GitHub Packages version. They do not use the sibling checkout or its link.
 
-## Legacy local tarball handoff
-
-From `ai-service/frontend`:
-
-```powershell
-npm ci
-npm run pack:chat-ui
-```
-
-This builds a partially compiled Angular package under `dist/chat-ui` and creates `dist/roithme0-chat-ui-0.0.0.tgz`. Angular common/core/platform-browser and Angular Material/CDK are peer dependencies rather than bundled runtimes. The package contains the public declarations, compiled component styles, packaged SVG icon definitions, and library JavaScript. The application remains independently buildable with `npm run build:app`.
-
-From the common parent directory containing both repositories:
-
-```powershell
-New-Item -ItemType Directory -Force kochwiki-v2/frontend/vendor
-Copy-Item -LiteralPath ai-service/frontend/dist/roithme0-chat-ui-0.0.0.tgz -Destination kochwiki-v2/frontend/vendor/
-Set-Location kochwiki-v2/frontend
-npm install ./vendor/roithme0-chat-ui-0.0.0.tgz
-npm run build -- --configuration production --progress=false
-```
-
-When migrating from the original package name or the artifact-renderer POC, remove the old dependency, update UI imports to `@roithme0/chat-ui/ui`, and adapt the host to the controlled `content` input and `messageSubmitted` output before running its build. Run the consumer's focused tests for its current chat host after that migration; they should cover message projection and submission orchestration rather than the removed POC renderer. This library does not prescribe a consumer test-file path.
-
-The installed dependency points to the copied tarball in Kochwiki's build context. Keep the tarball and updated manifest/lockfile together so `npm ci` and Docker builds do not require the AI Service checkout. Do not install using a source alias, symlink, force flag, or sibling source import.
-
-Local builds always use the placeholder version. Rebuild and pack after changing the library:
-
-```powershell
-# In ai-service/frontend:
-npm run pack:chat-ui
-```
-
-Rebuilding alone does not update the legacy Kochwiki tarball installation. Repeatedly installing a changed tarball with the same filename and version can reuse an old installed copy. Prefer the direct-link workflow after the registry migration.
-
 ## Browser verification
 
 Run the backend on port 8004 and `npm run start:app` in `frontend`, then open `http://localhost:4204` at a portrait-phone viewport. The host creates an empty `demo` session and advances a scripted sequence through the real backend. No model credentials or Kochwiki access is required; see [frontend setup](../../README.md) for commands.
 
-Submit arbitrary text to check the loading state and introduction, then both the `demo.greeting` artifact and the `demo.greetings` list of 30 greetings in the same turn, then a scripted error and completion guidance on the following message. The error's “Demo-Aktion (ohne Funktion)” button leaves the state unchanged. The demo host explicitly selects JSON presentation for both artifacts before the assistant reply. Check that the list starts collapsed and that “Mehr anzeigen” and “Weniger anzeigen” expand and collapse it. One more message triggers a frontend-only simulated 405 compatibility error without a retry action; the backend continues accepting messages. Refresh to restart with empty history; no dedicated restart button is provided. Generic error recovery actions remain available when failures occur. Also check that history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling.
+Submit arbitrary text to check the loading state and introduction, then both JSON artifacts, titled `demo.greeting` and `demo.greetings` (a list of 30 greetings) in the same turn, then a scripted error and completion guidance on the following message. The error's “Demo-Aktion (ohne Funktion)” button leaves the state unchanged. The demo host explicitly selects JSON presentation for both artifacts before the assistant reply. Check that the list starts collapsed and that “Mehr anzeigen” and “Weniger anzeigen” expand and collapse it. One more message triggers a frontend-only simulated 405 compatibility error without a retry action; the backend continues accepting messages. Refresh to restart with empty history; no dedicated restart button is provided. Generic error recovery actions remain available when failures occur. Also check that history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling.
 
 ## Advertising presentation capabilities
 
