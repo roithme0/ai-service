@@ -120,9 +120,7 @@ def test_http_admission_live_artifacts_failure_and_multiple_turns() -> None:
 
         async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             if not any(isinstance(part, ToolReturnPart) for msg in messages for part in msg.parts):
-                return ModelResponse(parts=[TextPart("Working."), ToolCallPart("present_artifact", {
-                    "candidate": {"type": "example", "payload": {"title": "Visible", "payload": {}}},
-                }, "artifact")])
+                return ModelResponse(parts=[TextPart("Working."), ToolCallPart("present_artifact", {"type": "example", "content": {"title": "Visible", "payload": {}}}, "artifact")])
             continuing.set()
             await release.wait()
             raise RuntimeError("SECRET_PROVIDER_ERROR")

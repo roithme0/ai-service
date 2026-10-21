@@ -8,11 +8,10 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextContent, TextP
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
-from app.agentic.artifacts import ArtifactAccepted
+from app.agentic.artifacts import ArtifactAccepted, ArtifactCapability
 from app.agentic.conversations import ConversationBusyError
 from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
 from app.agentic.turns import create_turn_agent
-from app.agentic.artifact_models import ArtifactCapability
 
 
 @pytest.fixture(autouse=True)
@@ -164,15 +163,15 @@ def test_admitted_turn_survives_expiry_and_retains_native_settlement(outcome: st
             returns = [part for message in messages for part in message.parts if isinstance(part, ToolReturnPart)]
             if not returns:
                 return ModelResponse(parts=[
-                    ToolCallPart("present_artifact", {"candidate": {
-                        "type": "example", "payload": {"title": "Before", "payload": {}},
-                    }}, "before"),
+                    ToolCallPart("present_artifact", {
+                        "type": "example", "content": {"title": "Before", "payload": {}},
+                    }, "before"),
                     ToolCallPart("operation", {}, "operation"),
                 ])
             if len(returns) == 2:
-                return ModelResponse(parts=[ToolCallPart("present_artifact", {"candidate": {
-                    "type": "example", "payload": {"title": "After", "payload": {}},
-                }}, "after")])
+                return ModelResponse(parts=[ToolCallPart("present_artifact", {
+                    "type": "example", "content": {"title": "After", "payload": {}},
+                }, "after")])
             assert [part.tool_call_id for part in returns] == ["before", "operation", "after"]
             assert isinstance(returns[-1].content, ArtifactAccepted)
             if outcome == "failure":
@@ -187,8 +186,8 @@ def test_admitted_turn_survives_expiry_and_retains_native_settlement(outcome: st
             await asyncio.wait_for(started.wait(), timeout=5)
             before = registry.read(created.session_id, owner="alice")
             assert len(before.artifacts) == 1
-            before.artifacts[0].payload.payload["injected"] = True
-            assert registry.read(created.session_id, owner="alice").artifacts[0].payload.payload == {}
+            before.artifacts[0].content.payload["injected"] = True
+            assert registry.read(created.session_id, owner="alice").artifacts[0].content.payload == {}
             with pytest.raises(ConversationBusyError):
                 await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="overlap")
             clock.now = created.expires_at

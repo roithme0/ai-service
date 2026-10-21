@@ -33,10 +33,9 @@ const artifact: PresentationPart = {
   artifact: {
     artifact_id: 'artifact',
     type: 'json',
-    turn_id: 'run',
+    run_id: 'run',
     created_at: time,
-    order: 0,
-    payload: { title: 'Result', payload: { value: 'A'.repeat(1000) } },
+    content: { title: 'Result', payload: { value: 'A'.repeat(1000) } },
   },
 };
 const answer: PresentationPart = { part_kind: 'text', phase: 'final_answer', content: 'Answer' };

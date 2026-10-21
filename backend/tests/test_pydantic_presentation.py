@@ -42,7 +42,7 @@ from app.agentic.presentation import (
 from app.agentic.runner import AgentTurnRunner
 from app.agentic.sessions import SessionSnapshot
 from app.agentic.turns import create_turn_agent
-from app.agentic.artifact_models import ArtifactPayload
+from app.agentic.artifacts import ArtifactContent
 
 
 NOW = datetime(2026, 10, 21, tzinfo=UTC)
@@ -87,8 +87,8 @@ def context_prompt(text: str) -> UserPromptPart:
 
 def test_serialized_contract_selects_only_display_data_and_preserves_native_order() -> None:
     artifact = ConversationArtifact(
-        artifact_id="artifact", type="example", created_at=NOW, turn_id="run", order=0,
-        tool_call_id="call", payload=ArtifactPayload(title="Example", payload={"visible": [42]}),
+        artifact_id="artifact", type="example", created_at=NOW, run_id="run",
+        tool_call_id="call", content=ArtifactContent(title="Example", payload={"visible": [42]}),
     )
     internal = snapshot([
         ModelRequest(parts=[context_prompt("SECRET_CONTEXT")]),
@@ -121,9 +121,9 @@ def test_serialized_contract_selects_only_display_data_and_preserves_native_orde
     assert PresentedSession.model_validate_json(encoded) == projected
     displayed = groups(projected)[0].parts[2]
     assert isinstance(displayed, AcceptedArtifact)
-    assert isinstance(displayed.artifact.payload.payload, dict)
-    displayed.artifact.payload.payload["visible"] = "changed"
-    assert artifact.payload.payload == {"visible": [42]}
+    assert isinstance(displayed.artifact.content.payload, dict)
+    displayed.artifact.content.payload["visible"] = "changed"
+    assert artifact.content.payload == {"visible": [42]}
     assert groups(present_session(internal))[0].parts[2] != displayed
 
 
@@ -310,8 +310,8 @@ def test_prompt_between_responses_keeps_native_order_without_rebuilding_turn_bou
 @pytest.mark.parametrize("status", ["running", "completed", "failed", "cancelled"])
 def test_accepted_artifact_is_visible_without_a_confirmed_tool_return(status: TurnStatus) -> None:
     artifact = ConversationArtifact(
-        artifact_id="artifact", type="example", created_at=NOW, turn_id="run", order=0,
-        tool_call_id="publish", payload=ArtifactPayload(title="Accepted", payload={"value": 42}),
+        artifact_id="artifact", type="example", created_at=NOW, run_id="run",
+        tool_call_id="publish", content=ArtifactContent(title="Accepted", payload={"value": 42}),
     )
     internal = snapshot([
         ModelResponse(parts=[ToolCallPart("present_artifact", {}, "publish")], run_id="run"),
@@ -321,7 +321,7 @@ def test_accepted_artifact_is_visible_without_a_confirmed_tool_return(status: Tu
     accepted = groups(projected)[0].parts[1]
     assert isinstance(accepted, AcceptedArtifact)
     assert accepted.artifact.artifact_id == "artifact"
-    assert accepted.artifact.payload.payload == {"value": 42}
+    assert accepted.artifact.content.payload == {"value": 42}
     assert projected == present_session(internal)
 
 
@@ -333,9 +333,9 @@ def test_parallel_publications_stay_beside_their_calls_as_artifacts_arrive(
     publication_order: tuple[int, ...], expected: list[str],
 ) -> None:
     artifacts = tuple(ConversationArtifact(
-        artifact_id=f"artifact:{call}", type="example", created_at=NOW, turn_id="run", order=order,
-        tool_call_id=f"call:{call}", payload=ArtifactPayload(title="Accepted", payload={"value": call}),
-    ) for order, call in enumerate(publication_order))
+        artifact_id=f"artifact:{call}", type="example", created_at=NOW, run_id="run",
+        tool_call_id=f"call:{call}", content=ArtifactContent(title="Accepted", payload={"value": call}),
+    ) for call in publication_order)
     internal = snapshot([
         ModelResponse(parts=[
             ToolCallPart("present_artifact", {}, f"call:{call}") for call in range(3)
@@ -349,9 +349,6 @@ def test_parallel_publications_stay_beside_their_calls_as_artifacts_arrive(
     assert [part.tool_call_id if isinstance(part, ToolActivity) else part.artifact.artifact_id
             for part in parts if isinstance(part, (ToolActivity, AcceptedArtifact))] == expected
     assert all(part.status == "success" for part in parts if isinstance(part, ToolActivity))
-    assert [part.artifact.order for part in parts if isinstance(part, AcceptedArtifact)] == (
-        [0] if len(publication_order) == 1 else [1, 2, 0]
-    )
 
 
 def test_real_runner_projection_tracks_tool_cancellation_and_native_followup_repair() -> None:

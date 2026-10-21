@@ -21,7 +21,7 @@ from app.agentic.sessions import (
     SessionNotFoundError,
 )
 from app.core.http_identity import require_application_user
-from app.agentic.artifact_models import ArtifactCapability
+from app.agentic.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
 
 _logger = logging.getLogger(__name__)

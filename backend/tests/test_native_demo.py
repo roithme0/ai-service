@@ -57,9 +57,9 @@ def test_native_demo_script_through_mounted_http_and_live_snapshots(monkeypatch:
                     assert [part.status for part in second.parts if isinstance(part, ToolActivity)] == ["success", "success", "failed"]
                     artifacts = [part.artifact for part in second.parts if isinstance(part, AcceptedArtifact)]
                     assert [artifact.type for artifact in artifacts] == ["json", "json"]
-                    assert [artifact.payload.title for artifact in artifacts] == ["demo.greeting", "demo.greetings"]
-                    assert artifacts[0].payload.payload == {"value": {"message": "Hello, World!"}}
-                    assert artifacts[1].payload.payload == {"value": {"messages": [f"Hello, Visitor {i}!" for i in range(1, 31)]}}
+                    assert [artifact.content.title for artifact in artifacts] == ["demo.greeting", "demo.greetings"]
+                    assert artifacts[0].content.payload == {"value": {"message": "Hello, World!"}}
+                    assert artifacts[1].content.payload == {"value": {"messages": [f"Hello, Visitor {i}!" for i in range(1, 31)]}}
                     assert final_turns[2].parts == (AssistantText(content=FAILED_GENERATION_UPDATE, phase="commentary"),)
                     assert (await client.get(path)).json() == snapshots[-1].model_dump(mode="json")
                 fresh = await client.post(BASE, json={"artifact_capabilities": CAPABILITIES})

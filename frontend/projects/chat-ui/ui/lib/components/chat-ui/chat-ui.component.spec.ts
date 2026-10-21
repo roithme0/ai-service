@@ -274,10 +274,9 @@ describe('ChatUiComponent', () => {
           artifact: {
             artifact_id: 'card',
             type: 'json',
-            turn_id: 'run',
+            run_id: 'run',
             created_at: lifecycle.started_at,
-            order: 0,
-            payload: { title: 'Result', payload: { value: 'Long result' } },
+            content: { title: 'Result', payload: { value: 'Long result' } },
           },
         },
       ],

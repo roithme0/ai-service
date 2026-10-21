@@ -80,9 +80,7 @@ def _artifact_step(step: int) -> ModelResponse:
             return _text(SECOND_REPLY, "final_answer")
     return ModelResponse(parts=[
         TextPart(commentary, provider_details={"phase": "commentary"}),
-        ToolCallPart("present_artifact", {
-            "candidate": {"type": "json", "payload": {"title": title, "payload": payload}},
-        }, f"demo-artifact-{step}"),
+        ToolCallPart("present_artifact", {"type": "json", "content": {"title": title, "payload": payload}}, f"demo-artifact-{step}"),
     ])
 
 

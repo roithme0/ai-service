@@ -18,7 +18,7 @@ from pydantic_ai.usage import UsageLimits
 from app.agentic.config import DEFAULT_SESSION_LIFETIME, MAX_ARTIFACTS
 from app.agentic.presentation import PresentedSession, present_session
 from app.agentic.sessions import AgentSessionRegistry, SessionCreated
-from app.agentic.artifact_models import ArtifactCapability
+from app.agentic.artifacts import ArtifactCapability
 
 
 _logger = logging.getLogger(__name__)

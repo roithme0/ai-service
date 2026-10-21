@@ -34,10 +34,9 @@ const snapshot: PresentedSession = {
           artifact: {
             artifact_id: 'artifact-1',
             created_at: expires,
-            turn_id: 'run-1',
-            order: 0,
+            run_id: 'run-1',
             type: 'json',
-            payload: {
+            content: {
               title: 'Result',
               payload: { value: [1, true, null] },
               metadata: { source: 'test' },

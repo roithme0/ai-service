@@ -150,9 +150,8 @@ describe('Native demo application', () => {
                   artifact_id: 'greeting-1',
                   type: 'json',
                   created_at: LIFECYCLE.finished_at,
-                  order: 0,
-                  turn_id: 'run-1',
-                  payload: { title, payload: { value: payload } },
+                  run_id: 'run-1',
+                  content: { title, payload: { value: payload } },
                 },
               },
               {

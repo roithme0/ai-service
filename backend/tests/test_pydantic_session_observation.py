@@ -19,7 +19,7 @@ from app.agentic.sessions import (
     SessionSnapshot,
 )
 from app.agentic.turns import create_turn_agent
-from app.agentic.artifact_models import ArtifactCapability
+from app.agentic.artifacts import ArtifactCapability
 
 
 def groups(snapshot: PresentedSession) -> tuple[PresentedTurn, ...]:
@@ -123,9 +123,9 @@ def test_artifacts_survive_outcomes_and_shutdown_delivers_final_snapshot(outcome
 
         async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             if not any(isinstance(part, ToolReturnPart) for msg in messages for part in msg.parts):
-                return ModelResponse(parts=[ToolCallPart("present_artifact", {"candidate": {
-                    "type": "example", "payload": {"title": "Example", "payload": {}},
-                }}, "artifact")])
+                return ModelResponse(parts=[ToolCallPart("present_artifact", {
+                    "type": "example", "content": {"title": "Example", "payload": {}},
+                }, "artifact")])
             continuing.set()
             await release.wait()
             if outcome == "failed":
@@ -147,9 +147,9 @@ def test_artifacts_survive_outcomes_and_shutdown_delivers_final_snapshot(outcome
             assert isinstance(activity, ToolActivity)
             assert activity.part_kind == "tool-call" and activity.tool_call_id == "artifact"
             assert groups(published)[-1].parts[1] == artifacts(published)[0]
-            artifacts(published)[0].artifact.payload.payload["consumer"] = "changed"
-            assert "consumer" not in artifacts(runner.read_session(session.session_id, owner="alice"))[0].artifact.payload.payload
-            artifacts(published)[0].artifact.payload.payload.pop("consumer")
+            artifacts(published)[0].artifact.content.payload["consumer"] = "changed"
+            assert "consumer" not in artifacts(runner.read_session(session.session_id, owner="alice"))[0].artifact.content.payload
+            artifacts(published)[0].artifact.content.payload.pop("consumer")
             if outcome == "cancelled":
                 await runner.close()
             else:

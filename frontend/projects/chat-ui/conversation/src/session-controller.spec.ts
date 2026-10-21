@@ -390,10 +390,9 @@ describe('SessionController', () => {
               artifact: {
                 artifact_id: 'a',
                 created_at: time,
-                turn_id: 'run',
-                order: 0,
+                run_id: 'run',
                 type: 'json',
-                payload: { title: 'Omitted', payload: null },
+                content: { title: 'Omitted', payload: null },
               },
             },
           ],

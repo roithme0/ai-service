@@ -56,9 +56,9 @@ export const zFiniteJsonValueOutput = z.union([
 ]).nullable();
 
 /**
- * ArtifactPayload
+ * ArtifactContent
  */
-export const zArtifactPayload = z.object({
+export const zArtifactContent = z.object({
     metadata: z.record(z.string(), zFiniteJsonValueOutput).nullish(),
     payload: zFiniteJsonValueOutput,
     subtitle: z.string().min(1).max(200).nullish(),
@@ -87,12 +87,11 @@ export const zPromptSubmissionRequest = z.object({
 /**
  * PublishedArtifact
  */
-export const zPublishedArtifactArtifactPayload = z.object({
+export const zPublishedArtifact = z.object({
     artifact_id: z.string(),
+    content: zArtifactContent,
     created_at: z.string(),
-    order: z.int(),
-    payload: zArtifactPayload,
-    turn_id: z.string(),
+    run_id: z.string(),
     type: z.string()
 });
 
@@ -100,7 +99,7 @@ export const zPublishedArtifactArtifactPayload = z.object({
  * AcceptedArtifact
  */
 export const zAcceptedArtifact = z.object({
-    artifact: zPublishedArtifactArtifactPayload,
+    artifact: zPublishedArtifact,
     part_kind: z.literal('artifact')
 });
 

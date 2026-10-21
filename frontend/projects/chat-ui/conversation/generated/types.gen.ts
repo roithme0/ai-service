@@ -8,7 +8,7 @@ export type ClientOptions = {
  * AcceptedArtifact
  */
 export type AcceptedArtifact = {
-    artifact: PublishedArtifactArtifactPayload;
+    artifact: PublishedArtifact;
     /**
      * Part Kind
      */
@@ -50,9 +50,9 @@ export type ArtifactCapability = {
 };
 
 /**
- * ArtifactPayload
+ * ArtifactContent
  */
-export type ArtifactPayload = {
+export type ArtifactContent = {
     /**
      * Metadata
      */
@@ -190,24 +190,20 @@ export type PromptSubmissionRequest = {
 /**
  * PublishedArtifact
  */
-export type PublishedArtifactArtifactPayload = {
+export type PublishedArtifact = {
     /**
      * Artifact Id
      */
     artifact_id: string;
+    content: ArtifactContent;
     /**
      * Created At
      */
     created_at: string;
     /**
-     * Order
+     * Run Id
      */
-    order: number;
-    payload: ArtifactPayload;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
+    run_id: string;
     /**
      * Type
      */

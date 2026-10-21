@@ -19,14 +19,15 @@ from pydantic_ai.usage import UsageLimits
 
 from app.agentic.artifacts import (
     ArtifactAccepted,
+    ArtifactCapability,
     ArtifactRejected,
     ArtifactSubmission,
+    PublishedArtifact,
     create_artifact_toolset,
 )
 from app.agentic.config import MAX_ARTIFACTS, MAX_CONTEXT_LENGTH
 from app.agentic.observation import TurnObservation
 from app.agentic.turns import execute_turn
-from app.agentic.artifact_models import ArtifactCapability, ArtifactPayload, PublishedArtifact
 
 
 _CONTEXT_ADAPTER = TypeAdapter(dict[str, JsonValue], config=ConfigDict(strict=True))
@@ -80,8 +81,8 @@ def latest_settled_observation(turns: Sequence[ConversationTurn]) -> TurnObserva
 
 
 @dataclass(frozen=True)
-class ConversationArtifact(PublishedArtifact[ArtifactPayload]):
-    """Accepted artifact; turn_id is the native run ID, order is publication order."""
+class ConversationArtifact(PublishedArtifact):
+    """Accepted artifact with its native tool call ID."""
 
     tool_call_id: str
 
@@ -166,9 +167,8 @@ class AgentConversation:
                 artifact_id=str(uuid4()),
                 type=submission.candidate.type,
                 created_at=datetime.now(UTC),
-                turn_id=submission.run_id,
-                payload=submission.candidate.payload.model_copy(deep=True),
-                order=len(self._artifacts),
+                run_id=submission.run_id,
+                content=submission.candidate.content.model_copy(deep=True),
                 tool_call_id=submission.tool_call_id,
             )
             accepted = ArtifactAccepted(artifact_id=artifact.artifact_id)

@@ -5,7 +5,7 @@
         "additionalProperties": false,
         "properties": {
           "artifact": {
-            "$ref": "#/components/schemas/PublishedArtifact_ArtifactPayload_"
+            "$ref": "#/components/schemas/PublishedArtifact"
           },
           "part_kind": {
             "const": "artifact",
@@ -90,7 +90,7 @@
         "title": "ArtifactCapability",
         "type": "object"
       },
-      "ArtifactPayload": {
+      "ArtifactContent": {
         "additionalProperties": false,
         "properties": {
           "metadata": {
@@ -134,7 +134,7 @@
           "title",
           "payload"
         ],
-        "title": "ArtifactPayload",
+        "title": "ArtifactContent",
         "type": "object"
       },
       "AssistantText": {
@@ -405,25 +405,21 @@
         "title": "PromptSubmissionRequest",
         "type": "object"
       },
-      "PublishedArtifact_ArtifactPayload_": {
+      "PublishedArtifact": {
         "properties": {
           "artifact_id": {
             "title": "Artifact Id",
             "type": "string"
           },
+          "content": {
+            "$ref": "#/components/schemas/ArtifactContent"
+          },
           "created_at": {
             "title": "Created At",
             "type": "string"
           },
-          "order": {
-            "title": "Order",
-            "type": "integer"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/ArtifactPayload"
-          },
-          "turn_id": {
-            "title": "Turn Id",
+          "run_id": {
+            "title": "Run Id",
             "type": "string"
           },
           "type": {
@@ -435,9 +431,8 @@
           "artifact_id",
           "type",
           "created_at",
-          "turn_id",
-          "payload",
-          "order"
+          "run_id",
+          "content"
         ],
         "title": "PublishedArtifact",
         "type": "object"

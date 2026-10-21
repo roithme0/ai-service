@@ -23,7 +23,7 @@ from app.agentic.conversations import (
 )
 from app.agentic.sessions import SessionSnapshot
 from app.agentic.response import ResponseModel
-from app.agentic.artifact_models import ArtifactPayload, PublishedArtifact
+from app.agentic.artifacts import PublishedArtifact
 
 type ToolStatus = Literal[
     "requested", "running", "success", "failed", "denied", "interrupted"
@@ -50,7 +50,7 @@ class ToolActivity(ResponseModel):
 
 class AcceptedArtifact(ResponseModel):
     part_kind: Literal["artifact"] = "artifact"
-    artifact: PublishedArtifact[ArtifactPayload]
+    artifact: PublishedArtifact
 
 
 type PresentationPart = Annotated[
@@ -125,13 +125,12 @@ def _initial_tool_status(turn_status: TurnStatus, *, started: bool) -> ToolStatu
 
 
 def _present_artifact(artifact: ConversationArtifact) -> AcceptedArtifact:
-    return AcceptedArtifact(artifact=PublishedArtifact[ArtifactPayload](
+    return AcceptedArtifact(artifact=PublishedArtifact(
         artifact_id=artifact.artifact_id,
         type=artifact.type,
         created_at=artifact.created_at,
-        turn_id=artifact.turn_id,
-        payload=artifact.payload.model_copy(deep=True),
-        order=artifact.order,
+        run_id=artifact.run_id,
+        content=artifact.content.model_copy(deep=True),
     ))
 
 
@@ -224,7 +223,7 @@ def present_session(snapshot: SessionSnapshot) -> PresentedSession:
     }
     artifacts: dict[tuple[str, str], list[ConversationArtifact]] = {}
     for artifact in snapshot.artifacts:
-        artifacts.setdefault((artifact.turn_id, artifact.tool_call_id), []).append(
+        artifacts.setdefault((artifact.run_id, artifact.tool_call_id), []).append(
             artifact
         )
     calls: dict[tuple[bool, str, str], tuple[_RunParts, int]] = {}

@@ -132,9 +132,9 @@ capabilities are advertised. Acceptance atomically checks the conversation's
 and UTC timestamp, and retains a detached payload before returning the accepted ID
 to the model. Duplicate capability types and invalid limits fail at creation.
 `conversation.artifacts` returns detached `ConversationArtifact` snapshots in
-zero-based publication order, including artifacts accepted during active execution.
+publication order, including artifacts accepted during active execution.
 They reuse the shared published-artifact envelope and retain the native tool-call
-ID. Their `turn_id` is the native run ID, which associates them with their
+ID. Their `run_id` is the native run ID, which associates them with their
 execution in the session presentation. There is no separate application turn ID.
 Publication order is not a position in the public timeline. Accepted artifacts
 survive later failure or cancellation and continue consuming capacity. Rejection
@@ -309,11 +309,11 @@ The OpenAI web-search adapter stores its explicit completion status inside nativ
 return content; the projection selects that status without exposing the content.
 Arbitrary local/MCP result text never determines status.
 
-Accepted artifacts reuse `PublishedArtifact[ArtifactPayload]`, are detached and
+Accepted artifacts reuse `PublishedArtifact`, are detached and
 appear immediately after the publishing call, even before a return is captured or
 after turn failure/cancellation. This placement associates artifacts with their
-calls; parallel calls need not publish artifacts in call order. Envelope `order`
-remains the original publication order.
+calls; parallel calls need not publish artifacts in call order. The retained
+artifacts tuple preserves publication order.
 
 Projection reads the newest available cumulative native history, including active
 execution, without retaining another history or accumulating usage. Native request
@@ -452,21 +452,19 @@ the current turn and pass it to `execute_turn(..., toolsets=[artifact_toolset])`
 run-scoped toolsets supplement the agent's existing tools, including MCP. The
 toolset snapshots advertised capabilities and provides a native `present_artifact`
 function tool with generated argument validation and capability instructions.
-The input uses `ArtifactCandidate[ArtifactPayload]` directly. Tool arguments have this structure:
+The input uses `ArtifactCandidate` directly. Tool arguments have this structure:
 
 ```json
 {
-  "candidate": {
-    "type": "example",
-    "payload": {
-      "title": "Oats",
-      "payload": {"name": "Oats"}
-    }
+  "type": "example",
+  "content": {
+    "title": "Oats",
+    "payload": {"name": "Oats"}
   }
 }
 ```
 
-The inner `ArtifactPayload` also supports optional `subtitle` and `metadata`.
+The inner `ArtifactContent` also supports optional `subtitle` and `metadata`.
 It rejects non-finite JSON values at the shared model boundary.
 With no capabilities, it offers no tool. Presentation is core turn functionality,
 so its schema is available eagerly rather than loaded on demand.
@@ -474,19 +472,21 @@ so its schema is available eagerly rather than loaded on demand.
 The synchronous, typed `accept` callback receives an `ArtifactSubmission` containing
 the validated candidate and native run/tool-call IDs. Bind application session and
 run ownership in that callback; native IDs do not authorize access. The callback
-must atomically assign identity, timestamp and ordering and retain the artifact before returning `ArtifactAccepted(artifact_id=...)`.
+must atomically assign identity and timestamp and append the artifact in publication order before returning `ArtifactAccepted(artifact_id=...)`.
 Capacity or other expected admission failures return `ArtifactRejected(reason=...)`
 without retaining the candidate. Acceptance must not perform blocking I/O or schedule
 background publication. `AgentConversation` supplies process-local acceptance
 automatically; standalone execution can supply another callback.
 
-Payload validation supports local JSON Schema references without network resolution.
-Metadata validation additionally checks supported formats and treats omitted metadata
+Payload and metadata validation support local JSON Schema references without network
+resolution and check supported formats. Unknown formats are not enforced.
+Metadata validation treats omitted metadata
 as an empty object when a metadata schema is advertised. Metadata is rejected without
 an advertised schema. These capability/admission rejections become native failed
 tool results through `ToolFailed`; malformed arguments use native validation and the
 configured zero-retry budget, which ends the run. Successful results contain the
-assigned ID, without echoing the artifact payload. The framework's sequential-tool
+assigned ID, without echoing the artifact payload. Result bodies contain no outcome
+discriminator; native tool outcomes distinguish success from failure. The framework's sequential-tool
 barrier orders publication before subsequent calls and model continuation.
 Accepted artifacts belong to application storage and survive later model failure or
 cancellation. Unexpected acceptance exceptions propagate without fabricated success;

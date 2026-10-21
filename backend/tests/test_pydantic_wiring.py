@@ -14,11 +14,10 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.native_tools import WebSearchTool
 
 from app.agentic import wiring
-from app.agentic.artifacts import ArtifactAccepted
+from app.agentic.artifacts import ArtifactAccepted, ArtifactCapability
 from app.agentic.conversations import AgentConversation
 from app.agentic.mcp import create_mcp_toolset
 from app.core.config import Settings
-from app.agentic.artifact_models import ArtifactCapability
 
 
 @pytest.fixture(autouse=True)
@@ -95,9 +94,7 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
                 return ModelResponse(parts=[ToolCallPart("lookup_recipe", {"name": "Soup"}, "lookup-1")])
             if len(results) == 1:
                 assert results[0].content == {"name": "Soup"}
-                return ModelResponse(parts=[ToolCallPart("present_artifact", {
-                    "candidate": {"type": "json", "payload": {"title": "Soup", "payload": {"name": "Soup"}}},
-                }, "present-1")])
+                return ModelResponse(parts=[ToolCallPart("present_artifact", {"type": "json", "content": {"title": "Soup", "payload": {"name": "Soup"}}}, "present-1")])
             assert len(first.artifacts) == 1
             assert results[-1].content == ArtifactAccepted(artifact_id=first.artifacts[0].artifact_id)
         else:
@@ -153,7 +150,7 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
             assert not http.is_closed
             assert len(first.artifacts) == 1
             assert first.artifacts[0].tool_call_id == "present-1"
-            assert first.artifacts[0].turn_id == result.run_id
+            assert first.artifacts[0].run_id == result.run_id
             assert independent.artifacts == ()
             assert first.last_turn is not None and independent.last_turn is not None
             assert first.last_turn.conversation_id != independent.last_turn.conversation_id

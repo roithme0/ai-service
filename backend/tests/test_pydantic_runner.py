@@ -16,7 +16,7 @@ from app.agentic.presentation import AcceptedArtifact, AssistantText, PresentedS
 from app.agentic.runner import AgentTurnRunner, RunnerClosedError
 from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
 from app.agentic.turns import create_turn_agent
-from app.agentic.artifact_models import ArtifactCapability
+from app.agentic.artifacts import ArtifactCapability
 
 
 def groups(snapshot: PresentedSession) -> tuple[PresentedTurn, ...]:
@@ -241,9 +241,9 @@ def test_shutdown_awaits_tool_cleanup_and_retains_artifacts(cancel_close: int) -
 
         async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             return ModelResponse(parts=[
-                ToolCallPart("present_artifact", {"candidate": {
-                    "type": "example", "payload": {"title": "Accepted", "payload": {}},
-                }}, "artifact"),
+                ToolCallPart("present_artifact", {
+                    "type": "example", "content": {"title": "Accepted", "payload": {}},
+                }, "artifact"),
                 ToolCallPart("operation", {}, "operation"),
             ])
 
@@ -336,9 +336,9 @@ def test_runner_session_boundary_preserves_context_capacity_isolation_and_expiry
                 assert returns[-1].outcome == "failed"
                 assert isinstance(returns[-1].content, str) and '"artifact_limit"' in returns[-1].content
                 return ModelResponse(parts=[TextPart("No publication capacity.")])
-            return ModelResponse(parts=[ToolCallPart("present_artifact", {"candidate": {
-                "type": "example", "payload": {"title": "Example", "payload": {}},
-            }}, "artifact")])
+            return ModelResponse(parts=[ToolCallPart("present_artifact", {
+                "type": "example", "content": {"title": "Example", "payload": {}},
+            }, "artifact")])
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         other_agent = create_turn_agent(FunctionModel(respond), instructions="Help.")

@@ -11,7 +11,7 @@ from pydantic_ai.toolsets import FunctionToolset
 from app.agentic.conversations import ConversationBusyError
 from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
 from app.agentic.turns import create_turn_agent
-from app.agentic.artifact_models import ArtifactCapability
+from app.agentic.artifacts import ArtifactCapability
 
 
 @pytest.fixture(autouse=True)
@@ -48,9 +48,9 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
                 return ModelResponse(parts=[TextPart("Follow-up.")])
             if len(messages) == 1:
                 return ModelResponse(parts=[
-                    ToolCallPart("present_artifact", {"candidate": {
-                        "type": "example", "payload": {"title": "Accepted", "payload": {}},
-                    }}, "artifact"),
+                    ToolCallPart("present_artifact", {
+                        "type": "example", "content": {"title": "Accepted", "payload": {}},
+                    }, "artifact"),
                     ToolCallPart("operation", {}, "operation"),
                 ])
             if outcome == "failed":
@@ -75,7 +75,7 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
                 assert running.started_at.tzinfo is UTC
                 assert active.last_turn is None and active.messages == ()
                 assert len(active.artifacts) == 1
-                assert active.artifacts[0].turn_id == running.run_id
+                assert active.artifacts[0].run_id == running.run_id
                 with pytest.raises(FrozenInstanceError):
                     setattr(running, "status", "completed")
                 with pytest.raises(SessionNotFoundError):

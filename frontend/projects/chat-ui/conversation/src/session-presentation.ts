@@ -3,27 +3,25 @@ import type {
   PresentedSession,
   PresentedTurn,
   PresentationPart,
-  PublishedArtifactArtifactPayload,
+  PublishedArtifact,
   UserPrompt,
 } from '../generated/types.gen';
 
-export type SessionArtifactMapper = (
-  artifact: PublishedArtifactArtifactPayload,
-) => ChatArtifact | null;
+export type SessionArtifactMapper = (artifact: PublishedArtifact) => ChatArtifact | null;
 
-export function presentSessionArtifact(artifact: PublishedArtifactArtifactPayload): ChatArtifact {
+export function presentSessionArtifact(artifact: PublishedArtifact): ChatArtifact {
   return {
     kind: 'artifact',
     id: artifact.artifact_id,
     type: artifact.type,
-    headline: artifact.payload.title,
-    payload: artifact.payload.payload,
-    ...(artifact.payload.subtitle === null || artifact.payload.subtitle === undefined
+    headline: artifact.content.title,
+    payload: artifact.content.payload,
+    ...(artifact.content.subtitle === null || artifact.content.subtitle === undefined
       ? {}
-      : { subtitle: artifact.payload.subtitle }),
-    ...(artifact.payload.metadata === null || artifact.payload.metadata === undefined
+      : { subtitle: artifact.content.subtitle }),
+    ...(artifact.content.metadata === null || artifact.content.metadata === undefined
       ? {}
-      : { metadata: artifact.payload.metadata }),
+      : { metadata: artifact.content.metadata }),
   };
 }
 
