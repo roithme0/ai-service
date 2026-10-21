@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncGenerator, Callable, Sequence
+from contextlib import aclosing
 from datetime import datetime, timedelta
 from types import TracebackType
 
@@ -15,7 +16,8 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
 from app.agentic.config import DEFAULT_SESSION_LIFETIME, MAX_ARTIFACTS
-from app.agentic.sessions import AgentSessionRegistry, SessionCreated, SessionSnapshot
+from app.agentic.presentation import PresentedSession, present_session
+from app.agentic.sessions import AgentSessionRegistry, SessionCreated
 from app.sessions.models.artifacts import ArtifactCapability
 
 
@@ -72,13 +74,15 @@ class AgentTurnRunner:
             artifact_capabilities=artifact_capabilities, max_artifacts=max_artifacts,
         )
 
-    def read_session(self, session_id: str, *, owner: str) -> SessionSnapshot:
+    def read_session(self, session_id: str, *, owner: str) -> PresentedSession:
         """Read detached state, including settled outcomes after runner shutdown."""
-        return self._sessions.read(session_id, owner=owner)
+        return present_session(self._sessions.read(session_id, owner=owner))
 
-    def observe_session(self, session_id: str, *, owner: str) -> AsyncGenerator[SessionSnapshot, None]:
-        """Observe until expiry, shutdown or disconnect; payloads remain internal."""
-        return self._sessions.observe(session_id, owner=owner)
+    async def observe_session(self, session_id: str, *, owner: str) -> AsyncGenerator[PresentedSession, None]:
+        """Observe complete presentation snapshots until expiry, shutdown or disconnect."""
+        async with aclosing(self._sessions.observe(session_id, owner=owner)) as snapshots:
+            async for snapshot in snapshots:
+                yield present_session(snapshot)
 
     async def submit(
         self,

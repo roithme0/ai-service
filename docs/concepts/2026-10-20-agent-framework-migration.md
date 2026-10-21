@@ -160,6 +160,18 @@ Lifecycle status remains available even for an execution that produced no visibl
 
 Regression coverage verifies serialization, exclusion of internal data, consumer ownership, native outcome and search status selection, unresolved activity, accepted artifacts across lifecycle outcomes, cumulative history grouping, reused call IDs, setup failure, and real runner cancellation/follow-up with native history repair. Native request merging covers multiple failed prompts without run attribution, metadata retention through native serialization, and context exclusion without hiding identical unmarked user text. An intervening prompt preserves native order while later tool results update the original call group. Existing HTTP/SSE, frontend, production composition and the legacy engine remain unchanged.
 
+The fifteenth approved slice makes the runner's read and observation methods return
+`PresentedSession` directly. The private registry retains native snapshots;
+consumers receive only the selected presentation, with the same complete-snapshot
+observation model and no additional retained history. The observation wrapper
+explicitly closes its registry subscription on disconnect, cancellation or
+projection failure. Existing admission, access, expiry, observer limits, overflow
+and shutdown behavior remains intact. Regression coverage now exercises the
+consumer contract for live tool progress, artifact adjacency and mutation isolation,
+settlement across failure/cancellation, serialization and internal-data exclusion,
+as well as subscription cleanup. Native history and usage remain internal concerns.
+HTTP/frontend integration and production wiring remain subsequent work.
+
 The main remaining choices are production session integration, HTTP/frontend delivery of the selected snapshot, application availability around native MCP, and an observability destination. These are implementation decisions to resolve as work proceeds, not blockers requiring a new evaluation phase.
 
 The native artifact tool accepts `ArtifactCandidate[ArtifactPayload]` directly, with generated arguments shaped as `candidate: {type, payload: {title, subtitle?, payload, metadata?}}`. A separate flat `ArtifactRequest` and its conversion are unnecessary. Finite-JSON validation belongs to the shared `ArtifactPayload`; the candidate rejects unknown fields during Pydantic validation. This changes only the new engine's internal tool input, not the frontend contract or the legacy tool interface.

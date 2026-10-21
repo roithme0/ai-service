@@ -12,10 +12,20 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
 from app.agentic.conversations import AgentConversation, ConversationBusyError, ConversationTurn
+from app.agentic.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity, UserPrompt
 from app.agentic.runner import AgentTurnRunner, RunnerClosedError
 from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
 from app.agentic.turns import create_turn_agent
 from app.sessions.models.artifacts import ArtifactCapability
+
+
+def groups(snapshot: PresentedSession) -> tuple[PresentedTurn, ...]:
+    return tuple(item for item in snapshot.history if isinstance(item, PresentedTurn))
+
+
+def artifacts(snapshot: PresentedSession) -> tuple[AcceptedArtifact, ...]:
+    return tuple(part for group in groups(snapshot) for part in group.parts
+                 if isinstance(part, AcceptedArtifact))
 
 
 @pytest.fixture(autouse=True)
@@ -25,7 +35,7 @@ def prevent_live_model_requests(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def wait_until_settled(runner: AgentTurnRunner, session_id: str) -> None:
     async with asyncio.timeout(5):
-        while runner.read_session(session_id, owner="alice").turns[-1].lifecycle.status == "running":
+        while groups(runner.read_session(session_id, owner="alice"))[-1].lifecycle.status == "running":
             await asyncio.sleep(0)
 
 
@@ -49,8 +59,8 @@ def test_submission_waits_for_admission_and_survives_submitting_caller_cancellat
             async def submit() -> None:
                 await runner.submit(created.session_id, owner="alice", prompt="work")
                 snapshot = runner.read_session(created.session_id, owner="alice")
-                assert len(snapshot.turns) == 1
-                assert snapshot.turns[0].lifecycle.status == "running"
+                assert len(groups(snapshot)) == 1
+                assert groups(snapshot)[0].lifecycle.status == "running"
                 with pytest.raises(ConversationBusyError):
                     await runner.submit(created.session_id, owner="alice", prompt="rejected")
                 submission_returned.set()
@@ -62,13 +72,13 @@ def test_submission_waits_for_admission_and_survives_submitting_caller_cancellat
             caller.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await caller
-            assert runner.read_session(created.session_id, owner="alice").turns[0].lifecycle.status == "running"
+            assert groups(runner.read_session(created.session_id, owner="alice"))[0].lifecycle.status == "running"
             release.set()
             await wait_until_settled(runner, created.session_id)
-            assert runner.read_session(created.session_id, owner="alice").turns[0].lifecycle.status == "completed"
+            assert groups(runner.read_session(created.session_id, owner="alice"))[0].lifecycle.status == "completed"
             await runner.submit(created.session_id, owner="alice", prompt="followup")
             await wait_until_settled(runner, created.session_id)
-            assert len(runner.read_session(created.session_id, owner="alice").turns) == 2
+            assert len(groups(runner.read_session(created.session_id, owner="alice"))) == 2
         with pytest.raises(RunnerClosedError):
             await runner.submit(created.session_id, owner="alice", prompt="rejected")
 
@@ -91,10 +101,10 @@ def test_background_failure_is_consumed_and_later_turn_can_run(caplog: pytest.Lo
         async with agent, runner:
             await runner.submit(created.session_id, owner="alice", prompt="fail")
             await wait_until_settled(runner, created.session_id)
-            assert runner.read_session(created.session_id, owner="alice").turns[0].lifecycle.status == "failed"
+            assert groups(runner.read_session(created.session_id, owner="alice"))[0].lifecycle.status == "failed"
             await runner.submit(created.session_id, owner="alice", prompt="followup")
             await wait_until_settled(runner, created.session_id)
-        assert runner.read_session(created.session_id, owner="alice").turns[-1].lifecycle.status == "completed"
+        assert groups(runner.read_session(created.session_id, owner="alice"))[-1].lifecycle.status == "completed"
 
     asyncio.run(exercise())
     assert "Background agent turn failed (RuntimeError)." in caplog.text
@@ -123,7 +133,7 @@ def test_shutdown_before_execution_starts_cancels_submission_without_admission()
                 await submission
             await runner.close()
             snapshot = runner.read_session(created.session_id, owner="alice")
-            assert snapshot.turns == () and snapshot.initial_context_message is not None
+            assert snapshot.history == ()
             assert calls == 0
             with pytest.raises(RunnerClosedError):
                 async with runner:
@@ -171,7 +181,7 @@ def test_caller_cancellation_before_admission_leaves_no_turn(monkeypatch: pytest
             submission.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await submission
-        assert runner.read_session(created.session_id, owner="alice").turns == ()
+        assert groups(runner.read_session(created.session_id, owner="alice")) == ()
 
     asyncio.run(exercise())
 
@@ -205,10 +215,10 @@ def test_caller_cancellation_after_admission_before_submit_returns_keeps_executi
             with pytest.raises(asyncio.CancelledError):
                 await asyncio.wait_for(submission, 5)
             await asyncio.wait_for(started.wait(), 5)
-            assert runner.read_session(created.session_id, owner="alice").turns[0].lifecycle.status == "running"
+            assert groups(runner.read_session(created.session_id, owner="alice"))[0].lifecycle.status == "running"
             release.set()
             await wait_until_settled(runner, created.session_id)
-            assert runner.read_session(created.session_id, owner="alice").turns[0].lifecycle.status == "completed"
+            assert groups(runner.read_session(created.session_id, owner="alice"))[0].lifecycle.status == "completed"
 
     asyncio.run(exercise())
 
@@ -245,7 +255,7 @@ def test_shutdown_awaits_tool_cleanup_and_retains_artifacts(cancel_close: int) -
         async with agent:
             await runner.submit(created.session_id, owner="alice", prompt="work")
             await asyncio.wait_for(started.wait(), 5)
-            assert len(runner.read_session(created.session_id, owner="alice").artifacts) == 1
+            assert len(artifacts(runner.read_session(created.session_id, owner="alice"))) == 1
             closing = asyncio.create_task(runner.close())
             await asyncio.wait_for(cleaning.wait(), 5)
             assert not closing.done() and not cleaned.is_set()
@@ -263,9 +273,10 @@ def test_shutdown_awaits_tool_cleanup_and_retains_artifacts(cancel_close: int) -
                 await asyncio.wait_for(closing, 5)
             assert cleaned.is_set()
             snapshot = runner.read_session(created.session_id, owner="alice")
-            assert snapshot.turns[-1].lifecycle.status == "cancelled"
-            assert snapshot.last_turn is not None and snapshot.last_turn.started_calls
-            assert len(snapshot.artifacts) == 1
+            assert groups(snapshot)[-1].lifecycle.status == "cancelled"
+            assert any(isinstance(part, ToolActivity) and part.tool_name == "operation" and part.status == "interrupted"
+                       for group in groups(snapshot) for part in group.parts)
+            assert len(artifacts(snapshot)) == 1
             await runner.close()
 
     asyncio.run(exercise())
@@ -293,7 +304,7 @@ def test_owner_expiry_and_independent_session_admission() -> None:
             for session_id in (first.session_id, "missing"):
                 with pytest.raises(SessionNotFoundError):
                     await runner.submit(session_id, owner="bob", prompt="denied")
-            assert runner.read_session(first.session_id, owner="alice").turns == ()
+            assert groups(runner.read_session(first.session_id, owner="alice")) == ()
             await runner.submit(first.session_id, owner="alice", prompt="work")
             await runner.submit(second.session_id, owner="bob", prompt="work")
             await asyncio.wait_for(both_started.wait(), 5)
@@ -351,11 +362,12 @@ def test_runner_session_boundary_preserves_context_capacity_isolation_and_expiry
             await runner.submit(created.session_id, owner="alice", prompt="present")
             await wait_until_settled(runner, created.session_id)
             snapshot = runner.read_session(created.session_id, owner="alice")
-            assert snapshot.turns[-1].lifecycle.status == "completed" and snapshot.artifacts == ()
-            snapshot.messages[0].parts.clear()
-            assert runner.read_session(created.session_id, owner="alice").messages[0].parts
+            assert groups(snapshot)[-1].lifecycle.status == "completed" and artifacts(snapshot) == ()
+            assert snapshot.history[0] == UserPrompt(content="present")
+            assert groups(snapshot)[-1].parts[-1] == AssistantText(content="No publication capacity.")
+            assert PresentedSession.model_validate_json(snapshot.model_dump_json()) == snapshot
 
-        assert runner.read_session(created.session_id, owner="alice").turns[-1].lifecycle.status == "completed"
+        assert groups(runner.read_session(created.session_id, owner="alice"))[-1].lifecycle.status == "completed"
         with pytest.raises(RunnerClosedError):
             runner.create_session(owner="alice")
         now = created.expires_at

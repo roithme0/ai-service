@@ -233,19 +233,20 @@ background tasks; neither the registry nor the conversation schedules work.
 Internally, `sessions.execute_turn()` awaits conversation settlement and returns
 the native result or propagates the execution error to the runner. Consumers use
 `create_session()`, `read_session()`, `observe_session()` and `submit()`; they do not execute through the
-registry. Session snapshots contain internal native data, not a public HTTP schema.
+registry. The registry retains internal native snapshots; runner reads and observation
+return the typed `PresentedSession` described below.
 
 `runner.observe_session(session_id, owner=...)` returns an async generator of
-detached session snapshots. Close it on disconnect, for example with
+detached `PresentedSession` snapshots. Close it on disconnect, for example with
 `contextlib.aclosing()`. Iteration validates access, subscribes before yielding the
 initial snapshot, then delivers admission, native execution boundaries, tool starts,
 artifact acceptance and final settlement. It stays open across turns. A late
 subscriber starts with current state; there is no historical event replay.
 
-The active turn's `observation.messages` and `observation.usage` expose native
+Inside the registry, the active turn's `observation.messages` and `observation.usage` expose native
 state at the observed boundaries. The retained capture references Pydantic AI's
 history and usage during execution and detaches on settlement; it does not append
-messages or accumulate usage. Consumer snapshots are independent copies. Existing
+messages or accumulate usage. Internal snapshots are independent copies. Their derived
 `snapshot.messages` and `last_turn` continue to select settled history. Tool returns
 appear when the framework commits them to history, normally while preparing the
 next model request; individual parallel results are not reconstructed early.
@@ -316,8 +317,13 @@ work or setup failure without a run ID. Such entries retain admission order:
 earlier unrepresented turns appear before the next represented turn, and remaining
 ones appear at the end. Prompts keep their native order; these empty entries do
 not establish prompt-to-turn attribution. HTTP/frontend integration must
-account for this boundary. Read and observation payloads remain internal until that
-integration; no existing API or frontend behavior changes in this slice. Focused
+account for this boundary. The runner applies this projection to both reads and
+observation, exposing only `PresentedSession` to consumers. The registry's native
+snapshots remain internal. Projection creates no retained history. The observation
+wrapper closes the registry subscription on disconnect, cancellation or projection
+failure, releasing observer capacity immediately. Ownership, expiry, overflow and
+shutdown semantics remain unchanged. No production HTTP API or frontend behavior
+changes yet. Focused
 coverage: `python -m pytest tests/test_pydantic_presentation.py`.
 
 The runner consumes background exceptions and logs failure exception types without

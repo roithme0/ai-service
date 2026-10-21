@@ -375,19 +375,19 @@ def test_real_runner_projection_tracks_tool_cancellation_and_native_followup_rep
         runner = AgentTurnRunner(agent)
         session = runner.create_session(owner="alice", initial_context={"secret": "SECRET_CONTEXT"})
         async with agent, runner, aclosing(runner.observe_session(session.session_id, owner="alice")) as updates:
-            assert present_session(await anext(updates)).history == ()
+            assert (await anext(updates)).history == ()
             await runner.submit(session.session_id, owner="alice", prompt="Find it")
             await asyncio.wait_for(started.wait(), 5)
-            running = present_session(runner.read_session(session.session_id, owner="alice"))
+            running = runner.read_session(session.session_id, owner="alice")
             assert isinstance(running.history[0], UserPrompt)
             activity = groups(running)[0].parts[-1]
             assert isinstance(activity, ToolActivity) and activity.status == "running"
             release.set()
             async with asyncio.timeout(5):
                 async for update in updates:
-                    if update.turns and update.turns[-1].lifecycle.status == "cancelled":
+                    if groups(update) and groups(update)[-1].lifecycle.status == "cancelled":
                         break
-            failed = present_session(update)
+            failed = update
             assert groups(failed)[0].lifecycle.status == "cancelled"
             activity = groups(failed)[0].parts[-1]
             assert isinstance(activity, ToolActivity) and activity.status == "interrupted"
@@ -395,10 +395,9 @@ def test_real_runner_projection_tracks_tool_cancellation_and_native_followup_rep
             await runner.submit(session.session_id, owner="alice", prompt="Follow up")
             async with asyncio.timeout(5):
                 async for update in updates:
-                    if len(update.turns) == 2 and update.turns[-1].lifecycle.status == "completed":
+                    if len(groups(update)) == 2 and groups(update)[-1].lifecycle.status == "completed":
                         break
-            assert update.turns[0].observation is None
-            continued = present_session(update)
+            continued = update
             assert groups(continued)[0] == groups(failed)[0]
             assert [item.content for item in continued.history if isinstance(item, UserPrompt)] == ["Find it", "Follow up"]
             assert [part.content for part in groups(continued)[1].parts
