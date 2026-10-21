@@ -9,7 +9,7 @@ export interface ChatArtifactCapability {
   readonly metadataSchema?: { readonly [key: string]: JsonValue };
 }
 
-export const JSON_ARTIFACT_CAPABILITY: ChatArtifactCapability = {
+export const JSON_ARTIFACT_CAPABILITY = {
   type: 'json',
   description: 'Display structured JSON data for inspection.',
   titleDescription: 'Use a short, user-facing label describing the presented data.',
@@ -20,4 +20,4 @@ export const JSON_ARTIFACT_CAPABILITY: ChatArtifactCapability = {
     required: ['value'],
     additionalProperties: false,
   },
-};
+} satisfies ChatArtifactCapability;

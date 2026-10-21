@@ -1,4 +1,4 @@
-﻿import { ConversationApiError } from '@roithme0/chat-ui/conversation';
+import { JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DemoTransport } from './demo-transport';
 
@@ -7,58 +7,45 @@ describe('DemoTransport', () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
-  it('counts successful terminal events, preserves the scripted failure, and resets with a fresh session', async () => {
+
+  it('delays native creation and admission while forwarding initialization and identity', async () => {
     vi.useFakeTimers();
-    let turnCount = 0;
-    const fetchMock = vi.fn<typeof fetch>((input) => Promise.resolve(mockResponse(input)));
-    const mockResponse = (input: Parameters<typeof fetch>[0]): Response => {
-      const url = input instanceof Request ? input.url : input.toString();
-      if (url.endsWith('/sessions'))
-        return Response.json({ session_id: 'demo-1', expires_at: '2026-10-04T20:00:00Z' });
-      if (url.endsWith('/messages'))
-        return Response.json({ role: 'user', text: 'Next', turn_id: `turn-${turnCount + 1}` });
-      if (url.endsWith('/turns')) {
-        turnCount += 1;
-        return Response.json({ kind: 'accepted', turn_id: `turn-${turnCount}` });
-      }
-      if (url.endsWith('/events'))
-        return new Response(
-          `data: ${JSON.stringify({ kind: 'terminal', turn_id: `turn-${turnCount}`, sequence: turnCount, outcome: turnCount === 3 ? 'generation_failed' : 'completed' })}\n\n`,
-          { headers: { 'Content-Type': 'text/event-stream' } },
-        );
-      throw new Error(`Unexpected request: ${url}`);
-    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json(
+          { session_id: 'demo-1', expires_at: '2026-10-21T12:00:00Z' },
+          { status: 201 },
+        ),
+      )
+      .mockResolvedValueOnce(Response.json({ kind: 'accepted' }, { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);
     const transport = new DemoTransport();
-    const creation = transport.createSession();
-    await vi.advanceTimersByTimeAsync(1500);
-    const { session_id: sessionId } = await creation;
-    for (let turn = 1; turn <= 4; turn += 1) {
-      const append = transport.appendMessage(sessionId, 'Next');
-      await vi.advanceTimersByTimeAsync(1500);
-      await append;
-      const start = await transport.generateTurn(sessionId);
-      for await (const event of transport.observeTurn(
-        sessionId,
-        start.turn_id,
-        new AbortController().signal,
-      ))
-        expect(event.kind).toBe('terminal');
-    }
-    const rejected = expect(transport.appendMessage(sessionId, 'After completion')).rejects.toEqual(
-      new ConversationApiError(405, 'method_not_allowed'),
+    const initialization = {
+      artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
+    };
+    const creation = transport.createSession(initialization);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(creation).resolves.toMatchObject({ session_id: 'demo-1' });
+    const submission = transport.submitPrompt('demo-1', 'Next');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(submission).resolves.toEqual({ kind: 'accepted' });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/native/api/v1/agents/demo/sessions',
+      expect.objectContaining({ method: 'POST' }),
     );
-    await vi.advanceTimersByTimeAsync(1500);
-    await rejected;
-    const fresh = transport.createSession();
-    await vi.advanceTimersByTimeAsync(1500);
-    await fresh;
-    const append = transport.appendMessage(sessionId, 'Fresh');
-    await vi.advanceTimersByTimeAsync(1500);
-    await expect(append).resolves.toMatchObject({ role: 'user' });
-    expect(fetchMock).toHaveBeenCalledTimes(15);
-    for (const [, options] of fetchMock.mock.calls) {
+    const body = fetchMock.mock.calls[0][1]?.body;
+    expect(typeof body).toBe('string');
+    expect(JSON.parse(body as string) as unknown).toEqual(initialization);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/native/api/v1/agents/demo/sessions/demo-1/turns',
+      expect.objectContaining({ body: JSON.stringify({ prompt: 'Next' }) }),
+    );
+    for (const [, options] of fetchMock.mock.calls)
       expect(new Headers(options?.headers).get('X-Application-User')).toBe('demo:default');
-    }
   });
 });

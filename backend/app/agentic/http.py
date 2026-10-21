@@ -1,4 +1,4 @@
-"""Injectable native conversation HTTP boundary; not mounted in production."""
+"""Injectable native conversation HTTP boundary with caller-owned composition."""
 
 import logging
 from collections.abc import AsyncGenerator, Callable, Mapping

@@ -1,4 +1,5 @@
 import logging
+from contextlib import AsyncExitStack
 from types import TracebackType
 
 from fastapi import FastAPI
@@ -12,12 +13,15 @@ from app.core.http import router as core_router
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
 from app.agents.enums.configuration import AgentConfiguration
 from app.agents.http import create_session_router, get_agent_registry
+from app.agentic.runner import AgentTurnRunner
+from app.demo.native import create_native_demo_agent, create_native_demo_application
 
 
 class AgentLifespan:
     def __init__(self, _application: FastAPI) -> None:
         self._configure_logging()
         self._agents = get_configured_agents()
+        self._resource_stack = AsyncExitStack()
 
     @staticmethod
     def _configure_logging() -> None:
@@ -30,7 +34,15 @@ class AgentLifespan:
             application_logger.addHandler(handler)
 
     async def __aenter__(self) -> None:
-        await self._agents.start()
+        try:
+            await self._agents.start()
+            self._resource_stack.push_async_callback(self._agents.close)
+            demo_agent = await self._resource_stack.enter_async_context(create_native_demo_agent())
+            native_demo.state.demo_runner = await self._resource_stack.enter_async_context(AgentTurnRunner(demo_agent))
+        except BaseException:
+            await self._resource_stack.aclose()
+            get_configured_agents.cache_clear()
+            raise
 
     async def __aexit__(
         self,
@@ -39,7 +51,7 @@ class AgentLifespan:
         _traceback: TracebackType | None,
     ) -> None:
         try:
-            await self._agents.close()
+            await self._resource_stack.aclose()
         finally:
             get_configured_agents.cache_clear()
 
@@ -50,6 +62,8 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
 )
+native_demo = create_native_demo_application()
+app.mount("/api/native", native_demo)
 app.include_router(create_session_router(
     get_agent_registry, tuple(configuration.value for configuration in AgentConfiguration),
 ), responses={

@@ -4,6 +4,10 @@
 
 Implemented. The shared conversation foundation, configured Kochwiki and demo agents, generic HTTP API, and deterministic frontend demo are implemented. The frontend foundation is exposed through `@roithme0/chat-ui/conversation`, alongside the rendering-only `@roithme0/chat-ui/ui` entry point.
 
+## Native demo migration
+
+The demo now runs on the native Pydantic AI session lifecycle using a deterministic local `FunctionModel`, not an external LLM. `SessionController` observes complete backend snapshots, and the demo advertises the built-in JSON presentation capability for the native `present_artifact` tool. The native application is mounted separately at `/api/native`; Kochwiki cutover and legacy removal remain separate slices. This supersedes the legacy implementation details below about execution strategies and artifact staging. The scripted UI experience and frontend-only compatibility failure remain.
+
 ## Context
 
 The previous AI Service application hosted `@roithme0/chat-ui` through a recipe-specific controller and a hardcoded recipe snapshot. Creating a proposal then depends on Kochwiki's authoritative foodstuff catalogue and resolver. A locally plausible snapshot can therefore produce a rejected proposal when its foodstuff identifiers do not exist in Kochwiki. This makes the application unreliable as a way to inspect the chat UI itself.

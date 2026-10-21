@@ -48,9 +48,20 @@ them in tool descriptions or artifact capabilities.
 
 The new executor in `app/agentic/turns.py` is developed alongside the current
 production engine. It uses Pydantic AI 2.58.0 directly for OpenAI Responses,
-tool execution, MCP and conversation history. It is not wired into HTTP sessions yet.
-Production artifact wiring and frontend timeline integration follow in
-separate slices before the eventual cutover and legacy removal.
+tool execution, MCP and conversation history. The deterministic demo is wired
+through this engine and the native HTTP boundary; Kochwiki cutover and legacy
+removal remain separate slices.
+
+The native demo subapplication is mounted at `/api/native`, with sessions at
+`/api/native/api/v1/agents/demo/sessions` and its own OpenAPI document at
+`/api/native/openapi.json`. It owns one shared `FunctionModel` agent and runner
+for the application lifespan. Shutdown closes the runner before the agent.
+Session initialization advertises the built-in `json` capability with a required
+`value` field. Greeting labels are artifact titles, not separate capability types. The script uses `present_artifact` for two valid greeting artifacts
+and one deliberate validation failure, then demonstrates a failed turn with
+retained commentary and a subsequent successful turn. Script selection reads
+the native history; it has no cross-session mutable step counter. No model
+credentials, network model requests or Kochwiki access are needed.
 
 `app.agentic.wiring.create_kochwiki_agent()` composes the new engine from existing
 `Settings`: `OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`,

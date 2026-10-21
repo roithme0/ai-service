@@ -129,7 +129,7 @@ The required base URL is the prefix immediately before `/agents`: `/api/v1` yiel
 
 The transport binds the URL, agent key, and required third constructor argument for application identity, and optional fourth constructor argument for initialization input. Omitted input sends `{ input: {} }`; supplied input uses `{ input: suppliedInput }`. Replacement sessions use the same transport settings. Server validation is authoritative, and configurations requiring domain input can reject an empty input. No recipe types or fixtures are packaged.
 
-The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentArtifact` is the default mapper: it preserves the advertised type and identity and unwraps the backend presentation payload `{ title, payload }`. `presentJsonArtifact` is an explicit adapter for hosts such as the deterministic demo that deliberately present arbitrary tool payloads using type `json` and `{ value: originalPayload }`; the controller follows the backend timeline exactly and maps the envelope embedded in each artifact item, preserving tool/artifact placement even without a final assistant answer. The host owns view-state binding, introductory text and custom renderer registration.
+The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentArtifact` is the default mapper: it preserves the advertised type and identity and unwraps the backend presentation payload `{ title, payload }`. `presentJsonArtifact` is an explicit adapter for legacy hosts that deliberately present arbitrary tool payloads using type `json` and `{ value: originalPayload }`; the controller follows the backend timeline exactly and maps the envelope embedded in each artifact item, preserving tool/artifact placement even without a final assistant answer. The host owns view-state binding, introductory text and custom renderer registration.
 
 Session snapshots contain session identity, expiry, sequence and ordered `turns`, with no parallel messages, artifacts or timeline collections. Each turn owns its ordered `timeline`, including its initiating user message and self-contained artifact envelopes, plus `turn_id`, `user_message_id` and precise `status`: `pending`, `in_progress`, `closing`, `completed`, `generation_failed` or `conflict`. These records are the sole snapshot lifecycle contract. The backend projects initiating user identities from its authoritative timeline, admission from its internal active turn and terminal outcomes from retained history. Timeline messages carry required `is_final`, projected only from retained explicit final records and mapped directly to UI `isFinal`. Intermediate messages keep their separate kind. Terminal outcomes take precedence over received final text; final content and its marker survive later failure. The controller maps pending, in-progress and closing work to UI `active`, and generation failure or conflict to UI `failed`, without reconstructing associations or inferring completion from answer text. Observer interruption marks only the observed active turn `unknown` and retains received content. The accepted user message is placed in its acknowledged turn immediately, using a provisional message identity until the first snapshot supplies the authoritative identity. If observation fails before that snapshot, this turn and message remain visible with an unknown outcome.
 
@@ -328,8 +328,8 @@ the consumer frontend interprets it and owns any domain actions.
 
 The `/conversation` entry point also exports `HttpSessionTransport` and its
 `SessionTransport` interface for the new Pydantic AI HTTP boundary. The existing
-`ConversationController` still uses the legacy transport. The application and
-production backend routing have not switched to the new API.
+`ConversationController` still uses the legacy transport. The demo application uses the native API at `/api/native/api/v1`; Kochwiki and
+the legacy HTTP routes remain on their existing implementation.
 
 ```ts
 const transport = new HttpSessionTransport('/api/v1', 'my-agent', 'host:42');
@@ -375,7 +375,7 @@ npm.cmd run check:conversation-contract
 
 ## Parallel native session integration
 
-`SessionController` and `HttpSessionTransport` provide the native snapshot integration independently of the legacy `ConversationController`. The application still uses the legacy controller and backend; native HTTP composition and application cutover are separate work.
+`SessionController` and `HttpSessionTransport` provide the native snapshot integration independently of the legacy `ConversationController`. The demo application now uses the native controller and the isolated native demo backend. Kochwiki cutover and removal of the legacy implementation remain separate work.
 
 Create a `SessionController(transport, publish)` and bind its `SessionViewState.turns`, composer flags and `status` to the controlled component. Call `start(initialization?)`, forward submissions to `submit(text, acknowledge)`, forward status actions to `performAction(id)`, and call `dispose()` on teardown. `snapshot` exposes the latest generated `PresentedSession` contract; `admission` and `observation` report request and connection outcomes separately from its authoritative execution lifecycles. `SessionArtifactMapper` receives the generated native artifact type and can omit artifacts with `null`; the default `presentSessionArtifact` maps its typed payload envelope directly.
 
