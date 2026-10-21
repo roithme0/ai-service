@@ -337,7 +337,7 @@ wrapper closes the registry subscription on disconnect, cancellation or projecti
 failure, releasing observer capacity immediately. Ownership, expiry, overflow and
 shutdown semantics remain unchanged. Focused coverage: `python -m pytest tests/test_pydantic_presentation.py`.
 
-`app.agentic.http.create_session_router(registry_provider)` provides the native
+`app.agentic.http.create_session_router(runners_provider)` provides the native
 HTTP boundary. The main application uses it directly for Kochwiki and through
 the demo subapplication at `/api/native`; tests also mount it with deterministic
 agents. The provider

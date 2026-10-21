@@ -252,6 +252,20 @@ def test_stream_disconnect_releases_capacity_without_cancelling_execution(monkey
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize("method,suffix,status_codes", [
+    ("post", "", {201, 400, 404, 422, 503}),
+    ("get", "/{session_id}", {200, 404, 422, 503}),
+    ("post", "/{session_id}/turns", {202, 404, 409, 422, 503}),
+    ("get", "/{session_id}/events", {200, 404, 422, 429, 503}),
+])
+def test_openapi_documents_route_specific_status_codes(method: str, suffix: str, status_codes: set[int]) -> None:
+    app = FastAPI()
+    app.include_router(create_session_router(lambda: {}))
+    path = BASE.replace("test", "{configuration}") + suffix
+    responses = app.openapi()["paths"][path][method]["responses"]
+    assert {int(code) for code in responses} == status_codes
+
+
 def test_openapi_advertises_native_snapshots_and_typed_sse() -> None:
     app = FastAPI()
     app.include_router(create_session_router(lambda: {}))

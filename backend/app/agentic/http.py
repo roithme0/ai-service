@@ -77,7 +77,7 @@ type SessionEvent = Annotated[
 ]
 
 
-def _error(
+def _error_response(
     error: (
         SessionNotFoundError
         | ConversationBusyError
@@ -86,17 +86,18 @@ def _error(
         | ValueError
     ),
 ) -> JSONResponse:
-    if isinstance(error, SessionNotFoundError):
-        status, kind = 404, BoundaryError(kind="unknown")
-    elif isinstance(error, ConversationBusyError):
-        status, kind = 409, BoundaryError(kind="busy")
-    elif isinstance(error, RunnerClosedError):
-        status, kind = 503, BoundaryError(kind="agent_unavailable")
-    elif isinstance(error, ObservationLimitError):
-        status, kind = 429, BoundaryError(kind="observation_limit")
-    else:
-        status, kind = 400, BoundaryError(kind="invalid_input")
-    return JSONResponse(status_code=status, content=kind.model_dump())
+    match error:
+        case SessionNotFoundError():
+            status_code, body = 404, BoundaryError(kind="unknown")
+        case ConversationBusyError():
+            status_code, body = 409, BoundaryError(kind="busy")
+        case RunnerClosedError():
+            status_code, body = 503, BoundaryError(kind="agent_unavailable")
+        case ObservationLimitError():
+            status_code, body = 429, BoundaryError(kind="observation_limit")
+        case _:
+            status_code, body = 400, BoundaryError(kind="invalid_input")
+    return JSONResponse(status_code=status_code, content=body.model_dump())
 
 
 async def _events(
@@ -144,36 +145,39 @@ class _SessionEventResponse(EventStreamResponse):
 
 
 def create_session_router(
-    registry_provider: Callable[[], Mapping[str, AgentTurnRunner | None]],
+    runners_provider: Callable[[], Mapping[str, AgentTurnRunner | None]],
 ) -> APIRouter:
     """Composition owns runner/agent lifetimes; routes stay on their event loop."""
     router = APIRouter(
         prefix="/api/v1/agents/{configuration}/sessions", tags=["agentic"]
     )
 
-    def resolve(
-        configuration: str, registry: Mapping[str, AgentTurnRunner | None]
+    def resolve_runner(
+        configuration: str, runners: Mapping[str, AgentTurnRunner | None]
     ) -> AgentTurnRunner | JSONResponse:
-        if configuration not in registry:
+        if configuration not in runners:
             return JSONResponse(
                 status_code=404,
                 content=BoundaryError(kind="unknown_configuration").model_dump(),
             )
-        return registry[configuration] or JSONResponse(
+        return runners[configuration] or JSONResponse(
             status_code=503,
             content=BoundaryError(kind="agent_unavailable").model_dump(),
         )
 
-    errors = {code: {"model": BoundaryError} for code in (400, 404, 409, 429, 503)}
-
-    @router.post("", status_code=201, response_model=SessionCreated, responses=errors)
+    @router.post(
+        "",
+        status_code=201,
+        response_model=SessionCreated,
+        responses={code: {"model": BoundaryError} for code in (400, 404, 503)},
+    )
     async def create_session(
         configuration: str,
         body: SessionCreationRequest,
         owner: str = Depends(require_application_user),
-        registry: Mapping[str, AgentTurnRunner | None] = Depends(registry_provider),
+        runners: Mapping[str, AgentTurnRunner | None] = Depends(runners_provider),
     ) -> SessionCreated | JSONResponse:
-        runner = resolve(configuration, registry)
+        runner = resolve_runner(configuration, runners)
         if isinstance(runner, JSONResponse):
             return runner
         try:
@@ -183,37 +187,41 @@ def create_session_router(
                 artifact_capabilities=body.artifact_capabilities,
             )
         except (ValueError, RunnerClosedError) as error:
-            return _error(error)
+            return _error_response(error)
 
-    @router.get("/{session_id}", response_model=PresentedSession, responses=errors)
+    @router.get(
+        "/{session_id}",
+        response_model=PresentedSession,
+        responses={code: {"model": BoundaryError} for code in (404, 503)},
+    )
     async def read_session(
         configuration: str,
         session_id: str,
         owner: str = Depends(require_application_user),
-        registry: Mapping[str, AgentTurnRunner | None] = Depends(registry_provider),
+        runners: Mapping[str, AgentTurnRunner | None] = Depends(runners_provider),
     ) -> PresentedSession | JSONResponse:
-        runner = resolve(configuration, registry)
+        runner = resolve_runner(configuration, runners)
         if isinstance(runner, JSONResponse):
             return runner
         try:
             return runner.read_session(session_id, owner=owner)
         except SessionNotFoundError as error:
-            return _error(error)
+            return _error_response(error)
 
     @router.post(
         "/{session_id}/turns",
         status_code=202,
         response_model=TurnAccepted,
-        responses=errors,
+        responses={code: {"model": BoundaryError} for code in (404, 409, 503)},
     )
     async def submit_prompt(
         configuration: str,
         session_id: str,
         body: PromptSubmissionRequest,
         owner: str = Depends(require_application_user),
-        registry: Mapping[str, AgentTurnRunner | None] = Depends(registry_provider),
+        runners: Mapping[str, AgentTurnRunner | None] = Depends(runners_provider),
     ) -> TurnAccepted | JSONResponse:
-        runner = resolve(configuration, registry)
+        runner = resolve_runner(configuration, runners)
         if isinstance(runner, JSONResponse):
             return runner
         try:
@@ -223,7 +231,7 @@ def create_session_router(
             ConversationBusyError,
             RunnerClosedError,
         ) as error:
-            return _error(error)
+            return _error_response(error)
         return TurnAccepted()
 
     @router.get(
@@ -231,7 +239,7 @@ def create_session_router(
         response_class=EventStreamResponse,
         response_model=None,
         responses={
-            **errors,
+            **{code: {"model": BoundaryError} for code in (404, 429, 503)},
             200: {
                 "model": RootModel[SessionEvent],
                 "content": {"text/event-stream": {"schema": {"type": "object"}}},
@@ -242,9 +250,9 @@ def create_session_router(
         configuration: str,
         session_id: str,
         owner: str = Depends(require_application_user),
-        registry: Mapping[str, AgentTurnRunner | None] = Depends(registry_provider),
+        runners: Mapping[str, AgentTurnRunner | None] = Depends(runners_provider),
     ) -> StreamingResponse | JSONResponse:
-        runner = resolve(configuration, registry)
+        runner = resolve_runner(configuration, runners)
         if isinstance(runner, JSONResponse):
             return runner
         updates = runner.observe_session(session_id, owner=owner)
@@ -252,7 +260,7 @@ def create_session_router(
             first = await anext(updates)
         except (SessionNotFoundError, ObservationLimitError) as error:
             await updates.aclose()
-            return _error(error)
+            return _error_response(error)
         except BaseException:
             await updates.aclose()
             raise

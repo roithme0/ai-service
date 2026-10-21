@@ -386,17 +386,9 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostErrors = {
      */
     404: BoundaryError;
     /**
-     * Conflict
-     */
-    409: BoundaryError;
-    /**
      * Validation Error
      */
     422: HttpValidationError;
-    /**
-     * Too Many Requests
-     */
-    429: BoundaryError;
     /**
      * Service Unavailable
      */
@@ -438,25 +430,13 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetData = {
 
 export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors = {
     /**
-     * Bad Request
-     */
-    400: BoundaryError;
-    /**
      * Not Found
      */
     404: BoundaryError;
     /**
-     * Conflict
-     */
-    409: BoundaryError;
-    /**
      * Validation Error
      */
     422: HttpValidationError;
-    /**
-     * Too Many Requests
-     */
-    429: BoundaryError;
     /**
      * Service Unavailable
      */
@@ -498,17 +478,9 @@ export type ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetData
 
 export type ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetErrors = {
     /**
-     * Bad Request
-     */
-    400: BoundaryError;
-    /**
      * Not Found
      */
     404: BoundaryError;
-    /**
-     * Conflict
-     */
-    409: BoundaryError;
     /**
      * Validation Error
      */
@@ -558,10 +530,6 @@ export type SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostData =
 
 export type SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors = {
     /**
-     * Bad Request
-     */
-    400: BoundaryError;
-    /**
      * Not Found
      */
     404: BoundaryError;
@@ -573,10 +541,6 @@ export type SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors
      * Validation Error
      */
     422: HttpValidationError;
-    /**
-     * Too Many Requests
-     */
-    429: BoundaryError;
     /**
      * Service Unavailable
      */
