@@ -42,7 +42,7 @@ from app.agentic.presentation import (
 from app.agentic.runner import AgentTurnRunner
 from app.agentic.sessions import SessionSnapshot
 from app.agentic.turns import create_turn_agent
-from app.sessions.models.artifacts import ArtifactPayload
+from app.agentic.artifact_models import ArtifactPayload
 
 
 NOW = datetime(2026, 10, 21, tzinfo=UTC)

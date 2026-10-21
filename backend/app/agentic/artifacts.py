@@ -15,7 +15,7 @@ from referencing import Registry
 from referencing.exceptions import Unresolvable
 
 from app.agentic.config import TOOL_TIMEOUT_SECONDS, VALIDATION_MAX_RETRIES
-from app.sessions.models.artifacts import (
+from app.agentic.artifact_models import (
     ArtifactCandidate,
     ArtifactCapability,
     ArtifactPayload,

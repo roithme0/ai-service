@@ -18,7 +18,7 @@ from app.agentic.artifacts import ArtifactAccepted
 from app.agentic.conversations import AgentConversation
 from app.agentic.mcp import create_mcp_toolset
 from app.core.config import Settings
-from app.sessions.models.artifacts import ArtifactCapability
+from app.agentic.artifact_models import ArtifactCapability
 
 
 @pytest.fixture(autouse=True)

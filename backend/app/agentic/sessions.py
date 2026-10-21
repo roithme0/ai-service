@@ -26,7 +26,7 @@ from app.agentic.conversations import (
     latest_settled_observation,
 )
 from app.agentic.observation import TurnObservation
-from app.sessions.models.artifacts import ArtifactCapability
+from app.agentic.artifact_models import ArtifactCapability
 
 
 def _utc_now() -> datetime:

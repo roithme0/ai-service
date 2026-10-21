@@ -12,7 +12,7 @@ from app.agentic.artifacts import ArtifactAccepted
 from app.agentic.conversations import ConversationBusyError
 from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
 from app.agentic.turns import create_turn_agent
-from app.sessions.models.artifacts import ArtifactCapability
+from app.agentic.artifact_models import ArtifactCapability
 
 
 @pytest.fixture(autouse=True)

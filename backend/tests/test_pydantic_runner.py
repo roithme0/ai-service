@@ -16,7 +16,7 @@ from app.agentic.presentation import AcceptedArtifact, AssistantText, PresentedS
 from app.agentic.runner import AgentTurnRunner, RunnerClosedError
 from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
 from app.agentic.turns import create_turn_agent
-from app.sessions.models.artifacts import ArtifactCapability
+from app.agentic.artifact_models import ArtifactCapability
 
 
 def groups(snapshot: PresentedSession) -> tuple[PresentedTurn, ...]:

@@ -23,7 +23,7 @@ from app.agentic.conversations import (
 )
 from app.agentic.sessions import SessionSnapshot
 from app.agentic.response import ResponseModel
-from app.sessions.models.artifacts import ArtifactPayload, PublishedArtifact
+from app.agentic.artifact_models import ArtifactPayload, PublishedArtifact
 
 type ToolStatus = Literal[
     "requested", "running", "success", "failed", "denied", "interrupted"

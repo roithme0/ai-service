@@ -19,7 +19,7 @@ from app.agentic.sessions import (
     SessionSnapshot,
 )
 from app.agentic.turns import create_turn_agent
-from app.sessions.models.artifacts import ArtifactCapability
+from app.agentic.artifact_models import ArtifactCapability
 
 
 def groups(snapshot: PresentedSession) -> tuple[PresentedTurn, ...]:

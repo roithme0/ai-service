@@ -11,7 +11,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from app.agentic.artifacts import ArtifactAccepted
 from app.agentic.conversations import AgentConversation, ConversationBusyError
 from app.agentic.turns import create_turn_agent
-from app.sessions.models.artifacts import ArtifactCapability
+from app.agentic.artifact_models import ArtifactCapability
 
 
 @pytest.fixture(autouse=True)

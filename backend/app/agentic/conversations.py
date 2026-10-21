@@ -26,7 +26,7 @@ from app.agentic.artifacts import (
 from app.agentic.config import MAX_ARTIFACTS, MAX_CONTEXT_LENGTH
 from app.agentic.observation import TurnObservation
 from app.agentic.turns import execute_turn
-from app.sessions.models.artifacts import ArtifactCapability, ArtifactPayload, PublishedArtifact
+from app.agentic.artifact_models import ArtifactCapability, ArtifactPayload, PublishedArtifact
 
 
 _CONTEXT_ADAPTER = TypeAdapter(dict[str, JsonValue], config=ConfigDict(strict=True))

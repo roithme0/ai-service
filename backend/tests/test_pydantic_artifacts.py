@@ -15,7 +15,7 @@ from app.agentic.artifacts import (
 )
 from app.agentic.observation import TurnObservation
 from app.agentic.turns import create_turn_agent, execute_turn
-from app.sessions.models.artifacts import ArtifactCapability, ArtifactPayload, PublishedArtifact
+from app.agentic.artifact_models import ArtifactCapability, ArtifactPayload, PublishedArtifact
 
 
 @pytest.fixture(autouse=True)

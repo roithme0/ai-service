@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, PlainSerializer, f
 from referencing import Resource
 from referencing.jsonschema import DRAFT202012
 
-from app.sessions.config import MAX_ARTIFACT_DESCRIPTION_LENGTH, MAX_ARTIFACT_HEADER_LENGTH
+from app.agentic.config import MAX_ARTIFACT_DESCRIPTION_LENGTH, MAX_ARTIFACT_HEADER_LENGTH
 from app.core.json import FiniteJsonValue
 
 ArtifactT = TypeVar("ArtifactT")
@@ -39,11 +39,6 @@ class ArtifactEnvelope(Generic[ArtifactT]):
 @dataclass(frozen=True)
 class PublishedArtifact(ArtifactEnvelope[ArtifactT]):
     order: int
-
-
-@dataclass(frozen=True)
-class ArtifactToolOutput:
-    kind: str
 
 
 class ArtifactCapability(BaseModel):
