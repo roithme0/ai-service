@@ -11,13 +11,11 @@ Plans and specification files are gitignored. Treat the current code and tracked
 ## Coding Rules
 
 - No destructive commands.
-- Avoid wide refactors without explicit confirmation.
 - Strict typing is required. Avoid `Any` and untyped parameters/returns.
 - Keep code comments to a minimum; avoid commenting the obvious.
 
 ## AI Workflow
 
-- Ask before large refactors.
 - If a user message is phrased as a question, answer it in chat first and ask for explicit confirmation before making code or file changes.
 - Confirm before touching build or tooling config.
 - Summarize changes and call out risks.

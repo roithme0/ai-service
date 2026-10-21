@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from datetime import datetime, timedelta
 from types import TracebackType
 
@@ -76,6 +76,10 @@ class AgentTurnRunner:
         """Read detached state, including settled outcomes after runner shutdown."""
         return self._sessions.read(session_id, owner=owner)
 
+    def observe_session(self, session_id: str, *, owner: str) -> AsyncGenerator[SessionSnapshot, None]:
+        """Observe until expiry, shutdown or disconnect; payloads remain internal."""
+        return self._sessions.observe(session_id, owner=owner)
+
     async def submit(
         self,
         session_id: str,
@@ -139,5 +143,6 @@ class AgentTurnRunner:
                 await asyncio.shield(completion)
             except asyncio.CancelledError as error:
                 cancellation = error
+        self._sessions.close_observers()
         if cancellation is not None:
             raise cancellation

@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 
 from pydantic_ai import RunContext, ToolDefinition
-from pydantic_ai.capabilities import AgentNode, Hooks, ValidatedToolArgs
+from pydantic_ai.capabilities import AgentNode, Hooks, NodeResult, ValidatedToolArgs
 from pydantic_ai.messages import ModelMessage, ToolCallPart
+from pydantic_ai.models import ModelRequestContext
 from pydantic_ai.usage import RunUsage
 
 
 @dataclass
 class TurnObservation:
-    """Single-use capture. Messages and usage settle even when execution raises."""
+    """Single-use native state view, detached on settlement even when execution raises."""
 
     messages: list[ModelMessage] = field(default_factory=list, init=False)
     started_calls: tuple[ToolCallPart, ...] = field(default=(), init=False)
@@ -25,25 +26,41 @@ class TurnObservation:
     _used: bool = field(default=False, init=False, repr=False)
 
     @contextmanager
-    def capture(self) -> Iterator[Hooks[None]]:
+    def capture(self, on_change: Callable[[], None] | None = None) -> Iterator[Hooks[None]]:
         if self._used:
             raise ValueError("Use a new TurnObservation for each turn.")
         self._used = True
-        history: list[ModelMessage] = []
-        usage = RunUsage()
         hooks = Hooks[None]()
 
-        @hooks.on.before_node_run
-        def observe_node(ctx: RunContext[None], *, node: AgentNode[None]) -> AgentNode[None]:
-            nonlocal history, usage
-            history = ctx.messages
-            usage = ctx.usage
+        def observe(ctx: RunContext[None]) -> None:
+            self.messages = ctx.messages
+            self.usage = ctx.usage
             self.run_id = ctx.run_id
             self.conversation_id = ctx.conversation_id
+            if on_change is not None:
+                on_change()
+
+        @hooks.on.before_node_run
+        async def observe_node(ctx: RunContext[None], *, node: AgentNode[None]) -> AgentNode[None]:
+            observe(ctx)
             return node
 
+        @hooks.on.after_node_run
+        async def observe_completed_node(
+            ctx: RunContext[None], *, node: AgentNode[None], result: NodeResult[None],
+        ) -> NodeResult[None]:
+            observe(ctx)
+            return result
+
+        @hooks.on.before_model_request
+        async def observe_request(
+            ctx: RunContext[None], request_context: ModelRequestContext,
+        ) -> ModelRequestContext:
+            observe(ctx)
+            return request_context
+
         @hooks.on.before_tool_execute
-        def start_tool(
+        async def start_tool(
             ctx: RunContext[None],
             *,
             call: ToolCallPart,
@@ -51,10 +68,11 @@ class TurnObservation:
             args: ValidatedToolArgs,
         ) -> ValidatedToolArgs:
             self.started_calls += (deepcopy(call),)
+            observe(ctx)
             return args
 
         try:
             yield hooks
         finally:
-            self.messages = deepcopy(history)
-            self.usage = deepcopy(usage)
+            self.messages = deepcopy(self.messages)
+            self.usage = deepcopy(self.usage)

@@ -1,6 +1,6 @@
 """Pydantic AI turns, independent of the legacy execution and session models."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import nullcontext
 
 from openai.types.shared import ReasoningEffort
@@ -83,9 +83,10 @@ async def execute_turn(
     message_history: Sequence[ModelMessage] = (),
     usage_limits: UsageLimits | None = None,
     observation: TurnObservation | None = None,
+    on_change: Callable[[], None] | None = None,
     toolsets: Sequence[AbstractToolset[None]] = (),
 ) -> AgentRunResult[str]:
-    with observation.capture() if observation is not None else nullcontext() as hooks:
+    with observation.capture(on_change) if observation is not None else nullcontext() as hooks:
         return await agent.run(
             prompt,
             message_history=message_history,

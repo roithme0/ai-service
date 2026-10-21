@@ -95,6 +95,7 @@ class AgentConversation:
         initial_context: dict[str, JsonValue] | None = None,
         artifact_capabilities: Sequence[ArtifactCapability] = (),
         max_artifacts: int = MAX_ARTIFACTS,
+        on_change: Callable[[], None] | None = None,
     ) -> None:
         if isinstance(max_artifacts, bool) or not isinstance(max_artifacts, int) or max_artifacts < 0:
             raise ValueError("max_artifacts must be a non-negative integer.")
@@ -108,6 +109,11 @@ class AgentConversation:
         self._artifact_lock = Lock()
         self._turns: tuple[ConversationTurn, ...] = ()
         self._turn_lock = Lock()
+        self._on_change = on_change
+
+    def _notify(self) -> None:
+        if self._on_change is not None:
+            self._on_change()
 
     @property
     def turns(self) -> tuple[ConversationTurn, ...]:
@@ -162,7 +168,8 @@ class AgentConversation:
             )
             accepted = ArtifactAccepted(artifact_id=artifact.artifact_id)
             self._artifacts = (*self._artifacts, artifact)
-            return accepted
+        self._notify()
+        return accepted
 
     async def execute_turn(
         self,
@@ -181,6 +188,7 @@ class AgentConversation:
         try:
             if on_admitted is not None:
                 on_admitted()
+            self._notify()
             artifact_toolset = create_artifact_toolset(self._artifact_capabilities, self._accept_artifact)
             result = await execute_turn(
                 agent,
@@ -188,6 +196,7 @@ class AgentConversation:
                 message_history=self.messages,
                 usage_limits=usage_limits,
                 observation=observation,
+                on_change=self._notify,
                 toolsets=[*toolsets, artifact_toolset],
             )
         except CancelledError:
@@ -229,3 +238,4 @@ class AgentConversation:
             observation=observation if observation.run_id is not None else None,
         ))
         self._turn_lock.release()
+        self._notify()

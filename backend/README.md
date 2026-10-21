@@ -232,8 +232,40 @@ callback before execution can suspend. The runner creates, retains and observes 
 background tasks; neither the registry nor the conversation schedules work.
 Internally, `sessions.execute_turn()` awaits conversation settlement and returns
 the native result or propagates the execution error to the runner. Consumers use
-`create_session()`, `read_session()` and `submit()`; they do not execute through the
+`create_session()`, `read_session()`, `observe_session()` and `submit()`; they do not execute through the
 registry. Session snapshots contain internal native data, not a public HTTP schema.
+
+`runner.observe_session(session_id, owner=...)` returns an async generator of
+detached session snapshots. Close it on disconnect, for example with
+`contextlib.aclosing()`. Iteration validates access, subscribes before yielding the
+initial snapshot, then delivers admission, native execution boundaries, tool starts,
+artifact acceptance and final settlement. It stays open across turns. A late
+subscriber starts with current state; there is no historical event replay.
+
+The active turn's `observation.messages` and `observation.usage` expose native
+state at the observed boundaries. The retained capture references Pydantic AI's
+history and usage during execution and detaches on settlement; it does not append
+messages or accumulate usage. Consumer snapshots are independent copies. Existing
+`snapshot.messages` and `last_turn` continue to select settled history. Tool returns
+appear when the framework commits them to history, normally while preparing the
+next model request; individual parallel results are not reconstructed early.
+Provider-native search is visible in completed native responses, without separate
+local execution notifications. Model execution remains non-streamed, without token
+deltas.
+
+Each session permits eight observers with 128 pending snapshots each, configured
+in `app/agentic/config.py`. `ObservationLimitError` rejects excess observers;
+`ObservationOverflowError` ends a slow observer explicitly without failing the
+turn. Ownership and expiry are rechecked before delivery. An idle observer waits
+for a conversation notification or the session's fixed expiry deadline, without
+periodic wake-ups or duplicate snapshots. Expiry raises the same
+`SessionNotFoundError` used by reads and never cancels admitted execution.
+Disconnect/cancellation releases the observer slot and leaves execution alone.
+Shutdown delivers queued settlement snapshots and ends observation; observing an
+already closed runner yields one owner-checked snapshot and ends. Consumers must
+still close generators when stopping iteration. HTTP/SSE and public content
+selection remain deferred. Focused coverage:
+`python -m pytest tests/test_pydantic_session_observation.py`.
 
 The runner consumes background exceptions and logs failure exception types without
 provider payloads. Existing conversation entries remain the only lifecycle records.
