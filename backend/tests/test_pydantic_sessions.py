@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic_ai import RunContext, Tool, models
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextContent, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
@@ -85,7 +85,8 @@ def test_snapshot_initial_context_survives_setup_failure_and_is_replaced_by_hist
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         prompts = [part.content for message in messages for part in message.parts if isinstance(part, UserPromptPart)]
-        assert len(prompts) == 2 and isinstance(prompts[0], str) and '"recipe":42' in prompts[0]
+        assert len(prompts) == 2 and not isinstance(prompts[0], str)
+        assert isinstance(prompts[0][0], TextContent) and '"recipe":42' in prompts[0][0].content
         return ModelResponse(parts=[TextPart("Hello.")])
 
     async def exercise() -> None:

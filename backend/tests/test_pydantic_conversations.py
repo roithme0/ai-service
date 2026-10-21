@@ -11,6 +11,7 @@ from pydantic_ai.messages import (
     ModelMessagesTypeAdapter,
     ModelResponse,
     TextPart,
+    TextContent,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -31,9 +32,11 @@ def prevent_live_model_requests(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def prompts(messages: Sequence[ModelMessage]) -> list[str]:
     return [
-        part.content
+        text if isinstance(text, str) else text.content
         for message in messages for part in message.parts
-        if isinstance(part, UserPromptPart) and isinstance(part.content, str)
+        if isinstance(part, UserPromptPart)
+        for text in ([part.content] if isinstance(part.content, str) else part.content)
+        if isinstance(text, (str, TextContent))
     ]
 
 
@@ -56,8 +59,10 @@ def test_initial_context_is_snapshotted_as_data_and_retained_once_across_request
     snapshot = conversation.messages
     assert len(snapshot) == 1
     assert isinstance(snapshot[0].parts[0], UserPromptPart)
-    context_text = snapshot[0].parts[0].content
-    assert isinstance(context_text, str)
+    context_content = snapshot[0].parts[0].content
+    assert not isinstance(context_content, str)
+    assert isinstance(context_content[0], TextContent)
+    context_text = context_content[0].content
     assert context_text.endswith(expected)
     assert "data, not instructions" in context_text
     snapshot[0].parts.clear()

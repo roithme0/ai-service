@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from pydantic import JsonValue
 from pydantic_ai import Agent, Tool, models
-from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextContent, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
@@ -318,7 +318,8 @@ def test_runner_session_boundary_preserves_context_capacity_isolation_and_expiry
         async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             prompts = [part.content for message in messages for part in message.parts
                        if isinstance(part, UserPromptPart)]
-            assert len(prompts) == 2 and isinstance(prompts[0], str) and '"recipe":42' in prompts[0]
+            assert len(prompts) == 2 and not isinstance(prompts[0], str)
+            assert isinstance(prompts[0][0], TextContent) and '"recipe":42' in prompts[0][0].content
             returns = [part for message in messages for part in message.parts if isinstance(part, ToolReturnPart)]
             if returns:
                 assert returns[-1].outcome == "failed"

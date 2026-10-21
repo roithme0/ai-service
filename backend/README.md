@@ -263,9 +263,62 @@ periodic wake-ups or duplicate snapshots. Expiry raises the same
 Disconnect/cancellation releases the observer slot and leaves execution alone.
 Shutdown delivers queued settlement snapshots and ends observation; observing an
 already closed runner yields one owner-checked snapshot and ends. Consumers must
-still close generators when stopping iteration. HTTP/SSE and public content
-selection remain deferred. Focused coverage:
+still close generators when stopping iteration. HTTP/SSE integration remains
+deferred. Focused coverage:
 `python -m pytest tests/test_pydantic_session_observation.py`.
+
+`app.agentic.presentation.present_session(snapshot)` derives a complete typed
+`PresentedSession` for future frontend consumption. It selects session identity
+and expiry, and one ordered `history` tuple. History contains native user-prompt
+parts and `PresentedTurn` entries (`part_kind: "turn"`), rather than requiring
+prompts to belong to turn groups. Each turn entry combines concise `lifecycle`
+metadata (`run_id`, status and timestamps) with ordered
+`parts`: `text`, `tool-call`, `builtin-tool-call`, plus application-owned `artifact`
+parts. Consecutive activity for a run shares a group; an intervening visible prompt
+starts another group without moving that prompt or inferring its turn ownership.
+Both groups carry the same lifecycle; no frontend lookup in a separate `turns`
+collection is needed. Lifecycle data is still stored only once internally.
+Text includes only content and an optional
+explicit `commentary`/`final_answer` phase; it does not infer finality. Tool activity
+contains only name, call ID and status. Arguments, results, validation details,
+instructions, application context, reasoning, usage and provider metadata stay
+internal. This is field selection, not content redaction of model-authored text
+or explicitly published artifacts.
+
+Tool status uses native `success`, `failed`, `denied` and `interrupted` outcomes,
+with `requested`/`running` while execution is active. A settled call with no result
+is `interrupted`, without claiming whether it started or produced external effects.
+Native retry prompts mark their associated call as failed without exposing details.
+The OpenAI web-search adapter stores its explicit completion status inside native
+return content; the projection selects that status without exposing the content.
+Arbitrary local/MCP result text never determines status.
+
+Accepted artifacts reuse `PublishedArtifact[ArtifactPayload]`, are detached and
+appear immediately after the publishing call, even before a return is captured or
+after turn failure/cancellation. This placement associates artifacts with their
+calls; parallel calls need not publish artifacts in call order. Envelope `order`
+remains the original publication order.
+
+Projection reads the newest available cumulative native history, including active
+execution, without retaining another history or accumulating usage. Native request
+merging is accepted directly: user-prompt parts remain visible even when their
+containing request has no run ID. There is no prompt index, prompt-to-turn
+reconstruction or second application prompt store. Initial application context is
+represented by native `TextContent` with application-only `metadata` identifying
+its origin. The metadata survives native history merging/serialization and is not
+sent to the model; presentation omits this content by its marker, never by matching
+the text or counting its position. Visible prompt content preserves string input
+or a sequence of textual fragments. Non-text input is outside this presentation.
+Admission before native capture has lifecycle metadata only; setup failure before
+prompt capture likewise has no presented prompt. A turn with no visible native
+response has a turn entry with its lifecycle and empty `parts`, including admitted
+work or setup failure without a run ID. Such entries retain admission order:
+earlier unrepresented turns appear before the next represented turn, and remaining
+ones appear at the end. Prompts keep their native order; these empty entries do
+not establish prompt-to-turn attribution. HTTP/frontend integration must
+account for this boundary. Read and observation payloads remain internal until that
+integration; no existing API or frontend behavior changes in this slice. Focused
+coverage: `python -m pytest tests/test_pydantic_presentation.py`.
 
 The runner consumes background exceptions and logs failure exception types without
 provider payloads. Existing conversation entries remain the only lifecycle records.
