@@ -9,6 +9,7 @@ MAX_TOOL_CALLS: Final[int] = 32
 MAX_NATIVE_TOOL_CALLS_PER_RESPONSE: Final[int] = 16
 MAX_OUTPUT_TOKENS: Final[int] = 16_384
 MAX_CONTEXT_LENGTH: Final[int] = 64_000
+MAX_PROMPT_LENGTH: Final[int] = 16_000
 MAX_ARTIFACTS: Final[int] = 100
 DEFAULT_SESSION_LIFETIME: Final[timedelta] = timedelta(minutes=90)
 MAX_OBSERVERS_PER_SESSION: Final[int] = 8

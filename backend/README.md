@@ -264,8 +264,8 @@ periodic wake-ups or duplicate snapshots. Expiry raises the same
 Disconnect/cancellation releases the observer slot and leaves execution alone.
 Shutdown delivers queued settlement snapshots and ends observation; observing an
 already closed runner yields one owner-checked snapshot and ends. Consumers must
-still close generators when stopping iteration. HTTP/SSE integration remains
-deferred. Focused coverage:
+still close generators when stopping iteration. Production HTTP/SSE integration remains
+deferred; the injectable router is described below. Focused coverage:
 `python -m pytest tests/test_pydantic_session_observation.py`.
 
 `app.agentic.presentation.present_session(snapshot)` derives a complete typed
@@ -325,6 +325,59 @@ failure, releasing observer capacity immediately. Ownership, expiry, overflow an
 shutdown semantics remain unchanged. No production HTTP API or frontend behavior
 changes yet. Focused
 coverage: `python -m pytest tests/test_pydantic_presentation.py`.
+
+`app.agentic.http.create_session_router(registry_provider)` provides the native
+HTTP boundary. It is intentionally absent from the production FastAPI application;
+tests mount it in an isolated application with deterministic agents. The provider
+returns configured names mapped to runners (or `None` for unavailable agents).
+Application composition owns the shared agent and runner lifetimes. All routes
+run asynchronously on the runner's event loop and require the existing
+`X-Application-User: source:id` header.
+
+Paths are relative to `/api/v1/agents/{configuration}/sessions`:
+
+| Method | Path | Request / response |
+| --- | --- | --- |
+| POST | empty | `{initial_context?, artifact_capabilities?}`; 201 with session ID and expiry |
+| GET | `/{session_id}` | Complete `PresentedSession` |
+| POST | `/{session_id}/turns` | `{prompt}`; 202 with `{kind: "accepted"}` after admission |
+| GET | `/{session_id}/events` | Session-level SSE with complete snapshots across turns |
+
+Creation accepts generic JSON context and shared artifact capability declarations;
+agent-specific domain input preparation remains composition work for cutover.
+Execution limits stay server-owned. Prompts must be nonblank strings of at most
+16,000 characters (`MAX_PROMPT_LENGTH`); their original whitespace is preserved.
+Unknown request fields are rejected. FastAPI reports malformed bodies and headers
+as 422 validation errors; invalid initialization detected by the runner (such as
+oversized context or duplicate capability types) returns 400 `invalid_input`.
+
+Submission combines prompt admission and execution startup; there is no separate
+append endpoint, HTTP turn identifier or required native run ID in the acceptance
+response. Execution can settle before the acknowledgement reaches the client;
+202 confirms admission, while read/observation lifecycle state supplies the outcome.
+Failed execution after admission does not change the acknowledgement into an HTTP
+failure. There is no automatic retry or idempotency token.
+
+The event stream acquires its subscription and initial snapshot before sending
+headers. Unknown, expired and differently owned sessions all return 404 `unknown`;
+unknown configuration returns 404 `unknown_configuration`, busy admission 409
+`busy`, unavailable/closed runners 503 `agent_unavailable`, and excess observers
+429 `observation_limit`. Reads and observation remain available on a closed runner
+until expiry. Each SSE data frame is either `{kind: "snapshot", snapshot: ...}`
+or `{kind: "error", reason: ...}`. After headers, expiry emits `unknown`, queue
+overflow emits `observation_overflow`, and unexpected observation failure emits
+`internal_error` without exception details. Errors end observation; turn completion
+keeps it open for subsequent turns. Shutdown drains queued snapshots then closes.
+EOF alone does not prove an active turn completed.
+
+The response owns subscription cleanup even when sending headers/body fails or
+the client disconnects. Disconnect never cancels admitted execution. Streaming
+uses `Cache-Control: no-cache` and `X-Accel-Buffering: no`; there is no replay,
+reconnection, delta protocol, token streaming or periodic heartbeat in this slice.
+OpenAPI describes both snapshot and error frame models under `text/event-stream`.
+Frontend generation/integration, demo migration, Kochwiki composition and production
+routing remain separate slices. Focused coverage:
+`python -m pytest tests/test_pydantic_http.py`.
 
 The runner consumes background exceptions and logs failure exception types without
 provider payloads. Existing conversation entries remain the only lifecycle records.

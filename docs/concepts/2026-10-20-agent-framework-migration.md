@@ -172,6 +172,26 @@ settlement across failure/cancellation, serialization and internal-data exclusio
 as well as subscription cleanup. Native history and usage remain internal concerns.
 HTTP/frontend integration and production wiring remain subsequent work.
 
+The sixteenth approved slice adds an injectable HTTP router around the runner,
+kept out of production routing until frontend integration is complete. The next
+slices separate frontend integration, deterministic demo migration, and Kochwiki
+cutover/legacy removal. The HTTP boundary is exercised in an isolated FastAPI app
+with deterministic native agents, without a legacy presentation adapter.
+
+Session creation accepts generic initial context and artifact capabilities;
+agent-specific preparation remains future composition work. Owner-checked reads
+return `PresentedSession`. One POST submits the prompt and starts execution,
+returning 202 on admission without requiring a run ID. Session-level SSE acquires
+its subscription before sending headers and emits complete snapshot frames across
+turns. Lifecycle data conveys execution outcomes; observation errors are separate
+frames ending the stream. Access, expiry and observer capacity failures before
+headers are HTTP errors. Disconnect releases the subscription without cancelling
+execution. Existing expiry, overflow and runner shutdown semantics are preserved.
+Request validation, OpenAPI frame schemas, artifacts, failure after admission,
+multiple turns, ownership isolation and disconnect cleanup have regression coverage.
+No production routes, generated frontend contracts, demo implementation or legacy
+engine behavior changes in this slice.
+
 The main remaining choices are production session integration, HTTP/frontend delivery of the selected snapshot, application availability around native MCP, and an observability destination. These are implementation decisions to resolve as work proceeds, not blockers requiring a new evaluation phase.
 
 The native artifact tool accepts `ArtifactCandidate[ArtifactPayload]` directly, with generated arguments shaped as `candidate: {type, payload: {title, subtitle?, payload, metadata?}}`. A separate flat `ArtifactRequest` and its conversion are unnecessary. Finite-JSON validation belongs to the shared `ArtifactPayload`; the candidate rejects unknown fields during Pydantic validation. This changes only the new engine's internal tool input, not the frontend contract or the legacy tool interface.
