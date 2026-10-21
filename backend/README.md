@@ -54,9 +54,8 @@ leaves that configuration unavailable (`503 agent_unavailable`) while the demo a
 the rest of the application start normally. Correcting startup configuration
 requires an application restart.
 
-The demo subapplication is mounted at `/api/native`, with sessions at
-`/api/native/api/v1/agents/demo/sessions` and its own OpenAPI document at
-`/api/native/openapi.json`. It owns one shared `FunctionModel` agent and runner
+Demo sessions use `/api/v1/agents/demo/sessions`, with the shared OpenAPI
+document at `/api/openapi.json`. The demo owns one shared `FunctionModel` agent and runner
 for the application lifespan. Shutdown closes the runner before the agent.
 Session initialization advertises the built-in `json` capability with a required
 `value` field. Greeting labels are artifact titles, not separate capability types. The script uses `present_artifact` for two valid greeting artifacts
@@ -348,9 +347,8 @@ failure, releasing observer capacity immediately. Ownership, expiry, overflow an
 shutdown semantics remain unchanged. Focused coverage: `python -m pytest tests/test_pydantic_presentation.py`.
 
 `app.agentic.http.create_session_router(runners_provider)` provides the native
-HTTP boundary. The main application uses it directly for Kochwiki and through
-the demo subapplication at `/api/native`; tests also mount it with deterministic
-agents. The provider
+HTTP boundary. The main application uses one router for Kochwiki and the demo;
+tests also mount it with deterministic agents. The provider
 returns configured names mapped to runners (or `None` for unavailable agents).
 Application composition owns the shared agent and runner lifetimes. All routes
 run asynchronously on the runner's event loop and require the existing

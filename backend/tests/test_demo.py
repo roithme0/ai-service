@@ -7,12 +7,13 @@ from pydantic_ai import models
 from app.agentic.http import SnapshotEvent
 from app.agentic.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity
 from app.agentic.runner import AgentTurnRunner
-from app.demo.native import COMPLETE_REPLY, FAILED_GENERATION_UPDATE, FIRST_REPLY, SECOND_REPLY, create_native_demo_agent
-from app.main import app, native_demo
+from app.demo.agent import COMPLETE_REPLY, FAILED_GENERATION_UPDATE, FIRST_REPLY, SECOND_REPLY, create_demo_agent
+from app import main
+from app.main import app
 from tests.test_pydantic_http import stream
 
 
-BASE = "/api/native/api/v1/agents/demo/sessions"
+BASE = "/api/v1/agents/demo/sessions"
 CAPABILITIES = [{
     "type": "json", "description": "Display structured JSON data for inspection.",
     "payloadSchema": {
@@ -26,13 +27,13 @@ def _turns(snapshot: PresentedSession) -> list[PresentedTurn]:
     return [item for item in snapshot.history if isinstance(item, PresentedTurn)]
 
 
-def test_native_demo_script_through_mounted_http_and_live_snapshots(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_demo_script_through_http_and_live_snapshots(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)
 
     async def exercise() -> None:
-        agent = create_native_demo_agent(delay_seconds=0)
+        agent = create_demo_agent(delay_seconds=0)
         async with agent, AgentTurnRunner(agent) as runner:
-            monkeypatch.setattr(native_demo.state, "demo_runner", runner, raising=False)
+            monkeypatch.setitem(app.dependency_overrides, main.get_agent_registry, lambda: {"demo": runner})
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test", headers={"X-Application-User": "test:alice"}) as client:
                 created = await client.post(BASE, json={
                     "initial_context": {"hidden": "SECRET_CONTEXT"},

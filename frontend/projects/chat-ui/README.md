@@ -104,7 +104,7 @@ export class ChatHost implements OnInit, OnDestroy {
     status: null,
   });
   private readonly controller = new SessionController(
-    new HttpSessionTransport('/api/native/api/v1', 'demo', 'demo:default'),
+    new HttpSessionTransport('/api/v1', 'demo', 'demo:default'),
     (state) => this.chat.set(state),
   );
 
@@ -123,7 +123,7 @@ export class ChatHost implements OnInit, OnDestroy {
 }
 ```
 
-The base URL is the prefix immediately before `/agents`; the demo uses `/api/native/api/v1`. The transport takes a configuration key and an explicit application identity as `X-Application-User`. Server validation is authoritative. Supply initial context and advertised artifact capabilities to `start(initialization)` when needed; replacement sessions retain that initialization.
+The base URL is the prefix immediately before `/agents`; the demo uses `/api/v1`. The transport takes a configuration key and an explicit application identity as `X-Application-User`. Server validation is authoritative. Supply initial context and advertised artifact capabilities to `start(initialization)` when needed; replacement sessions retain that initialization.
 
 The controller receives complete backend snapshots and derives UI content through `presentSession`. Its optional third constructor argument is a `SessionArtifactMapper`, which receives the native artifact envelope and returns a `ChatArtifact` or `null` to omit it. The default `presentSessionArtifact` preserves artifact identity and type and unwraps its presentation payload. The host owns view-state binding and renderer registration. See session lifecycle and recovery below for admission and observation behavior.
 
@@ -236,7 +236,7 @@ supply them beside caller context when creating a model-backed session:
 import { JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
 import { HttpSessionTransport } from '@roithme0/chat-ui/conversation';
 
-const transport = new HttpSessionTransport('/api/native/api/v1', 'demo', 'demo:default');
+const transport = new HttpSessionTransport('/api/v1', 'demo', 'demo:default');
 const session = await transport.createSession({
   initial_context: { selectedItem: item },
   artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
@@ -276,11 +276,11 @@ the consumer frontend interprets it and owns any domain actions.
 
 The `/conversation` entry point exports `HttpSessionTransport` and its
 `SessionTransport` interface for the Pydantic AI session API used by the demo
-application at `/api/native/api/v1`. Kochwiki uses the same contract at `/api/v1`
+application at `/api/v1`. Kochwiki uses the same contract at `/api/v1`
 with configuration key `kochwiki`.
 
 ```ts
-const transport = new HttpSessionTransport('/api/native/api/v1', 'demo', 'demo:default');
+const transport = new HttpSessionTransport('/api/v1', 'demo', 'demo:default');
 const session = await transport.createSession({
   initial_context: { selectedItem: item },
   artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],

@@ -14,13 +14,13 @@ from app.agentic.runner import AgentTurnRunner
 from app.agentic.wiring import create_kochwiki_agent
 from app.core.config import get_settings
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
-from app.demo.native import create_native_demo_agent, create_native_demo_application
+from app.demo.agent import create_demo_agent
 
 
 class AgentLifespan:
     def __init__(self, application: FastAPI) -> None:
         self._configure_logging()
-        self._runners: dict[str, AgentTurnRunner | None] = {"kochwiki": None}
+        self._runners: dict[str, AgentTurnRunner | None] = {"kochwiki": None, "demo": None}
         application.state.agent_runners = self._runners
         self._resource_stack = AsyncExitStack()
 
@@ -37,8 +37,8 @@ class AgentLifespan:
     async def __aenter__(self) -> None:
         try:
             await self._start_kochwiki()
-            demo_agent = await self._resource_stack.enter_async_context(create_native_demo_agent())
-            native_demo.state.demo_runner = await self._resource_stack.enter_async_context(AgentTurnRunner(demo_agent))
+            demo_agent = await self._resource_stack.enter_async_context(create_demo_agent())
+            self._runners["demo"] = await self._resource_stack.enter_async_context(AgentTurnRunner(demo_agent))
         except BaseException:
             await self._resource_stack.aclose()
             raise
@@ -62,6 +62,7 @@ class AgentLifespan:
         _traceback: TracebackType | None,
     ) -> None:
         self._runners["kochwiki"] = None
+        self._runners["demo"] = None
         await self._resource_stack.aclose()
 
 
@@ -75,8 +76,6 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
 )
-native_demo = create_native_demo_application()
-app.mount("/api/native", native_demo)
 app.include_router(create_session_router(get_agent_registry), responses={
     405: {"model": HttpErrorResponse},
     500: {"model": HttpErrorResponse},

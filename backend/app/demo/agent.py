@@ -1,16 +1,12 @@
-"""Deterministic demo using the native agent, tools, and session lifecycle."""
+"""Scripted demo agent exercising messages, artifacts, and failures."""
 
 import asyncio
-from collections.abc import Mapping
 
-from fastapi import FastAPI, Request
 from pydantic import JsonValue
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from app.agentic.http import create_session_router
-from app.agentic.runner import AgentTurnRunner
 from app.agentic.turns import create_turn_agent
 
 
@@ -21,7 +17,7 @@ FAILED_GENERATION_UPDATE = "I'll start another response. This demo will delibera
 COMPLETE_REPLY = "This scripted demo is complete. Refresh the page to restart it."
 
 
-def create_native_demo_agent(*, delay_seconds: float = TURN_DELAY_SECONDS) -> Agent[None, str]:
+def create_demo_agent(*, delay_seconds: float = TURN_DELAY_SECONDS) -> Agent[None, str]:
     if delay_seconds < 0:
         raise ValueError("delay_seconds must not be negative")
 
@@ -82,13 +78,3 @@ def _artifact_step(step: int) -> ModelResponse:
         TextPart(commentary, provider_details={"phase": "commentary"}),
         ToolCallPart("present_artifact", {"type": "json", "content": {"title": title, "payload": payload}}, f"demo-artifact-{step}"),
     ])
-
-
-def native_demo_registry(request: Request) -> Mapping[str, AgentTurnRunner | None]:
-    return {"demo": request.app.state.demo_runner}
-
-
-def create_native_demo_application() -> FastAPI:
-    application = FastAPI(title="Native Demo")
-    application.include_router(create_session_router(native_demo_registry))
-    return application

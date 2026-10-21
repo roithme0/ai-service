@@ -108,7 +108,7 @@ describe('Native demo application', () => {
       const { fixture, chat, server } = await openDemo();
       expect(server.fetch).toHaveBeenNthCalledWith(
         1,
-        '/api/native/api/v1/agents/demo/sessions',
+        '/api/v1/agents/demo/sessions',
         expect.objectContaining({
           method: 'POST',
         }),
@@ -127,7 +127,7 @@ describe('Native demo application', () => {
       expect(chat.turns()).toEqual([]);
       expect(server.fetch).toHaveBeenNthCalledWith(
         3,
-        '/api/native/api/v1/agents/demo/sessions/demo-1/turns',
+        '/api/v1/agents/demo/sessions/demo-1/turns',
         expect.objectContaining({ body: JSON.stringify({ prompt: 'Any text' }) }),
       );
       server.snapshot({

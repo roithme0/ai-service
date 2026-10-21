@@ -6,7 +6,7 @@ Implemented. The shared conversation foundation, configured Kochwiki and demo ag
 
 ## Native demo migration
 
-The demo now runs on the native Pydantic AI session lifecycle using a deterministic local `FunctionModel`, not an external LLM. `SessionController` observes complete backend snapshots, and the demo advertises the built-in JSON presentation capability for the native `present_artifact` tool. The native application is mounted separately at `/api/native`; Kochwiki cutover and legacy removal remain separate slices. This supersedes the legacy implementation details below about execution strategies and artifact staging. The scripted UI experience and frontend-only compatibility failure remain.
+The demo now runs on the native Pydantic AI session lifecycle using a deterministic local `FunctionModel`, not an external LLM. `SessionController` observes complete backend snapshots, and the demo advertises the built-in JSON presentation capability for the native `present_artifact` tool. The demo and Kochwiki share the `/api/v1/agents/{agent}/sessions` HTTP boundary. This supersedes the legacy implementation details below about execution strategies and artifact staging. The scripted UI experience and frontend-only compatibility failure remain.
 
 ## Context
 

@@ -1,6 +1,6 @@
 # AI Service Frontend
 
-The Angular application hosts a scripted chat UI demo using the backend's `demo` configuration at `/api/native/api/v1/agents/demo/sessions`. It imports the rendering component from `@roithme0/chat-ui/ui` and `SessionController` with `HttpSessionTransport` from `@roithme0/chat-ui/conversation`. Initialization advertises `JSON_ARTIFACT_CAPABILITY`; the default artifact mapper passes its `{ value: <JSON value> }` payloads directly to JSON cards. A local Pydantic AI `FunctionModel` supplies deterministic responses without an external model. Displayed history comes only from complete backend snapshots; HTTP admission clears the draft without inserting an optimistic prompt.
+The Angular application hosts a scripted chat UI demo using the backend's `demo` configuration at `/api/v1/agents/demo/sessions`. It imports the rendering component from `@roithme0/chat-ui/ui` and `SessionController` with `HttpSessionTransport` from `@roithme0/chat-ui/conversation`. Initialization advertises `JSON_ARTIFACT_CAPABILITY`; the default artifact mapper passes its `{ value: <JSON value> }` payloads directly to JSON cards. A local Pydantic AI `FunctionModel` supplies deterministic responses without an external model. Displayed history comes only from complete backend snapshots; HTTP admission clears the draft without inserting an optimistic prompt.
 
 ## Development server
 

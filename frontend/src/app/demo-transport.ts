@@ -7,7 +7,7 @@ import {
 
 export class DemoTransport extends HttpSessionTransport {
   constructor() {
-    super('/api/native/api/v1', 'demo', 'demo:default');
+    super('/api/v1', 'demo', 'demo:default');
   }
 
   override async createSession(initialization?: SessionCreationRequest): Promise<SessionCreated> {

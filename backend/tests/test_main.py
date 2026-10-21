@@ -66,7 +66,8 @@ def test_kochwiki_initialization_failure_does_not_block_application(
         unavailable_response = client.post("/api/v1/agents/kochwiki/sessions", json={}, headers=headers)
         assert unavailable_response.status_code == 503
         assert unavailable_response.json() == {"kind": "agent_unavailable"}
-        assert client.post("/api/native/api/v1/agents/demo/sessions", json={}, headers=headers).status_code == 201
+        assert client.post("/api/v1/agents/demo/sessions", json={}, headers=headers).status_code == 201
+        assert client.post("/api/native/api/v1/agents/demo/sessions", json={}, headers=headers).status_code == 404
 
 
 def test_kochwiki_cutover_mcp_outage_recovery_and_resource_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -34,7 +34,7 @@ describe('DemoTransport', () => {
     await expect(submission).resolves.toEqual({ kind: 'accepted' });
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/native/api/v1/agents/demo/sessions',
+      '/api/v1/agents/demo/sessions',
       expect.objectContaining({ method: 'POST' }),
     );
     const body = fetchMock.mock.calls[0][1]?.body;
@@ -42,7 +42,7 @@ describe('DemoTransport', () => {
     expect(JSON.parse(body as string) as unknown).toEqual(initialization);
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      '/api/native/api/v1/agents/demo/sessions/demo-1/turns',
+      '/api/v1/agents/demo/sessions/demo-1/turns',
       expect.objectContaining({ body: JSON.stringify({ prompt: 'Next' }) }),
     );
     for (const [, options] of fetchMock.mock.calls)
