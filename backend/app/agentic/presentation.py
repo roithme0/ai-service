@@ -7,7 +7,6 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 from pydantic_ai.messages import (
-    ModelMessage,
     NativeToolCallPart,
     NativeToolReturnPart,
     RetryPromptPart,
@@ -18,8 +17,8 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from app.agentic.conversations import (
-    INITIAL_CONTEXT_ORIGIN, ConversationArtifact, TurnLifecycle, TurnStatus,
+from app.agentic.session_state import (
+    INITIAL_CONTEXT_ORIGIN, SessionArtifact, TurnLifecycle, TurnStatus,
 )
 from app.agentic.sessions import SessionSnapshot
 from app.agentic.response import ResponseModel
@@ -72,23 +71,13 @@ class PresentedSession(ResponseModel):
     session_id: str
     expires_at: datetime
     history: tuple[HistoryItem, ...]
+    error: Literal["conversation_limit_reached"] | None
 
 
 @dataclass
 class _RunSection:
     run_id: str
     parts: list[PresentationPart] = field(default_factory=list)
-
-
-def _latest_native_messages(snapshot: SessionSnapshot) -> Sequence[ModelMessage]:
-    return next(
-        (
-            turn.observation.messages
-            for turn in reversed(snapshot.turns)
-            if turn.observation is not None and turn.observation.messages
-        ),
-        (),
-    )
 
 
 def _return_status(part: ToolReturnPart | NativeToolReturnPart) -> ToolStatus:
@@ -124,7 +113,7 @@ def _initial_tool_status(turn_status: TurnStatus, *, started: bool) -> ToolStatu
     return "running" if started else "requested"
 
 
-def _present_artifact(artifact: ConversationArtifact) -> AcceptedArtifact:
+def _present_artifact(artifact: SessionArtifact) -> AcceptedArtifact:
     return AcceptedArtifact(artifact=PublishedArtifact(
         artifact_id=artifact.artifact_id,
         type=artifact.type,
@@ -139,7 +128,7 @@ def _present_tool_call(
     *,
     turn_status: TurnStatus,
     started: bool,
-    artifacts: Sequence[ConversationArtifact],
+    artifacts: Sequence[SessionArtifact],
 ) -> tuple[ToolActivity | AcceptedArtifact, ...]:
     native = isinstance(part, NativeToolCallPart)
     activity = ToolActivity(
@@ -239,25 +228,25 @@ def present_session(snapshot: SessionSnapshot) -> PresentedSession:
     activity promises no execution outcome.
     """
     lifecycles_by_run_id = {
-        turn.lifecycle.run_id: turn.lifecycle
-        for turn in snapshot.turns
-        if turn.lifecycle.run_id is not None
+        execution.lifecycle.run_id: execution.lifecycle
+        for execution in snapshot.turn_executions
+        if execution.lifecycle.run_id is not None
     }
     history_sections: list[UserPrompt | _RunSection] = []
     started_tool_calls = {
-        (turn.lifecycle.run_id, call.tool_call_id)
-        for turn in snapshot.turns
-        if turn.observation is not None
-        for call in turn.observation.started_tool_calls
+        (execution.lifecycle.run_id, call.tool_call_id)
+        for execution in snapshot.turn_executions
+        if execution.observation is not None
+        for call in execution.observation.started_tool_calls
     }
-    artifacts_by_call: dict[tuple[str, str], list[ConversationArtifact]] = {}
+    artifacts_by_call: dict[tuple[str, str], list[SessionArtifact]] = {}
     for artifact in snapshot.artifacts:
         artifacts_by_call.setdefault((artifact.run_id, artifact.tool_call_id), []).append(
             artifact
         )
     tool_call_locations: dict[tuple[bool, str, str], tuple[_RunSection, int]] = {}
 
-    for message in _latest_native_messages(snapshot):
+    for message in snapshot.messages:
         run_id = message.run_id
         for part in message.parts:
             if isinstance(
@@ -293,7 +282,8 @@ def present_session(snapshot: SessionSnapshot) -> PresentedSession:
     return PresentedSession(
         session_id=snapshot.session_id,
         expires_at=snapshot.expires_at,
+        error="conversation_limit_reached" if snapshot.limit_reached else None,
         history=_present_history(
-            history_sections, tuple(turn.lifecycle for turn in snapshot.turns),
+            history_sections, tuple(execution.lifecycle for execution in snapshot.turn_executions),
         ),
     )

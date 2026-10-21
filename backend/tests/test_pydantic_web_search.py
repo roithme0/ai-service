@@ -9,7 +9,7 @@ import pytest
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import SecretStr
-from pydantic_ai import Tool, UnexpectedModelBehavior, models
+from pydantic_ai import Conversation, Tool, UnexpectedModelBehavior, models
 from pydantic_ai.exceptions import ModelHTTPError, UsageLimitExceeded
 from pydantic_ai.messages import (
     ModelMessagesTypeAdapter,
@@ -128,7 +128,7 @@ def test_search_coexists_with_local_and_mcp_tools_and_retains_serialized_history
             history = ModelMessagesTypeAdapter.validate_json(first.all_messages_json())
             followup_agent = create_turn_agent(model, instructions="Use retained context.")
             async with followup_agent:
-                second = await execute_turn(followup_agent, "Repeat that.", message_history=history)
+                second = await execute_turn(followup_agent, "Repeat that.", conversation=Conversation(messages=list(history)))
 
         assert first.output == second.output == "The value is 42."
         assert first.usage.requests == 2

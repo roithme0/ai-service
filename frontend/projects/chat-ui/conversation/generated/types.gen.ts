@@ -95,7 +95,7 @@ export type BoundaryError = {
     /**
      * Kind
      */
-    kind: 'unknown_configuration' | 'unknown' | 'busy' | 'agent_unavailable' | 'invalid_input' | 'observation_limit';
+    kind: 'unknown_configuration' | 'unknown' | 'busy' | 'agent_unavailable' | 'invalid_input' | 'observation_limit' | 'conversation_limit_reached';
 };
 
 export type FiniteJsonValueInput = {
@@ -148,6 +148,10 @@ export type PresentationPart = ({
  * PresentedSession
  */
 export type PresentedSession = {
+    /**
+     * Error
+     */
+    error: 'conversation_limit_reached' | null;
     /**
      * Expires At
      */

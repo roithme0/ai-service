@@ -183,7 +183,8 @@
               "busy",
               "agent_unavailable",
               "invalid_input",
-              "observation_limit"
+              "observation_limit",
+              "conversation_limit_reached"
             ],
             "title": "Kind",
             "type": "string"
@@ -337,6 +338,18 @@
       "PresentedSession": {
         "additionalProperties": false,
         "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "const": "conversation_limit_reached",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "expires_at": {
             "format": "date-time",
             "title": "Expires At",
@@ -357,7 +370,8 @@
         "required": [
           "session_id",
           "expires_at",
-          "history"
+          "history",
+          "error"
         ],
         "title": "PresentedSession",
         "type": "object"

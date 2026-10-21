@@ -1,13 +1,12 @@
-"""Pydantic AI turns, independent of the legacy execution and session models."""
+"""Native agent construction and conversation execution."""
 
 from collections.abc import Callable, Sequence
 from contextlib import nullcontext
 
 from openai.types.shared import ReasoningEffort
 from pydantic import SecretStr
-from pydantic_ai import Agent, Tool
+from pydantic_ai import Agent, Conversation, Tool
 from pydantic_ai.capabilities import Caching, WebSearch
-from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -16,10 +15,8 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
 from app.agentic.config import (
-    MAX_MODEL_REQUESTS_PER_TURN,
     MAX_NATIVE_TOOL_CALLS_PER_RESPONSE,
     MAX_OUTPUT_TOKENS,
-    MAX_TOOL_CALLS_PER_TURN,
     MODEL_REQUEST_MAX_RETRIES,
     MODEL_NETWORK_TIMEOUT_SECONDS,
     MODEL_REQUEST_TIMEOUT_SECONDS,
@@ -27,6 +24,7 @@ from app.agentic.config import (
     VALIDATION_MAX_RETRIES,
 )
 from app.agentic.observation import TurnObservation
+from app.agentic.limits import turn_usage_limits
 
 
 def create_openai_model(
@@ -80,20 +78,19 @@ async def execute_turn(
     agent: Agent[None, str],
     prompt: str,
     *,
-    message_history: Sequence[ModelMessage] = (),
+    conversation: Conversation | None = None,
     usage_limits: UsageLimits | None = None,
     observation: TurnObservation | None = None,
     on_change: Callable[[], None] | None = None,
     toolsets: Sequence[AbstractToolset[None]] = (),
 ) -> AgentRunResult[str]:
+    state = conversation if conversation is not None else Conversation()
+    limits = turn_usage_limits(state.usage, usage_limits)
     with observation.capture(on_change) if observation is not None else nullcontext() as hooks:
         return await agent.run(
             prompt,
-            message_history=message_history,
+            conversation=state,
             toolsets=toolsets,
-            usage_limits=usage_limits if usage_limits is not None else UsageLimits(
-                request_limit=MAX_MODEL_REQUESTS_PER_TURN,
-                tool_calls_limit=MAX_TOOL_CALLS_PER_TURN,
-            ),
+            usage_limits=limits,
             capabilities=[hooks] if hooks is not None else (),
         )

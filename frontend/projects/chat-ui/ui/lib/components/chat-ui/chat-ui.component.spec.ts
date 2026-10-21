@@ -282,6 +282,7 @@ describe('ChatUiComponent', () => {
       ],
     };
     const snapshot: PresentedSession = {
+      error: null,
       session_id: 's',
       expires_at: lifecycle.started_at,
       history: [first],

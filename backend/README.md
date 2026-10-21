@@ -75,15 +75,15 @@ without including their values. The optional reasoning effort uses its existing
 settings validation.
 
 ```python
-from app.agentic.conversations import AgentConversation
+from app.agentic.session_state import SessionState
 from app.agentic.wiring import create_kochwiki_agent
 from app.core.config import get_settings
 
 agent = create_kochwiki_agent(get_settings())
-conversation = AgentConversation()
+state = SessionState()
 async with agent:
-    first = await conversation.execute_turn(agent, "Find a soup recipe.")
-    second = await conversation.execute_turn(agent, "Explain that recipe.")
+    first = await state.execute_turn(agent, "Find a soup recipe.")
+    second = await state.execute_turn(agent, "Explain that recipe.")
 ```
 
 Keep one agent context open across conversations to manage the model/provider
@@ -93,26 +93,27 @@ closes that connection. Application startup makes no MCP requests. A connection
 failure fails the admitted turn; a later turn opens a fresh connection and can
 recover after the MCP server returns. Interrupted tool calls are not automatically
 replayed. There is no application reconnect loop.
-Pass `artifact_capabilities` to `AgentConversation` for
-conversation-owned artifact acceptance and retention. Each turn receives its own
+Pass `artifact_capabilities` to `SessionState` for
+session-owned artifact acceptance and retention. Each turn receives its own
 native publication toolset; presentation configuration is not shared agent state.
 Configured composition coverage runs with
 `python -m pytest tests/test_pydantic_wiring.py`; it uses no live credentials.
 
 The caller keeps the native agent open with `async with agent:`. Use
-`app.agentic.conversations.AgentConversation` to retain native history across turns:
+`app.agentic.session_state.SessionState` to own session state across turns:
 
 ```python
-conversation = AgentConversation(initial_context={"recipe": {"id": "recipe-42"}})
+state = SessionState(initial_context={"recipe": {"id": "recipe-42"}})
 async with agent:
-    first = await conversation.execute_turn(agent, "Find the value.")
-    second = await conversation.execute_turn(agent, "Explain that result.")
+    first = await state.execute_turn(agent, "Find the value.")
+    second = await state.execute_turn(agent, "Explain that result.")
 ```
 
 `execute_turn()` returns the native `AgentRunResult[str]` and accepts per-turn
 `usage_limits` and additional `toolsets`.
-`conversation.messages` returns a detached tuple of native messages;
-`conversation.last_settled_observation` returns detached `TurnObservation` inspection data.
+`state.messages` returns a detached tuple of native messages;
+`state.conversation` returns a detached native `Conversation` with messages,
+cumulative usage, native identity and deferred-tool state.
 Optional `initial_context` must be a JSON object. Creation validates and serializes
 it once, preserving nested JSON types and rejecting non-finite numbers and cycles.
 The serialized context, including its data-only prefix, is limited to 64,000
@@ -120,18 +121,17 @@ characters by `app/agentic/config.py`. Later caller mutations cannot change it.
 It seeds a native user-data message, rather than system or agent instructions,
 and follow-up turns reuse it through history without appending another copy.
 Omission adds no context message; an explicit empty object is retained. Before
-the first turn, `messages` exposes a detached context snapshot and `last_settled_observation`
-is `None`. Context is internal model input, not a public timeline item. The label
+the first turn, `messages` exposes the context retained in the native state. Context is internal model input, not a public timeline item. The label
 and agent guidance establish a data boundary; they do not guarantee resistance
 to instructions embedded in caller data.
 
-Optional `artifact_capabilities` are also snapshotted at conversation creation.
+Optional `artifact_capabilities` are also snapshotted at session-state creation.
 `execute_turn()` automatically attaches the native `present_artifact` tool when
-capabilities are advertised. Acceptance atomically checks the conversation's
+capabilities are advertised. Acceptance atomically checks the session state's
 `max_artifacts` capacity (default 100, configurable down to zero), assigns a UUID
 and UTC timestamp, and retains a detached payload before returning the accepted ID
 to the model. Duplicate capability types and invalid limits fail at creation.
-`conversation.artifacts` returns detached `ConversationArtifact` snapshots in
+`state.artifacts` returns detached `SessionArtifact` snapshots in
 publication order, including artifacts accepted during active execution.
 They reuse the shared published-artifact envelope and retain the native tool-call
 ID. Their `run_id` is the native run ID, which associates them with their
@@ -143,37 +143,47 @@ history continuation do not publish artifacts again; the model can still request
 a new publication. No duplicate-publication prevention is added.
 
 ```python
-conversation = AgentConversation(
+state = SessionState(
     initial_context={"recipe": {"id": "recipe-42"}},
     artifact_capabilities=capabilities,
 )
 async with agent:
-    await conversation.execute_turn(agent, "Present the recipe.")
-artifacts = conversation.artifacts
+    await state.execute_turn(agent, "Present the recipe.")
+artifacts = state.artifacts
 ```
 
-Do not also attach another `present_artifact` toolset to that conversation.
-The latest settled observation owns the authoritative history. Failed or cancelled
-execution retains its completed messages, confirmed results and uncertain started
-calls before propagating the original exception. Setup failure before the first
-execution node preserves the previous history. An overlapping turn raises
-`ConversationBusyError` immediately, without admitting its prompt or queueing it;
-independent conversations can run concurrently on one open agent.
+Do not also attach another `present_artifact` toolset to that state.
+A native Pydantic AI `Conversation` owns settled continuation state. Each execution
+receives that state through `conversation=` and retains the native result on
+success. Failed or cancelled execution retains available native messages and
+usage captured by hooks before propagating the original exception. Setup failure
+before native capture preserves the previous state. Accepted artifacts survive
+all outcomes. An overlapping turn raises `SessionBusyError` immediately;
+independent session states can run concurrently on one open agent.
 
-One internal turn collection owns lifecycle records and their observations. Active
-execution and the latest settled observation are derived from those entries.
-Once a newer captured history settles, the superseded observation is released;
-earlier lifecycle records remain without retaining repeated cumulative histories.
+Turn observations supply live messages, usage and tool progress. Settlement
+releases each observation; lifecycle records remain. Session snapshots expose the
+active native messages during execution and the retained conversation otherwise.
+Returned results and snapshots cannot mutate retained state. The native state can
+be serialized through `ConversationTypeAdapter`; no runtime serialization cycle,
+database or restart recovery is implemented.
 
-While a turn is running, history reads show the previous settled turn. Returned results
-and snapshots do not share mutable data with the retained conversation. This is
-an internal process-local building block. The session registry adds authorization
-and expiry; the presentation layer projects public history. Durable storage is
-not implemented. Focused coverage runs with
-`python -m pytest tests/test_pydantic_conversations.py tests/test_pydantic_conversation_artifacts.py`.
+Limits in `app/agentic/config.py` allow 40 model requests and 32 successful tool
+calls per turn, with a separate cap of 50 model requests and 40 successful tool
+calls per conversation. Caller-supplied `usage_limits` remain per-turn allowances;
+native usage accumulates across turns. Per-request token limits keep their native
+meaning. These are orchestration budgets, not caps on provider retries or spending.
+If a parallel batch would exceed the conversation tool cap, it is rejected before
+execution and the conversation closes to further submissions. Exhaustion preserves
+history and artifacts and publishes `error: "conversation_limit_reached"` in
+snapshots. Further submission returns `409 conversation_limit_reached` without
+adding a turn; reads and observation remain available until normal session expiry.
+
+Focused coverage runs with
+`python -m pytest tests/test_pydantic_session_state.py tests/test_pydantic_session_limits.py tests/test_pydantic_session_state_artifacts.py`.
 
 `app.agentic.runner.AgentTurnRunner` is the consumer-facing boundary for one
-configured agent and all its conversations. It creates and owns an internal
+configured agent and all its sessions. It creates and owns an internal
 `AgentSessionRegistry`; consumers do not construct or access that registry:
 
 ```python
@@ -196,32 +206,32 @@ capabilities and capacity. Each runner owns an independent registry.
 Every read and turn admission checks the exact owner and expiry; unknown,
 other-owner and expired sessions raise the same `SessionNotFoundError`. Owner
 identity must come from the application boundary; this check is not authentication.
-Reads return detached turn entries and artifacts, never the retained conversation.
-Session IDs are distinct from native run/conversation IDs. `snapshot.last_settled_observation` and
-`snapshot.messages` derive their data from the latest settled observation in
-`snapshot.turns`; they are not separately stored copies. Before captured history
-exists, messages come from the detached `snapshot.initial_context_message` seed.
+Reads return detached turn entries and artifacts, never the retained state.
+Each internal `_Session` holds ownership, expiry and a `state: SessionState`.
+`session.state.conversation` accesses the native Pydantic AI value through that state.
+Session IDs are distinct from native run/conversation IDs. Internal snapshots
+compose a detached native `conversation` with application-owned `turn_executions` and artifacts.
+`snapshot.messages` reads the active observation when native execution has started,
+otherwise the settled conversation, including any initial hidden context.
 
 Expiry is inclusive (`now >= expires_at`), and activity does not extend it. An
 admitted turn may finish and publish artifacts after expiry, returning its native
 result or propagating failure/cancellation normally. Further reads and turns remain
 unavailable. Expired registry entries are removed on subsequent registry operations;
-an active turn retains its conversation only until settlement. There is no background
+an active execution retains its session state until settlement. There is no background
 cleanup task or cancellation on expiry. Use the registry from one event loop.
 Tests inject a timezone-aware clock and lifetime to cover boundaries without sleeps.
-History and artifacts remain owned by `AgentConversation`; the registry adds no
+Native conversation state, execution records and artifacts remain owned by `SessionState`; the registry adds no
 execution log, timeline projection or second history store. The runner exposes
 presented snapshots through the session HTTP and SSE boundary used by the frontend. Run focused coverage with
 `python -m pytest tests/test_pydantic_sessions.py`.
 
-`conversation.turns` and `snapshot.turns` expose admission-ordered `ConversationTurn`
+`state.turn_executions` and `snapshot.turn_executions` expose admission-ordered `TurnExecution`
 entries. Each entry contains an immutable `lifecycle` (`TurnLifecycle`: `run_id`,
 `status`, `started_at`, `finished_at`) and an optional detached native `observation`.
-For example, inspect `snapshot.turns[-1].lifecycle.status`. Superseded captures are
-released from newer snapshots once a later captured history settles; earlier
-snapshots retain their detached observations. Setup failures have no retained
-capture. Active captures are detached inspection data and do not supply settled
-messages; history reads continue to use the previous settled capture.
+For example, inspect `snapshot.turn_executions[-1].lifecycle.status`. Only the active turn
+holds an observation; settled entries retain lifecycle metadata alone. Earlier
+snapshots keep their detached data.
 An admitted request immediately appears as `running`, then settles as `completed`,
 `failed` or `cancelled`, with UTC timestamps. There is no separate application turn
 ID. Active reads obtain the native run ID from the existing observation hook;
@@ -229,10 +239,10 @@ before that hook runs, the ID is `None`. Setup failures and cancellations can
 therefore settle without an ID, while preserving prior native history. Rejected
 overlapping or unauthorized requests create no record. Execution does not mutate
 existing snapshots; callers may edit their detached observations without affecting
-the conversation. Derived message and last-turn views share that snapshot-owned data.
+the state. Derived message views share that snapshot-owned data.
 
 Lifecycle records contain no duplicate messages, tool results or usage. They remain
-conversation-owned for the session lifetime and do not change exception propagation
+session-owned for the session lifetime and do not change exception propagation
 or artifact correlation: artifacts still use the native run ID. A failed or
 cancelled execution retains accepted artifacts and captured history; cancellation
 does not establish whether an interrupted tool's external effects occurred. Direct
@@ -240,12 +250,12 @@ does not establish whether an interrupted tool's external effects occurred. Dire
 `python -m pytest tests/test_pydantic_turn_lifecycle.py`.
 
 `await runner.submit(...)` waits for admission, then returns without waiting for
-completion. Ownership, expiry and the conversation's existing busy guard are checked
+completion. Ownership, expiry and the session state's existing busy guard are checked
 inside the background execution; admission failures reach the submitting caller.
-The conversation acknowledges admission through the optional internal `on_admitted`
+The session state acknowledges admission through the optional internal `on_admitted`
 callback before execution can suspend. The runner creates, retains and observes all
-background tasks; neither the registry nor the conversation schedules work.
-Internally, `sessions.execute_turn()` awaits conversation settlement and returns
+background tasks; neither the registry nor the session state schedules work.
+Internally, `sessions.execute_turn()` awaits turn settlement and returns
 the native result or propagates the execution error to the runner. Consumers use
 `create_session()`, `read_session()`, `observe_session()` and `submit()`; they do not execute through the
 registry. The registry retains internal native snapshots; runner reads and observation
@@ -262,7 +272,7 @@ Inside the registry, the active turn's `observation.messages` and `observation.u
 state at the observed boundaries. The retained capture references Pydantic AI's
 history and usage during execution and detaches on settlement; it does not append
 messages or accumulate usage. Internal snapshots are independent copies. Their derived
-`snapshot.messages` and `last_settled_observation` continue to select settled history. Tool returns
+`snapshot.messages` selects the active capture, falling back to settled native state during setup. Tool returns
 appear when the framework commits them to history, normally while preparing the
 next model request; individual parallel results are not reconstructed early.
 Provider-native search is visible in completed native responses, without separate
@@ -475,7 +485,7 @@ run ownership in that callback; native IDs do not authorize access. The callback
 must atomically assign identity and timestamp and append the artifact in publication order before returning `ArtifactAccepted(artifact_id=...)`.
 Capacity or other expected admission failures return `ArtifactRejected(reason=...)`
 without retaining the candidate. Acceptance must not perform blocking I/O or schedule
-background publication. `AgentConversation` supplies process-local acceptance
+background publication. `SessionState` supplies process-local acceptance
 automatically; standalone execution can supply another callback.
 
 Payload and metadata validation support local JSON Schema references without network

@@ -15,7 +15,7 @@ from pydantic_ai.native_tools import WebSearchTool
 
 from app.agentic import wiring
 from app.agentic.artifacts import ArtifactAccepted, ArtifactCapability
-from app.agentic.conversations import AgentConversation
+from app.agentic.session_state import SessionState
 from app.agentic.mcp import create_mcp_toolset
 from app.core.config import Settings
 
@@ -69,7 +69,7 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
 ) -> None:
     server = MCPServer("Kochwiki", instructions="Use lookup_recipe for recipe data.")
     lookups: list[str] = []
-    first = AgentConversation(artifact_capabilities=[ArtifactCapability(
+    first = SessionState(artifact_capabilities=[ArtifactCapability(
         type="json", description="Show recipe data.", payloadSchema={"type": "object"},
     )])
     toolsets: list[MCPToolset[None]] = []
@@ -133,7 +133,7 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
             assert model.settings["openai_store"] is False
             assert model.client.api_key == "test-key"
             assert toolsets == []
-            independent = AgentConversation()
+            independent = SessionState()
             async with agent:
                 assert toolsets == []
                 assert not model.client.is_closed()
@@ -143,7 +143,8 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
                     separate = await independent.execute_turn(agent, "Hello.")
                 assert result.output == followup.output == separate.output == "Soup is ready."
                 assert result.usage.tool_calls == 2
-                assert followup.usage.tool_calls == separate.usage.tool_calls == 0
+                assert followup.usage.tool_calls == result.usage.tool_calls
+                assert separate.usage.tool_calls == 0
             assert model.client.is_closed()
             assert len(toolsets) == 3
             assert all(not toolset.client.is_connected() for toolset in toolsets)
@@ -152,8 +153,7 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
             assert first.artifacts[0].tool_call_id == "present-1"
             assert first.artifacts[0].run_id == result.run_id
             assert independent.artifacts == ()
-            assert first.last_settled_observation is not None and independent.last_settled_observation is not None
-            assert first.last_settled_observation.conversation_id != independent.last_settled_observation.conversation_id
+            assert first.conversation.conversation_id != independent.conversation.conversation_id
         assert http.is_closed
 
     asyncio.run(exercise())
@@ -183,12 +183,12 @@ def test_configured_mcp_failure_is_confined_to_each_run(
             async with agent:
                 assert attempts == 0
                 with agent.override(model=FunctionModel(lambda messages, info: ModelResponse(parts=[TextPart("Hello")]))):
-                    conversation = AgentConversation()
+                    session_state = SessionState()
                     for prompt in ("First", "Try again"):
                         with pytest.raises(RuntimeError, match="Client failed to connect: MCP unavailable"):
-                            await conversation.execute_turn(agent, prompt)
-                assert len(conversation.turns) == 2
-                assert all(turn.lifecycle.status == "failed" for turn in conversation.turns)
+                            await session_state.execute_turn(agent, prompt)
+                assert len(session_state.turn_executions) == 2
+                assert all(execution.lifecycle.status == "failed" for execution in session_state.turn_executions)
             assert all(not toolset.client.is_connected() for toolset in toolsets)
             assert not http.is_closed
 

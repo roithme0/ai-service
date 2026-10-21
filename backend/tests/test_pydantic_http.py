@@ -49,6 +49,42 @@ def test_native_frontend_contract_matches_router() -> None:
     assert json.loads(contract.read_text(encoding="utf-8")) == app.openapi()
 
 
+def test_exhausted_conversation_is_readable_observable_and_rejects_submission(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.agentic.limits.MAX_MODEL_REQUESTS_PER_CONVERSATION", 1)
+
+    async def exercise() -> None:
+        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            return ModelResponse(parts=[TextPart("Retained answer")])
+
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        runner = AgentTurnRunner(agent)
+        app = application(runner)
+        async with agent, runner, httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="http://test", headers=IDENTITY,
+        ) as client:
+            created = await client.post(BASE, json={})
+            path = f"{BASE}/{created.json()['session_id']}"
+            async with stream(app, f"{path}/events") as updates:
+                await updates.event()
+                accepted = await client.post(f"{path}/turns", json={"prompt": "Hello"})
+                assert accepted.status_code == 202
+                exhausted = await updates.until(lambda snapshot: snapshot.error is not None)
+                assert exhausted.error == "conversation_limit_reached"
+                assert turns(exhausted)[0].lifecycle.status == "completed"
+                assert "Retained answer" in exhausted.model_dump_json()
+                rejected = await client.post(f"{path}/turns", json={"prompt": "Rejected"})
+                assert rejected.status_code == 409
+                assert rejected.json() == {"kind": "conversation_limit_reached"}
+                read = await client.get(path)
+                assert read.status_code == 200
+                assert PresentedSession.model_validate_json(read.content) == exhausted
+            async with stream(app, f"{path}/events") as reconnected:
+                event = await reconnected.event()
+                assert isinstance(event, SnapshotEvent) and event.snapshot == exhausted
+
+    asyncio.run(exercise())
+
+
 def turns(snapshot: PresentedSession) -> tuple[PresentedTurn, ...]:
     return tuple(item for item in snapshot.history if isinstance(item, PresentedTurn))
 

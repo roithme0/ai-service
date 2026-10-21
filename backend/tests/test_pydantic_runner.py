@@ -10,7 +10,7 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
-from app.agentic.conversations import AgentConversation, ConversationBusyError, ConversationTurn
+from app.agentic.session_state import SessionState, SessionBusyError, TurnExecution
 from app.agentic.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity, UserPrompt
 from app.agentic.runner import AgentTurnRunner, RunnerClosedError
 from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
@@ -61,7 +61,7 @@ def test_submission_waits_for_admission_and_survives_submitting_caller_cancellat
                 snapshot = runner.read_session(created.session_id, owner="alice")
                 assert len(groups(snapshot)) == 1
                 assert groups(snapshot)[0].lifecycle.status == "running"
-                with pytest.raises(ConversationBusyError):
+                with pytest.raises(SessionBusyError):
                     await runner.submit(created.session_id, owner="alice", prompt="rejected")
                 submission_returned.set()
                 await asyncio.Event().wait()
@@ -192,15 +192,15 @@ def test_caller_cancellation_after_admission_before_submit_returns_keeps_executi
     async def exercise() -> None:
         started, release = asyncio.Event(), asyncio.Event()
         submission: asyncio.Task[None] | None = None
-        admit_turn = AgentConversation._admit_turn
+        admit_execution = SessionState._admit_execution
 
-        def admit_and_cancel_caller(conversation: AgentConversation) -> ConversationTurn:
-            turn = admit_turn(conversation)
+        def admit_and_cancel_caller(session_state: SessionState) -> TurnExecution:
+            execution = admit_execution(session_state)
             assert submission is not None and not submission.done()
             submission.cancel()
-            return turn
+            return execution
 
-        monkeypatch.setattr(AgentConversation, "_admit_turn", admit_and_cancel_caller)
+        monkeypatch.setattr(SessionState, "_admit_execution", admit_and_cancel_caller)
 
         async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             started.set()

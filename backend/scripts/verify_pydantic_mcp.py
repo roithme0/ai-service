@@ -59,14 +59,14 @@ async def verify(tool_name: str, prompt: str) -> None:
             assert len(results) == 1 and results[0].outcome == "success", "Expected one successful MCP result."
             second = await execute_turn(
                 agent, "Summarize the information you just retrieved without calling a tool.",
-                message_history=first.all_messages(),
+                conversation=first.conversation,
                 usage_limits=UsageLimits(request_limit=MAX_MODEL_REQUESTS_PER_TURN, tool_calls_limit=0),
             )
             assert first.output.strip() and second.output.strip(), "Expected answers in both turns."
 
     for number, result in enumerate((first, second), start=1):
         print(f"Turn {number}: {result.output}")
-        print(f"  Usage: {result.usage}")
+        print(f"  Cumulative usage: {result.usage}")
     print("Verified one successful MCP call and a follow-up without another tool execution.")
 
 

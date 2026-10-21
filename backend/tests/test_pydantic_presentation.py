@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import pytest
-from pydantic_ai import Tool, models
+from pydantic_ai import Conversation, Tool, models
 from pydantic_ai.messages import (
     ModelMessage,
     ModelMessagesTypeAdapter,
@@ -25,8 +25,8 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from app.agentic.conversations import (
-    INITIAL_CONTEXT_ORIGIN, ConversationArtifact, ConversationTurn, TurnLifecycle, TurnStatus,
+from app.agentic.session_state import (
+    INITIAL_CONTEXT_ORIGIN, SessionArtifact, TurnExecution, TurnLifecycle, TurnStatus,
 )
 from app.agentic.observation import TurnObservation
 from app.agentic.presentation import (
@@ -53,10 +53,10 @@ def prevent_live_model_requests(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)
 
 
-def turn(
+def execution(
     run_id: str | None, status: TurnStatus, observation: TurnObservation | None = None,
-) -> ConversationTurn:
-    return ConversationTurn(TurnLifecycle(
+) -> TurnExecution:
+    return TurnExecution(TurnLifecycle(
         run_id=run_id, status=status, started_at=NOW,
         finished_at=None if status == "running" else NOW,
     ), observation)
@@ -64,7 +64,7 @@ def turn(
 
 def snapshot(
     messages: Sequence[ModelMessage], *, status: TurnStatus = "completed",
-    started: bool = False, artifacts: tuple[ConversationArtifact, ...] = (),
+    started: bool = False, artifacts: tuple[SessionArtifact, ...] = (),
 ) -> SessionSnapshot:
     observation = TurnObservation()
     observation.messages = list(messages)
@@ -73,7 +73,8 @@ def snapshot(
         observation.started_tool_calls = (ToolCallPart("lookup", {}, "call"),)
     return SessionSnapshot(
         session_id="session", expires_at=NOW + timedelta(hours=1), artifacts=artifacts,
-        turns=(turn("run", status, observation),), initial_context_message=None,
+        turn_executions=(execution("run", status, observation if status == "running" else None),),
+        conversation=Conversation(messages=list(messages)), limit_reached=False,
     )
 
 
@@ -86,7 +87,7 @@ def context_prompt(text: str) -> UserPromptPart:
 
 
 def test_serialized_contract_selects_only_display_data_and_preserves_native_order() -> None:
-    artifact = ConversationArtifact(
+    artifact = SessionArtifact(
         artifact_id="artifact", type="example", created_at=NOW, run_id="run",
         tool_call_id="call", content=ArtifactContent(title="Example", payload={"visible": [42]}),
     )
@@ -115,7 +116,7 @@ def test_serialized_contract_selects_only_display_data_and_preserves_native_orde
     assert isinstance(text, AssistantText) and text.phase == "commentary"
     encoded = projected.model_dump_json()
     assert "turns" not in projected.model_dump()
-    assert groups(projected)[0].lifecycle == internal.turns[0].lifecycle
+    assert groups(projected)[0].lifecycle == internal.turn_executions[0].lifecycle
     assert "SECRET" not in encoded
     assert "usage" not in encoded and "provider_details" not in encoded
     assert PresentedSession.model_validate_json(encoded) == projected
@@ -200,8 +201,8 @@ def test_cumulative_history_groups_old_turns_and_matches_reused_ids_by_call_orde
     ])
     internal = SessionSnapshot(
         session_id=internal.session_id, expires_at=internal.expires_at, artifacts=(),
-        turns=(turn("first", "cancelled"), turn(None, "failed"), *internal.turns),
-        initial_context_message=None,
+        turn_executions=(execution("first", "cancelled"), execution(None, "failed"), *internal.turn_executions),
+        conversation=internal.conversation, limit_reached=False,
     )
     projected = present_session(internal)
     empty = groups(projected)[1]
@@ -216,8 +217,9 @@ def test_cumulative_history_groups_old_turns_and_matches_reused_ids_by_call_orde
 def test_admission_and_setup_failure_expose_lifecycle_without_context() -> None:
     internal = SessionSnapshot(
         session_id="session", expires_at=NOW, artifacts=(),
-        turns=(turn(None, "failed"), turn(None, "running", TurnObservation())),
-        initial_context_message=ModelRequest(parts=[UserPromptPart("SECRET_CONTEXT")]),
+        turn_executions=(execution(None, "failed"), execution(None, "running", TurnObservation())),
+        conversation=Conversation(messages=[ModelRequest(parts=[context_prompt("SECRET_CONTEXT")])]),
+        limit_reached=False,
     )
     projected = present_session(internal)
     assert [item.lifecycle.status for item in groups(projected)] == ["failed", "running"]
@@ -235,10 +237,10 @@ def test_turn_without_response_follows_retained_history_and_carries_its_lifecycl
         ModelRequest(parts=[UserPromptPart("First")]),
         ModelResponse(parts=[TextPart("Done")], run_id="run"),
     ])
-    pending = turn(pending_run_id, "running", TurnObservation())
+    pending = execution(pending_run_id, "running", TurnObservation())
     internal = SessionSnapshot(
         session_id=internal.session_id, expires_at=internal.expires_at, artifacts=(),
-        turns=(*internal.turns, pending), initial_context_message=None,
+        turn_executions=(*internal.turn_executions, pending), conversation=internal.conversation, limit_reached=False,
     )
     projected = present_session(internal)
     assert [item.part_kind for item in projected.history] == ["user-prompt", "turn", "turn"]
@@ -258,12 +260,10 @@ def test_native_request_merging_preserves_failed_prompts_without_exposing_contex
     ])
     history = ModelMessagesTypeAdapter.validate_json(ModelMessagesTypeAdapter.dump_json(history))
     assert len(history) == 2 and history[0].run_id is None
-    observation = TurnObservation()
-    observation.messages = history
     internal = SessionSnapshot(
-        session_id="session", expires_at=NOW, artifacts=(), initial_context_message=None,
-        turns=(turn("first", "failed"), turn("second", "failed"),
-               turn("run", "completed", observation)),
+        session_id="session", expires_at=NOW, artifacts=(), conversation=Conversation(messages=history), limit_reached=False,
+        turn_executions=(execution("first", "failed"), execution("second", "failed"),
+               execution("run", "completed")),
     )
     projected = present_session(internal)
     assert [item.content for item in projected.history if isinstance(item, UserPrompt)] == ["First", "Second", "Third"]
@@ -286,7 +286,7 @@ def test_prompt_visibility_uses_native_metadata_rather_than_text_or_run_attribut
         UserPrompt(content="Initial application context: same text"),
         UserPrompt(content=("First fragment", "Second fragment")),
     )
-    assert groups(projected) == (PresentedTurn(lifecycle=internal.turns[0].lifecycle, parts=()),)
+    assert groups(projected) == (PresentedTurn(lifecycle=internal.turn_executions[0].lifecycle, parts=()),)
     assert PresentedSession.model_validate_json(projected.model_dump_json()) == projected
 
 
@@ -315,7 +315,7 @@ def test_prompt_between_responses_keeps_native_order_without_rebuilding_turn_bou
     projected = present_session(internal)
     assert [item.part_kind for item in projected.history] == ["user-prompt", "turn", "user-prompt", "turn"]
     first, second = groups(projected)
-    assert first.lifecycle == second.lifecycle == internal.turns[0].lifecycle
+    assert first.lifecycle == second.lifecycle == internal.turn_executions[0].lifecycle
     assert first.lifecycle.run_id == "run"
     assert isinstance(first.parts[0], ToolActivity) and first.parts[0].status == "success"
     assert second.parts == (AssistantText(content="Done"),)
@@ -323,7 +323,7 @@ def test_prompt_between_responses_keeps_native_order_without_rebuilding_turn_bou
 
 @pytest.mark.parametrize("status", ["running", "completed", "failed", "cancelled"])
 def test_accepted_artifact_is_visible_without_a_confirmed_tool_return(status: TurnStatus) -> None:
-    artifact = ConversationArtifact(
+    artifact = SessionArtifact(
         artifact_id="artifact", type="example", created_at=NOW, run_id="run",
         tool_call_id="publish", content=ArtifactContent(title="Accepted", payload={"value": 42}),
     )
@@ -346,7 +346,7 @@ def test_accepted_artifact_is_visible_without_a_confirmed_tool_return(status: Tu
 def test_parallel_publications_stay_beside_their_calls_as_artifacts_arrive(
     publication_order: tuple[int, ...], expected: list[str],
 ) -> None:
-    artifacts = tuple(ConversationArtifact(
+    artifacts = tuple(SessionArtifact(
         artifact_id=f"artifact:{call}", type="example", created_at=NOW, run_id="run",
         tool_call_id=f"call:{call}", content=ArtifactContent(title="Accepted", payload={"value": call}),
     ) for call in publication_order)

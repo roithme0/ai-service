@@ -3,7 +3,7 @@ from collections.abc import Sequence
 
 import httpx2
 import pytest
-from pydantic_ai import Tool, ToolFailed, UnexpectedModelBehavior, models
+from pydantic_ai import Conversation, Tool, ToolFailed, UnexpectedModelBehavior, models
 from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import (
     ModelMessage,
@@ -63,7 +63,7 @@ def test_capture_uses_native_history_without_streaming_and_detaches_completed_tu
             text = [part.content for msg in first.messages for part in msg.parts if isinstance(part, TextPart)]
             assert text == ["I'll look that up.", "The value is 42."]
             history = ModelMessagesTypeAdapter.validate_json(ModelMessagesTypeAdapter.dump_json(first.messages))
-            await execute_turn(agent, "Repeat the value.", message_history=history, observation=second)
+            await execute_turn(agent, "Repeat the value.", conversation=Conversation(messages=list(history)), observation=second)
         assert second.started_tool_calls == ()
         assert second.run_id != first.run_id
         assert second.usage.tool_calls == 0
@@ -116,7 +116,7 @@ def test_lost_response_preserves_completed_output_and_native_followup_does_not_r
             assert tail.state == "interrupted"
             assert any(isinstance(part, TextPart) for msg in observation.messages for part in msg.parts)
             history = ModelMessagesTypeAdapter.validate_json(ModelMessagesTypeAdapter.dump_json(observation.messages))
-            result = await execute_turn(agent, "What was confirmed?", message_history=history)
+            result = await execute_turn(agent, "What was confirmed?", conversation=Conversation(messages=list(history)))
             assert result.usage.tool_calls == 0
         assert executed == ["confirmed", "lost"]
         assert requests == 2

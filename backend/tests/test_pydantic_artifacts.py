@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 from pydantic import JsonValue, ValidationError
-from pydantic_ai import UnexpectedModelBehavior, models
+from pydantic_ai import Conversation, UnexpectedModelBehavior, models
 from pydantic_ai.messages import (
     ModelMessage, ModelMessagesTypeAdapter, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart,
 )
@@ -111,7 +111,7 @@ def test_publications_are_accepted_in_order_before_model_continues_and_survive_f
 
             history = ModelMessagesTypeAdapter.validate_json(ModelMessagesTypeAdapter.dump_json(observation.messages))
             with agent.override(model=FunctionModel(followup)):
-                result = await execute_turn(agent, "What was accepted?", message_history=history)
+                result = await execute_turn(agent, "What was accepted?", conversation=Conversation(messages=list(history)))
             assert result.usage.tool_calls == 0
         assert len(acceptance.artifacts) == 2
         assert [item.tool_call_id for item in acceptance.submissions] == ["first", "second"]

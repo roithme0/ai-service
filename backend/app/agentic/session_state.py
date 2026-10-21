@@ -1,4 +1,4 @@
-"""Process-local conversation history around native turn execution."""
+"""Application session state around native conversation and turn execution."""
 
 import json
 from asyncio import CancelledError
@@ -11,7 +11,7 @@ from typing import Literal
 from uuid import uuid4
 
 from pydantic import ConfigDict, TypeAdapter
-from pydantic_ai import Agent
+from pydantic_ai import Agent, Conversation
 from pydantic_ai.messages import ModelMessage, ModelRequest, TextContent, UserPromptPart
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
@@ -27,6 +27,7 @@ from app.agentic.artifacts import (
 )
 from app.agentic.config import MAX_ARTIFACTS_PER_SESSION, MAX_INITIAL_CONTEXT_CHARACTERS
 from app.agentic.observation import TurnObservation
+from app.agentic.limits import ConversationLimitReached, conversation_limit_reached
 from app.agentic.turns import execute_turn
 from app.core.json import FiniteJsonValue
 
@@ -48,8 +49,8 @@ def _initial_context_message(context: dict[str, FiniteJsonValue] | None) -> Mode
     ])])
 
 
-class ConversationBusyError(RuntimeError):
-    """The conversation already has a running turn."""
+class SessionBusyError(RuntimeError):
+    """The session already has a running turn."""
 
 
 type TurnStatus = Literal["running", "completed", "failed", "cancelled"]
@@ -66,30 +67,22 @@ class TurnLifecycle:
 
 
 @dataclass(frozen=True)
-class ConversationTurn:
-    """Lifecycle and its retained native capture; public reads detach the capture."""
+class TurnExecution:
+    """Lifecycle and live observation, released when the turn settles."""
 
     lifecycle: TurnLifecycle
     observation: TurnObservation | None
 
 
-def latest_settled_observation(turns: Sequence[ConversationTurn]) -> TurnObservation | None:
-    return next((
-        turn.observation for turn in reversed(turns)
-        if turn.lifecycle.status != "running"
-        and turn.observation is not None and turn.observation.run_id is not None
-    ), None)
-
-
 @dataclass(frozen=True)
-class ConversationArtifact(PublishedArtifact):
+class SessionArtifact(PublishedArtifact):
     """Accepted artifact with its native tool call ID."""
 
     tool_call_id: str
 
 
-class AgentConversation:
-    """Retain native history; callers own the agent's context lifetime.
+class SessionState:
+    """Own native conversation state, turn executions and accepted artifacts.
 
     Snapshots contain internal diagnostic data, not public timeline payloads.
     """
@@ -107,13 +100,15 @@ class AgentConversation:
         capabilities = tuple(item.model_copy(deep=True) for item in artifact_capabilities)
         if len({item.type for item in capabilities}) != len(capabilities):
             raise ValueError("Artifact capability types must be unique.")
-        self._initial_context_message = _initial_context_message(initial_context)
+        seed = _initial_context_message(initial_context)
+        self._conversation = Conversation(messages=[seed] if seed is not None else [])
+        self._limit_reached = False
         self._artifact_capabilities = capabilities
         self._max_artifacts = max_artifacts
-        self._artifacts: tuple[ConversationArtifact, ...] = ()
+        self._artifacts: tuple[SessionArtifact, ...] = ()
         self._artifact_lock = Lock()
-        self._turns: tuple[ConversationTurn, ...] = ()
-        self._turn_lock = Lock()
+        self._turn_executions: tuple[TurnExecution, ...] = ()
+        self._execution_lock = Lock()
         self._on_change = on_change
 
     def _notify(self) -> None:
@@ -121,41 +116,34 @@ class AgentConversation:
             self._on_change()
 
     @property
-    def turns(self) -> tuple[ConversationTurn, ...]:
+    def turn_executions(self) -> tuple[TurnExecution, ...]:
         """Admission-ordered snapshots with immutable lifecycle and detached capture."""
         return tuple(
-            ConversationTurn(
+            TurnExecution(
                 lifecycle=replace(
-                    turn.lifecycle, run_id=turn.observation.run_id,
+                    execution.lifecycle, run_id=execution.observation.run_id,
                 )
-                if turn.observation is not None else turn.lifecycle,
-                observation=deepcopy(turn.observation),
+                if execution.observation is not None else execution.lifecycle,
+                observation=deepcopy(execution.observation),
             )
-            for turn in self._turns
+            for execution in self._turn_executions
         )
 
     @property
-    def initial_context_message(self) -> ModelRequest | None:
-        """Detached seed, retained only until captured history replaces it."""
-        return deepcopy(self._initial_context_message)
+    def conversation(self) -> Conversation:
+        """Detached native continuation state from the last settled execution."""
+        return deepcopy(self._conversation)
 
     @property
     def messages(self) -> tuple[ModelMessage, ...]:
-        """Detached settled history, or initial context before execution."""
-        observation = latest_settled_observation(self._turns)
-        if observation is not None:
-            return tuple(deepcopy(observation.messages))
-        if self._initial_context_message is not None:
-            return (deepcopy(self._initial_context_message),)
-        return ()
+        return tuple(deepcopy(self._conversation.messages))
 
     @property
-    def last_settled_observation(self) -> TurnObservation | None:
-        """Detached inspection of the last settled turn, including failed turns."""
-        return deepcopy(latest_settled_observation(self._turns))
+    def limit_reached(self) -> bool:
+        return self._limit_reached or conversation_limit_reached(self._conversation.usage)
 
     @property
-    def artifacts(self) -> tuple[ConversationArtifact, ...]:
+    def artifacts(self) -> tuple[SessionArtifact, ...]:
         """Detached accepted artifacts, including publications from an active turn."""
         with self._artifact_lock:
             return deepcopy(self._artifacts)
@@ -164,7 +152,7 @@ class AgentConversation:
         with self._artifact_lock:
             if len(self._artifacts) >= self._max_artifacts:
                 return ArtifactRejected(reason="artifact_limit")
-            artifact = ConversationArtifact(
+            artifact = SessionArtifact(
                 artifact_id=str(uuid4()),
                 type=submission.candidate.type,
                 created_at=datetime.now(UTC),
@@ -187,8 +175,8 @@ class AgentConversation:
         on_admitted: Callable[[], None] | None = None,
     ) -> AgentRunResult[str]:
         """Admit and await execution; notify the runner before execution can suspend."""
-        turn = self._admit_turn()
-        observation = turn.observation
+        execution = self._admit_execution()
+        observation = execution.observation
         assert observation is not None
         status: TurnStatus = "failed"
         try:
@@ -199,52 +187,59 @@ class AgentConversation:
             result = await execute_turn(
                 agent,
                 prompt,
-                message_history=self.messages,
+                conversation=deepcopy(self._conversation),
                 usage_limits=usage_limits,
                 observation=observation,
                 on_change=self._notify,
                 toolsets=[*toolsets, artifact_toolset],
             )
+        except ConversationLimitReached:
+            self._limit_reached = True
+            raise
         except CancelledError:
             status = "cancelled"
             raise
         else:
+            self._conversation = deepcopy(result.conversation)
             status = "completed"
             return result
         finally:
-            self._settle_turn(turn, status)
+            self._settle_execution(execution, status)
 
-    def _admit_turn(self) -> ConversationTurn:
-        if not self._turn_lock.acquire(blocking=False):
-            raise ConversationBusyError("The conversation already has a running turn.")
+    def _admit_execution(self) -> TurnExecution:
+        if not self._execution_lock.acquire(blocking=False):
+            raise SessionBusyError("The session already has a running turn.")
+        if self.limit_reached:
+            self._execution_lock.release()
+            raise ConversationLimitReached("Conversation limit reached")
         observation = TurnObservation()
-        turn = ConversationTurn(
+        execution = TurnExecution(
             lifecycle=TurnLifecycle(run_id=None, status="running", started_at=datetime.now(UTC), finished_at=None),
             observation=observation,
         )
-        self._turns = (*self._turns, turn)
-        return turn
+        self._turn_executions = (*self._turn_executions, execution)
+        return execution
 
-    def _settle_turn(self, turn: ConversationTurn, status: TurnStatus) -> None:
-        observation = turn.observation
+    def _settle_execution(self, execution: TurnExecution, status: TurnStatus) -> None:
+        observation = execution.observation
         assert observation is not None
-        previous_turns = self._turns[:-1]
-        if observation.run_id is not None:
-            self._initial_context_message = None
-            # Superseded captures contain cumulative history; retain only the latest.
-            previous_turns = tuple(
-                replace(previous, observation=None) if previous.observation is not None else previous
-                for previous in previous_turns
+        if status != "completed" and observation.run_id is not None:
+            assert observation.conversation_id is not None
+            self._conversation = replace(
+                self._conversation,
+                messages=observation.messages,
+                usage=observation.usage,
+                conversation_id=observation.conversation_id,
             )
         settled = replace(
-            turn.lifecycle,
+            execution.lifecycle,
             run_id=observation.run_id,
             status=status,
             finished_at=datetime.now(UTC),
         )
-        self._turns = (*previous_turns, ConversationTurn(
+        self._turn_executions = (*self._turn_executions[:-1], TurnExecution(
             lifecycle=settled,
-            observation=observation if observation.run_id is not None else None,
+            observation=None,
         ))
-        self._turn_lock.release()
+        self._execution_lock.release()
         self._notify()

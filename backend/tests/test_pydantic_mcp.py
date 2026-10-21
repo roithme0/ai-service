@@ -8,7 +8,7 @@ import pytest
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
-from pydantic_ai import Tool, models
+from pydantic_ai import Conversation, Tool, models
 from pydantic_ai.messages import (
     ModelMessage,
     ModelMessagesTypeAdapter,
@@ -91,7 +91,7 @@ def test_mcp_discovery_instructions_execution_history_and_cleanup() -> None:
                 assert toolset.client.is_connected()
                 first = await execute_turn(agent, "Find the sample value.")
                 history = ModelMessagesTypeAdapter.validate_json(first.all_messages_json())
-                second = await execute_turn(agent, "Repeat that value.", message_history=history)
+                second = await execute_turn(agent, "Repeat that value.", conversation=Conversation(messages=list(history)))
                 assert first.output == second.output == "The value is 42."
                 assert second.usage.tool_calls == 0
             assert not toolset.client.is_connected()

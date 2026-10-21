@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage, ModelRequest
+from pydantic_ai import Agent, Conversation
+from pydantic_ai.messages import ModelMessage
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
@@ -18,13 +18,11 @@ from app.agentic.config import (
     MAX_OBSERVERS_PER_SESSION,
     MAX_PENDING_OBSERVATION_UPDATES,
 )
-from app.agentic.conversations import (
-    AgentConversation,
-    ConversationArtifact,
-    ConversationTurn,
-    latest_settled_observation,
+from app.agentic.session_state import (
+    SessionState,
+    SessionArtifact,
+    TurnExecution,
 )
-from app.agentic.observation import TurnObservation
 from app.agentic.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
 
@@ -57,29 +55,25 @@ class SessionSnapshot:
 
     session_id: str
     expires_at: datetime
-    artifacts: tuple[ConversationArtifact, ...]
-    turns: tuple[ConversationTurn, ...]
-    initial_context_message: ModelRequest | None
-
-    @property
-    def last_settled_observation(self) -> TurnObservation | None:
-        return latest_settled_observation(self.turns)
+    artifacts: tuple[SessionArtifact, ...]
+    turn_executions: tuple[TurnExecution, ...]
+    conversation: Conversation
+    limit_reached: bool
 
     @property
     def messages(self) -> tuple[ModelMessage, ...]:
-        observation = self.last_settled_observation
-        if observation is not None:
+        """Current native execution view, falling back to settled state during setup."""
+        observation = self.turn_executions[-1].observation if self.turn_executions else None
+        if observation is not None and observation.run_id is not None:
             return tuple(observation.messages)
-        if self.initial_context_message is not None:
-            return (self.initial_context_message,)
-        return ()
+        return tuple(self.conversation.messages)
 
 
 @dataclass(frozen=True)
 class _Session:
     owner: str
     expires_at: datetime
-    conversation: AgentConversation
+    state: SessionState
 
 
 @dataclass(eq=False)
@@ -109,7 +103,7 @@ class _Observer:
 class AgentSessionRegistry:
     """In-process lifecycle only; callers own the shared agent's context lifetime.
 
-    Use from one event loop. Never expose retained conversations to callers:
+    Use from one event loop. Never expose retained session state to callers:
     each read and turn admission must pass ownership and expiry checks.
     """
 
@@ -151,14 +145,14 @@ class AgentSessionRegistry:
         now = self._now()
         self._discard_expired(now)
         session_id = str(uuid4())
-        conversation = AgentConversation(
+        state = SessionState(
             initial_context=initial_context,
             artifact_capabilities=artifact_capabilities,
             max_artifacts=max_artifacts,
             on_change=lambda: self._publish(session_id),
         )
         expires_at = now + self._lifetime
-        self._sessions[session_id] = _Session(owner, expires_at, conversation)
+        self._sessions[session_id] = _Session(owner=owner, expires_at=expires_at, state=state)
         return SessionCreated(session_id, expires_at)
 
     def _require_session(self, session_id: str, owner: str) -> _Session:
@@ -174,13 +168,14 @@ class AgentSessionRegistry:
 
     @staticmethod
     def _create_snapshot(session_id: str, session: _Session) -> SessionSnapshot:
-        conversation = session.conversation
+        state = session.state
         return SessionSnapshot(
             session_id=session_id,
             expires_at=session.expires_at,
-            artifacts=conversation.artifacts,
-            turns=conversation.turns,
-            initial_context_message=conversation.initial_context_message,
+            artifacts=state.artifacts,
+            turn_executions=state.turn_executions,
+            conversation=state.conversation,
+            limit_reached=state.limit_reached,
         )
 
     def _publish(self, session_id: str) -> None:
@@ -237,9 +232,9 @@ class AgentSessionRegistry:
         toolsets: Sequence[AbstractToolset[None]] = (),
         on_admitted: Callable[[], None] | None = None,
     ) -> AgentRunResult[str]:
-        """Check access, then await the conversation through settlement."""
+        """Check access, then await turn execution through settlement."""
         session = self._require_session(session_id, owner)
-        return await session.conversation.execute_turn(
+        return await session.state.execute_turn(
             agent,
             prompt,
             usage_limits=usage_limits,

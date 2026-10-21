@@ -33,6 +33,7 @@ export class SessionController {
   private sessionId: string | null = null;
   private initialization: SessionCreationRequest | undefined;
   private sessionUnavailable = false;
+  private admissionLimitReached = false;
   private admissionAction: ChatConversationStatus['action'];
   private awaitingLifecycle = false;
   private loadingPromptBaseline = 0;
@@ -115,6 +116,7 @@ export class SessionController {
     this.admissionError = null;
     this.admissionAction = undefined;
     this.sessionUnavailable = false;
+    this.admissionLimitReached = false;
     this.sessionFailure = null;
   }
 
@@ -140,6 +142,7 @@ export class SessionController {
 
   private rejectAdmission(error: SessionHttpError): void {
     this.value = { ...this.value, admission: 'rejected' };
+    this.admissionLimitReached = error.kind === 'conversation_limit_reached';
     if (error.kind === 'method_not_allowed') {
       this.awaitingLifecycle = false;
       this.setCompatibilityFailure();
@@ -265,6 +268,8 @@ export class SessionController {
   private isSubmissionBlocked(running: boolean): boolean {
     return (
       this.sessionUnavailable ||
+      this.admissionLimitReached ||
+      this.value.snapshot?.error === 'conversation_limit_reached' ||
       this.value.observation !== 'connected' ||
       running ||
       this.awaitingLifecycle ||
@@ -278,6 +283,12 @@ export class SessionController {
     running: boolean,
   ): ChatConversationStatus | null {
     const snapshot = this.value.snapshot;
+    if (
+      this.sessionFailure === null &&
+      (snapshot?.error === 'conversation_limit_reached' || this.admissionLimitReached)
+    ) {
+      return errorStatus('Conversation limit reached');
+    }
     const latestStatus = latestRunStatus(snapshot);
     const executionFailure = executionFailureMessage(latestStatus);
 
@@ -368,6 +379,8 @@ function observationFailureMessage(running: boolean, executionFailure: string | 
 
 function admissionRejectionMessage(kind: SessionHttpError['kind']): string {
   switch (kind) {
+    case 'conversation_limit_reached':
+      return 'Conversation limit reached';
     case 'busy':
       return 'Der KI-Agent bearbeitet bereits eine Anfrage.';
     case 'agent_unavailable':

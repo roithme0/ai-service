@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app.component';
 
 const EMPTY: PresentedSession = {
+  error: null,
   session_id: 'demo-1',
   expires_at: '2026-10-21T12:00:00Z',
   history: [],

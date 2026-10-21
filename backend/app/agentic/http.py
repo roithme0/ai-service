@@ -10,7 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 from starlette.types import Receive, Scope, Send
 
 from app.agentic.config import MAX_PROMPT_CHARACTERS
-from app.agentic.conversations import ConversationBusyError
+from app.agentic.limits import ConversationLimitReached
+from app.agentic.session_state import SessionBusyError
 from app.agentic.presentation import PresentedSession
 from app.agentic.response import ResponseModel
 from app.agentic.runner import AgentTurnRunner, RunnerClosedError
@@ -57,6 +58,7 @@ class BoundaryError(ResponseModel):
         "agent_unavailable",
         "invalid_input",
         "observation_limit",
+        "conversation_limit_reached",
     ]
 
 
@@ -80,7 +82,8 @@ type SessionEvent = Annotated[
 def _error_response(
     error: (
         SessionNotFoundError
-        | ConversationBusyError
+        | ConversationLimitReached
+        | SessionBusyError
         | RunnerClosedError
         | ObservationLimitError
         | ValueError
@@ -89,7 +92,9 @@ def _error_response(
     match error:
         case SessionNotFoundError():
             status_code, body = 404, BoundaryError(kind="unknown")
-        case ConversationBusyError():
+        case ConversationLimitReached():
+            status_code, body = 409, BoundaryError(kind="conversation_limit_reached")
+        case SessionBusyError():
             status_code, body = 409, BoundaryError(kind="busy")
         case RunnerClosedError():
             status_code, body = 503, BoundaryError(kind="agent_unavailable")
@@ -228,7 +233,8 @@ def create_session_router(
             await runner.submit(session_id, owner=owner, prompt=body.prompt)
         except (
             SessionNotFoundError,
-            ConversationBusyError,
+            SessionBusyError,
+            ConversationLimitReached,
             RunnerClosedError,
         ) as error:
             return _error_response(error)

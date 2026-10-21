@@ -5,7 +5,7 @@ from typing import cast
 import httpx2
 import pytest
 from pydantic import SecretStr
-from pydantic_ai import Tool, ToolFailed, UnexpectedModelBehavior, capture_run_messages
+from pydantic_ai import Conversation, Tool, ToolFailed, UnexpectedModelBehavior, capture_run_messages
 from pydantic_ai import models
 from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import (
@@ -67,7 +67,7 @@ def test_tool_result_and_serialized_history_continue_without_reexecuting_tool() 
         async with agent:
             first = await execute_turn(agent, "Find the sample value.")
             history = ModelMessagesTypeAdapter.validate_json(first.all_messages_json())
-            second = await execute_turn(agent, "Repeat the value.", message_history=history)
+            second = await execute_turn(agent, "Repeat the value.", conversation=Conversation(messages=list(history)))
         assert first.output == second.output == "The value is 42."
         assert first.usage.requests == 2
         assert first.usage.tool_calls == 1

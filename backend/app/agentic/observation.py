@@ -19,6 +19,7 @@ class TurnObservation:
     """Single-use view of native execution state.
 
     Messages and usage reference Pydantic AI's live state during capture.
+    Usage includes the native conversation baseline when continuing a conversation.
     Both become detached copies when capture ends, including on failure or cancellation.
     """
 

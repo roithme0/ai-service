@@ -8,7 +8,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
-from app.agentic.conversations import ConversationBusyError
+from app.agentic.session_state import SessionBusyError
 from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
 from app.agentic.turns import create_turn_agent
 from app.agentic.artifacts import ArtifactCapability
@@ -59,7 +59,7 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(operation)])
         before = datetime.now(UTC)
-        assert registry.read(created.session_id, owner="alice").turns == ()
+        assert registry.read(created.session_id, owner="alice").turn_executions == ()
         async with agent:
             task = asyncio.create_task(registry.execute_turn(
                 created.session_id, owner="alice", agent=agent, prompt="work",
@@ -67,13 +67,13 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
             try:
                 await asyncio.wait_for(started.wait(), timeout=5)
                 active = registry.read(created.session_id, owner="alice")
-                assert len(active.turns) == 1
-                running = active.turns[0].lifecycle
+                assert len(active.turn_executions) == 1
+                running = active.turn_executions[0].lifecycle
                 assert running.status == "running" and running.finished_at is None
                 assert running.run_id is not None
                 assert before <= running.started_at <= datetime.now(UTC)
                 assert running.started_at.tzinfo is UTC
-                assert active.last_settled_observation is None and active.messages == ()
+                assert active.conversation.messages == [] and active.messages
                 assert len(active.artifacts) == 1
                 assert active.artifacts[0].run_id == running.run_id
                 with pytest.raises(FrozenInstanceError):
@@ -82,10 +82,10 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
                     registry.read(created.session_id, owner="bob")
                 with pytest.raises(SessionNotFoundError):
                     await registry.execute_turn(created.session_id, owner="bob", agent=agent, prompt="unauthorized")
-                with pytest.raises(ConversationBusyError):
+                with pytest.raises(SessionBusyError):
                     await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="overlap")
-                assert registry.read(created.session_id, owner="alice").turns == active.turns
-                assert registry.read(other.session_id, owner="bob").turns == ()
+                assert registry.read(created.session_id, owner="alice").turn_executions == active.turn_executions
+                assert registry.read(other.session_id, owner="bob").turn_executions == ()
                 if outcome == "cancelled":
                     task.cancel()
                     with pytest.raises(asyncio.CancelledError):
@@ -105,14 +105,14 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
                     with pytest.raises(asyncio.CancelledError):
                         await task
             settled = registry.read(created.session_id, owner="alice")
-            entry, = settled.turns
+            entry, = settled.turn_executions
             record = entry.lifecycle
             assert record.status == outcome and record.run_id == running.run_id
             assert record.started_at == running.started_at
             assert record.finished_at is not None and record.finished_at.tzinfo is UTC
             assert record.started_at <= record.finished_at <= datetime.now(UTC)
             assert running.status == "running" and running.finished_at is None
-            assert settled.last_settled_observation is not None and settled.last_settled_observation.run_id == record.run_id
+            assert entry.observation is None and settled.conversation.messages[-1].run_id == record.run_id
             assert settled.messages and settled.artifacts == active.artifacts
             followup_task = asyncio.create_task(registry.execute_turn(
                 created.session_id, owner="alice", agent=agent, prompt="followup",
@@ -120,12 +120,12 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
             try:
                 await asyncio.wait_for(followup_started.wait(), timeout=5)
                 during_followup = registry.read(created.session_id, owner="alice")
-                assert during_followup.messages == settled.messages
-                assert during_followup.last_settled_observation == settled.last_settled_observation
-                assert during_followup.turns[0].lifecycle == record
-                assert during_followup.turns[1].lifecycle.status == "running"
-                assert during_followup.turns[1].lifecycle.run_id is not None
-                assert during_followup.turns[1].lifecycle.run_id != record.run_id
+                assert during_followup.conversation == settled.conversation
+                assert len(during_followup.messages) >= len(settled.messages)
+                assert during_followup.turn_executions[0].lifecycle == record
+                assert during_followup.turn_executions[1].lifecycle.status == "running"
+                assert during_followup.turn_executions[1].lifecycle.run_id is not None
+                assert during_followup.turn_executions[1].lifecycle.run_id != record.run_id
                 followup_release.set()
                 followup = await asyncio.wait_for(followup_task, timeout=5)
             finally:
@@ -134,13 +134,12 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
                     with pytest.raises(asyncio.CancelledError):
                         await followup_task
             final = registry.read(created.session_id, owner="alice")
-            assert final.turns[0].lifecycle == record
-            assert final.turns[0].observation is None
-            assert len(final.turns) == 2 and final.turns[1].lifecycle.status == "completed"
-            assert final.turns[1].lifecycle.run_id == followup.run_id != record.run_id
-            assert final.last_settled_observation is final.turns[1].observation
-            assert settled.last_settled_observation is entry.observation and entry.observation is not None
-            assert settled.messages == tuple(entry.observation.messages)
+            assert final.turn_executions[0].lifecycle == record
+            assert final.turn_executions[0].observation is None
+            assert len(final.turn_executions) == 2 and final.turn_executions[1].lifecycle.status == "completed"
+            assert final.turn_executions[1].lifecycle.run_id == followup.run_id != record.run_id
+            assert all(execution.observation is None for execution in final.turn_executions)
+            assert settled.messages == tuple(settled.conversation.messages)
             assert final.artifacts == settled.artifacts
 
     asyncio.run(exercise())
@@ -173,10 +172,10 @@ def test_setup_lifecycle_without_run_id_preserves_prior_history(outcome: str) ->
             try:
                 await asyncio.wait_for(started.wait(), timeout=5)
                 active = registry.read(created.session_id, owner="alice")
-                assert active.turns[:-1] == prior.turns
-                assert active.messages == prior.messages and active.last_settled_observation == prior.last_settled_observation
-                assert active.turns[-1].lifecycle.status == "running" and active.turns[-1].lifecycle.run_id is None
-                assert active.turns[-1].lifecycle.finished_at is None
+                assert active.turn_executions[:-1] == prior.turn_executions
+                assert active.messages == prior.messages and active.conversation == prior.conversation
+                assert active.turn_executions[-1].lifecycle.status == "running" and active.turn_executions[-1].lifecycle.run_id is None
+                assert active.turn_executions[-1].lifecycle.finished_at is None
                 if outcome == "cancelled":
                     task.cancel()
                     with pytest.raises(asyncio.CancelledError):
@@ -191,11 +190,11 @@ def test_setup_lifecycle_without_run_id_preserves_prior_history(outcome: str) ->
                     with pytest.raises(asyncio.CancelledError):
                         await task
             settled = registry.read(created.session_id, owner="alice")
-            assert settled.messages == prior.messages and settled.last_settled_observation == prior.last_settled_observation
-            assert settled.turns[:-1] == prior.turns
-            assert settled.turns[-1].lifecycle.run_id is None and settled.turns[-1].lifecycle.status == outcome
-            assert settled.turns[-1].lifecycle.started_at == active.turns[-1].lifecycle.started_at
-            assert settled.turns[-1].lifecycle.finished_at is not None
+            assert settled.messages == prior.messages and settled.conversation == prior.conversation
+            assert settled.turn_executions[:-1] == prior.turn_executions
+            assert settled.turn_executions[-1].lifecycle.run_id is None and settled.turn_executions[-1].lifecycle.status == outcome
+            assert settled.turn_executions[-1].lifecycle.started_at == active.turn_executions[-1].lifecycle.started_at
+            assert settled.turn_executions[-1].lifecycle.finished_at is not None
             release.set()
             with pytest.raises(RuntimeError, match="Toolset unavailable"):
                 await registry.execute_turn(
@@ -203,12 +202,12 @@ def test_setup_lifecycle_without_run_id_preserves_prior_history(outcome: str) ->
                     toolsets=[UnavailableTools()],
                 )
             repeated = registry.read(created.session_id, owner="alice")
-            assert repeated.messages == prior.messages and repeated.last_settled_observation == prior.last_settled_observation
-            assert repeated.turns[:-1] == settled.turns
-            assert repeated.turns[-1].lifecycle.status == "failed" and repeated.turns[-1].lifecycle.run_id is None
+            assert repeated.messages == prior.messages and repeated.conversation == prior.conversation
+            assert repeated.turn_executions[:-1] == settled.turn_executions
+            assert repeated.turn_executions[-1].lifecycle.status == "failed" and repeated.turn_executions[-1].lifecycle.run_id is None
             await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="followup")
             final = registry.read(created.session_id, owner="alice")
-            assert len(final.turns) == 4 and final.turns[-1].lifecycle.status == "completed"
+            assert len(final.turn_executions) == 4 and final.turn_executions[-1].lifecycle.status == "completed"
             prompts = [part.content for message in final.messages for part in message.parts
                        if isinstance(part, UserPromptPart)]
             assert "invalid" not in prompts and "invalid again" not in prompts and prompts[-1] == "followup"

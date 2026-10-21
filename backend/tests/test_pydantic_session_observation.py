@@ -9,7 +9,6 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from app.agentic.config import MAX_OBSERVERS_PER_SESSION, MAX_PENDING_OBSERVATION_UPDATES
-from app.agentic.conversations import AgentConversation
 from app.agentic.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity, UserPrompt, present_session
 from app.agentic.runner import AgentTurnRunner
 from app.agentic.sessions import (
@@ -98,7 +97,7 @@ def test_observer_sees_presented_progress_and_complete_snapshots_without_interna
             assert runner.read_session(session.session_id, owner="alice") == active
             assert PresentedSession.model_validate_json(active.model_dump_json()) == active
             assert "SECRET" not in active.model_dump_json()
-            assert set(active.model_dump()) == {"session_id", "expires_at", "history"}
+            assert set(active.model_dump()) == {"session_id", "expires_at", "history", "error"}
             release.set()
             await asyncio.wait_for(continuing.wait(), 5)
             returned = await until(updates, has_result)
@@ -326,11 +325,11 @@ def test_observer_sees_setup_failure_without_native_run_id(monkeypatch: pytest.M
         async with agent, runner, aclosing(runner.observe_session(session.session_id, owner="alice")) as updates:
             initial = await anext(updates)
 
-            def reject_history(self: AgentConversation) -> tuple[ModelMessage, ...]:
+            def reject_tools(*_args: object) -> None:
                 raise RuntimeError("Setup unavailable")
 
             with monkeypatch.context() as setup_patch:
-                setup_patch.setattr(AgentConversation, "messages", property(reject_history))
+                setup_patch.setattr("app.agentic.session_state.create_artifact_toolset", reject_tools)
                 await runner.submit(session.session_id, owner="alice", prompt="Work.")
                 final = await until(updates, settled)
             assert groups(final)[-1].lifecycle.status == "failed"

@@ -4,6 +4,7 @@ import type { SessionEvent, PresentedSession } from '../generated/types.gen';
 
 const expires = '2026-10-21T12:00:00Z';
 const snapshot: PresentedSession = {
+  error: null,
   session_id: 's/1',
   expires_at: expires,
   history: [

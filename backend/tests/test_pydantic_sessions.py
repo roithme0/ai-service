@@ -9,7 +9,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
 from app.agentic.artifacts import ArtifactAccepted, ArtifactCapability
-from app.agentic.conversations import ConversationBusyError
+from app.agentic.session_state import SessionBusyError
 from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
 from app.agentic.turns import create_turn_agent
 
@@ -52,12 +52,11 @@ def test_owner_checks_isolation_and_detached_snapshots() -> None:
             assert "unauthorized" not in result.output
             snapshot = registry.read(first.session_id, owner="alice")
             snapshot.messages[0].parts.clear()
-            assert snapshot.last_settled_observation is not None
-            snapshot.last_settled_observation.messages.clear()
+            snapshot.conversation.messages.clear()
             assert snapshot.messages == ()
-            assert snapshot.last_settled_observation is snapshot.turns[-1].observation
+            assert snapshot.turn_executions[-1].observation is None
             fresh = registry.read(first.session_id, owner="alice")
-            assert fresh.messages[0].parts and fresh.last_settled_observation is not None and fresh.last_settled_observation.messages
+            assert fresh.messages[0].parts and fresh.conversation.messages
             reply = await registry.execute_turn(first.session_id, owner="alice", agent=agent, prompt="followup")
             assert "hello" in reply.output and "followup" in reply.output
             other = await registry.execute_turn(second.session_id, owner="bob", agent=agent, prompt="independent")
@@ -68,12 +67,55 @@ def test_owner_checks_isolation_and_detached_snapshots() -> None:
     asyncio.run(exercise())
 
 
+def test_active_snapshot_mutation_cannot_change_execution_or_retained_state() -> None:
+    async def exercise() -> None:
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            started.set()
+            await release.wait()
+            return ModelResponse(parts=[TextPart("Retained")])
+
+        registry = AgentSessionRegistry()
+        created = registry.create(owner="alice", initial_context={"recipe": 42})
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        async with agent:
+            task = asyncio.create_task(registry.execute_turn(
+                created.session_id, owner="alice", agent=agent, prompt="Hello",
+            ))
+            try:
+                await asyncio.wait_for(started.wait(), timeout=5)
+                snapshot = registry.read(created.session_id, owner="alice")
+                observation = snapshot.turn_executions[-1].observation
+                assert observation is not None and snapshot.messages
+                snapshot.conversation.messages.clear()
+                observation.messages.clear()
+                observation.usage.requests = 999
+                pristine = registry.read(created.session_id, owner="alice")
+                assert pristine.messages and pristine.conversation.messages
+                release.set()
+                result = await asyncio.wait_for(task, timeout=5)
+                assert result.usage.requests == 1
+                settled = registry.read(created.session_id, owner="alice")
+                assert settled.conversation.usage.requests == 1
+                assert settled.messages[-1].parts == [TextPart("Retained")]
+                assert settled.turn_executions[-1].observation is None
+            finally:
+                release.set()
+                if not task.done():
+                    task.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await task
+
+    asyncio.run(exercise())
+
+
 def test_snapshot_initial_context_survives_setup_failure_and_is_replaced_by_history() -> None:
     registry = AgentSessionRegistry()
     created = registry.create(owner="alice", initial_context={"recipe": 42})
     seed = registry.read(created.session_id, owner="alice")
-    assert seed.initial_context_message is not None and seed.last_settled_observation is None
-    assert seed.messages == (seed.initial_context_message,) and seed.turns == ()
+    assert len(seed.conversation.messages) == 1 and seed.conversation.usage.requests == 0
+    assert seed.messages == tuple(seed.conversation.messages) and seed.turn_executions == ()
     seed.messages[0].parts.clear()
     pristine = registry.read(created.session_id, owner="alice")
     assert pristine.messages[0].parts
@@ -96,18 +138,18 @@ def test_snapshot_initial_context_survives_setup_failure_and_is_replaced_by_hist
                     created.session_id, owner="alice", agent=agent, prompt="invalid", toolsets=[UnavailableTools()],
                 )
             failed = registry.read(created.session_id, owner="alice")
-            assert failed.last_settled_observation is None and failed.messages == pristine.messages
-            assert failed.turns[0].observation is None
+            assert failed.conversation == pristine.conversation
+            assert failed.turn_executions[0].observation is None
             await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="hello")
             settled = registry.read(created.session_id, owner="alice")
-            assert settled.initial_context_message is None
-            assert settled.last_settled_observation is settled.turns[-1].observation
-            observation = settled.turns[-1].observation
-            assert observation is not None and settled.messages == tuple(observation.messages)
-            observation.messages.clear()
+            assert settled.turn_executions[-1].observation is None
+            assert settled.messages == tuple(settled.conversation.messages)
+            assert settled.conversation.usage.requests == 1
+            settled.conversation.messages.clear()
             assert settled.messages == ()
             assert registry.read(created.session_id, owner="alice").messages
-            assert failed.messages == pristine.messages and failed.last_settled_observation is None
+            assert failed.conversation == pristine.conversation
+
 
     asyncio.run(exercise())
 
@@ -188,7 +230,7 @@ def test_admitted_turn_survives_expiry_and_retains_native_settlement(outcome: st
             assert len(before.artifacts) == 1
             before.artifacts[0].content.payload["injected"] = True
             assert registry.read(created.session_id, owner="alice").artifacts[0].content.payload == {}
-            with pytest.raises(ConversationBusyError):
+            with pytest.raises(SessionBusyError):
                 await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="overlap")
             clock.now = created.expires_at
             with pytest.raises(SessionNotFoundError):

@@ -39,7 +39,7 @@ async def verify() -> None:
         second = await execute_turn(
             agent,
             "Repeat the verification value from our conversation without calling a tool.",
-            message_history=first.all_messages(),
+            conversation=first.conversation,
         )
         assert calls == 1 and probe_value in second.output, "Follow-up did not reuse history."
 
@@ -49,7 +49,7 @@ async def verify() -> None:
             for part in message.parts:
                 if isinstance(part, (ToolCallPart, ToolReturnPart)):
                     print(f"  {part.part_kind}: {part.tool_name} ({part.tool_call_id})")
-        print(f"  Usage: {result.usage}")
+        print(f"  Cumulative usage: {result.usage}")
     print("Verified native tool execution and follow-up history without replaying the tool.")
 
 

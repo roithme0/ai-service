@@ -9,7 +9,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from app.agentic.artifacts import ArtifactAccepted, ArtifactCapability
-from app.agentic.conversations import AgentConversation, ConversationBusyError
+from app.agentic.session_state import SessionState, SessionBusyError
 from app.agentic.turns import create_turn_agent
 
 
@@ -43,7 +43,7 @@ def prompt(messages: Sequence[ModelMessage]) -> str:
 def test_owned_publication_snapshots_capabilities_and_artifacts_and_continues_without_replay() -> None:
     advertised = capability()
     capabilities = [advertised]
-    conversation = AgentConversation(artifact_capabilities=capabilities)
+    session_state = SessionState(artifact_capabilities=capabilities)
     advertised.payload_schema.clear()
     advertised.payload_schema["type"] = "null"
     capabilities.clear()
@@ -54,7 +54,7 @@ def test_owned_publication_snapshots_capabilities_and_artifacts_and_continues_wi
         if not returns(messages):
             return ModelResponse(parts=[ToolCallPart("present_artifact", arguments("First"), "first"),
                                         ToolCallPart("present_artifact", arguments("Second"), "second")])
-        artifacts = conversation.artifacts
+        artifacts = session_state.artifacts
         assert [item.content.title for item in artifacts] == ["First", "Second"]
         for result, artifact in zip(returns(messages), artifacts, strict=True):
             assert result.content == ArtifactAccepted(artifact_id=artifact.artifact_id)
@@ -63,27 +63,27 @@ def test_owned_publication_snapshots_capabilities_and_artifacts_and_continues_wi
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         async with agent:
-            first = await conversation.execute_turn(agent, "present")
-            snapshot = conversation.artifacts
+            first = await session_state.execute_turn(agent, "present")
+            snapshot = session_state.artifacts
             payload = snapshot[0].content.payload
             assert isinstance(payload, dict)
             payload["name"] = "changed"
-            second = await conversation.execute_turn(agent, "followup")
-        artifacts = conversation.artifacts
+            second = await session_state.execute_turn(agent, "followup")
+        artifacts = session_state.artifacts
         assert [item.content.payload for item in artifacts] == [{"name": "First"}, {"name": "Second"}]
         assert [item.tool_call_id for item in artifacts] == ["first", "second"]
         assert {item.run_id for item in artifacts} == {first.run_id}
         assert len({item.artifact_id for item in artifacts}) == 2
         assert all(before <= item.created_at <= datetime.now(UTC) for item in artifacts)
-        assert second.usage.tool_calls == 0
-        assert len(returns(conversation.messages)) == 2
+        assert second.usage.tool_calls == first.usage.tool_calls
+        assert len(returns(session_state.messages)) == 2
 
     asyncio.run(exercise())
 
 
 @pytest.mark.parametrize("limit", [0, 2])
 def test_capacity_is_shared_across_turns_and_rejections_do_not_publish(limit: int) -> None:
-    conversation = AgentConversation(artifact_capabilities=[capability()], max_artifacts=limit)
+    session_state = SessionState(artifact_capabilities=[capability()], max_artifacts=limit)
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         label = prompt(messages)
@@ -95,18 +95,18 @@ def test_capacity_is_shared_across_turns_and_rejections_do_not_publish(limit: in
             assert "artifact_limit" in str(result.content)
         else:
             assert result.outcome == "success"
-        assert len(conversation.artifacts) <= limit
+        assert len(session_state.artifacts) <= limit
         return ModelResponse(parts=[TextPart("Done.")])
 
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         async with agent:
-            first = await conversation.execute_turn(agent, "first")
-            second = await conversation.execute_turn(agent, "second")
-            await conversation.execute_turn(agent, "third")
-        assert len(conversation.artifacts) == limit
+            first = await session_state.execute_turn(agent, "first")
+            second = await session_state.execute_turn(agent, "second")
+            await session_state.execute_turn(agent, "third")
+        assert len(session_state.artifacts) == limit
         if limit:
-            assert [item.run_id for item in conversation.artifacts] == [first.run_id, second.run_id]
+            assert [item.run_id for item in session_state.artifacts] == [first.run_id, second.run_id]
 
     asyncio.run(exercise())
 
@@ -115,7 +115,7 @@ def test_capacity_is_shared_across_turns_and_rejections_do_not_publish(limit: in
 def test_publication_survives_later_failure_or_cancellation_and_is_visible_during_execution(failure: str) -> None:
     async def exercise() -> None:
         published = asyncio.Event()
-        conversation = AgentConversation(artifact_capabilities=[capability()], max_artifacts=1)
+        session_state = SessionState(artifact_capabilities=[capability()], max_artifacts=1)
 
         def fail() -> str:
             """Attempt another operation."""
@@ -126,7 +126,7 @@ def test_publication_survives_later_failure_or_cancellation_and_is_visible_durin
                 accepted_returns = [part for part in returns(messages) if part.tool_name == "present_artifact"]
                 assert len(accepted_returns) == 1
                 assert accepted_returns[0].outcome == "success"
-                assert len(conversation.artifacts) == 1
+                assert len(session_state.artifacts) == 1
                 return ModelResponse(parts=[TextPart("Already presented.")])
             if not returns(messages):
                 return ModelResponse(parts=[ToolCallPart("present_artifact", arguments("Retained"), "publish")])
@@ -139,25 +139,25 @@ def test_publication_survives_later_failure_or_cancellation_and_is_visible_durin
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(fail)])
         async with agent:
-            task = asyncio.create_task(conversation.execute_turn(agent, "present"))
+            task = asyncio.create_task(session_state.execute_turn(agent, "present"))
             try:
                 await asyncio.wait_for(published.wait(), timeout=5)
-                accepted = conversation.artifacts
+                accepted = session_state.artifacts
                 assert len(accepted) == 1
                 if failure == "cancel":
-                    with pytest.raises(ConversationBusyError):
-                        await conversation.execute_turn(agent, "busy")
+                    with pytest.raises(SessionBusyError):
+                        await session_state.execute_turn(agent, "busy")
             finally:
                 if failure == "cancel":
                     task.cancel()
                 with pytest.raises(asyncio.CancelledError if failure == "cancel" else RuntimeError):
                     await task
-            failed = conversation.last_settled_observation
+            failed = session_state.conversation
             assert failed is not None
-            assert accepted[0].run_id == failed.run_id
-            result = await conversation.execute_turn(agent, "followup")
-        assert result.usage.tool_calls == 0
-        assert conversation.artifacts == accepted
+            assert accepted[0].run_id == session_state.turn_executions[-1].lifecycle.run_id
+            result = await session_state.execute_turn(agent, "followup")
+        assert result.usage.tool_calls == failed.usage.tool_calls
+        assert session_state.artifacts == accepted
 
     asyncio.run(exercise())
 
@@ -166,7 +166,7 @@ def test_shared_agent_keeps_concurrent_capabilities_and_publications_isolated() 
     async def exercise() -> None:
         both_started = asyncio.Event()
         started: set[str] = set()
-        conversations = {name: AgentConversation(artifact_capabilities=[capability(name)], max_artifacts=1)
+        session_states = {name: SessionState(artifact_capabilities=[capability(name)], max_artifacts=1)
                          for name in ("left", "right")}
 
         async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -178,13 +178,13 @@ def test_shared_agent_keeps_concurrent_capabilities_and_publications_isolated() 
                     both_started.set()
                 await asyncio.wait_for(both_started.wait(), timeout=5)
                 return ModelResponse(parts=[ToolCallPart("present_artifact", arguments(label, label), "same-call-id")])
-            assert conversations[label].artifacts[0].content.title == label
+            assert session_states[label].artifacts[0].content.title == label
             return ModelResponse(parts=[TextPart(label)])
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         async with agent:
-            left, right = await asyncio.gather(*(item.execute_turn(agent, name) for name, item in conversations.items()))
-            empty = AgentConversation()
+            left, right = await asyncio.gather(*(item.execute_turn(agent, name) for name, item in session_states.items()))
+            empty = SessionState()
 
             def without_artifacts(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
                 assert info.function_tools == []
@@ -193,15 +193,15 @@ def test_shared_agent_keeps_concurrent_capabilities_and_publications_isolated() 
             with agent.override(model=FunctionModel(without_artifacts)):
                 await empty.execute_turn(agent, "empty")
         assert empty.artifacts == ()
-        assert conversations["left"].artifacts[0].run_id == left.run_id
-        assert conversations["right"].artifacts[0].run_id == right.run_id
-        assert conversations["left"].artifacts[0].artifact_id != conversations["right"].artifacts[0].artifact_id
+        assert session_states["left"].artifacts[0].run_id == left.run_id
+        assert session_states["right"].artifacts[0].run_id == right.run_id
+        assert session_states["left"].artifacts[0].artifact_id != session_states["right"].artifacts[0].artifact_id
 
     asyncio.run(exercise())
 
 
 def test_invalid_artifact_configuration_is_rejected_at_creation() -> None:
     with pytest.raises(ValueError, match="unique"):
-        AgentConversation(artifact_capabilities=[capability(), capability()])
+        SessionState(artifact_capabilities=[capability(), capability()])
     with pytest.raises(ValueError, match="non-negative"):
-        AgentConversation(max_artifacts=-1)
+        SessionState(max_artifacts=-1)
