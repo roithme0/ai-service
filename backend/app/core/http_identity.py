@@ -1,4 +1,4 @@
-"""Trusted application identity at the conversation HTTP boundary."""
+"""Trusted application identity at HTTP boundaries."""
 
 from typing import Annotated
 

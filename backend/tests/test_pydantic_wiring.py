@@ -135,10 +135,10 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
             assert model.settings["openai_reasoning_effort"] == "low"
             assert model.settings["openai_store"] is False
             assert model.client.api_key == "test-key"
-            assert not toolsets[0].client.is_connected()
+            assert toolsets == []
             independent = AgentConversation()
             async with agent:
-                assert toolsets[0].client.is_connected()
+                assert toolsets == []
                 assert not model.client.is_closed()
                 with agent.override(model=FunctionModel(respond)):
                     result = await first.execute_turn(agent, "Find and present soup.")
@@ -148,7 +148,8 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
                 assert result.usage.tool_calls == 2
                 assert followup.usage.tool_calls == separate.usage.tool_calls == 0
             assert model.client.is_closed()
-            assert not toolsets[0].client.is_connected()
+            assert len(toolsets) == 3
+            assert all(not toolset.client.is_connected() for toolset in toolsets)
             assert not http.is_closed
             assert len(first.artifacts) == 1
             assert first.artifacts[0].tool_call_id == "present-1"
@@ -162,7 +163,7 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
     assert lookups == ["Soup"]
 
 
-def test_configured_mcp_startup_failure_propagates_without_retry(
+def test_configured_mcp_failure_is_confined_to_each_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     attempts = 0
@@ -182,11 +183,17 @@ def test_configured_mcp_startup_failure_propagates_without_retry(
 
             monkeypatch.setattr(wiring, "create_mcp_toolset", mcp)
             agent = wiring.create_kochwiki_agent(settings())
-            with pytest.raises(RuntimeError, match="Client failed to connect: MCP unavailable"):
-                async with agent:
-                    pytest.fail("Startup failure must prevent entry")
-            assert not toolsets[0].client.is_connected()
+            async with agent:
+                assert attempts == 0
+                with agent.override(model=FunctionModel(lambda messages, info: ModelResponse(parts=[TextPart("Hello")]))):
+                    conversation = AgentConversation()
+                    for prompt in ("First", "Try again"):
+                        with pytest.raises(RuntimeError, match="Client failed to connect: MCP unavailable"):
+                            await conversation.execute_turn(agent, prompt)
+                assert len(conversation.turns) == 2
+                assert all(turn.lifecycle.status == "failed" for turn in conversation.turns)
+            assert all(not toolset.client.is_connected() for toolset in toolsets)
             assert not http.is_closed
 
     asyncio.run(exercise())
-    assert attempts == 1
+    assert attempts == 2

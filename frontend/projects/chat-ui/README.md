@@ -310,8 +310,8 @@ the consumer frontend interprets it and owns any domain actions.
 
 The `/conversation` entry point exports `HttpSessionTransport` and its
 `SessionTransport` interface for the Pydantic AI session API used by the demo
-application at `/api/native/api/v1`. Kochwiki still uses the legacy backend API;
-this transport targets the Pydantic AI session API.
+application at `/api/native/api/v1`. Kochwiki uses the same contract at `/api/v1`
+with configuration key `kochwiki`.
 
 ```ts
 const transport = new HttpSessionTransport('/api/native/api/v1', 'demo', 'demo:default');

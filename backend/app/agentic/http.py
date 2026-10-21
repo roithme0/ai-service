@@ -20,7 +20,7 @@ from app.agentic.sessions import (
     SessionCreated,
     SessionNotFoundError,
 )
-from app.agents.http_identity import require_application_user
+from app.core.http_identity import require_application_user
 from app.sessions.models.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
 

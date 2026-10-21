@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Mapping
 from contextlib import AsyncExitStack
 from types import TracebackType
 
@@ -8,19 +9,20 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
-from app.agents.wiring import get_configured_agents
+from app.agentic.http import create_session_router
+from app.agentic.runner import AgentTurnRunner
+from app.agentic.wiring import create_kochwiki_agent
+from app.core.config import get_settings
 from app.core.http import router as core_router
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
-from app.agents.enums.configuration import AgentConfiguration
-from app.agents.http import create_session_router, get_agent_registry
-from app.agentic.runner import AgentTurnRunner
 from app.demo.native import create_native_demo_agent, create_native_demo_application
 
 
 class AgentLifespan:
-    def __init__(self, _application: FastAPI) -> None:
+    def __init__(self, application: FastAPI) -> None:
         self._configure_logging()
-        self._agents = get_configured_agents()
+        self._runners: dict[str, AgentTurnRunner | None] = {"kochwiki": None}
+        application.state.agent_runners = self._runners
         self._resource_stack = AsyncExitStack()
 
     @staticmethod
@@ -35,14 +37,24 @@ class AgentLifespan:
 
     async def __aenter__(self) -> None:
         try:
-            await self._agents.start()
-            self._resource_stack.push_async_callback(self._agents.close)
+            await self._start_kochwiki()
             demo_agent = await self._resource_stack.enter_async_context(create_native_demo_agent())
             native_demo.state.demo_runner = await self._resource_stack.enter_async_context(AgentTurnRunner(demo_agent))
         except BaseException:
             await self._resource_stack.aclose()
-            get_configured_agents.cache_clear()
             raise
+
+    async def _start_kochwiki(self) -> None:
+        try:
+            async with AsyncExitStack() as resources:
+                agent = await resources.enter_async_context(create_kochwiki_agent(get_settings()))
+                runner = await resources.enter_async_context(AgentTurnRunner(agent))
+                self._resource_stack.push_async_callback(resources.pop_all().aclose)
+                self._runners["kochwiki"] = runner
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                "Kochwiki agent unavailable during initialization (%s).", type(error).__name__,
+            )
 
     async def __aexit__(
         self,
@@ -50,10 +62,12 @@ class AgentLifespan:
         _exception: BaseException | None,
         _traceback: TracebackType | None,
     ) -> None:
-        try:
-            await self._resource_stack.aclose()
-        finally:
-            get_configured_agents.cache_clear()
+        self._runners["kochwiki"] = None
+        await self._resource_stack.aclose()
+
+
+def get_agent_registry(request: Request) -> Mapping[str, AgentTurnRunner | None]:
+    return request.app.state.agent_runners
 
 
 app = FastAPI(
@@ -64,9 +78,7 @@ app = FastAPI(
 )
 native_demo = create_native_demo_application()
 app.mount("/api/native", native_demo)
-app.include_router(create_session_router(
-    get_agent_registry, tuple(configuration.value for configuration in AgentConfiguration),
-), responses={
+app.include_router(create_session_router(get_agent_registry), responses={
     405: {"model": HttpErrorResponse},
     500: {"model": HttpErrorResponse},
 })

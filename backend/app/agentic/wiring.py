@@ -1,8 +1,10 @@
-"""Compose configured native agents without starting production services."""
+"""Compose configured agents with MCP sessions owned by individual runs."""
 
 from urllib.parse import urlparse
 
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.mcp import MCPToolset
+from pydantic_ai.toolsets import DynamicToolset
 
 from app.agentic.instructions import CONVERSATION_INSTRUCTIONS
 from app.agentic.mcp import create_mcp_toolset
@@ -27,6 +29,10 @@ def create_kochwiki_agent(settings: Settings) -> Agent[None, str]:
             "Invalid or missing agent configuration: " + ", ".join(missing)
         )
     assert key is not None and model is not None and mcp_url is not None
+
+    def kochwiki_tools(_ctx: RunContext[None]) -> MCPToolset[None]:
+        return create_mcp_toolset(mcp_url, id="kochwiki")
+
     agent = create_turn_agent(
         create_openai_model(
             model,
@@ -34,7 +40,7 @@ def create_kochwiki_agent(settings: Settings) -> Agent[None, str]:
             reasoning_effort=settings.kochwiki_openai_reasoning_effort,
         ),
         instructions=CONVERSATION_INSTRUCTIONS,
-        toolsets=[create_mcp_toolset(mcp_url, id="kochwiki")],
+        toolsets=[DynamicToolset(kochwiki_tools, per_run_step=False, id="kochwiki")],
         web_search=True,
     )
     agent.name = "kochwiki"
