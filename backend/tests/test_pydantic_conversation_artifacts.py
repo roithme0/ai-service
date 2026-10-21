@@ -152,7 +152,7 @@ def test_publication_survives_later_failure_or_cancellation_and_is_visible_durin
                     task.cancel()
                 with pytest.raises(asyncio.CancelledError if failure == "cancel" else RuntimeError):
                     await task
-            failed = conversation.last_turn
+            failed = conversation.last_settled_observation
             assert failed is not None
             assert accepted[0].run_id == failed.run_id
             result = await conversation.execute_turn(agent, "followup")

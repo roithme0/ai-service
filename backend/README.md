@@ -112,7 +112,7 @@ async with agent:
 `execute_turn()` returns the native `AgentRunResult[str]` and accepts per-turn
 `usage_limits` and additional `toolsets`.
 `conversation.messages` returns a detached tuple of native messages;
-`conversation.last_turn` returns detached `TurnObservation` inspection data.
+`conversation.last_settled_observation` returns detached `TurnObservation` inspection data.
 Optional `initial_context` must be a JSON object. Creation validates and serializes
 it once, preserving nested JSON types and rejecting non-finite numbers and cycles.
 The serialized context, including its data-only prefix, is limited to 64,000
@@ -120,7 +120,7 @@ characters by `app/agentic/config.py`. Later caller mutations cannot change it.
 It seeds a native user-data message, rather than system or agent instructions,
 and follow-up turns reuse it through history without appending another copy.
 Omission adds no context message; an explicit empty object is retained. Before
-the first turn, `messages` exposes a detached context snapshot and `last_turn`
+the first turn, `messages` exposes a detached context snapshot and `last_settled_observation`
 is `None`. Context is internal model input, not a public timeline item. The label
 and agent guidance establish a data boundary; they do not guarantee resistance
 to instructions embedded in caller data.
@@ -197,7 +197,7 @@ Every read and turn admission checks the exact owner and expiry; unknown,
 other-owner and expired sessions raise the same `SessionNotFoundError`. Owner
 identity must come from the application boundary; this check is not authentication.
 Reads return detached turn entries and artifacts, never the retained conversation.
-Session IDs are distinct from native run/conversation IDs. `snapshot.last_turn` and
+Session IDs are distinct from native run/conversation IDs. `snapshot.last_settled_observation` and
 `snapshot.messages` derive their data from the latest settled observation in
 `snapshot.turns`; they are not separately stored copies. Before captured history
 exists, messages come from the detached `snapshot.initial_context_message` seed.
@@ -262,7 +262,7 @@ Inside the registry, the active turn's `observation.messages` and `observation.u
 state at the observed boundaries. The retained capture references Pydantic AI's
 history and usage during execution and detaches on settlement; it does not append
 messages or accumulate usage. Internal snapshots are independent copies. Their derived
-`snapshot.messages` and `last_turn` continue to select settled history. Tool returns
+`snapshot.messages` and `last_settled_observation` continue to select settled history. Tool returns
 appear when the framework commits them to history, normally while preparing the
 next model request; individual parallel results are not reconstructed early.
 Provider-native search is visible in completed native responses, without separate

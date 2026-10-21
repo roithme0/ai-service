@@ -9,7 +9,6 @@ from contextlib import aclosing
 from datetime import datetime, timedelta
 from types import TracebackType
 
-from pydantic import JsonValue
 from pydantic_ai import Agent
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
@@ -19,6 +18,7 @@ from app.agentic.config import DEFAULT_SESSION_LIFETIME, MAX_ARTIFACTS_PER_SESSI
 from app.agentic.presentation import PresentedSession, present_session
 from app.agentic.sessions import AgentSessionRegistry, SessionCreated
 from app.agentic.artifacts import ArtifactCapability
+from app.core.json import FiniteJsonValue
 
 
 _logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class AgentTurnRunner:
         self,
         *,
         owner: str,
-        initial_context: dict[str, JsonValue] | None = None,
+        initial_context: dict[str, FiniteJsonValue] | None = None,
         artifact_capabilities: Sequence[ArtifactCapability] = (),
         max_artifacts: int = MAX_ARTIFACTS_PER_SESSION,
     ) -> SessionCreated:

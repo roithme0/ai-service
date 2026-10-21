@@ -73,7 +73,7 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
                 assert running.run_id is not None
                 assert before <= running.started_at <= datetime.now(UTC)
                 assert running.started_at.tzinfo is UTC
-                assert active.last_turn is None and active.messages == ()
+                assert active.last_settled_observation is None and active.messages == ()
                 assert len(active.artifacts) == 1
                 assert active.artifacts[0].run_id == running.run_id
                 with pytest.raises(FrozenInstanceError):
@@ -112,7 +112,7 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
             assert record.finished_at is not None and record.finished_at.tzinfo is UTC
             assert record.started_at <= record.finished_at <= datetime.now(UTC)
             assert running.status == "running" and running.finished_at is None
-            assert settled.last_turn is not None and settled.last_turn.run_id == record.run_id
+            assert settled.last_settled_observation is not None and settled.last_settled_observation.run_id == record.run_id
             assert settled.messages and settled.artifacts == active.artifacts
             followup_task = asyncio.create_task(registry.execute_turn(
                 created.session_id, owner="alice", agent=agent, prompt="followup",
@@ -121,7 +121,7 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
                 await asyncio.wait_for(followup_started.wait(), timeout=5)
                 during_followup = registry.read(created.session_id, owner="alice")
                 assert during_followup.messages == settled.messages
-                assert during_followup.last_turn == settled.last_turn
+                assert during_followup.last_settled_observation == settled.last_settled_observation
                 assert during_followup.turns[0].lifecycle == record
                 assert during_followup.turns[1].lifecycle.status == "running"
                 assert during_followup.turns[1].lifecycle.run_id is not None
@@ -138,8 +138,8 @@ def test_active_and_settled_lifecycle_preserves_native_data(outcome: str) -> Non
             assert final.turns[0].observation is None
             assert len(final.turns) == 2 and final.turns[1].lifecycle.status == "completed"
             assert final.turns[1].lifecycle.run_id == followup.run_id != record.run_id
-            assert final.last_turn is final.turns[1].observation
-            assert settled.last_turn is entry.observation and entry.observation is not None
+            assert final.last_settled_observation is final.turns[1].observation
+            assert settled.last_settled_observation is entry.observation and entry.observation is not None
             assert settled.messages == tuple(entry.observation.messages)
             assert final.artifacts == settled.artifacts
 
@@ -174,7 +174,7 @@ def test_setup_lifecycle_without_run_id_preserves_prior_history(outcome: str) ->
                 await asyncio.wait_for(started.wait(), timeout=5)
                 active = registry.read(created.session_id, owner="alice")
                 assert active.turns[:-1] == prior.turns
-                assert active.messages == prior.messages and active.last_turn == prior.last_turn
+                assert active.messages == prior.messages and active.last_settled_observation == prior.last_settled_observation
                 assert active.turns[-1].lifecycle.status == "running" and active.turns[-1].lifecycle.run_id is None
                 assert active.turns[-1].lifecycle.finished_at is None
                 if outcome == "cancelled":
@@ -191,7 +191,7 @@ def test_setup_lifecycle_without_run_id_preserves_prior_history(outcome: str) ->
                     with pytest.raises(asyncio.CancelledError):
                         await task
             settled = registry.read(created.session_id, owner="alice")
-            assert settled.messages == prior.messages and settled.last_turn == prior.last_turn
+            assert settled.messages == prior.messages and settled.last_settled_observation == prior.last_settled_observation
             assert settled.turns[:-1] == prior.turns
             assert settled.turns[-1].lifecycle.run_id is None and settled.turns[-1].lifecycle.status == outcome
             assert settled.turns[-1].lifecycle.started_at == active.turns[-1].lifecycle.started_at
@@ -203,7 +203,7 @@ def test_setup_lifecycle_without_run_id_preserves_prior_history(outcome: str) ->
                     toolsets=[UnavailableTools()],
                 )
             repeated = registry.read(created.session_id, owner="alice")
-            assert repeated.messages == prior.messages and repeated.last_turn == prior.last_turn
+            assert repeated.messages == prior.messages and repeated.last_settled_observation == prior.last_settled_observation
             assert repeated.turns[:-1] == settled.turns
             assert repeated.turns[-1].lifecycle.status == "failed" and repeated.turns[-1].lifecycle.run_id is None
             await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="followup")

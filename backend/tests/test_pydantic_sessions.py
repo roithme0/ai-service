@@ -52,12 +52,12 @@ def test_owner_checks_isolation_and_detached_snapshots() -> None:
             assert "unauthorized" not in result.output
             snapshot = registry.read(first.session_id, owner="alice")
             snapshot.messages[0].parts.clear()
-            assert snapshot.last_turn is not None
-            snapshot.last_turn.messages.clear()
+            assert snapshot.last_settled_observation is not None
+            snapshot.last_settled_observation.messages.clear()
             assert snapshot.messages == ()
-            assert snapshot.last_turn is snapshot.turns[-1].observation
+            assert snapshot.last_settled_observation is snapshot.turns[-1].observation
             fresh = registry.read(first.session_id, owner="alice")
-            assert fresh.messages[0].parts and fresh.last_turn is not None and fresh.last_turn.messages
+            assert fresh.messages[0].parts and fresh.last_settled_observation is not None and fresh.last_settled_observation.messages
             reply = await registry.execute_turn(first.session_id, owner="alice", agent=agent, prompt="followup")
             assert "hello" in reply.output and "followup" in reply.output
             other = await registry.execute_turn(second.session_id, owner="bob", agent=agent, prompt="independent")
@@ -72,7 +72,7 @@ def test_snapshot_initial_context_survives_setup_failure_and_is_replaced_by_hist
     registry = AgentSessionRegistry()
     created = registry.create(owner="alice", initial_context={"recipe": 42})
     seed = registry.read(created.session_id, owner="alice")
-    assert seed.initial_context_message is not None and seed.last_turn is None
+    assert seed.initial_context_message is not None and seed.last_settled_observation is None
     assert seed.messages == (seed.initial_context_message,) and seed.turns == ()
     seed.messages[0].parts.clear()
     pristine = registry.read(created.session_id, owner="alice")
@@ -96,18 +96,18 @@ def test_snapshot_initial_context_survives_setup_failure_and_is_replaced_by_hist
                     created.session_id, owner="alice", agent=agent, prompt="invalid", toolsets=[UnavailableTools()],
                 )
             failed = registry.read(created.session_id, owner="alice")
-            assert failed.last_turn is None and failed.messages == pristine.messages
+            assert failed.last_settled_observation is None and failed.messages == pristine.messages
             assert failed.turns[0].observation is None
             await registry.execute_turn(created.session_id, owner="alice", agent=agent, prompt="hello")
             settled = registry.read(created.session_id, owner="alice")
             assert settled.initial_context_message is None
-            assert settled.last_turn is settled.turns[-1].observation
+            assert settled.last_settled_observation is settled.turns[-1].observation
             observation = settled.turns[-1].observation
             assert observation is not None and settled.messages == tuple(observation.messages)
             observation.messages.clear()
             assert settled.messages == ()
             assert registry.read(created.session_id, owner="alice").messages
-            assert failed.messages == pristine.messages and failed.last_turn is None
+            assert failed.messages == pristine.messages and failed.last_settled_observation is None
 
     asyncio.run(exercise())
 

@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from pydantic import JsonValue
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage, ModelRequest
 from pydantic_ai.run import AgentRunResult
@@ -27,6 +26,7 @@ from app.agentic.conversations import (
 )
 from app.agentic.observation import TurnObservation
 from app.agentic.artifacts import ArtifactCapability
+from app.core.json import FiniteJsonValue
 
 
 def _utc_now() -> datetime:
@@ -62,12 +62,12 @@ class SessionSnapshot:
     initial_context_message: ModelRequest | None
 
     @property
-    def last_turn(self) -> TurnObservation | None:
+    def last_settled_observation(self) -> TurnObservation | None:
         return latest_settled_observation(self.turns)
 
     @property
     def messages(self) -> tuple[ModelMessage, ...]:
-        observation = self.last_turn
+        observation = self.last_settled_observation
         if observation is not None:
             return tuple(observation.messages)
         if self.initial_context_message is not None:
@@ -126,7 +126,7 @@ class AgentSessionRegistry:
         self,
         *,
         owner: str,
-        initial_context: dict[str, JsonValue] | None = None,
+        initial_context: dict[str, FiniteJsonValue] | None = None,
         artifact_capabilities: Sequence[ArtifactCapability] = (),
         max_artifacts: int = MAX_ARTIFACTS_PER_SESSION,
     ) -> SessionCreated:

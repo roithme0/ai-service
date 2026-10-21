@@ -3,7 +3,6 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from pydantic import JsonValue
 from pydantic_ai import Agent, Tool, models
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextContent, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
@@ -17,6 +16,7 @@ from app.agentic.runner import AgentTurnRunner, RunnerClosedError
 from app.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
 from app.agentic.turns import create_turn_agent
 from app.agentic.artifacts import ArtifactCapability
+from app.core.json import FiniteJsonValue
 
 
 def groups(snapshot: PresentedSession) -> tuple[PresentedTurn, ...]:
@@ -321,7 +321,7 @@ def test_owner_expiry_and_independent_session_admission() -> None:
 def test_runner_session_boundary_preserves_context_capacity_isolation_and_expiry() -> None:
     async def exercise() -> None:
         now = datetime(2026, 10, 20, tzinfo=UTC)
-        context: dict[str, JsonValue] = {"recipe": 42}
+        context: dict[str, FiniteJsonValue] = {"recipe": 42}
         capability = ArtifactCapability(
             type="example", description="Present data.", payloadSchema={"type": "object"},
         )

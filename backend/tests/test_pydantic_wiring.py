@@ -152,8 +152,8 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
             assert first.artifacts[0].tool_call_id == "present-1"
             assert first.artifacts[0].run_id == result.run_id
             assert independent.artifacts == ()
-            assert first.last_turn is not None and independent.last_turn is not None
-            assert first.last_turn.conversation_id != independent.last_turn.conversation_id
+            assert first.last_settled_observation is not None and independent.last_settled_observation is not None
+            assert first.last_settled_observation.conversation_id != independent.last_settled_observation.conversation_id
         assert http.is_closed
 
     asyncio.run(exercise())
