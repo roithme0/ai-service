@@ -16,10 +16,14 @@ from pydantic_ai.usage import RunUsage
 
 @dataclass
 class TurnObservation:
-    """Single-use native state view, detached on settlement even when execution raises."""
+    """Single-use view of native execution state.
+
+    Messages and usage reference Pydantic AI's live state during capture.
+    Both become detached copies when capture ends, including on failure or cancellation.
+    """
 
     messages: list[ModelMessage] = field(default_factory=list, init=False)
-    started_calls: tuple[ToolCallPart, ...] = field(default=(), init=False)
+    started_tool_calls: tuple[ToolCallPart, ...] = field(default=(), init=False)
     usage: RunUsage = field(default_factory=RunUsage, init=False)
     run_id: str | None = field(default=None, init=False)
     conversation_id: str | None = field(default=None, init=False)
@@ -67,7 +71,7 @@ class TurnObservation:
             tool_def: ToolDefinition,
             args: ValidatedToolArgs,
         ) -> ValidatedToolArgs:
-            self.started_calls += (deepcopy(call),)
+            self.started_tool_calls += (deepcopy(call),)
             observe(ctx)
             return args
 

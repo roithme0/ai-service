@@ -426,7 +426,7 @@ Pass a fresh `app.agentic.observation.TurnObservation` to
 failure or cancellation. Its `messages` are detached native `ModelMessage` objects,
 including prior history, completed assistant text, confirmed tool results and any
 native interrupted-request marker. `usage`, `run_id` and `conversation_id` identify
-the execution. `started_calls` contains native `ToolCallPart` objects recorded at
+the execution. `started_tool_calls` contains native `ToolCallPart` objects recorded at
 the framework's pre-execution hook; it does not treat a model's requested call as
 proof of execution. The capture is single-use and scoped to one invocation, so
 concurrent turns on the same agent stay separate. Messages and usage are finalized
@@ -523,7 +523,7 @@ and [native tool support](https://pydantic.dev/docs/ai/tools-toolsets/native-too
 
 Native `NativeToolCallPart` and `NativeToolReturnPart` objects retain search
 actions and provider status. They are present in observation messages and native
-serialized history, but do not enter `started_calls`, which tracks local dispatch.
+serialized history, but do not enter `started_tool_calls`, which tracks local dispatch.
 The OpenAI model factory requests search sources and preserves raw citation
 annotations in `TextPart.provider_details["annotations"]`. These remain internal
 inspection data; citation rendering is not added. Native history replay omits

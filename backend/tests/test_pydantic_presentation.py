@@ -70,7 +70,7 @@ def snapshot(
     observation.messages = list(messages)
     observation.run_id = "run"
     if started:
-        observation.started_calls = (ToolCallPart("lookup", {}, "call"),)
+        observation.started_tool_calls = (ToolCallPart("lookup", {}, "call"),)
     return SessionSnapshot(
         session_id="session", expires_at=NOW + timedelta(hours=1), artifacts=artifacts,
         turns=(turn("run", status, observation),), initial_context_message=None,

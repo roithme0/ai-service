@@ -136,7 +136,7 @@ def test_search_coexists_with_local_and_mcp_tools_and_retains_serialized_history
         assert first.usage.details["web_search_requests"] == 2
         assert second.usage.tool_calls == 0
         assert second.usage.details.get("web_search_requests", 0) == 0
-        assert {call.tool_call_id for call in observation.started_calls} == {"local-1", "mcp-1"}
+        assert {call.tool_call_id for call in observation.started_tool_calls} == {"local-1", "mcp-1"}
         parts = [part for message in observation.messages for part in message.parts]
         native_calls = [part for part in parts if isinstance(part, NativeToolCallPart)]
         assert [part.tool_call_id for part in native_calls] == ["ws_1", "ws_2"]
@@ -190,7 +190,7 @@ def test_native_search_status_is_retained_without_local_dispatch(
         parts = [part for message in observation.messages for part in message.parts]
         result = next(part for part in parts if isinstance(part, NativeToolReturnPart))
         assert result.content["status"] == status
-        assert observation.started_calls == ()
+        assert observation.started_tool_calls == ()
 
     asyncio.run(exercise())
     assert requests == 1
@@ -251,7 +251,7 @@ def test_search_without_answer_obeys_zero_validation_retries(monkeypatch: pytest
             async with agent:
                 with pytest.raises(UnexpectedModelBehavior, match="maximum output retries"):
                     await execute_turn(agent, "Search.", observation=observation)
-        assert observation.started_calls == ()
+        assert observation.started_tool_calls == ()
         assert sum(
             isinstance(part, NativeToolReturnPart)
             for message in observation.messages for part in message.parts
@@ -294,7 +294,7 @@ def test_later_provider_failure_preserves_confirmed_search_without_retry(
             isinstance(part, NativeToolReturnPart)
             for message in observation.messages for part in message.parts
         ) == 1
-        assert [call.tool_call_id for call in observation.started_calls] == ["call-1"]
+        assert [call.tool_call_id for call in observation.started_tool_calls] == ["call-1"]
 
     asyncio.run(exercise())
     assert requests == 2

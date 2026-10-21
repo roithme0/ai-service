@@ -219,7 +219,7 @@ def present_session(snapshot: SessionSnapshot) -> PresentedSession:
         (turn.lifecycle.run_id, call.tool_call_id)
         for turn in snapshot.turns
         if turn.observation is not None
-        for call in turn.observation.started_calls
+        for call in turn.observation.started_tool_calls
     }
     artifacts: dict[tuple[str, str], list[ConversationArtifact]] = {}
     for artifact in snapshot.artifacts:

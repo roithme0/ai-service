@@ -169,7 +169,7 @@ def test_lost_mcp_response_does_not_replay_completed_operation() -> None:
                     with pytest.raises(httpx2.ReadError, match="Response lost after execution"):
                         await execute_turn(agent, "Update the value.", observation=observation)
             assert not toolset.client.is_connected()
-            assert [call.tool_call_id for call in observation.started_calls] == ["call-1"]
+            assert [call.tool_call_id for call in observation.started_tool_calls] == ["call-1"]
             assert observation.messages[-1].state == "interrupted"
             assert not any(isinstance(part, ToolReturnPart) for msg in observation.messages for part in msg.parts)
 

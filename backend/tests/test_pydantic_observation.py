@@ -58,13 +58,13 @@ def test_capture_uses_native_history_without_streaming_and_detaches_completed_tu
             assert list(first.messages) == result.all_messages()
             assert first.usage == result.usage
             assert first.run_id == result.run_id
-            assert [call.tool_call_id for call in first.started_calls] == ["lookup-1"]
+            assert [call.tool_call_id for call in first.started_tool_calls] == ["lookup-1"]
             assert returns(first.messages)["lookup-1"].outcome == "success"
             text = [part.content for msg in first.messages for part in msg.parts if isinstance(part, TextPart)]
             assert text == ["I'll look that up.", "The value is 42."]
             history = ModelMessagesTypeAdapter.validate_json(ModelMessagesTypeAdapter.dump_json(first.messages))
             await execute_turn(agent, "Repeat the value.", message_history=history, observation=second)
-        assert second.started_calls == ()
+        assert second.started_tool_calls == ()
         assert second.run_id != first.run_id
         assert second.usage.tool_calls == 0
         assert len(second.messages) > len(first.messages)
@@ -108,7 +108,7 @@ def test_lost_response_preserves_completed_output_and_native_followup_does_not_r
         async with agent:
             with pytest.raises(httpx2.ReadError, match="Response lost"):
                 await execute_turn(agent, "Update the values.", observation=observation)
-            assert [call.tool_call_id for call in observation.started_calls] == ["confirmed", "lost"]
+            assert [call.tool_call_id for call in observation.started_tool_calls] == ["confirmed", "lost"]
             assert returns(observation.messages)["confirmed"].outcome == "success"
             assert "lost" not in returns(observation.messages)
             tail = observation.messages[-1]
@@ -146,7 +146,7 @@ def test_explicit_failure_keeps_native_failed_outcome_and_allows_answer() -> Non
             result = await execute_turn(agent, "Find the value.", observation=observation)
         assert result.output == "The lookup failed."
         assert returns(observation.messages)["lookup-1"].outcome == "failed"
-        assert len(observation.started_calls) == 1
+        assert len(observation.started_tool_calls) == 1
         assert calls == 1
 
     asyncio.run(exercise())
@@ -168,7 +168,7 @@ def test_rejected_calls_are_observed_without_claiming_execution(failure: str) ->
         async with agent:
             with pytest.raises(UnexpectedModelBehavior if failure == "arguments" else UsageLimitExceeded):
                 await execute_turn(agent, "Find it.", observation=observation, usage_limits=limits)
-        assert observation.started_calls == ()
+        assert observation.started_tool_calls == ()
         assert any(isinstance(part, ToolCallPart) for msg in observation.messages for part in msg.parts)
         assert not returns(observation.messages)
 
@@ -224,7 +224,7 @@ def test_cancellation_settles_capture_after_tool_cleanup_and_preserves_exception
         async with agent:
             task = asyncio.create_task(execute_turn(agent, "Find it.", observation=observation))
             await asyncio.wait_for(started.wait(), timeout=5)
-            assert [call.tool_call_id for call in observation.started_calls] == ["call"]
+            assert [call.tool_call_id for call in observation.started_tool_calls] == ["call"]
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
@@ -264,8 +264,8 @@ def test_concurrent_turns_have_independent_capture_and_capture_cannot_be_reused(
             )
             with pytest.raises(ValueError, match="new TurnObservation"):
                 await execute_turn(agent, "again", observation=left)
-        assert [call.tool_call_id for call in left.started_calls] == ["left"]
-        assert [call.tool_call_id for call in right.started_calls] == ["right"]
+        assert [call.tool_call_id for call in left.started_tool_calls] == ["left"]
+        assert [call.tool_call_id for call in right.started_tool_calls] == ["right"]
         assert set(returns(left.messages)) == {"left"}
         assert set(returns(right.messages)) == {"right"}
         assert left.run_id != right.run_id

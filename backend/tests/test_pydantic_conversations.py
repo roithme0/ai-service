@@ -215,7 +215,7 @@ def test_continuation_has_fresh_budgets_and_detached_snapshots() -> None:
         inspection = conversation.last_settled_observation
         assert inspection is not None
         assert inspection.usage == second.usage
-        assert [call.tool_call_id for call in inspection.started_calls] == ["second"]
+        assert [call.tool_call_id for call in inspection.started_tool_calls] == ["second"]
         restored = ModelMessagesTypeAdapter.validate_json(ModelMessagesTypeAdapter.dump_json(list(conversation.messages)))
         assert restored == list(conversation.messages)
         assert calls == ["first", "second"]
@@ -299,7 +299,7 @@ def test_cancellation_retains_uncertain_call_and_releases_busy_guard() -> None:
             assert cleaned_up.is_set()
             failed = conversation.last_settled_observation
             assert failed is not None
-            assert [call.tool_call_id for call in failed.started_calls] == ["update"]
+            assert [call.tool_call_id for call in failed.started_tool_calls] == ["update"]
             assert not returns(conversation.messages)
             assert conversation.messages[-1].state == "interrupted"
             result = await conversation.execute_turn(agent, "followup")
@@ -361,7 +361,7 @@ def test_budget_failure_retains_requested_call_and_next_turn_gets_fresh_budget()
                 await conversation.execute_turn(agent, "lookup", usage_limits=UsageLimits(tool_calls_limit=0))
             failed = conversation.last_settled_observation
             assert failed is not None
-            assert failed.started_calls == ()
+            assert failed.started_tool_calls == ()
             result = await conversation.execute_turn(agent, "followup", usage_limits=UsageLimits(request_limit=1))
         assert result.usage.requests == 1
         assert result.usage.tool_calls == 0
