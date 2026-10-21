@@ -3,6 +3,7 @@ import json
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Literal
 
 import httpx
@@ -36,6 +37,16 @@ def application(runner: AgentTurnRunner) -> FastAPI:
     app = FastAPI()
     app.include_router(create_session_router(lambda: {"test": runner, "unavailable": None}))
     return app
+
+
+def test_native_frontend_contract_matches_router() -> None:
+    app = FastAPI()
+    app.include_router(create_session_router(lambda: {}))
+    contract = (
+        Path(__file__).resolve().parents[2]
+        / "frontend/projects/chat-ui/conversation/generated/native/openapi.json"
+    )
+    assert json.loads(contract.read_text(encoding="utf-8")) == app.openapi()
 
 
 def turns(snapshot: PresentedSession) -> tuple[PresentedTurn, ...]:
@@ -253,6 +264,21 @@ def test_openapi_advertises_native_snapshots_and_typed_sse() -> None:
     assert "SnapshotEvent" in schema["components"]["schemas"]
     assert "ObservationErrorEvent" in schema["components"]["schemas"]
     assert "PresentedSession" in schema["components"]["schemas"]
+    definitions = schema["components"]["schemas"]
+    for name, discriminator in (
+        ("TurnAccepted", "kind"),
+        ("SnapshotEvent", "kind"),
+        ("ObservationErrorEvent", "kind"),
+        ("AssistantText", "part_kind"),
+        ("AcceptedArtifact", "part_kind"),
+        ("PresentedTurn", "part_kind"),
+        ("UserPrompt", "part_kind"),
+    ):
+        assert discriminator in definitions[name]["required"]
+        assert "default" not in definitions[name]["properties"][discriminator]
+    json_definitions = [value for name, value in definitions.items() if name.startswith("FiniteJsonValue")]
+    assert json_definitions
+    assert all("anyOf" in definition for definition in json_definitions)
     json.dumps(schema, allow_nan=False)
 
 

@@ -40,28 +40,34 @@ if (process.argv.length > 3 || (process.argv[2] && !check)) {
 
 const temporary = await mkdtemp(join(tmpdir(), 'ai-service-contract-'));
 try {
-  const document = execFileSync(process.env.PYTHON ?? 'python', ['-m', 'scripts.export_openapi'], {
-    cwd: backend,
-    encoding: 'utf8',
-  });
-  const input = join(temporary, 'openapi.json');
-  const output = join(temporary, 'generated');
-  await writeFile(input, document);
-  await createClient({ input, output, plugins: ['@hey-api/typescript', 'zod'] });
+  for (const native of [false, true]) {
+    const document = execFileSync(
+      process.env.PYTHON ?? 'python',
+      ['-m', 'scripts.export_openapi', ...(native ? ['--native'] : [])],
+      {
+        cwd: backend,
+        encoding: 'utf8',
+      },
+    );
+    const input = join(temporary, 'openapi.json');
+    const output = join(temporary, 'generated');
+    await writeFile(input, document);
+    await createClient({ input, output, plugins: ['@hey-api/typescript', 'zod'] });
 
-  for (const name of files) {
-    const generated = await readFile(name === 'openapi.json' ? input : join(output, name));
-    const destination = join(contract, name);
-    if (check) {
-      const committed = await readFile(destination).catch(() => null);
-      if (!committed?.equals(generated)) {
-        throw new Error(
-          `${destination} is stale. ${mismatchDetails(committed, generated)}\nRun npm run generate:conversation-contract.`,
-        );
+    for (const name of files) {
+      const generated = await readFile(name === 'openapi.json' ? input : join(output, name));
+      const destination = join(contract, ...(native ? ['native'] : []), name);
+      if (check) {
+        const committed = await readFile(destination).catch(() => null);
+        if (!committed?.equals(generated)) {
+          throw new Error(
+            `${destination} is stale. ${mismatchDetails(committed, generated)}\nRun npm run generate:conversation-contract.`,
+          );
+        }
+      } else {
+        await mkdir(dirname(destination), { recursive: true });
+        await writeFile(destination, generated);
       }
-    } else {
-      await mkdir(contract, { recursive: true });
-      await writeFile(destination, generated);
     }
   }
   process.stdout.write(

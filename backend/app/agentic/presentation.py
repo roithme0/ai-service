@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 from pydantic_ai.messages import (
     ModelMessage,
     NativeToolCallPart,
@@ -22,6 +22,7 @@ from app.agentic.conversations import (
     INITIAL_CONTEXT_ORIGIN, ConversationArtifact, TurnLifecycle, TurnStatus,
 )
 from app.agentic.sessions import SessionSnapshot
+from app.agentic.response import ResponseModel
 from app.sessions.models.artifacts import ArtifactPayload, PublishedArtifact
 
 type ToolStatus = Literal[
@@ -29,29 +30,25 @@ type ToolStatus = Literal[
 ]
 
 
-class _PresentationModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class UserPrompt(_PresentationModel):
+class UserPrompt(ResponseModel):
     part_kind: Literal["user-prompt"] = "user-prompt"
     content: str | tuple[str, ...]
 
 
-class AssistantText(_PresentationModel):
+class AssistantText(ResponseModel):
     part_kind: Literal["text"] = "text"
     content: str
     phase: Literal["commentary", "final_answer"] | None = None
 
 
-class ToolActivity(_PresentationModel):
+class ToolActivity(ResponseModel):
     part_kind: Literal["tool-call", "builtin-tool-call"]
     tool_name: str
     tool_call_id: str
     status: ToolStatus
 
 
-class AcceptedArtifact(_PresentationModel):
+class AcceptedArtifact(ResponseModel):
     part_kind: Literal["artifact"] = "artifact"
     artifact: PublishedArtifact[ArtifactPayload]
 
@@ -62,7 +59,7 @@ type PresentationPart = Annotated[
 ]
 
 
-class PresentedTurn(_PresentationModel):
+class PresentedTurn(ResponseModel):
     part_kind: Literal["turn"] = "turn"
     lifecycle: TurnLifecycle
     parts: tuple[PresentationPart, ...]
@@ -71,7 +68,7 @@ class PresentedTurn(_PresentationModel):
 type HistoryItem = Annotated[UserPrompt | PresentedTurn, Field(discriminator="part_kind")]
 
 
-class PresentedSession(_PresentationModel):
+class PresentedSession(ResponseModel):
     session_id: str
     expires_at: datetime
     history: tuple[HistoryItem, ...]

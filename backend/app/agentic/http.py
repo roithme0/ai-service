@@ -6,12 +6,13 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, RootModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 from starlette.types import Receive, Scope, Send
 
 from app.agentic.config import MAX_PROMPT_LENGTH
 from app.agentic.conversations import ConversationBusyError
 from app.agentic.presentation import PresentedSession
+from app.agentic.response import ResponseModel
 from app.agentic.runner import AgentTurnRunner, RunnerClosedError
 from app.agentic.sessions import (
     ObservationLimitError,
@@ -21,13 +22,14 @@ from app.agentic.sessions import (
 )
 from app.agents.http_identity import require_application_user
 from app.sessions.models.artifacts import ArtifactCapability
+from app.core.json import FiniteJsonValue
 
 _logger = logging.getLogger(__name__)
 
 
 class SessionCreationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    initial_context: dict[str, JsonValue] | None = None
+    initial_context: dict[str, FiniteJsonValue] | None = None
     artifact_capabilities: list[ArtifactCapability] = Field(default_factory=list)
 
 
@@ -43,13 +45,11 @@ class PromptSubmissionRequest(BaseModel):
         return value
 
 
-class TurnAccepted(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class TurnAccepted(ResponseModel):
     kind: Literal["accepted"] = "accepted"
 
 
-class BoundaryError(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class BoundaryError(ResponseModel):
     kind: Literal[
         "unknown_configuration",
         "unknown",
@@ -60,14 +60,12 @@ class BoundaryError(BaseModel):
     ]
 
 
-class SnapshotEvent(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class SnapshotEvent(ResponseModel):
     kind: Literal["snapshot"] = "snapshot"
     snapshot: PresentedSession
 
 
-class ObservationErrorEvent(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class ObservationErrorEvent(ResponseModel):
     kind: Literal["error"] = "error"
     reason: Literal[
         "unknown", "observation_overflow", "internal_error"

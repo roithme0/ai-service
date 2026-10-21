@@ -192,6 +192,29 @@ multiple turns, ownership isolation and disconnect cleanup have regression cover
 No production routes, generated frontend contracts, demo implementation or legacy
 engine behavior changes in this slice.
 
+The seventeenth approved slice prepares the conversation package with a parallel
+native session transport and generated HTTP contracts. It uses session creation,
+owner-checked reads, one prompt submission returning admission, and session-wide
+complete-snapshot observation. The wire validators retain independent user prompts,
+native run groups, nullable run IDs, tool/artifact ordering and concise lifecycle
+status directly. They do not recreate legacy controller states or prompt ownership.
+HTTP errors, malformed/network responses and terminal observation error frames
+remain distinct. Observation handles fragmented UTF-8/SSE, abort and early consumer
+exit with reader cleanup, without replay or automatic submission retries.
+
+The new contract is generated from the isolated native router; legacy generated
+contracts and the running controller remain in place. Backend response schemas
+describe required serialized fields without constructor defaults; shared finite
+JSON types describe recursive payloads explicitly. Frontend consumers use generated
+schema and type names directly, without handwritten schema extensions or aliases.
+The existing generation and drift-check commands cover both router contracts.
+Contract drift, transport
+requests, validation and stream behavior have regression coverage. The next slice
+builds the new controller against this boundary. Presentation/application adaptation,
+deterministic native demo and backend composition/cutover remain separate work.
+Legacy frontend deletion follows its cutover; legacy backend deletion also requires
+the remaining agent configurations to migrate.
+
 The main remaining choices are production session integration, HTTP/frontend delivery of the selected snapshot, application availability around native MCP, and an observability destination. These are implementation decisions to resolve as work proceeds, not blockers requiring a new evaluation phase.
 
 The native artifact tool accepts `ArtifactCandidate[ArtifactPayload]` directly, with generated arguments shaped as `candidate: {type, payload: {title, subtitle?, payload, metadata?}}`. A separate flat `ArtifactRequest` and its conversion are unnecessary. Finite-JSON validation belongs to the shared `ArtifactPayload`; the candidate rejects unknown fields during Pydantic validation. This changes only the new engine's internal tool input, not the frontend contract or the legacy tool interface.

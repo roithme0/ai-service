@@ -15,6 +15,7 @@ from referencing import Resource
 from referencing.jsonschema import DRAFT202012
 
 from app.sessions.config import MAX_ARTIFACT_DESCRIPTION_LENGTH, MAX_ARTIFACT_HEADER_LENGTH
+from app.core.json import FiniteJsonValue
 
 ArtifactT = TypeVar("ArtifactT")
 
@@ -57,8 +58,8 @@ class ArtifactCapability(BaseModel):
         default=None, alias="subtitleDescription", min_length=1,
         max_length=MAX_ARTIFACT_DESCRIPTION_LENGTH,
     )
-    payload_schema: dict[str, JsonValue] = Field(alias="payloadSchema")
-    metadata_schema: dict[str, JsonValue] | None = Field(default=None, alias="metadataSchema")
+    payload_schema: dict[str, FiniteJsonValue] = Field(alias="payloadSchema")
+    metadata_schema: dict[str, FiniteJsonValue] | None = Field(default=None, alias="metadataSchema")
 
     @field_validator("description", "title_description", "subtitle_description")
     @classmethod
@@ -100,8 +101,8 @@ class ArtifactPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     title: str = Field(min_length=1, max_length=MAX_ARTIFACT_HEADER_LENGTH)
     subtitle: str | None = Field(default=None, min_length=1, max_length=MAX_ARTIFACT_HEADER_LENGTH)
-    payload: JsonValue
-    metadata: dict[str, JsonValue] | None = None
+    payload: FiniteJsonValue
+    metadata: dict[str, FiniteJsonValue] | None = None
 
     @field_validator("payload", "metadata")
     @classmethod

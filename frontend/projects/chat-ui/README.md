@@ -323,3 +323,52 @@ empty object, so schema-required fields remain required. The default mapper
 passes metadata to `ChatArtifact.metadata`; custom templates access it through
 `let-artifact="artifact"`. Metadata has no built-in rendering or action behavior;
 the consumer frontend interprets it and owns any domain actions.
+
+## Native session transport (parallel implementation)
+
+The `/conversation` entry point also exports `HttpSessionTransport` and its
+`SessionTransport` interface for the new Pydantic AI HTTP boundary. The existing
+`ConversationController` still uses the legacy transport. The application and
+production backend routing have not switched to the new API.
+
+```ts
+const transport = new HttpSessionTransport('/api/v1', 'my-agent', 'host:42');
+const session = await transport.createSession({
+  initial_context: { selectedItem: item },
+  artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
+});
+const snapshot = await transport.readSession(session.session_id);
+await transport.submitPrompt(session.session_id, 'Please update this item.');
+```
+
+`submitPrompt()` returns `{ kind: 'accepted' }` after admission, without a turn ID.
+`observeSession(sessionId, signal)` returns an async iterable of complete snapshot
+events across turns and terminal observation error events. Snapshots preserve the
+backend's ordered `history` of independent user prompts and run groups, including
+empty groups whose native run ID is not yet available. Observation errors describe
+the connection; turn outcomes come from snapshot lifecycle status. Clean EOF means
+the observation ended, not that a turn completed. Aborting or leaving the iterable
+releases the reader and does not cancel execution. There are no automatic retries,
+reconnections, optimistic messages, or frontend lifecycle reconstruction.
+
+HTTP failures throw `SessionHttpError` with status and kind; FastAPI 422 responses
+use `validation_error`. Network and malformed-response failures throw
+`SessionTransportError`. Observation error frames remain typed `SessionEvent`
+values, followed by the end of the iterable. The transport uses the generated
+schemas directly. The backend response schemas require explicit discriminators
+and describe recursive finite JSON values for context and artifact data.
+
+The separate `conversation/generated/native` contract is generated from an isolated
+FastAPI app mounting `app.agentic.http.create_session_router(lambda: {})`, using
+the existing `@hey-api/openapi-ts` TypeScript and Zod plugins. It does not depend
+on production mounting or replace the legacy generated contract. Backend regression
+coverage compares its OpenAPI document with the actual router.
+
+The existing generation and drift-check commands cover both contracts. From
+`frontend` in PowerShell:
+
+```powershell
+$env:PYTHON = (Resolve-Path ../backend/.venv/Scripts/python.exe).Path
+npm.cmd run generate:conversation-contract
+npm.cmd run check:conversation-contract
+```
