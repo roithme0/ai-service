@@ -176,9 +176,9 @@ describe('live conversation controller', () => {
           }),
         });
         expect(controller.state.turns).toMatchObject([
-          { id: 'old', userMessageId: 'request-first', status: 'completed' },
-          { id: 'failed', userMessageId: 'request-second', status: 'failed' },
-          { id: 't', userMessageId: 'request-current', status: 'active' },
+          { runKey: 'old', status: 'completed' },
+          { runKey: 'failed', status: 'failed' },
+          { runKey: 't', status: 'active' },
         ]);
         expect(controller.state.turns.map((turn) => turn.content.map((item) => item.id))).toEqual([
           ['request-first', 'old-answer'],
@@ -277,7 +277,7 @@ describe('live conversation controller', () => {
     await controller.start();
     const acknowledge = vi.fn(() => {
       expect(controller.state.turns).toHaveLength(1);
-      expect(controller.state.turns[0]).toMatchObject({ id: 't', status: 'active' });
+      expect(controller.state.turns[0]).toMatchObject({ runKey: 't', status: 'active' });
       expect(contentOf(controller.state)).toContainEqual(
         expect.objectContaining({ role: 'user', text: 'Hello', turnId: 't' }),
       );
@@ -629,9 +629,7 @@ describe('live conversation controller', () => {
       await controller.start();
       await controller.submit('Hello', vi.fn());
       expect(contentOf(controller.state)).toHaveLength(2);
-      expect(controller.state.turns).toMatchObject([
-        { id: 't', userMessageId: 'confirmed-0-user', status: 'unknown' },
-      ]);
+      expect(controller.state.turns).toMatchObject([{ runKey: 't', status: 'unknown' }]);
       expect(controller.state.composerDisabled).toBe(true);
       expect(controller.state.status).not.toHaveProperty('action');
       await controller.performAction('retry-turn');
@@ -776,9 +774,7 @@ describe('live conversation controller', () => {
       text: 'Final before failure',
       isFinal: true,
     });
-    expect(controller.state.turns).toMatchObject([
-      { id: 't', userMessageId: 'confirmed-0-user', status: 'failed' },
-    ]);
+    expect(controller.state.turns).toMatchObject([{ runKey: 't', status: 'failed' }]);
   });
 
   it.each(['completed', 'generation_failed', 'conflict'] as const)(
@@ -819,8 +815,7 @@ describe('live conversation controller', () => {
       await controller.submit('Hello', vi.fn());
       expect(controller.state.turns).toMatchObject([
         {
-          id: 't',
-          userMessageId: 'confirmed-0-user',
+          runKey: 't',
           status: outcome === 'completed' ? 'completed' : 'failed',
         },
       ]);
@@ -985,8 +980,7 @@ describe('live conversation controller', () => {
       await controller.submit('Hello', vi.fn());
       expect(controller.state.turns).toMatchObject([
         {
-          id: 't',
-          userMessageId: 'confirmed-0-user',
+          runKey: 't',
           status: outcome === 'completed' ? 'completed' : 'failed',
         },
       ]);
@@ -1047,8 +1041,8 @@ describe('live conversation controller', () => {
     await controller.start();
     await controller.submit('Hello', vi.fn());
     expect(controller.state.turns).toMatchObject([
-      { id: 'old', userMessageId: 'request-old', status: 'completed' },
-      { id: 'latest', userMessageId: 'request-latest', status: 'unknown' },
+      { runKey: 'old', status: 'completed' },
+      { runKey: 'latest', status: 'unknown' },
     ]);
     expect(controller.state.composerDisabled).toBe(true);
     expect(controller.state.status?.kind).toBe('error');
@@ -1163,9 +1157,7 @@ describe('live conversation controller', () => {
     const controller = new ConversationController(transport, () => undefined);
     await controller.start();
     await controller.submit('Hello', vi.fn());
-    expect(controller.state.turns).toMatchObject([
-      { id: 't', userMessageId: 'confirmed-0-user', status: 'unknown' },
-    ]);
+    expect(controller.state.turns).toMatchObject([{ runKey: 't', status: 'unknown' }]);
     expect(contentOf(controller.state)).toEqual([
       {
         kind: 'text',
@@ -1195,7 +1187,7 @@ describe('live conversation controller', () => {
       await controller.submit('Hello', vi.fn());
       expect(controller.state.composerDisabled).toBe(true);
       expect(controller.state.status?.message).not.toContain('unbekannt');
-      expect(controller.state.turns).toMatchObject([{ id: 't', status: 'unknown' }]);
+      expect(controller.state.turns).toMatchObject([{ runKey: 't', status: 'unknown' }]);
       expect(transport.observeTurn).toHaveBeenCalledTimes(1);
       expect(transport.readSession).not.toHaveBeenCalled();
     },
@@ -1390,7 +1382,7 @@ describe('live conversation controller', () => {
             expect(acknowledge).not.toHaveBeenCalled();
             expect(transport.generateTurn).not.toHaveBeenCalled();
           } else {
-            expect(controller.state.turns).toMatchObject([{ id: 't', status: 'unknown' }]);
+            expect(controller.state.turns).toMatchObject([{ runKey: 't', status: 'unknown' }]);
             expect(controller.state.turns[0].content).toHaveLength(1);
             expect(acknowledge).toHaveBeenCalledOnce();
           }

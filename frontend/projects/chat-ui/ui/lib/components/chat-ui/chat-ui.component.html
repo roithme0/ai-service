@@ -6,14 +6,15 @@
     </section>
 
     <div class="messages">
-      @for (turn of turns(); track turn.id; let lastTurn = $last) {
+      @for (section of sections(); track section.key; let lastTurn = $last) {
+        @let turn = section.turn;
         @for (item of turn.content; track item.id; let last = $last) {
           @if (
             item.kind !== 'failure' || !lastTurn || !last || conversationStatus()?.kind !== 'error'
           ) {
             <ai-chat-history-item
               [collapsed]="
-                (item.kind === 'tool' || item.kind === 'intermediate') && detailsHidden(turn.id)
+                (item.kind === 'tool' || item.kind === 'intermediate') && detailsHidden(turn)
               "
             >
               @switch (item.kind) {
@@ -38,9 +39,11 @@
                   } @else {
                     <ai-chat-assistant-message
                       [message]="item"
-                      [showDetailsToggle]="disclosureAnswers().get(turn.id) === item.id"
-                      [detailsExpanded]="detailsExpanded(turn.id)"
-                      (detailsToggled)="toggleDetails(turn.id)"
+                      [showDetailsToggle]="
+                        turn.runKey !== null && detailToggleAnchors().get(turn.runKey) === item.id
+                      "
+                      [detailsExpanded]="detailsExpanded(turn)"
+                      (detailsToggled)="toggleDetails(turn)"
                     />
                   }
                 }

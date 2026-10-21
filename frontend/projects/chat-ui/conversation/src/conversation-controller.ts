@@ -498,8 +498,7 @@ export class ConversationController {
 function presentTurns(turns: readonly RetainedTurn[], mapArtifact: ArtifactMapper): PresentedTurns {
   const responseTurnIds = new Set<string>();
   const presented = turns.map((turn): ChatTurn => ({
-    id: turn.turn_id,
-    userMessageId: turn.user_message_id,
+    runKey: turn.turn_id,
     status:
       turn.status === 'unknown'
         ? 'unknown'

@@ -12,7 +12,13 @@ import {
   type ChatTextMessage,
   type ChatTurn,
 } from '../../models/chat-message';
+import { ArtifactCardComponent } from '../artifact-card/artifact-card.component';
 import { ChatUiComponent } from './chat-ui.component';
+import { presentSession } from '../../../../conversation/src/session-presentation';
+import type {
+  PresentedSession,
+  PresentedTurn,
+} from '../../../../conversation/generated/native/types.gen';
 
 const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
   {
@@ -31,7 +37,7 @@ const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
   },
 ];
 
-const DISCLOSURE_CONTENT: readonly ChatContent[] = [
+const DETAILS_CONTENT: readonly ChatContent[] = [
   { kind: 'text', isFinal: false, id: 'request', role: 'user', text: 'Request' },
   { kind: 'intermediate', id: 'detail', text: 'Checking' },
   { kind: 'tool', id: 'recoverable', name: 'check', status: 'failed' },
@@ -78,8 +84,7 @@ describe('ChatUiComponent', () => {
     expect(mascot.getAttribute('aria-hidden')).toBe('true');
 
     const turn: ChatTurn = {
-      id: 'active',
-      userMessageId: 'request',
+      runKey: 'active',
       status: 'active',
       content: [],
     };
@@ -87,7 +92,7 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     expect(mascot.getAttribute('src')).toBe('images/maskot-working.png');
 
-    fixture.componentRef.setInput('turns', [{ ...turn, content: DISCLOSURE_CONTENT }]);
+    fixture.componentRef.setInput('turns', [{ ...turn, content: DETAILS_CONTENT }]);
     fixture.componentRef.setInput('conversationStatus', null);
     fixture.detectChanges();
     expect(mascot.getAttribute('src')).toBe('images/maskot-working.png');
@@ -112,8 +117,8 @@ describe('ChatUiComponent', () => {
     expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/mascot-idle.png');
 
     fixture.componentRef.setInput('turns', [
-      { id: 'active', userMessageId: 'request', status: 'active', content: [] },
-      { id: 'completed', userMessageId: 'other', status: 'completed', content: [] },
+      { runKey: 'active', status: 'active', content: [] },
+      { runKey: 'completed', status: 'completed', content: [] },
     ]);
     fixture.detectChanges();
     expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/maskot-working.png');
@@ -122,10 +127,9 @@ describe('ChatUiComponent', () => {
   it('collapses details only after completion and places an accessible toggle below the explicit answer', () => {
     const fixture = createFixture([]);
     const turn: ChatTurn = {
-      id: 'first',
-      userMessageId: 'request',
+      runKey: 'first',
       status: 'active',
-      content: DISCLOSURE_CONTENT,
+      content: DETAILS_CONTENT,
     };
     fixture.componentRef.setInput('turns', [turn]);
     fixture.detectChanges();
@@ -162,7 +166,7 @@ describe('ChatUiComponent', () => {
     (status) => {
       const fixture = createFixture([]);
       fixture.componentRef.setInput('turns', [
-        { id: 'first', userMessageId: 'request', status, content: DISCLOSURE_CONTENT },
+        { runKey: 'first', status, content: DETAILS_CONTENT },
       ]);
       fixture.detectChanges();
       const element = fixtureElement(fixture);
@@ -177,13 +181,13 @@ describe('ChatUiComponent', () => {
   it.each([
     { content: [] },
     {
-      content: DISCLOSURE_CONTENT.filter(
+      content: DETAILS_CONTENT.filter(
         (item) => item.kind !== 'tool' && item.kind !== 'intermediate',
       ),
     },
-    { content: DISCLOSURE_CONTENT.filter((item) => item.kind !== 'text' || !item.isFinal) },
+    { content: DETAILS_CONTENT.filter((item) => item.kind !== 'text' || !item.isFinal) },
   ])(
-    'does not offer disclosure without both details and an explicit final answer (%j)',
+    'does not offer a details toggle without both details and an explicit final answer (%j)',
     ({ content }) => {
       const fixture = createFixture(content);
       expect(fixtureElement(fixture).querySelector('.details-toggle')).toBeNull();
@@ -193,7 +197,7 @@ describe('ChatUiComponent', () => {
 
   it('uses the first explicitly final answer rather than later unspecified or additional final text', () => {
     const fixture = createFixture([
-      ...DISCLOSURE_CONTENT,
+      ...DETAILS_CONTENT,
       {
         kind: 'text',
         isFinal: true,
@@ -221,13 +225,13 @@ describe('ChatUiComponent', () => {
     ]);
   });
 
-  it('remembers manual disclosure per historical turn across new inputs and resets on recreation', () => {
-    const fixture = createFixture(DISCLOSURE_CONTENT);
+  it('remembers manual detail expansion per historical run across new inputs and resets on recreation', () => {
+    const fixture = createFixture(DETAILS_CONTENT);
     const element = fixtureElement(fixture);
     element.querySelector<HTMLButtonElement>('.details-toggle')!.click();
     fixture.detectChanges();
     const historical = fixture.componentInstance.turns()[0];
-    const next: ChatTurn = { ...historical, id: 'next', content: [...DISCLOSURE_CONTENT] };
+    const next: ChatTurn = { ...historical, runKey: 'next', content: [...DETAILS_CONTENT] };
     fixture.componentRef.setInput('turns', [
       { ...historical, content: [...historical.content] },
       next,
@@ -242,7 +246,7 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     fixture.componentRef.setInput('turns', [
       ...fixture.componentInstance.turns(),
-      { id: 'pending', userMessageId: 'pending-user', status: 'active', content: [] },
+      { runKey: 'pending', status: 'active', content: [] },
     ]);
     fixture.detectChanges();
     expect(toggles[0].getAttribute('aria-expanded')).toBe('false');
@@ -250,18 +254,113 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     expect(toggles[1].getAttribute('aria-expanded')).toBe('true');
     fixture.destroy();
-    const recreated = createFixture(DISCLOSURE_CONTENT);
+    const recreated = createFixture(DETAILS_CONTENT);
     expect(
       fixtureElement(recreated).querySelector('.details-toggle')?.getAttribute('aria-expanded'),
     ).toBe('false');
+  });
+
+  it('retains native artifacts and shared run detail expansion through replacement snapshots and nullable ID capture', () => {
+    const lifecycle: PresentedTurn['lifecycle'] = {
+      run_id: null,
+      status: 'running',
+      started_at: '2026-10-21T12:00:00Z',
+      finished_at: null,
+    };
+    const first: PresentedTurn = {
+      part_kind: 'turn',
+      lifecycle,
+      parts: [
+        { part_kind: 'tool-call', tool_call_id: 'call', tool_name: 'publish', status: 'running' },
+        {
+          part_kind: 'artifact',
+          artifact: {
+            artifact_id: 'card',
+            type: 'json',
+            turn_id: 'run',
+            created_at: lifecycle.started_at,
+            order: 0,
+            payload: { title: 'Result', payload: { value: 'Long result' } },
+          },
+        },
+      ],
+    };
+    const snapshot: PresentedSession = {
+      session_id: 's',
+      expires_at: lifecycle.started_at,
+      history: [first],
+    };
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('turns', presentSession(snapshot));
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const card = element.querySelector('ai-chat-artifact-card')!;
+    const body = card.querySelector<HTMLElement>('.artifact-body')!;
+    Object.defineProperty(body, 'scrollHeight', { configurable: true, value: 500 });
+    Object.defineProperty(body, 'clientHeight', { configurable: true, value: 100 });
+    const artifactComponent = fixture.debugElement
+      .query(By.directive(ArtifactCardComponent))
+      .injector.get(ArtifactCardComponent);
+    artifactComponent['measure']();
+    fixture.detectChanges();
+    card.querySelector<HTMLButtonElement>('.artifact-toggle')!.click();
+    fixture.detectChanges();
+    const completed = { ...lifecycle, run_id: 'run', status: 'completed' as const };
+    const updated: PresentedSession = {
+      ...snapshot,
+      history: [
+        {
+          ...first,
+          lifecycle: completed,
+          parts: [
+            {
+              part_kind: 'tool-call',
+              tool_call_id: 'call',
+              tool_name: 'publish',
+              status: 'success',
+            },
+            first.parts[1],
+          ],
+        },
+        { part_kind: 'user-prompt', content: ['same', 'same'] },
+        {
+          part_kind: 'turn',
+          lifecycle: completed,
+          parts: [{ part_kind: 'text', phase: null, content: 'Answer' }],
+        },
+      ],
+    };
+    fixture.componentRef.setInput('turns', presentSession(updated));
+    fixture.detectChanges();
+    expect(element.querySelector('ai-chat-artifact-card')).toBe(card);
+    expect(card.querySelector('.artifact-body')).toBe(body);
+    expect(card.querySelector('.artifact-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    expect(element.querySelector('ai-chat-tool-call')?.textContent).toContain('publish');
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(true);
+    element.querySelector<HTMLButtonElement>('.details-toggle')!.click();
+    fixture.detectChanges();
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(false);
+    fixture.componentRef.setInput('turns', presentSession(structuredClone(updated)));
+    fixture.detectChanges();
+    expect(element.querySelector('.details-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    expect(card.querySelector('.artifact-toggle')?.getAttribute('aria-expanded')).toBe('true');
+    expect(element.querySelectorAll('ai-chat-user-message')).toHaveLength(2);
+    expect(element.querySelector('ai-chat-artifact-card')).toBe(card);
+    fixture.componentRef.setInput(
+      'turns',
+      presentSession({ ...updated, session_id: 'another-session' }),
+    );
+    fixture.detectChanges();
+    expect(element.querySelector('.details-toggle')?.getAttribute('aria-expanded')).toBe('false');
+    expect(element.querySelector('ai-chat-artifact-card')).not.toBe(card);
   });
 
   it('preserves interleaved artifact nodes, renderer DOM state and order across toggles', () => {
     const templateFixture = TestBed.createComponent(RendererTemplateHost);
     templateFixture.detectChanges();
     const fixture = createFixture([
-      DISCLOSURE_CONTENT[0],
-      DISCLOSURE_CONTENT[1],
+      DETAILS_CONTENT[0],
+      DETAILS_CONTENT[1],
       {
         kind: 'artifact',
         id: 'card',
@@ -269,8 +368,8 @@ describe('ChatUiComponent', () => {
         headline: 'Card',
         payload: { label: 'retained' },
       },
-      DISCLOSURE_CONTENT[2],
-      DISCLOSURE_CONTENT[3],
+      DETAILS_CONTENT[2],
+      DETAILS_CONTENT[3],
     ]);
     fixture.componentRef.setInput('artifactRenderers', {
       known: artifactRenderer(templateFixture.componentInstance.template()),
@@ -295,7 +394,7 @@ describe('ChatUiComponent', () => {
   });
 
   it('expands and collapses details without requesting a scroll or changing the scroll offset', async () => {
-    const fixture = createFixture(DISCLOSURE_CONTENT);
+    const fixture = createFixture(DETAILS_CONTENT);
     const element = fixtureElement(fixture);
     const history = element.querySelector<HTMLElement>('.history')!;
     const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
@@ -340,8 +439,7 @@ describe('ChatUiComponent', () => {
     const fixture = createFixture([]);
     fixture.componentRef.setInput('turns', [
       {
-        id: 'first',
-        userMessageId: 'first-user',
+        runKey: 'first',
         status: 'failed',
         content: [
           { kind: 'text', isFinal: false, id: 'first-user', role: 'user', text: 'First' },
@@ -349,8 +447,7 @@ describe('ChatUiComponent', () => {
         ],
       },
       {
-        id: 'second',
-        userMessageId: 'second-user',
+        runKey: 'second',
         status: 'failed',
         content: [
           { kind: 'text', isFinal: false, id: 'second-user', role: 'user', text: 'Second' },
@@ -1068,9 +1165,7 @@ function setContent(
 ): void {
   fixture.componentRef.setInput(
     'turns',
-    content.length === 0
-      ? []
-      : [{ id: 'turn-1', userMessageId: 'user-1', status: 'completed', content }],
+    content.length === 0 ? [] : [{ runKey: 'turn-1', status: 'completed', content }],
   );
 }
 

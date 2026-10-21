@@ -49,7 +49,7 @@ export class ChatUiComponent {
   private readonly history = viewChild.required<ElementRef<HTMLElement>>('history');
 
   private scrollHistoryToBottom = false;
-  private readonly expandedTurns = signal<ReadonlySet<string>>(new Set());
+  private readonly expandedRuns = signal<ReadonlySet<string>>(new Set());
 
   readonly bannerTitle = input.required<string>();
   readonly bannerDescription = input.required<string>();
@@ -61,6 +61,15 @@ export class ChatUiComponent {
   readonly composerPlaceholder = input('Nachricht schreiben');
   readonly mascotAssetPath = input('images');
 
+  protected readonly sections = computed(() => {
+    const occurrences = new Map<string | null, number>();
+    return this.turns().map((turn) => {
+      const occurrence = occurrences.get(turn.runKey) ?? 0;
+      occurrences.set(turn.runKey, occurrence + 1);
+      return { turn, key: JSON.stringify([turn.runKey, occurrence]) };
+    });
+  });
+
   protected readonly mascotSource = computed(() => {
     const filename = this.turns().some((turn) => turn.status === 'active')
       ? 'maskot-working.png'
@@ -71,18 +80,25 @@ export class ChatUiComponent {
   readonly messageSubmitted = output<ChatSubmission>();
   readonly statusActionTriggered = output<string>();
 
-  protected readonly disclosureAnswers = computed(() => {
+  protected readonly detailToggleAnchors = computed(() => {
     const answers = new Map<string, string>();
+    const groups = new Map<string, ChatTurn[]>();
     for (const turn of this.turns()) {
+      const key = turn.runKey;
+      if (key === null) continue;
+      groups.set(key, [...(groups.get(key) ?? []), turn]);
+    }
+    for (const [key, turns] of groups) {
+      const content = turns.flatMap((turn) => turn.content);
       if (
-        turn.status !== 'completed' ||
-        !turn.content.some((item) => item.kind === 'intermediate' || item.kind === 'tool')
+        turns.some((turn) => turn.status !== 'completed') ||
+        !content.some((item) => item.kind === 'intermediate' || item.kind === 'tool')
       )
         continue;
-      const answer = turn.content.find(
+      const answer = content.find(
         (item) => item.kind === 'text' && item.role === 'assistant' && item.isFinal,
       );
-      if (answer) answers.set(turn.id, answer.id);
+      if (answer) answers.set(key, answer.id);
     }
     return answers;
   });
@@ -113,22 +129,27 @@ export class ChatUiComponent {
     this.scrollHistoryToBottom = true;
   }
 
-  protected detailsExpanded(turnId: string): boolean {
-    return this.expandedTurns().has(turnId);
+  protected detailsExpanded(turn: ChatTurn): boolean {
+    return turn.runKey !== null && this.expandedRuns().has(turn.runKey);
   }
 
-  protected detailsHidden(turnId: string): boolean {
-    return this.disclosureAnswers().has(turnId) && !this.detailsExpanded(turnId);
+  protected detailsHidden(turn: ChatTurn): boolean {
+    return (
+      turn.runKey !== null &&
+      this.detailToggleAnchors().has(turn.runKey) &&
+      !this.detailsExpanded(turn)
+    );
   }
 
-  protected toggleDetails(turnId: string): void {
-    if (!this.disclosureAnswers().has(turnId)) return;
-    const expanded = new Set(this.expandedTurns());
-    if (expanded.has(turnId)) {
-      expanded.delete(turnId);
+  protected toggleDetails(turn: ChatTurn): void {
+    const runKey = turn.runKey;
+    if (runKey === null || !this.detailToggleAnchors().has(runKey)) return;
+    const expanded = new Set(this.expandedRuns());
+    if (expanded.has(runKey)) {
+      expanded.delete(runKey);
     } else {
-      expanded.add(turnId);
+      expanded.add(runKey);
     }
-    this.expandedTurns.set(expanded);
+    this.expandedRuns.set(expanded);
   }
 }
