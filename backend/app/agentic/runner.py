@@ -43,7 +43,7 @@ class AgentTurnRunner:
     ) -> None:
         self._agent = agent
         self._sessions = AgentSessionRegistry(lifetime=session_lifetime, clock=clock)
-        self._tasks: set[asyncio.Task[AgentRunResult[str]]] = set()
+        self._turn_tasks: set[asyncio.Task[AgentRunResult[str]]] = set()
         self._closed = False
 
     async def __aenter__(self) -> AgentTurnRunner:
@@ -96,55 +96,71 @@ class AgentTurnRunner:
         """Wait for admission; execution then continues under runner ownership."""
         if self._closed:
             raise RunnerClosedError("The turn runner is closed.")
-        admission: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        admission_future: asyncio.Future[None] = asyncio.get_running_loop().create_future()
 
         def admitted() -> None:
-            admission.set_result(None)
+            admission_future.set_result(None)
 
         execution = self._sessions.execute_turn(
             session_id, owner=owner, agent=self._agent, prompt=prompt,
             usage_limits=usage_limits, toolsets=tuple(toolsets), on_admitted=admitted,
         )
         try:
-            task = asyncio.create_task(execution)
+            execution_task = asyncio.create_task(execution)
         except BaseException:
             execution.close()
             raise
-        self._tasks.add(task)
+        self._turn_tasks.add(execution_task)
 
-        def finished(completed: asyncio.Task[AgentRunResult[str]]) -> None:
-            self._tasks.discard(completed)
-            if completed.cancelled():
-                if not admission.done():
-                    admission.cancel()
-                return
-            error = completed.exception()
-            if not admission.done():
-                admission.set_exception(error if error is not None else RuntimeError("Turn admission was not acknowledged."))
-            elif error is not None and not admission.cancelled():
-                _logger.error("Background agent turn failed (%s).", type(error).__name__)
+        def on_execution_finished(completed_task: asyncio.Task[AgentRunResult[str]]) -> None:
+            self._handle_turn_completion(completed_task, admission_future)
 
-        task.add_done_callback(finished)
+        execution_task.add_done_callback(on_execution_finished)
+        await self._wait_for_admission(execution_task, admission_future)
+
+    def _handle_turn_completion(
+        self,
+        execution_task: asyncio.Task[AgentRunResult[str]],
+        admission_future: asyncio.Future[None],
+    ) -> None:
+        self._turn_tasks.discard(execution_task)
+        if execution_task.cancelled():
+            if not admission_future.done():
+                admission_future.cancel()
+            return
+        error = execution_task.exception()
+        if not admission_future.done():
+            admission_future.set_exception(
+                error if error is not None else RuntimeError("Turn admission was not acknowledged.")
+            )
+        elif error is not None and not admission_future.cancelled():
+            _logger.error("Background agent turn failed (%s).", type(error).__name__)
+
+    async def _wait_for_admission(
+        self,
+        execution_task: asyncio.Task[AgentRunResult[str]],
+        admission_future: asyncio.Future[None],
+    ) -> None:
         try:
-            await asyncio.shield(admission)
+            await asyncio.shield(admission_future)
         except asyncio.CancelledError:
-            if not admission.done():
-                admission.cancel()
-                task.cancel()
-            elif not admission.cancelled():
-                admission.exception()
+            if not admission_future.done():
+                admission_future.cancel()
+                execution_task.cancel()
+            elif not admission_future.cancelled():
+                admission_future.exception()
             raise
 
     async def close(self) -> None:
         if not self._closed:
             self._closed = True
-            for task in self._tasks:
-                task.cancel()
-        completion = asyncio.gather(*self._tasks, return_exceptions=True)
+            for execution_task in self._turn_tasks:
+                execution_task.cancel()
+        pending_turns = asyncio.gather(*self._turn_tasks, return_exceptions=True)
         cancellation: asyncio.CancelledError | None = None
-        while not completion.done():
+        while not pending_turns.done():
             try:
-                await asyncio.shield(completion)
+                await asyncio.shield(pending_turns)
             except asyncio.CancelledError as error:
                 cancellation = error
         self._sessions.close_observers()

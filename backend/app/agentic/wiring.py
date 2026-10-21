@@ -14,40 +14,40 @@ from app.core.config import Settings
 
 def create_kochwiki_agent(settings: Settings) -> Agent[None, str]:
     """Build the agent; the caller owns its native async context lifetime."""
-    key = settings.openai_api_key
-    model = settings.kochwiki_openai_model
+    api_key = settings.openai_api_key
+    model_name = settings.kochwiki_openai_model
     mcp_url = settings.kochwiki_mcp_url
-    missing: list[str] = []
-    if key is None or not key.get_secret_value().strip():
-        missing.append("OPENAI_API_KEY")
-    if model is None or not model.strip():
-        missing.append("KOCHWIKI_OPENAI_MODEL")
-    if mcp_url is None or not _valid_mcp_url(mcp_url):
-        missing.append("KOCHWIKI_MCP_URL")
-    if missing:
+    invalid_settings: list[str] = []
+    if api_key is None or not api_key.get_secret_value().strip():
+        invalid_settings.append("OPENAI_API_KEY")
+    if model_name is None or not model_name.strip():
+        invalid_settings.append("KOCHWIKI_OPENAI_MODEL")
+    if mcp_url is None or not _is_valid_mcp_url(mcp_url):
+        invalid_settings.append("KOCHWIKI_MCP_URL")
+    if invalid_settings:
         raise ValueError(
-            "Invalid or missing agent configuration: " + ", ".join(missing)
+            "Invalid or missing agent configuration: " + ", ".join(invalid_settings)
         )
-    assert key is not None and model is not None and mcp_url is not None
+    assert api_key is not None and model_name is not None and mcp_url is not None
 
-    def kochwiki_tools(_ctx: RunContext[None]) -> MCPToolset[None]:
+    def create_kochwiki_toolset(_ctx: RunContext[None]) -> MCPToolset[None]:
         return create_mcp_toolset(mcp_url, id="kochwiki")
 
     agent = create_turn_agent(
         create_openai_model(
-            model,
-            key,
+            model_name,
+            api_key,
             reasoning_effort=settings.kochwiki_openai_reasoning_effort,
         ),
         instructions=CONVERSATION_INSTRUCTIONS,
-        toolsets=[DynamicToolset(kochwiki_tools, per_run_step=False, id="kochwiki")],
+        toolsets=[DynamicToolset(create_kochwiki_toolset, per_run_step=False, id="kochwiki")],
         web_search=True,
     )
     agent.name = "kochwiki"
     return agent
 
 
-def _valid_mcp_url(value: str) -> bool:
+def _is_valid_mcp_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
         return (

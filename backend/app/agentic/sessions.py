@@ -89,6 +89,22 @@ class _Observer:
     )
     overflow: bool = False
 
+    def publish(self, snapshot_factory: Callable[[], SessionSnapshot]) -> None:
+        if self.overflow:
+            return
+        if self.queue.full():
+            self.overflow = True
+        else:
+            self.queue.put_nowait(snapshot_factory())
+
+    def check_overflow(self) -> None:
+        if self.overflow:
+            raise ObservationOverflowError("Session observation fell behind.")
+
+    def close(self) -> None:
+        if not self.queue.full():
+            self.queue.put_nowait(None)
+
 
 class AgentSessionRegistry:
     """In-process lifecycle only; callers own the shared agent's context lifetime.
@@ -109,7 +125,7 @@ class AgentSessionRegistry:
         self._clock = clock if clock is not None else _utc_now
         self._sessions: dict[str, _Session] = {}
         self._observers: dict[str, set[_Observer]] = {}
-        self._observation_closed = False
+        self._observers_closed = False
 
     def _now(self) -> datetime:
         now = self._clock()
@@ -145,7 +161,7 @@ class AgentSessionRegistry:
         self._sessions[session_id] = _Session(owner, expires_at, conversation)
         return SessionCreated(session_id, expires_at)
 
-    def _find(self, session_id: str, owner: str) -> _Session:
+    def _require_session(self, session_id: str, owner: str) -> _Session:
         self._discard_expired(self._now())
         session = self._sessions.get(session_id)
         if session is None or session.owner != owner:
@@ -153,11 +169,11 @@ class AgentSessionRegistry:
         return session
 
     def read(self, session_id: str, *, owner: str) -> SessionSnapshot:
-        session = self._find(session_id, owner)
-        return self._snapshot(session_id, session)
+        session = self._require_session(session_id, owner)
+        return self._create_snapshot(session_id, session)
 
     @staticmethod
-    def _snapshot(session_id: str, session: _Session) -> SessionSnapshot:
+    def _create_snapshot(session_id: str, session: _Session) -> SessionSnapshot:
         conversation = session.conversation
         return SessionSnapshot(
             session_id=session_id,
@@ -172,44 +188,36 @@ class AgentSessionRegistry:
         if session is None:
             return
         for observer in self._observers.get(session_id, ()):
-            if observer.overflow:
-                continue
-            if observer.queue.full():
-                observer.overflow = True
-            else:
-                observer.queue.put_nowait(self._snapshot(session_id, session))
+            observer.publish(lambda: self._create_snapshot(session_id, session))
 
     def close_observers(self) -> None:
-        self._observation_closed = True
+        self._observers_closed = True
         for observers in self._observers.values():
             for observer in observers:
-                if not observer.queue.full():
-                    observer.queue.put_nowait(None)
+                observer.close()
 
     async def observe(self, session_id: str, *, owner: str) -> AsyncGenerator[SessionSnapshot, None]:
         """Yield detached boundary snapshots; disconnect never controls execution."""
-        session = self._find(session_id, owner)
+        session = self._require_session(session_id, owner)
         observers = self._observers.setdefault(session_id, set())
         if len(observers) >= MAX_OBSERVERS_PER_SESSION:
             raise ObservationLimitError("Session observer limit reached.")
         observer = _Observer()
         observers.add(observer)
         try:
-            yield self._snapshot(session_id, session)
+            yield self._create_snapshot(session_id, session)
             while True:
-                self._find(session_id, owner)
-                if observer.overflow:
-                    raise ObservationOverflowError("Session observation fell behind.")
-                if self._observation_closed and observer.queue.empty():
+                self._require_session(session_id, owner)
+                observer.check_overflow()
+                if self._observers_closed and observer.queue.empty():
                     return
                 timeout = (session.expires_at - self._now()).total_seconds()
                 try:
                     snapshot = await asyncio.wait_for(observer.queue.get(), timeout=max(0.0, timeout))
                 except TimeoutError:
                     continue
-                self._find(session_id, owner)
-                if observer.overflow:
-                    raise ObservationOverflowError("Session observation fell behind.")
+                self._require_session(session_id, owner)
+                observer.check_overflow()
                 if snapshot is None:
                     return
                 yield snapshot
@@ -230,7 +238,7 @@ class AgentSessionRegistry:
         on_admitted: Callable[[], None] | None = None,
     ) -> AgentRunResult[str]:
         """Check access, then await the conversation through settlement."""
-        session = self._find(session_id, owner)
+        session = self._require_session(session_id, owner)
         return await session.conversation.execute_turn(
             agent,
             prompt,
