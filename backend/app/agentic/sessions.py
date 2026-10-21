@@ -15,7 +15,7 @@ from pydantic_ai.usage import UsageLimits
 
 from app.agentic.config import (
     DEFAULT_SESSION_LIFETIME,
-    MAX_ARTIFACTS,
+    MAX_ARTIFACTS_PER_SESSION,
     MAX_OBSERVERS_PER_SESSION,
     MAX_PENDING_OBSERVATION_UPDATES,
 )
@@ -128,7 +128,7 @@ class AgentSessionRegistry:
         owner: str,
         initial_context: dict[str, JsonValue] | None = None,
         artifact_capabilities: Sequence[ArtifactCapability] = (),
-        max_artifacts: int = MAX_ARTIFACTS,
+        max_artifacts: int = MAX_ARTIFACTS_PER_SESSION,
     ) -> SessionCreated:
         if not owner.strip():
             raise ValueError("Session owner must not be blank.")

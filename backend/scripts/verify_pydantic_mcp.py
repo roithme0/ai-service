@@ -8,7 +8,7 @@ from pydantic_ai.messages import ToolReturnPart
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import UsageLimits
 
-from app.agentic.config import MAX_MODEL_REQUESTS
+from app.agentic.config import MAX_MODEL_REQUESTS_PER_TURN
 from app.agentic.mcp import create_mcp_toolset
 from app.agentic.turns import create_openai_model, create_turn_agent, execute_turn
 from app.core.config import Settings
@@ -50,7 +50,7 @@ async def verify(tool_name: str, prompt: str) -> None:
         async with agent:
             first = await execute_turn(
                 agent, f"Use the tool exactly once to answer this question: {prompt}",
-                usage_limits=UsageLimits(request_limit=MAX_MODEL_REQUESTS, tool_calls_limit=1),
+                usage_limits=UsageLimits(request_limit=MAX_MODEL_REQUESTS_PER_TURN, tool_calls_limit=1),
             )
             results = [
                 part for message in first.new_messages() for part in message.parts
@@ -60,7 +60,7 @@ async def verify(tool_name: str, prompt: str) -> None:
             second = await execute_turn(
                 agent, "Summarize the information you just retrieved without calling a tool.",
                 message_history=first.all_messages(),
-                usage_limits=UsageLimits(request_limit=MAX_MODEL_REQUESTS, tool_calls_limit=0),
+                usage_limits=UsageLimits(request_limit=MAX_MODEL_REQUESTS_PER_TURN, tool_calls_limit=0),
             )
             assert first.output.strip() and second.output.strip(), "Expected answers in both turns."
 

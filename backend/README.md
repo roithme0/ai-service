@@ -358,7 +358,7 @@ Paths are relative to `/api/v1/agents/{configuration}/sessions`:
 Creation accepts generic JSON context and artifact capability declarations.
 Callers prepare domain-specific context before creating the session.
 Execution limits stay server-owned. Prompts must be nonblank strings of at most
-16,000 characters (`MAX_PROMPT_LENGTH`); their original whitespace is preserved.
+16,000 characters (`MAX_PROMPT_CHARACTERS`); their original whitespace is preserved.
 Unknown request fields are rejected. FastAPI reports malformed bodies and headers
 as 422 validation errors; invalid initialization detected by the runner (such as
 oversized context or duplicate capability types) returns 400 `invalid_input`.

@@ -20,7 +20,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.usage import UsageLimits
 
-from app.agentic.config import MAX_CONTEXT_LENGTH
+from app.agentic.config import MAX_INITIAL_CONTEXT_CHARACTERS
 from app.agentic.conversations import AgentConversation, ConversationBusyError
 from app.agentic.turns import create_turn_agent
 
@@ -166,10 +166,10 @@ def test_initial_context_rejects_cycles() -> None:
 def test_initial_context_length_limit_includes_prefix_and_allows_exact_boundary() -> None:
     empty = AgentConversation(initial_context={"text": ""})
     overhead = len(prompts(empty.messages)[0])
-    conversation = AgentConversation(initial_context={"text": "x" * (MAX_CONTEXT_LENGTH - overhead)})
-    assert len(prompts(conversation.messages)[0]) == MAX_CONTEXT_LENGTH
-    with pytest.raises(ValueError, match=f"exceeds {MAX_CONTEXT_LENGTH}"):
-        AgentConversation(initial_context={"text": "x" * (MAX_CONTEXT_LENGTH - overhead + 1)})
+    conversation = AgentConversation(initial_context={"text": "x" * (MAX_INITIAL_CONTEXT_CHARACTERS - overhead)})
+    assert len(prompts(conversation.messages)[0]) == MAX_INITIAL_CONTEXT_CHARACTERS
+    with pytest.raises(ValueError, match=f"exceeds {MAX_INITIAL_CONTEXT_CHARACTERS}"):
+        AgentConversation(initial_context={"text": "x" * (MAX_INITIAL_CONTEXT_CHARACTERS - overhead + 1)})
     assert json.loads(prompts(AgentConversation(initial_context={}).messages)[0].split("\n", 1)[1]) == {}
 
 

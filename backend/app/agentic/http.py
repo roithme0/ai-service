@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 from starlette.types import Receive, Scope, Send
 
-from app.agentic.config import MAX_PROMPT_LENGTH
+from app.agentic.config import MAX_PROMPT_CHARACTERS
 from app.agentic.conversations import ConversationBusyError
 from app.agentic.presentation import PresentedSession
 from app.agentic.response import ResponseModel
@@ -35,7 +35,7 @@ class SessionCreationRequest(BaseModel):
 
 class PromptSubmissionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    prompt: str = Field(min_length=1, max_length=MAX_PROMPT_LENGTH)
+    prompt: str = Field(min_length=1, max_length=MAX_PROMPT_CHARACTERS)
 
     @field_validator("prompt")
     @classmethod

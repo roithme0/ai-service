@@ -15,7 +15,7 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
-from app.agentic.config import DEFAULT_SESSION_LIFETIME, MAX_ARTIFACTS
+from app.agentic.config import DEFAULT_SESSION_LIFETIME, MAX_ARTIFACTS_PER_SESSION
 from app.agentic.presentation import PresentedSession, present_session
 from app.agentic.sessions import AgentSessionRegistry, SessionCreated
 from app.agentic.artifacts import ArtifactCapability
@@ -65,7 +65,7 @@ class AgentTurnRunner:
         owner: str,
         initial_context: dict[str, JsonValue] | None = None,
         artifact_capabilities: Sequence[ArtifactCapability] = (),
-        max_artifacts: int = MAX_ARTIFACTS,
+        max_artifacts: int = MAX_ARTIFACTS_PER_SESSION,
     ) -> SessionCreated:
         if self._closed:
             raise RunnerClosedError("The turn runner is closed.")

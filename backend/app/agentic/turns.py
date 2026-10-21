@@ -16,11 +16,11 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
 from app.agentic.config import (
-    MAX_MODEL_REQUESTS,
+    MAX_MODEL_REQUESTS_PER_TURN,
     MAX_NATIVE_TOOL_CALLS_PER_RESPONSE,
     MAX_OUTPUT_TOKENS,
-    MAX_TOOL_CALLS,
-    MODEL_MAX_RETRIES,
+    MAX_TOOL_CALLS_PER_TURN,
+    MODEL_REQUEST_MAX_RETRIES,
     MODEL_NETWORK_TIMEOUT_SECONDS,
     MODEL_REQUEST_TIMEOUT_SECONDS,
     TOOL_TIMEOUT_SECONDS,
@@ -70,7 +70,7 @@ def create_turn_agent(
             "max_tokens": MAX_OUTPUT_TOKENS,
             "timeout": MODEL_NETWORK_TIMEOUT_SECONDS,
             "request_timeout": MODEL_REQUEST_TIMEOUT_SECONDS,
-            "max_retries": MODEL_MAX_RETRIES,
+            "max_retries": MODEL_REQUEST_MAX_RETRIES,
         },
         capabilities=[Caching(), WebSearch()] if web_search else [Caching()],
     )
@@ -92,8 +92,8 @@ async def execute_turn(
             message_history=message_history,
             toolsets=toolsets,
             usage_limits=usage_limits if usage_limits is not None else UsageLimits(
-                request_limit=MAX_MODEL_REQUESTS,
-                tool_calls_limit=MAX_TOOL_CALLS,
+                request_limit=MAX_MODEL_REQUESTS_PER_TURN,
+                tool_calls_limit=MAX_TOOL_CALLS_PER_TURN,
             ),
             capabilities=[hooks] if hooks is not None else (),
         )

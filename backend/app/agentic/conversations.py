@@ -25,7 +25,7 @@ from app.agentic.artifacts import (
     PublishedArtifact,
     create_artifact_toolset,
 )
-from app.agentic.config import MAX_ARTIFACTS, MAX_CONTEXT_LENGTH
+from app.agentic.config import MAX_ARTIFACTS_PER_SESSION, MAX_INITIAL_CONTEXT_CHARACTERS
 from app.agentic.observation import TurnObservation
 from app.agentic.turns import execute_turn
 
@@ -40,8 +40,8 @@ def _initial_context_message(context: dict[str, JsonValue] | None) -> ModelReque
         return None
     validated = _CONTEXT_ADAPTER.validate_python(context)
     content = _CONTEXT_PREFIX + json.dumps(validated, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    if len(content) > MAX_CONTEXT_LENGTH:
-        raise ValueError(f"Initial context exceeds {MAX_CONTEXT_LENGTH} characters.")
+    if len(content) > MAX_INITIAL_CONTEXT_CHARACTERS:
+        raise ValueError(f"Initial context exceeds {MAX_INITIAL_CONTEXT_CHARACTERS} characters.")
     return ModelRequest(parts=[UserPromptPart([
         TextContent(content, metadata={"origin": INITIAL_CONTEXT_ORIGIN}),
     ])])
@@ -98,7 +98,7 @@ class AgentConversation:
         *,
         initial_context: dict[str, JsonValue] | None = None,
         artifact_capabilities: Sequence[ArtifactCapability] = (),
-        max_artifacts: int = MAX_ARTIFACTS,
+        max_artifacts: int = MAX_ARTIFACTS_PER_SESSION,
         on_change: Callable[[], None] | None = None,
     ) -> None:
         if isinstance(max_artifacts, bool) or not isinstance(max_artifacts, int) or max_artifacts < 0:
