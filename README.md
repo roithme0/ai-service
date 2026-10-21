@@ -6,7 +6,7 @@ The current implementation includes configured KochWiki and deterministic demo a
 
 ## Core Features
 
-- **Configured agent services**: A shared typed service hosts independent server-configured KochWiki and demo instances through one generic conversation HTTP API.
+- **Configured agent services**: The demo uses the Pydantic AI session API; Kochwiki remains on the legacy conversation API pending its backend cutover.
 - **Supporting features**:
   - **Bounded AI capabilities**: Offer reusable operations requested by other services, initially including MCP-backed recipe conversations and, later, image generation.
   - **Conversation foundation**: Support ephemeral multi-turn chat, multiple tool calls, explicit failures, and artifact acceptance and ordered turn-owned UI timelines of messages, tool activity and embedded artifacts. Model-backed sessions can publish explicit artifacts using caller-advertised presentation capabilities; the demo also exercises artifact publishing. Complete messages, requested/running/outcome tool rows, and accepted artifacts stream live through backend-owned turns and a separate SSE observer. The native session controller reconnects observation after transient failures and restores state from a fresh snapshot; submission remains disabled until observation recovers. Lost submission acknowledgements remain uncertain. Refresh recovery and user-controlled cancellation are not implemented.
@@ -19,9 +19,9 @@ Domain services such as Kochwiki and Home Assistant continue to own their data, 
 
 ## Tech Stack
 
-The frontend is an Angular 22 workspace containing the AI Service application and the independently packaged `@roithme0/chat-ui` library. The Python backend uses FastAPI and Pydantic, with an OpenAI Responses adapter behind a provider-neutral generation interface. Dockerfiles and Docker Compose configurations are provided for local development, testing, staging, and production.
+The frontend is an Angular 22 workspace containing the AI Service application and the independently packaged `@roithme0/chat-ui` library. The Python backend uses FastAPI, Pydantic and Pydantic AI. Pydantic AI owns execution, tools and history for the demo session API; Kochwiki still uses the custom engine and its OpenAI Responses adapter. Dockerfiles and Docker Compose configurations are provided for local development, testing, staging, and production.
 
-Sessions retain their initialization snapshots, messages, and any published artifacts in process-local memory with a fixed 90-minute lifetime. Clients submit messages and request turns against a session identifier; the backend supplies retained history to the model. There is no database-backed conversation storage, and sessions do not survive a backend restart. Durable history, listing, and resumption are outside the current scope. See the [backend README](backend/README.md) for setup and model/MCP configuration.
+Sessions retain their initialization snapshots, messages, and any published artifacts in process-local memory with a fixed 90-minute lifetime. Clients submit prompts against a session identifier and observe complete session snapshots through the Pydantic AI session API. The legacy API separates message submission from turn admission. Both engines retain the history needed for later turns. There is no database-backed conversation storage, and sessions do not survive a backend restart. Durable history, listing, and resumption are outside the current scope. See the [backend README](backend/README.md) for setup and model/MCP configuration.
 
 Frontend formatting, linting, tests, and Codex hook behavior are documented in [frontend validation](docs/frontend-validation.md). The Stop hook formats changed frontend files, checks whole-frontend lint, and runs tooling tests plus both Angular test suites. CI runs read-only linting.
 

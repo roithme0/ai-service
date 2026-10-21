@@ -44,13 +44,13 @@ The AI Service owns generic conversation, execution and presentation guidance.
 Keep multi-step domain policies in the MCP instructions rather than repeating
 them in tool descriptions or artifact capabilities.
 
-## Pydantic AI migration development
+## Pydantic AI engine and session API
 
-The new executor in `app/agentic/turns.py` is developed alongside the current
-production engine. It uses Pydantic AI 2.58.0 directly for OpenAI Responses,
-tool execution, MCP and conversation history. The deterministic demo is wired
-through this engine and the native HTTP boundary; Kochwiki cutover and legacy
-removal remain separate slices.
+The executor in `app/agentic/turns.py` uses Pydantic AI 2.58.0 directly for OpenAI
+Responses, tool execution, MCP and conversation history. It powers the
+deterministic demo through the session HTTP API and the frontend's `SessionController`.
+Kochwiki still uses the custom engine; its backend cutover and legacy removal
+remain separate slices.
 
 The native demo subapplication is mounted at `/api/native`, with sessions at
 `/api/native/api/v1/agents/demo/sessions` and its own OpenAPI document at
@@ -130,8 +130,8 @@ to the model. Duplicate capability types and invalid limits fail at creation.
 `conversation.artifacts` returns detached `ConversationArtifact` snapshots in
 zero-based publication order, including artifacts accepted during active execution.
 They reuse the shared published-artifact envelope and retain the native tool-call
-ID. Their `turn_id` is the native run ID at this internal boundary; eventual
-production integration must associate it with the application's admitted turn.
+ID. Their `turn_id` is the native run ID, which associates them with their
+execution in the session presentation. There is no separate application turn ID.
 Publication order is not a position in the public timeline. Accepted artifacts
 survive later failure or cancellation and continue consuming capacity. Rejection
 publishes nothing and becomes a native failed tool result. Repeated reads and
@@ -206,8 +206,8 @@ an active turn retains its conversation only until settlement. There is no backg
 cleanup task or cancellation on expiry. Use the registry from one event loop.
 Tests inject a timezone-aware clock and lifetime to cover boundaries without sleeps.
 History and artifacts remain owned by `AgentConversation`; the registry adds no
-execution log, timeline projection or second history store. HTTP, SSE, frontend and
-production cutover remain outside this slice. Run focused coverage with
+execution log, timeline projection or second history store. The runner exposes
+presented snapshots through the session HTTP and SSE boundary used by the frontend. Run focused coverage with
 `python -m pytest tests/test_pydantic_sessions.py`.
 
 `conversation.turns` and `snapshot.turns` expose admission-ordered `ConversationTurn`
@@ -275,12 +275,12 @@ periodic wake-ups or duplicate snapshots. Expiry raises the same
 Disconnect/cancellation releases the observer slot and leaves execution alone.
 Shutdown delivers queued settlement snapshots and ends observation; observing an
 already closed runner yields one owner-checked snapshot and ends. Consumers must
-still close generators when stopping iteration. Production HTTP/SSE integration remains
-deferred; the injectable router is described below. Focused coverage:
+still close generators when stopping iteration. The HTTP/SSE router used by the
+demo is described below. Focused coverage:
 `python -m pytest tests/test_pydantic_session_observation.py`.
 
 `app.agentic.presentation.present_session(snapshot)` derives a complete typed
-`PresentedSession` for future frontend consumption. It selects session identity
+`PresentedSession` consumed by the frontend session controller. It selects session identity
 and expiry, and one ordered `history` tuple. History contains native user-prompt
 parts and `PresentedTurn` entries (`part_kind: "turn"`), rather than requiring
 prompts to belong to turn groups. Each turn entry combines concise `lifecycle`
@@ -333,13 +333,11 @@ observation, exposing only `PresentedSession` to consumers. The registry's nativ
 snapshots remain internal. Projection creates no retained history. The observation
 wrapper closes the registry subscription on disconnect, cancellation or projection
 failure, releasing observer capacity immediately. Ownership, expiry, overflow and
-shutdown semantics remain unchanged. No production HTTP API or frontend behavior
-changes yet. Focused
-coverage: `python -m pytest tests/test_pydantic_presentation.py`.
+shutdown semantics remain unchanged. Focused coverage: `python -m pytest tests/test_pydantic_presentation.py`.
 
 `app.agentic.http.create_session_router(registry_provider)` provides the native
-HTTP boundary. It is intentionally absent from the production FastAPI application;
-tests mount it in an isolated application with deterministic agents. The provider
+HTTP boundary. The main application mounts it through the demo subapplication at
+`/api/native`; tests also mount it with deterministic agents. The provider
 returns configured names mapped to runners (or `None` for unavailable agents).
 Application composition owns the shared agent and runner lifetimes. All routes
 run asynchronously on the runner's event loop and require the existing
@@ -384,10 +382,12 @@ EOF alone does not prove an active turn completed.
 The response owns subscription cleanup even when sending headers/body fails or
 the client disconnects. Disconnect never cancels admitted execution. Streaming
 uses `Cache-Control: no-cache` and `X-Accel-Buffering: no`; there is no replay,
-reconnection, delta protocol, token streaming or periodic heartbeat in this slice.
+server-side reconnection, delta protocol, token streaming or periodic heartbeat.
+The frontend controller reconnects after transient observation failures and consumes
+a fresh snapshot.
 OpenAPI describes both snapshot and error frame models under `text/event-stream`.
-Frontend generation/integration, demo migration, Kochwiki composition and production
-routing remain separate slices. Focused coverage:
+The generated frontend contract and demo use this boundary. Kochwiki composition
+and removal of the legacy backend routes remain separate work. Focused coverage:
 `python -m pytest tests/test_pydantic_http.py`.
 
 The runner consumes background exceptions and logs failure exception types without
@@ -440,10 +440,9 @@ into a later turn lets Pydantic AI synthesize `outcome="interrupted"` results fo
 unanswered calls, preserving confirmed returns without replaying old calls. This
 is history repair, not a guarantee that the model cannot choose another mutation.
 
-These records are backend inspection data, including tool arguments and results,
-not a public timeline payload. No legacy timeline projection, session/SSE wiring,
-HTTP schema or frontend change is included. The presentation contract will follow
-native semantics in a later slice. Run focused observation coverage with
+These records are backend inspection data, including tool arguments and results.
+The session presentation projects them into safe public parts for HTTP and SSE;
+raw arguments and results remain internal. Run focused observation coverage with
 `python -m pytest tests/test_pydantic_observation.py`.
 
 Artifact publication is available independently through
@@ -594,7 +593,7 @@ smoke script invokes the application session API.
 The project skill in `.agents/skills/building-pydantic-ai-agents` is copied from
 the installed framework package. Refresh that copy when upgrading Pydantic AI.
 
-## MCP connections and tool execution
+## Legacy engine: MCP connections and tool execution
 
 The Kochwiki agent's model setting is `KOCHWIKI_OPENAI_MODEL`, replacing
 `RECIPE_IMPROVEMENT_OPENAI_MODEL`. Rename that key in existing environment
@@ -765,7 +764,7 @@ creation followed by saving in a later turn and a failed save.
 `tests/test_mcp_tools.py` covers multiple servers, routing, errors and limits.
 Startup discovers capabilities but never invokes domain tools.
 
-## Conversation HTTP API
+## Legacy conversation HTTP API
 
 Every conversation request requires `X-Application-User: source:id`, including SSE observation. The value must contain exactly one colon and non-empty source and ID portions without whitespace. Prefixes are unrestricted; no user lookup or authentication is performed. Missing, empty, or malformed values return HTTP 422 with the typed `request_validation` envelope before conversation access or execution. Session creation stores the exact asserted identity as an immutable owner alongside the ephemeral session state. Reads, message submission, turn starts, and SSE observation check ownership before accessing conversation data or work. Another owner receives the same HTTP 404 `unknown` envelope as an unknown session, including before opening an SSE stream. An admitted turn continues against its original session when the caller disconnects or changes identity; ownership is never transferred. The demo frontend sends `demo:default`; Kochwiki hosts supply `kochwiki:<user-id>`.
 
@@ -813,7 +812,7 @@ Run the tests:
 pytest
 ```
 
-## Explicit presentation capabilities
+## Legacy presentation capabilities
 
 Model-backed session input accepts an optional `artifactCapabilities` array beside
 `context`. Each entry supplies a unique `type`, a usage `description`, and a

@@ -31,7 +31,7 @@ Map artifact type discriminators to typed Angular templates with `artifactRender
 
 The component trims a valid submission and emits it once as a `ChatSubmission`. It retains the draft until the host calls `acknowledge`, so the visible composer can remain truthful to backend acceptance. It never adds that text to `turns`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break. New content and status changes smoothly scroll the conversation history to the bottom, including when a delayed status becomes visible, even if the user had scrolled up.
 
-`conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. Conversation loading renders as text; assistant loading renders as the supplied three-dot animation, with the status message as its accessible label. Conversation loading text fades in over 180 ms; the dots use only their SVG animation. Dots inherit the muted theme color. A reusable Angular component uses the supplied animated SVG as its external template; the animation does not vary with the reduced-motion setting. Loading states can opt into `reveal: 'delayed'`: the UI reserves a line and waits 300 ms before revealing the loading content. Replacing the status cancels the pending reveal. The conversation controller shows no indicator while sending. It starts assistant loading immediately once the accepted user message is displayed in history. Errors appear immediately without animation. Changing the conversation loading label restarts its fade. Animations run regardless of the reduced-motion setting. Rendering-only hosts own the loading lifetime: clear assistant loading as soon as any response content from that turn can be displayed. `composerDisabled` blocks submissions. `composerEditingDisabled` separately blocks text edits while keeping the textarea enabled and focusable. The controller blocks editing only while sending and, after an ambiguous network failure, reconciling backend acceptance; it unlocks editing before acknowledging an accepted message, so the next draft can be written during the assistant response. Cancellable edits are prevented before input; other edits restore the retained draft. The send button remains disabled while submissions or edits are blocked, and the textarea exposes its editing lock through `aria-disabled`. This avoids disabling the focused textarea during sending; mobile keyboard persistence still depends on the browser. The composer does not move focus on initialization, state changes, or message acknowledgement; focus remains under user control. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
+`conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. Conversation loading renders as text; assistant loading renders as the supplied three-dot animation, with the status message as its accessible label. Conversation loading text fades in over 180 ms; the dots use only their SVG animation. Dots inherit the muted theme color. A reusable Angular component uses the supplied animated SVG as its external template; the animation does not vary with the reduced-motion setting. Loading states can opt into `reveal: 'delayed'`: the UI reserves a line and waits 300 ms before revealing the loading content. Replacing the status cancels the pending reveal. The conversation controller shows no indicator while sending. It starts assistant loading immediately once the accepted user message is displayed in history. Errors appear immediately without animation. Changing the conversation loading label restarts its fade. Animations run regardless of the reduced-motion setting. Rendering-only hosts own the loading lifetime: clear assistant loading as soon as any response content from that turn can be displayed. `composerDisabled` blocks submissions. `composerEditingDisabled` separately blocks text edits while keeping the textarea enabled and focusable. The controller blocks editing only while submission admission is pending. Acceptance unlocks editing before acknowledging the message, so the next draft can be written during the assistant response. A missing admission response retains the draft and blocks further submissions while allowing edits; the controller does not reconcile acceptance. Cancellable edits are prevented before input; other edits restore the retained draft. The send button remains disabled while submissions or edits are blocked, and the textarea exposes its editing lock through `aria-disabled`. This avoids disabling the focused textarea during sending; mobile keyboard persistence still depends on the browser. The composer does not move focus on initialization, state changes, or message acknowledgement; focus remains under user control. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
 
 ## Assets
 
@@ -125,7 +125,7 @@ export class ChatHost implements OnInit, OnDestroy {
 
 The base URL is the prefix immediately before `/agents`; the demo uses `/api/native/api/v1`. The transport takes a configuration key and an explicit application identity as `X-Application-User`. Server validation is authoritative. Supply initial context and advertised artifact capabilities to `start(initialization)` when needed; replacement sessions retain that initialization.
 
-The controller receives complete backend snapshots and derives UI content through `presentSession`. Its optional third constructor argument is a `SessionArtifactMapper`, which receives the native artifact envelope and returns a `ChatArtifact` or `null` to omit it. The default `presentSessionArtifact` preserves artifact identity and type and unwraps its presentation payload. The host owns view-state binding and renderer registration. See the native session integration below for admission, observation and recovery behavior.
+The controller receives complete backend snapshots and derives UI content through `presentSession`. Its optional third constructor argument is a `SessionArtifactMapper`, which receives the native artifact envelope and returns a `ChatArtifact` or `null` to omit it. The default `presentSessionArtifact` preserves artifact identity and type and unwraps its presentation payload. The host owns view-state binding and renderer registration. See session lifecycle and recovery below for admission and observation behavior.
 
 For selected-user changes, clear visible content, status and draft, dispose the old controller and create a new transport and controller for the selected identity. Disposal aborts observation and ignores stale asynchronous results; it does not cancel backend execution. Sessions are not transferred between identities.
 
@@ -270,7 +270,7 @@ supply them beside caller context when creating a model-backed session:
 import { JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
 import { HttpSessionTransport } from '@roithme0/chat-ui/conversation';
 
-const transport = new HttpSessionTransport('/ai/api/v1', 'kochwiki', 'kochwiki:42');
+const transport = new HttpSessionTransport('/api/native/api/v1', 'demo', 'demo:default');
 const session = await transport.createSession({
   initial_context: { selectedItem: item },
   artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
@@ -306,14 +306,15 @@ passes metadata to `ChatArtifact.metadata`; custom templates access it through
 `let-artifact="artifact"`. Metadata has no built-in rendering or action behavior;
 the consumer frontend interprets it and owns any domain actions.
 
-## Native session transport
+## Session HTTP transport
 
 The `/conversation` entry point exports `HttpSessionTransport` and its
-`SessionTransport` interface for the Pydantic AI HTTP boundary. The obsolete legacy controller and transport have been removed. The demo application uses the native API at `/api/native/api/v1`; Kochwiki and
-the legacy HTTP routes remain on their existing implementation.
+`SessionTransport` interface for the Pydantic AI session API used by the demo
+application at `/api/native/api/v1`. Kochwiki still uses the legacy backend API;
+this transport targets the Pydantic AI session API.
 
 ```ts
-const transport = new HttpSessionTransport('/api/v1', 'my-agent', 'host:42');
+const transport = new HttpSessionTransport('/api/native/api/v1', 'demo', 'demo:default');
 const session = await transport.createSession({
   initial_context: { selectedItem: item },
   artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
@@ -344,10 +345,10 @@ and describe recursive finite JSON values for context and artifact data.
 The `conversation/generated` contract is generated from an isolated
 FastAPI app mounting `app.agentic.http.create_session_router(lambda: {})`, using
 the existing `@hey-api/openapi-ts` TypeScript and Zod plugins. It does not depend
-on production mounting. The legacy generated contract has been removed. Backend regression
+on production mounting. Backend regression
 coverage compares its OpenAPI document with the actual router.
 
-The generation and drift-check commands cover the native contract. From
+The generation and drift-check commands cover this contract. From
 `frontend` in PowerShell:
 
 ```powershell
@@ -356,11 +357,13 @@ npm.cmd run generate:conversation-contract
 npm.cmd run check:conversation-contract
 ```
 
-## Parallel native session integration
+## Session lifecycle and recovery
 
-`SessionController` and `HttpSessionTransport` provide the native snapshot integration. The obsolete legacy controller has been removed. The demo application now uses the native controller and the isolated native demo backend. Kochwiki cutover and removal of the legacy implementation remain separate work.
+`SessionController` owns prompt submission, session observation and recovery.
+`HttpSessionTransport` handles HTTP and SSE, and `presentSession` projects the
+backend snapshot into the rendering component's view model.
 
-Create a `SessionController(transport, publish)` and bind its `SessionViewState.turns`, composer flags and `status` to the controlled component. Call `start(initialization?)`, forward submissions to `submit(text, acknowledge)`, forward status actions to `performAction(id)`, and call `dispose()` on teardown. `snapshot` exposes the latest generated `PresentedSession` contract; `admission` and `observation` report request and connection outcomes separately from its authoritative execution lifecycles. `SessionArtifactMapper` receives the generated native artifact type and can omit artifacts with `null`; the default `presentSessionArtifact` maps its typed payload envelope directly.
+Create a `SessionController(transport, publish)` and bind its `SessionViewState.turns`, composer flags and `status` to the controlled component. Call `start(initialization?)`, forward submissions to `submit(text, acknowledge)`, forward status actions to `performAction(id)`, and call `dispose()` on teardown. `snapshot` exposes the latest generated `PresentedSession` contract; `admission` and `observation` report request and connection outcomes separately from its authoritative execution lifecycles. `SessionArtifactMapper` receives the generated artifact type and can omit artifacts with `null`; the default `presentSessionArtifact` maps its typed payload envelope directly.
 
 Admission success calls the submission acknowledgement without inserting a prompt. Only observer snapshots supply conversation content. A missing admission response retains the draft, reports uncertainty and disables submission; healthy observation continues, without reconciliation reads, text matching, retries or guessed acknowledgement. Disposal aborts observation and ignores late HTTP results, without cancelling backend execution.
 
