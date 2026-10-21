@@ -26,13 +26,6 @@ from tests.test_pydantic_http import stream
 client = TestClient(app)
 
 
-def test_hello_world() -> None:
-    response = client.get("/")
-
-    assert response.status_code == 200
-    assert response.json() == {"message": "Hello World"}
-
-
 def test_application_http_errors_remain_typed_and_hide_internal_details() -> None:
     runner = AgentTurnRunner(Agent(FunctionModel(
         lambda messages, info: ModelResponse(parts=[TextPart("Unused")]),
@@ -69,7 +62,6 @@ def test_kochwiki_initialization_failure_does_not_block_application(
 
     monkeypatch.setattr(main, "create_kochwiki_agent", unavailable)
     with TestClient(app) as client:
-        assert client.get("/").status_code == 200
         headers = {"X-Application-User": "test:user"}
         unavailable_response = client.post("/api/v1/agents/kochwiki/sessions", json={}, headers=headers)
         assert unavailable_response.status_code == 503

@@ -13,7 +13,6 @@ from app.agentic.http import create_session_router
 from app.agentic.runner import AgentTurnRunner
 from app.agentic.wiring import create_kochwiki_agent
 from app.core.config import get_settings
-from app.core.http import router as core_router
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
 from app.demo.native import create_native_demo_agent, create_native_demo_application
 
@@ -79,10 +78,6 @@ app = FastAPI(
 native_demo = create_native_demo_application()
 app.mount("/api/native", native_demo)
 app.include_router(create_session_router(get_agent_registry), responses={
-    405: {"model": HttpErrorResponse},
-    500: {"model": HttpErrorResponse},
-})
-app.include_router(core_router, responses={
     405: {"model": HttpErrorResponse},
     500: {"model": HttpErrorResponse},
 })
