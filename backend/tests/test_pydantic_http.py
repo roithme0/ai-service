@@ -44,7 +44,7 @@ def test_native_frontend_contract_matches_router() -> None:
     app.include_router(create_session_router(lambda: {}))
     contract = (
         Path(__file__).resolve().parents[2]
-        / "frontend/projects/chat-ui/conversation/generated/native/openapi.json"
+        / "frontend/projects/chat-ui/conversation/generated/openapi.json"
     )
     assert json.loads(contract.read_text(encoding="utf-8")) == app.openapi()
 

@@ -7,7 +7,7 @@ import {
   zSessionEvent,
   zPresentedSession,
   zHttpValidationError,
-} from '../generated/native/zod.gen';
+} from '../generated/zod.gen';
 import type {
   BoundaryError,
   TurnAccepted,
@@ -15,7 +15,7 @@ import type {
   SessionCreationRequest,
   SessionEvent,
   PresentedSession,
-} from '../generated/native/types.gen';
+} from '../generated/types.gen';
 
 export type SessionErrorKind = BoundaryError['kind'] | 'validation_error' | 'method_not_allowed';
 

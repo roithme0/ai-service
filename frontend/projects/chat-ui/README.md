@@ -341,13 +341,13 @@ values, followed by the end of the iterable. The transport uses the generated
 schemas directly. The backend response schemas require explicit discriminators
 and describe recursive finite JSON values for context and artifact data.
 
-The separate `conversation/generated/native` contract is generated from an isolated
+The `conversation/generated` contract is generated from an isolated
 FastAPI app mounting `app.agentic.http.create_session_router(lambda: {})`, using
 the existing `@hey-api/openapi-ts` TypeScript and Zod plugins. It does not depend
-on production mounting or replace the legacy generated contract. Backend regression
+on production mounting. The legacy generated contract has been removed. Backend regression
 coverage compares its OpenAPI document with the actual router.
 
-The existing generation and drift-check commands cover both contracts. From
+The generation and drift-check commands cover the native contract. From
 `frontend` in PowerShell:
 
 ```powershell

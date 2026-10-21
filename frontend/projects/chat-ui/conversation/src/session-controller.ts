@@ -3,7 +3,7 @@ import type {
   PresentedSession,
   PresentedTurn,
   SessionCreationRequest,
-} from '../generated/native/types.gen';
+} from '../generated/types.gen';
 import {
   SessionHttpError,
   SessionTransportError,

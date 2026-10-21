@@ -1,11 +1,3 @@
-export type {
-  UserMessageResponse,
-  SessionCreationResponse,
-  SessionSnapshotResponse,
-  AcceptedTurnResponse,
-  StreamEvent,
-  PublishedArtifactDictStrObject as ArtifactResponse,
-} from './generated/types.gen';
 export {
   HttpSessionTransport,
   SessionHttpError,
@@ -18,7 +10,7 @@ export type {
   PresentedSession,
   SessionEvent,
   TurnAccepted,
-} from './generated/native/types.gen';
+} from './generated/types.gen';
 export { SessionController } from './src/session-controller';
 export type { SessionViewState } from './src/session-controller';
 export { presentSession, presentSessionArtifact } from './src/session-presentation';

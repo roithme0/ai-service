@@ -5,55 +5,192 @@ export type ClientOptions = {
 };
 
 /**
- * AcceptedTurnResponse
+ * AcceptedArtifact
  */
-export type AcceptedTurnResponse = {
+export type AcceptedArtifact = {
+    artifact: PublishedArtifactArtifactPayload;
     /**
-     * Kind
+     * Part Kind
      */
-    kind: 'accepted';
-    /**
-     * Turn Id
-     */
-    turn_id: string;
+    part_kind: 'artifact';
 };
 
 /**
- * ErrorResponse
+ * ArtifactCapability
  */
-export type ErrorResponse = {
+export type ArtifactCapability = {
     /**
-     * Detail
+     * Description
      */
-    detail: string;
+    description: string;
     /**
-     * Kind
+     * Metadataschema
      */
-    kind: 'not_found' | 'method_not_allowed' | 'http_error' | 'internal_error' | 'unknown_configuration' | 'agent_unavailable' | 'unknown' | 'expired' | 'busy' | 'not_ready' | 'conflict' | 'limit_reached' | 'generation_failed';
+    metadataSchema?: {
+        [key: string]: FiniteJsonValueInput;
+    } | null;
     /**
-     * Turn Id
+     * Payloadschema
      */
-    turn_id?: string | null;
+    payloadSchema: {
+        [key: string]: FiniteJsonValueInput;
+    };
+    /**
+     * Subtitledescription
+     */
+    subtitleDescription?: string | null;
+    /**
+     * Titledescription
+     */
+    titleDescription?: string | null;
+    /**
+     * Type
+     */
+    type: string;
 };
 
 /**
- * HttpErrorResponse
+ * ArtifactPayload
  */
-export type HttpErrorResponse = {
+export type ArtifactPayload = {
     /**
-     * Detail
+     * Metadata
      */
-    detail: string;
+    metadata?: {
+        [key: string]: FiniteJsonValueOutput;
+    } | null;
+    payload: FiniteJsonValueOutput;
+    /**
+     * Subtitle
+     */
+    subtitle?: string | null;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
+ * AssistantText
+ */
+export type AssistantText = {
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Part Kind
+     */
+    part_kind: 'text';
+    /**
+     * Phase
+     */
+    phase: 'commentary' | 'final_answer' | null;
+};
+
+/**
+ * BoundaryError
+ */
+export type BoundaryError = {
     /**
      * Kind
      */
-    kind: 'not_found' | 'method_not_allowed' | 'http_error' | 'internal_error';
+    kind: 'unknown_configuration' | 'unknown' | 'busy' | 'agent_unavailable' | 'invalid_input' | 'observation_limit';
+};
+
+export type FiniteJsonValueInput = {
+    [key: string]: FiniteJsonValueInput;
+} | Array<FiniteJsonValueInput> | string | boolean | number | number | null;
+
+export type FiniteJsonValueOutput = {
+    [key: string]: FiniteJsonValueOutput;
+} | Array<FiniteJsonValueOutput> | string | boolean | number | number | null;
+
+/**
+ * HTTPValidationError
+ */
+export type HttpValidationError = {
+    /**
+     * Detail
+     */
+    detail?: Array<ValidationError>;
+};
+
+export type HistoryItem = ({
+    part_kind: 'user-prompt';
+} & UserPrompt) | ({
+    part_kind: 'turn';
+} & PresentedTurn);
+
+/**
+ * ObservationErrorEvent
+ */
+export type ObservationErrorEvent = {
+    /**
+     * Kind
+     */
+    kind: 'error';
+    /**
+     * Reason
+     */
+    reason: 'unknown' | 'observation_overflow' | 'internal_error';
+};
+
+export type PresentationPart = ({
+    part_kind: 'text';
+} & AssistantText) | ({
+    part_kind: 'builtin-tool-call' | 'tool-call';
+} & ToolActivity) | ({
+    part_kind: 'artifact';
+} & AcceptedArtifact);
+
+/**
+ * PresentedSession
+ */
+export type PresentedSession = {
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * History
+     */
+    history: Array<HistoryItem>;
+    /**
+     * Session Id
+     */
+    session_id: string;
+};
+
+/**
+ * PresentedTurn
+ */
+export type PresentedTurn = {
+    lifecycle: TurnLifecycle;
+    /**
+     * Part Kind
+     */
+    part_kind: 'turn';
+    /**
+     * Parts
+     */
+    parts: Array<PresentationPart>;
+};
+
+/**
+ * PromptSubmissionRequest
+ */
+export type PromptSubmissionRequest = {
+    /**
+     * Prompt
+     */
+    prompt: string;
 };
 
 /**
  * PublishedArtifact
  */
-export type PublishedArtifactDictStrObject = {
+export type PublishedArtifactArtifactPayload = {
     /**
      * Artifact Id
      */
@@ -66,408 +203,167 @@ export type PublishedArtifactDictStrObject = {
      * Order
      */
     order: number;
+    payload: ArtifactPayload;
     /**
-     * Payload
+     * Turn Id
      */
-    payload: {
+    turn_id: string;
+    /**
+     * Type
+     */
+    type: string;
+};
+
+/**
+ * RootModel[SessionEvent]
+ */
+export type RootModelSessionEvent = SessionEvent;
+
+/**
+ * SessionCreated
+ */
+export type SessionCreated = {
+    /**
+     * Expires At
+     */
+    expires_at: string;
+    /**
+     * Session Id
+     */
+    session_id: string;
+};
+
+/**
+ * SessionCreationRequest
+ */
+export type SessionCreationRequest = {
+    /**
+     * Artifact Capabilities
+     */
+    artifact_capabilities?: Array<ArtifactCapability>;
+    /**
+     * Initial Context
+     */
+    initial_context?: {
+        [key: string]: FiniteJsonValueInput;
+    } | null;
+};
+
+export type SessionEvent = ({
+    kind: 'snapshot';
+} & SnapshotEvent) | ({
+    kind: 'error';
+} & ObservationErrorEvent);
+
+/**
+ * SnapshotEvent
+ */
+export type SnapshotEvent = {
+    /**
+     * Kind
+     */
+    kind: 'snapshot';
+    snapshot: PresentedSession;
+};
+
+/**
+ * ToolActivity
+ */
+export type ToolActivity = {
+    /**
+     * Part Kind
+     */
+    part_kind: 'tool-call' | 'builtin-tool-call';
+    status: ToolStatus;
+    /**
+     * Tool Call Id
+     */
+    tool_call_id: string;
+    /**
+     * Tool Name
+     */
+    tool_name: string;
+};
+
+export type ToolStatus = 'requested' | 'running' | 'success' | 'failed' | 'denied' | 'interrupted';
+
+/**
+ * TurnAccepted
+ */
+export type TurnAccepted = {
+    /**
+     * Kind
+     */
+    kind: 'accepted';
+};
+
+/**
+ * TurnLifecycle
+ *
+ * Application lifecycle only; identity comes from the native run.
+ */
+export type TurnLifecycle = {
+    /**
+     * Finished At
+     */
+    finished_at: string | null;
+    /**
+     * Run Id
+     */
+    run_id: string | null;
+    /**
+     * Started At
+     */
+    started_at: string;
+    status: TurnStatus;
+};
+
+export type TurnStatus = 'running' | 'completed' | 'failed' | 'cancelled';
+
+/**
+ * UserPrompt
+ */
+export type UserPrompt = {
+    /**
+     * Content
+     */
+    content: string | Array<string>;
+    /**
+     * Part Kind
+     */
+    part_kind: 'user-prompt';
+};
+
+/**
+ * ValidationError
+ */
+export type ValidationError = {
+    /**
+     * Context
+     */
+    ctx?: {
         [key: string]: unknown;
     };
     /**
-     * Turn Id
+     * Input
      */
-    turn_id: string;
+    input?: unknown;
     /**
-     * Type
-     */
-    type: string;
-};
-
-/**
- * SessionCreationResponse
- */
-export type SessionCreationResponse = {
-    /**
-     * Expires At
-     */
-    expires_at: string;
-    /**
-     * Session Id
-     */
-    session_id: string;
-};
-
-/**
- * SessionSnapshotResponse
- */
-export type SessionSnapshotResponse = {
-    /**
-     * Expires At
-     */
-    expires_at: string;
-    /**
-     * Sequence
-     */
-    sequence: number;
-    /**
-     * Session Id
-     */
-    session_id: string;
-    /**
-     * Turns
-     */
-    turns: Array<TurnSnapshotDictStrObject>;
-};
-
-/**
- * StreamClosing
- */
-export type StreamClosing = {
-    /**
-     * Kind
-     */
-    kind: 'closing';
-    /**
-     * Sequence
-     */
-    sequence: number;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * StreamError
- */
-export type StreamError = {
-    /**
-     * Kind
-     */
-    kind: 'error';
-    /**
-     * Reason
-     */
-    reason: 'unavailable' | 'observation_limit';
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * StreamEvent
- */
-export type StreamEvent = ({
-    kind: 'snapshot';
-} & StreamSnapshot) | ({
-    kind: 'upsert';
-} & StreamUpsert) | ({
-    kind: 'closing';
-} & StreamClosing) | ({
-    kind: 'terminal';
-} & StreamTerminal) | ({
-    kind: 'error';
-} & StreamError);
-
-/**
- * StreamSnapshot
- */
-export type StreamSnapshot = {
-    /**
-     * Kind
-     */
-    kind: 'snapshot';
-    snapshot: SessionSnapshotResponse;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * StreamTerminal
- */
-export type StreamTerminal = {
-    /**
-     * Kind
-     */
-    kind: 'terminal';
-    /**
-     * Outcome
-     */
-    outcome: 'completed' | 'generation_failed' | 'conflict';
-    /**
-     * Sequence
-     */
-    sequence: number;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * StreamUpsert
- */
-export type StreamUpsert = {
-    /**
-     * Identity
-     */
-    identity: string;
-    /**
-     * Item
-     */
-    item: ({
-        kind: 'message';
-    } & TimelineMessage) | ({
-        kind: 'intermediate';
-    } & TimelineIntermediateMessage) | ({
-        kind: 'tool';
-    } & TimelineTool) | ({
-        kind: 'artifact';
-    } & TimelineArtifactDictStrObject) | ({
-        kind: 'failure';
-    } & TimelineFailure);
-    /**
-     * Kind
-     */
-    kind: 'upsert';
-    /**
-     * Order
-     */
-    order: number;
-    /**
-     * Sequence
-     */
-    sequence: number;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * TimelineArtifact
- */
-export type TimelineArtifactDictStrObject = {
-    artifact: PublishedArtifactDictStrObject;
-    /**
-     * Kind
-     */
-    kind: 'artifact';
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * TimelineFailure
- */
-export type TimelineFailure = {
-    /**
-     * Kind
-     */
-    kind: 'failure';
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * TimelineIntermediateMessage
- */
-export type TimelineIntermediateMessage = {
-    /**
-     * Id
-     */
-    id: string;
-    /**
-     * Kind
-     */
-    kind: 'intermediate';
-    /**
-     * Text
-     */
-    text: string;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * TimelineMessage
- */
-export type TimelineMessage = {
-    /**
-     * Id
-     */
-    id: string;
-    /**
-     * Is Final
-     */
-    is_final: boolean;
-    /**
-     * Kind
-     */
-    kind: 'message';
-    /**
-     * Role
-     */
-    role: 'user' | 'assistant';
-    /**
-     * Text
-     */
-    text: string;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * TimelineTool
- */
-export type TimelineTool = {
-    /**
-     * Execution Id
-     */
-    execution_id: string;
-    /**
-     * Kind
-     */
-    kind: 'tool';
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Status
-     */
-    status: 'requested' | 'running' | 'completed' | 'failed' | 'not_executed' | 'outcome_unknown';
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * TurnSnapshot
- */
-export type TurnSnapshotDictStrObject = {
-    /**
-     * Status
-     */
-    status: 'pending' | 'in_progress' | 'closing' | 'completed' | 'generation_failed' | 'conflict';
-    /**
-     * Timeline
-     */
-    timeline: Array<TimelineMessage | TimelineIntermediateMessage | TimelineTool | TimelineArtifactDictStrObject | TimelineFailure>;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-    /**
-     * User Message Id
-     */
-    user_message_id: string;
-};
-
-/**
- * UserMessageResponse
- */
-export type UserMessageResponse = {
-    /**
-     * Role
-     */
-    role: 'user';
-    /**
-     * Text
-     */
-    text: string;
-    /**
-     * Turn Id
-     */
-    turn_id: string;
-};
-
-/**
- * ValidationDetail
- */
-export type ValidationDetail = {
-    /**
-     * Loc
+     * Location
      */
     loc: Array<string | number>;
     /**
-     * Msg
+     * Message
      */
     msg: string;
     /**
-     * Type
+     * Error Type
      */
     type: string;
 };
 
-/**
- * ValidationErrorResponse
- */
-export type ValidationErrorResponse = {
-    /**
-     * Detail
-     */
-    detail: Array<ValidationDetail>;
-    /**
-     * Kind
-     */
-    kind: 'invalid_input' | 'invalid_message' | 'request_validation';
-};
-
-export type HelloWorldGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/';
-};
-
-export type HelloWorldGetErrors = {
-    /**
-     * Method Not Allowed
-     */
-    405: HttpErrorResponse;
-    /**
-     * Internal Server Error
-     */
-    500: HttpErrorResponse;
-};
-
-export type HelloWorldGetError = HelloWorldGetErrors[keyof HelloWorldGetErrors];
-
-export type HelloWorldGetResponses = {
-    /**
-     * Response Hello World  Get
-     *
-     * Successful Response
-     */
-    200: {
-        [key: string]: string;
-    };
-};
-
-export type HelloWorldGetResponse = HelloWorldGetResponses[keyof HelloWorldGetResponses];
-
 export type CreateSessionApiV1AgentsConfigurationSessionsPostData = {
-    /**
-     * SessionCreationRequest
-     */
-    body: {
-        /**
-         * Input
-         */
-        input?: unknown;
-    };
+    body: SessionCreationRequest;
     headers: {
         /**
          * X-Application-User
@@ -478,7 +374,7 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostData = {
         /**
          * Configuration
          */
-        configuration: 'demo' | 'kochwiki';
+        configuration: string;
     };
     query?: never;
     url: '/api/v1/agents/{configuration}/sessions';
@@ -486,25 +382,29 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostData = {
 
 export type CreateSessionApiV1AgentsConfigurationSessionsPostErrors = {
     /**
+     * Bad Request
+     */
+    400: BoundaryError;
+    /**
      * Not Found
      */
-    404: ErrorResponse;
+    404: BoundaryError;
     /**
-     * Method Not Allowed
+     * Conflict
      */
-    405: HttpErrorResponse;
+    409: BoundaryError;
     /**
-     * Unprocessable Content
+     * Validation Error
      */
-    422: ValidationErrorResponse;
+    422: HttpValidationError;
     /**
-     * Internal Server Error
+     * Too Many Requests
      */
-    500: HttpErrorResponse;
+    429: BoundaryError;
     /**
      * Service Unavailable
      */
-    503: ErrorResponse;
+    503: BoundaryError;
 };
 
 export type CreateSessionApiV1AgentsConfigurationSessionsPostError = CreateSessionApiV1AgentsConfigurationSessionsPostErrors[keyof CreateSessionApiV1AgentsConfigurationSessionsPostErrors];
@@ -513,7 +413,7 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostResponses = {
     /**
      * Successful Response
      */
-    201: SessionCreationResponse;
+    201: SessionCreated;
 };
 
 export type CreateSessionApiV1AgentsConfigurationSessionsPostResponse = CreateSessionApiV1AgentsConfigurationSessionsPostResponses[keyof CreateSessionApiV1AgentsConfigurationSessionsPostResponses];
@@ -530,7 +430,7 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetData = {
         /**
          * Configuration
          */
-        configuration: 'demo' | 'kochwiki';
+        configuration: string;
         /**
          * Session Id
          */
@@ -542,29 +442,29 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetData = {
 
 export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors = {
     /**
+     * Bad Request
+     */
+    400: BoundaryError;
+    /**
      * Not Found
      */
-    404: ErrorResponse;
+    404: BoundaryError;
     /**
-     * Method Not Allowed
+     * Conflict
      */
-    405: HttpErrorResponse;
+    409: BoundaryError;
     /**
-     * Gone
+     * Validation Error
      */
-    410: ErrorResponse;
+    422: HttpValidationError;
     /**
-     * Unprocessable Content
+     * Too Many Requests
      */
-    422: ValidationErrorResponse;
-    /**
-     * Internal Server Error
-     */
-    500: HttpErrorResponse;
+    429: BoundaryError;
     /**
      * Service Unavailable
      */
-    503: ErrorResponse;
+    503: BoundaryError;
 };
 
 export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetError = ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors[keyof ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetErrors];
@@ -573,157 +473,12 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetResponses = {
     /**
      * Successful Response
      */
-    200: SessionSnapshotResponse;
+    200: PresentedSession;
 };
 
 export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetResponse = ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetResponses[keyof ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetResponses];
 
-export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostData = {
-    /**
-     * UserMessageRequest
-     */
-    body: {
-        /**
-         * Text
-         */
-        text: string;
-    };
-    headers: {
-        /**
-         * X-Application-User
-         */
-        'X-Application-User': string;
-    };
-    path: {
-        /**
-         * Configuration
-         */
-        configuration: 'demo' | 'kochwiki';
-        /**
-         * Session Id
-         */
-        session_id: string;
-    };
-    query?: never;
-    url: '/api/v1/agents/{configuration}/sessions/{session_id}/messages';
-};
-
-export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostErrors = {
-    /**
-     * Not Found
-     */
-    404: ErrorResponse;
-    /**
-     * Method Not Allowed
-     */
-    405: HttpErrorResponse;
-    /**
-     * Conflict
-     */
-    409: ErrorResponse;
-    /**
-     * Gone
-     */
-    410: ErrorResponse;
-    /**
-     * Unprocessable Content
-     */
-    422: ValidationErrorResponse;
-    /**
-     * Internal Server Error
-     */
-    500: HttpErrorResponse;
-    /**
-     * Service Unavailable
-     */
-    503: ErrorResponse;
-};
-
-export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostError = AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostErrors[keyof AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostErrors];
-
-export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostResponses = {
-    /**
-     * Successful Response
-     */
-    201: UserMessageResponse;
-};
-
-export type AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostResponse = AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostResponses[keyof AppendMessageApiV1AgentsConfigurationSessionsSessionIdMessagesPostResponses];
-
-export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostData = {
-    /**
-     * EmptyTurnRequest
-     */
-    body?: {
-        [key: string]: never;
-    };
-    headers: {
-        /**
-         * X-Application-User
-         */
-        'X-Application-User': string;
-    };
-    path: {
-        /**
-         * Configuration
-         */
-        configuration: 'demo' | 'kochwiki';
-        /**
-         * Session Id
-         */
-        session_id: string;
-    };
-    query?: never;
-    url: '/api/v1/agents/{configuration}/sessions/{session_id}/turns';
-};
-
-export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors = {
-    /**
-     * Not Found
-     */
-    404: ErrorResponse;
-    /**
-     * Method Not Allowed
-     */
-    405: HttpErrorResponse;
-    /**
-     * Conflict
-     */
-    409: ErrorResponse;
-    /**
-     * Gone
-     */
-    410: ErrorResponse;
-    /**
-     * Unprocessable Content
-     */
-    422: ValidationErrorResponse;
-    /**
-     * Internal Server Error
-     */
-    500: HttpErrorResponse;
-    /**
-     * Bad Gateway
-     */
-    502: ErrorResponse;
-    /**
-     * Service Unavailable
-     */
-    503: ErrorResponse;
-};
-
-export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostError = ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors[keyof ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors];
-
-export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponses = {
-    /**
-     * Successful Response
-     */
-    202: AcceptedTurnResponse;
-};
-
-export type ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponse = ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponses[keyof ExecuteTurnApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponses];
-
-export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetData = {
+export type ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetData = {
     body?: never;
     headers: {
         /**
@@ -735,54 +490,110 @@ export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEvent
         /**
          * Configuration
          */
-        configuration: 'demo' | 'kochwiki';
+        configuration: string;
         /**
          * Session Id
          */
         session_id: string;
-        /**
-         * Turn Id
-         */
-        turn_id: string;
     };
     query?: never;
-    url: '/api/v1/agents/{configuration}/sessions/{session_id}/turns/{turn_id}/events';
+    url: '/api/v1/agents/{configuration}/sessions/{session_id}/events';
 };
 
-export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors = {
+export type ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetErrors = {
+    /**
+     * Bad Request
+     */
+    400: BoundaryError;
     /**
      * Not Found
      */
-    404: ErrorResponse;
-    /**
-     * Method Not Allowed
-     */
-    405: HttpErrorResponse;
+    404: BoundaryError;
     /**
      * Conflict
      */
-    409: ErrorResponse;
+    409: BoundaryError;
     /**
-     * Gone
+     * Validation Error
      */
-    410: ErrorResponse;
+    422: HttpValidationError;
     /**
-     * Unprocessable Content
+     * Too Many Requests
      */
-    422: ValidationErrorResponse;
+    429: BoundaryError;
     /**
-     * Internal Server Error
+     * Service Unavailable
      */
-    500: HttpErrorResponse;
+    503: BoundaryError;
 };
 
-export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetError = ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors[keyof ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetErrors];
+export type ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetError = ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetErrors[keyof ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetErrors];
 
-export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponses = {
+export type ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetResponses = {
     /**
      * Successful Response
      */
-    200: StreamEvent;
+    200: RootModelSessionEvent;
 };
 
-export type ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponse = ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponses[keyof ObserveTurnApiV1AgentsConfigurationSessionsSessionIdTurnsTurnIdEventsGetResponses];
+export type ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetResponse = ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetResponses[keyof ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetResponses];
+
+export type SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostData = {
+    body: PromptSubmissionRequest;
+    headers: {
+        /**
+         * X-Application-User
+         */
+        'X-Application-User': string;
+    };
+    path: {
+        /**
+         * Configuration
+         */
+        configuration: string;
+        /**
+         * Session Id
+         */
+        session_id: string;
+    };
+    query?: never;
+    url: '/api/v1/agents/{configuration}/sessions/{session_id}/turns';
+};
+
+export type SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors = {
+    /**
+     * Bad Request
+     */
+    400: BoundaryError;
+    /**
+     * Not Found
+     */
+    404: BoundaryError;
+    /**
+     * Conflict
+     */
+    409: BoundaryError;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too Many Requests
+     */
+    429: BoundaryError;
+    /**
+     * Service Unavailable
+     */
+    503: BoundaryError;
+};
+
+export type SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostError = SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors[keyof SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostErrors];
+
+export type SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: TurnAccepted;
+};
+
+export type SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponse = SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponses[keyof SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostResponses];

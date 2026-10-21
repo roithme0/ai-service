@@ -5,7 +5,7 @@ import type {
   PresentationPart,
   PublishedArtifactArtifactPayload,
   UserPrompt,
-} from '../generated/native/types.gen';
+} from '../generated/types.gen';
 
 export type SessionArtifactMapper = (
   artifact: PublishedArtifactArtifactPayload,

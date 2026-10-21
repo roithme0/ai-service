@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type {
-  PresentedSession,
-  PresentedTurn,
-  PresentationPart,
-} from '../generated/native/types.gen';
+import type { PresentedSession, PresentedTurn, PresentationPart } from '../generated/types.gen';
 import { presentSession } from './session-presentation';
 
 const time = '2026-10-21T12:00:00Z';

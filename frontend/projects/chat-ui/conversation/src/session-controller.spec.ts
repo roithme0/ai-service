@@ -4,7 +4,7 @@ import type {
   SessionCreated,
   SessionEvent,
   TurnAccepted,
-} from '../generated/native/types.gen';
+} from '../generated/types.gen';
 import type { SessionTransport } from './session-transport';
 import { SessionHttpError, SessionTransportError } from './session-transport';
 import { SessionController } from './session-controller';

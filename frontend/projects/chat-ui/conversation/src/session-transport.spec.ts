@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpSessionTransport, SessionHttpError, SessionTransportError } from './session-transport';
-import type { SessionEvent, PresentedSession } from '../generated/native/types.gen';
+import type { SessionEvent, PresentedSession } from '../generated/types.gen';
 
 const expires = '2026-10-21T12:00:00Z';
 const snapshot: PresentedSession = {
