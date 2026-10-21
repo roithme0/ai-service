@@ -1,4 +1,0 @@
-"""MCP lifecycle policy."""
-
-INITIAL_RETRY_SECONDS = 30.0
-CATALOGUE_REFRESH_SECONDS = 300.0

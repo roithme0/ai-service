@@ -40,10 +40,14 @@ if (process.argv.length > 3 || (process.argv[2] && !check)) {
 
 const temporary = await mkdtemp(join(tmpdir(), 'ai-service-contract-'));
 try {
-  const document = execFileSync(process.env.PYTHON ?? 'python', ['-m', 'scripts.export_openapi'], {
-    cwd: backend,
-    encoding: 'utf8',
-  });
+  const document = execFileSync(
+    process.env.PYTHON ?? 'python',
+    ['-m', 'scripts.export_openapi', '--native'],
+    {
+      cwd: backend,
+      encoding: 'utf8',
+    },
+  );
   const input = join(temporary, 'openapi.json');
   const output = join(temporary, 'generated');
   await writeFile(input, document);
@@ -60,7 +64,7 @@ try {
         );
       }
     } else {
-      await mkdir(contract, { recursive: true });
+      await mkdir(dirname(destination), { recursive: true });
       await writeFile(destination, generated);
     }
   }

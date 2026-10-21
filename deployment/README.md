@@ -16,19 +16,19 @@ docker compose -f deployment/docker-compose-local.yml up --build
 
 Open `http://localhost:8000` (or the configured `GATEWAY_PORT`) for the scripted
 chat UI demo. It requires no OpenAI credentials, model configuration, or reachable
-Kochwiki service. Submit any text to advance through greeting, greeting-tool JSON
-artifact, and completion. Refresh the page to restart with a new empty session.
+Kochwiki service. Submit any text to advance through an introduction, two JSON artifacts, a scripted
+turn failure, and completion guidance. Refresh the page to restart with a new empty session.
 
 Docker Compose reads `deployment/.env`. To enable Kochwiki turns in the
 container, add `OPENAI_API_KEY`, `KOCHWIKI_OPENAI_MODEL`, and `KOCHWIKI_MCP_URL`.
 That file is ignored by Git. The variables are forwarded only to the backend.
 Optionally set `KOCHWIKI_OPENAI_REASONING_EFFORT` alongside the model name;
 all three Compose environments forward it to the backend. Blank or unset
-keeps the model's default. See [backend configuration](../backend/README.md#mcp-connections-and-tool-execution)
+keeps the model's default. See [backend configuration](../backend/README.md#local-development)
 for accepted values and model-specific restrictions.
 When Kochwiki runs directly on the host, use
 `http://host.docker.internal:<port>/mcp/`; `localhost` inside the backend
-container refers to that container itself. `KOCHWIKI_BASE_URL` is no longer used.
+container refers to that container itself.
 
 Run backend tests in a container:
 
@@ -45,21 +45,18 @@ Push a `v`-prefixed repository version tag to publish both application images an
 The `/api/` gateway uses a finite **600-second (10-minute) response read
 timeout**, with 5-second upstream connection and request-send timeouts.
 Upstream retries are disabled (`proxy_next_upstream off`) so state-changing
-session/message/turn requests are not automatically replayed by the gateway.
+session creation and prompt submissions are not automatically replayed by the gateway.
 
-Recipe turns return only after completion. The current backend allows eight
-provider responses at 60 seconds each, with provider retries disabled, and six
-MCP tool attempts with a 10-second SDK read timeout. The resulting
-nominal budget is 540 seconds; 600 seconds leaves 60 seconds for orchestration
-and transport overhead. These are operation limits, not a hard wall-clock turn
-deadline. Nginx's [read timeout](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_read_timeout)
-measures inactivity between upstream reads, not total request duration.
+Prompt submission returns HTTP 202 after admission; execution continues in the
+background. Clients observe complete session snapshots over SSE across turns.
+The gateway read timeout measures inactivity between upstream reads, not total
+turn duration. Observation has no heartbeat, so an idle connection can reach this
+timeout; the session controller reconnects and receives a fresh snapshot.
 
-Kochwiki should use a proxy response timeout of at least 600 seconds when calling
-the exposed AI Service gateway, preferably 660 seconds to let the gateway's
-timeout response arrive first. Align any HTTP client total deadline accordingly,
-keep connection timeouts short, and disable automatic retries of state-changing
-requests. A timeout does not prove that a turn failed or was rolled back.
+Execution budgets are configured in `backend/app/agentic/config.py`; they are
+independent of the gateway timeout. Keep automatic retries disabled for
+state-changing requests. A lost admission response or connection timeout does
+not prove that execution failed or was rolled back.
 
 Run the isolated gateway regression test (no model credentials required):
 
@@ -68,6 +65,6 @@ docker compose -f deployment/tests/gateway/compose.yml up --abort-on-container-e
 docker compose -f deployment/tests/gateway/compose.yml down
 ```
 
-It mounts the actual gateway configuration and checks POST turn responses delayed
+It mounts the actual gateway configuration and checks synthetic POST responses delayed
 65 seconds before any headers, preserving both HTTP 201 and HTTP 422 and their
 exact JSON bodies. The two cases run concurrently and take about 65 seconds.

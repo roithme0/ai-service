@@ -1,306 +1,258 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
+﻿import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { ChatUiComponent, JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
+import type { PresentedSession, SessionEvent } from '@roithme0/chat-ui/conversation';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app.component';
-import type { SessionSnapshotResponse } from '@roithme0/chat-ui/conversation';
 
-describe('Demo application', () => {
+const EMPTY: PresentedSession = {
+  error: null,
+  session_id: 'demo-1',
+  expires_at: '2026-10-21T12:00:00Z',
+  history: [],
+};
+const LIFECYCLE = {
+  run_id: 'run-1',
+  status: 'completed' as const,
+  started_at: '2026-10-21T10:00:00Z',
+  finished_at: '2026-10-21T10:00:01Z',
+};
+
+class DemoServer {
+  private events!: ReadableStreamDefaultController<Uint8Array>;
+  readonly fetch = vi.fn<typeof fetch>((input) => {
+    const url = input instanceof Request ? input.url : input.toString();
+    if (url.endsWith('/sessions'))
+      return Promise.resolve(
+        Response.json(
+          { session_id: EMPTY.session_id, expires_at: EMPTY.expires_at },
+          { status: 201 },
+        ),
+      );
+    if (url.endsWith('/events'))
+      return Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start: (controller) => {
+              this.events = controller;
+              this.snapshot(EMPTY);
+            },
+          }),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        ),
+      );
+    if (url.endsWith('/turns'))
+      return Promise.resolve(Response.json({ kind: 'accepted' }, { status: 202 }));
+    return Promise.reject(new Error(`Unexpected request: ${url}`));
+  });
+  snapshot(snapshot: PresentedSession): void {
+    const event: SessionEvent = { kind: 'snapshot', snapshot };
+    this.events.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`));
+  }
+}
+
+async function openDemo(): Promise<{
+  fixture: ComponentFixture<App>;
+  chat: ChatUiComponent;
+  server: DemoServer;
+}> {
+  const server = new DemoServer();
+  vi.stubGlobal('fetch', server.fetch);
+  TestBed.configureTestingModule({ imports: [App] });
+  const fixture = TestBed.createComponent(App);
+  fixture.detectChanges();
+  const chat = fixture.debugElement.query(By.directive(ChatUiComponent))
+    .componentInstance as ChatUiComponent;
+  expect(chat.composerDisabled()).toBe(true);
+  expect(chat.conversationStatus()?.kind).toBe('loading');
+  await vi.waitFor(
+    () => {
+      fixture.detectChanges();
+      expect(chat.composerDisabled()).toBe(false);
+    },
+    { timeout: 2500 },
+  );
+  return { fixture, chat, server };
+}
+
+function element(fixture: ComponentFixture<App>): HTMLElement {
+  return fixture.nativeElement as HTMLElement;
+}
+
+async function render(fixture: ComponentFixture<App>, condition: () => void): Promise<void> {
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    condition();
+  });
+}
+
+describe('Native demo application', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it.each([
+  it.each<{ title: string; payload: Record<string, string | string[]>; text: string }>([
     {
-      type: 'demo.greeting',
+      title: 'demo.greeting',
       payload: { message: 'Hello, World!' },
       text: '"message": "Hello, World!"',
     },
     {
-      type: 'demo.greetings',
+      title: 'demo.greetings',
       payload: {
         messages: Array.from({ length: 30 }, (_, index) => `Hello, Visitor ${index + 1}!`),
       },
       text: 'Hello, Visitor 30!',
     },
   ])(
-    'creates an empty demo session and renders $type through explicit JSON presentation',
-    async ({ type, payload, text }) => {
-      const fetchMock = vi
-        .fn<typeof fetch>()
-        .mockResolvedValueOnce(
-          Response.json({ session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z' }),
-        )
-        .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Any text', turn_id: 'turn-2' }))
-        .mockResolvedValueOnce(Response.json({ kind: 'accepted', turn_id: 'turn-2' }))
-        .mockResolvedValueOnce(
-          snapshotObservation({
-            session_id: 'demo-1',
-            expires_at: '2026-09-26T12:00:00Z',
-            sequence: 10,
-            turns: [
-              {
-                turn_id: 'turn-2',
-                user_message_id: 'confirmed-0-user',
-                status: 'completed',
-                timeline: [
-                  {
-                    kind: 'message',
-                    is_final: false,
-                    id: 'confirmed-0-user',
-                    role: 'user',
-                    text: 'Any text',
-                    turn_id: 'turn-2',
-                  },
-                  {
-                    kind: 'intermediate',
-                    turn_id: 'turn-2',
-                    id: 'update-1',
-                    text: "I'll create a greeting artifact.",
-                  },
-                  {
-                    kind: 'tool',
-                    turn_id: 'turn-2',
-                    execution_id: 'call-1',
-                    name: 'create_greeting',
-                    status: 'completed',
-                  },
-                  {
-                    kind: 'artifact',
-                    turn_id: 'turn-2',
-                    artifact: {
-                      artifact_id: 'greeting-1',
-                      type,
-                      created_at: '2026-09-26T12:00:00Z',
-                      order: 1,
-                      turn_id: 'turn-2',
-                      payload,
-                    },
-                  },
-                  {
-                    kind: 'intermediate',
-                    turn_id: 'turn-2',
-                    id: 'update-2',
-                    text: "I'll demonstrate a failed tool call.",
-                  },
-                  {
-                    kind: 'tool',
-                    turn_id: 'turn-2',
-                    execution_id: 'call-2',
-                    name: 'create_greeting',
-                    status: 'failed',
-                  },
-                  {
-                    kind: 'message',
-                    is_final: true,
-                    turn_id: 'turn-2',
-                    id: 'assistant-turn-2',
-                    role: 'assistant',
-                    text: 'Scripted reply',
-                  },
-                ],
-              },
-            ],
-          }),
-        );
-      vi.stubGlobal('fetch', fetchMock);
-      TestBed.configureTestingModule({ imports: [App] });
-      const fixture = TestBed.createComponent(App);
-      fixture.detectChanges();
-      const chat = fixture.debugElement.query(By.directive(ChatUiComponent))
-        .componentInstance as ChatUiComponent;
-      expect(chat.conversationStatus()?.message).toBe('Unterhaltung wird gestartet …');
-      expect(fixtureElement(fixture).querySelector('.content')!.classList.contains('fade')).toBe(
-        true,
-      );
-      expect(chat.composerDisabled()).toBe(true);
-      expect(fetchMock).not.toHaveBeenCalled();
-      await fixture.whenStable();
-      fixture.detectChanges();
-      await vi.waitFor(
-        () => {
-          fixture.detectChanges();
-          expect(chat.composerDisabled()).toBe(false);
-        },
-        { timeout: 2500 },
-      );
-      expect(fetchMock).toHaveBeenNthCalledWith(
+    'renders $title from native snapshots without inserting an optimistic prompt',
+    async ({ title, payload, text }) => {
+      const { fixture, chat, server } = await openDemo();
+      expect(server.fetch).toHaveBeenNthCalledWith(
         1,
         '/api/v1/agents/demo/sessions',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ input: {} }),
         }),
       );
-      expect(chat.turns().flatMap((turn) => turn.content)).toEqual([]);
-      expect(chat.composerDisabled()).toBe(false);
-      expect(document.activeElement).not.toBe(fixtureElement(fixture).querySelector('textarea'));
-      const acknowledge = vi.fn();
-      const submission: ChatSubmission = { text: 'Any text', acknowledge };
-      chat.messageSubmitted.emit(submission);
-      fixture.detectChanges();
-      expect(chat.conversationStatus()).toBeNull();
-      expect(chat.composerDisabled()).toBe(true);
-      expect(acknowledge).not.toHaveBeenCalled();
-      expect(fetchMock).toHaveBeenCalledTimes(1);
-      await vi.waitFor(
-        () => {
-          fixture.detectChanges();
-          expect(fetchMock).toHaveBeenCalledTimes(4);
-        },
-        { timeout: 2000 },
-      );
-      await vi.waitFor(() => {
-        fixture.detectChanges();
-        expect(chat.turns().flatMap((turn) => turn.content)).toHaveLength(7);
+      const body = server.fetch.mock.calls[0][1]?.body;
+      expect(typeof body).toBe('string');
+      expect(JSON.parse(body as string) as unknown).toEqual({
+        artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
       });
-      expect(acknowledge).toHaveBeenCalledOnce();
-      expect(fetchMock).toHaveBeenNthCalledWith(
-        2,
-        '/api/v1/agents/demo/sessions/demo-1/messages',
-        expect.objectContaining({ body: JSON.stringify({ text: 'Any text' }) }),
-      );
-      expect(fetchMock).toHaveBeenNthCalledWith(
+      const acknowledge = vi.fn();
+      chat.messageSubmitted.emit({ text: 'Any text', acknowledge });
+      fixture.detectChanges();
+      expect(chat.composerEditingDisabled()).toBe(true);
+      expect(chat.turns()).toEqual([]);
+      await vi.waitFor(() => expect(acknowledge).toHaveBeenCalledOnce(), { timeout: 2500 });
+      expect(chat.turns()).toEqual([]);
+      expect(server.fetch).toHaveBeenNthCalledWith(
         3,
         '/api/v1/agents/demo/sessions/demo-1/turns',
-        expect.objectContaining({ method: 'POST' }),
+        expect.objectContaining({ body: JSON.stringify({ prompt: 'Any text' }) }),
       );
-      expect(
-        chat
-          .turns()
-          .flatMap((turn) => turn.content)
-          .map((item) => item.id),
-      ).toEqual([
-        'confirmed-0-user',
-        'update-1',
-        'tool-call-1',
-        'greeting-1',
-        'update-2',
-        'tool-call-2',
-        'assistant-turn-2',
+      server.snapshot({
+        ...EMPTY,
+        history: [
+          { part_kind: 'user-prompt', content: 'Any text' },
+          {
+            part_kind: 'turn',
+            lifecycle: LIFECYCLE,
+            parts: [
+              { part_kind: 'text', content: 'Creating a greeting.', phase: 'commentary' },
+              {
+                part_kind: 'tool-call',
+                tool_call_id: 'call-1',
+                tool_name: 'present_artifact',
+                status: 'success',
+              },
+              {
+                part_kind: 'artifact',
+                artifact: {
+                  artifact_id: 'greeting-1',
+                  type: 'json',
+                  created_at: LIFECYCLE.finished_at,
+                  run_id: 'run-1',
+                  content: { title, payload: { value: payload } },
+                },
+              },
+              {
+                part_kind: 'tool-call',
+                tool_call_id: 'call-2',
+                tool_name: 'present_artifact',
+                status: 'failed',
+              },
+              { part_kind: 'text', content: 'Scripted reply', phase: 'final_answer' },
+            ],
+          },
+        ],
+      });
+      await render(fixture, () =>
+        expect(chat.turns().flatMap((turn) => turn.content)).toHaveLength(6),
+      );
+      const content = chat.turns().flatMap((turn) => turn.content);
+      expect(content.map((item) => item.kind)).toEqual([
+        'text',
+        'intermediate',
+        'tool',
+        'artifact',
+        'tool',
+        'text',
       ]);
-      expect(chat.turns().flatMap((turn) => turn.content)[3]).toEqual({
+      expect(content[3]).toEqual({
         kind: 'artifact',
         id: 'greeting-1',
-        turnId: 'turn-2',
         type: 'json',
-        headline: type,
+        headline: title,
         payload: { value: payload },
       });
-      const element = fixtureElement(fixture);
-      expect(element.querySelector('ai-chat-intermediate-message')?.textContent).toContain(
-        "I'll create a greeting artifact.",
+      expect(element(fixture).querySelector('pre')?.textContent).toContain(text);
+      expect(element(fixture).querySelector('ai-chat-assistant-message')?.textContent).toContain(
+        'Scripted reply',
       );
-      const rows = [
-        ...element.querySelectorAll<HTMLElement>(
-          '.messages > ai-chat-history-item > .collapse > .clip > .item-content > *',
-        ),
-      ];
-      expect(rows[1].matches('ai-chat-intermediate-message')).toBe(true);
-      expect(rows[2].matches('ai-chat-tool-call')).toBe(true);
-      expect(rows[3].tagName).toBe('AI-CHAT-ARTIFACT-CARD');
-      expect(rows[4].matches('ai-chat-intermediate-message')).toBe(true);
-      expect(rows[5].querySelector('.status')?.textContent).toContain('Fehlgeschlagen');
-      expect(rows[6].matches('ai-chat-assistant-message')).toBe(true);
-      expect(element.querySelector('pre')?.textContent).toContain(text);
-      expect(element.textContent).toContain('festen Skript ohne KI-Modell');
-      expect(element.textContent).toContain('simulierten API-Fehler');
       expect(chat.composerDisabled()).toBe(false);
     },
   );
 
-  it('shows a no-op action for the demo generation error', async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        Response.json({ session_id: 'demo-1', expires_at: '2026-09-26T12:00:00Z' }),
-      )
-      .mockResolvedValueOnce(Response.json({ role: 'user', text: 'Show error', turn_id: 'turn-4' }))
-      .mockResolvedValueOnce(Response.json({ kind: 'accepted', turn_id: 'turn-4' }))
-      .mockResolvedValueOnce(
-        snapshotObservation({
-          session_id: 'demo-1',
-          expires_at: '2026-09-26T12:00:00Z',
-          sequence: 4,
-          turns: [
-            {
-              turn_id: 'turn-4',
-              user_message_id: 'confirmed-0-user',
-              status: 'generation_failed',
-              timeline: [
-                {
-                  kind: 'message',
-                  is_final: false,
-                  id: 'confirmed-0-user',
-                  turn_id: 'turn-4',
-                  role: 'user',
-                  text: 'Show error',
-                },
-                {
-                  kind: 'intermediate',
-                  id: 'failed-update',
-                  turn_id: 'turn-4',
-                  text: 'This update remains visible after generation fails.',
-                },
-                { kind: 'failure', turn_id: 'turn-4' },
-              ],
-            },
+  it('retains failed-turn commentary and offers the no-op action', async () => {
+    const { fixture, chat, server } = await openDemo();
+    server.snapshot({
+      ...EMPTY,
+      history: [
+        { part_kind: 'user-prompt', content: 'Show error' },
+        {
+          part_kind: 'turn',
+          lifecycle: { ...LIFECYCLE, status: 'failed' },
+          parts: [
+            { part_kind: 'text', content: 'This update remains visible.', phase: 'commentary' },
           ],
-        }),
-      );
-    vi.stubGlobal('fetch', fetchMock);
-    TestBed.configureTestingModule({ imports: [App] });
-    const fixture = TestBed.createComponent(App);
+        },
+      ],
+    });
+    await render(fixture, () => expect(chat.conversationStatus()?.action?.id).toBe('demo-noop'));
+    expect(element(fixture).querySelector('ai-chat-intermediate-message')?.textContent).toContain(
+      'This update remains visible.',
+    );
+    expect(element(fixture).querySelector('ai-chat-assistant-message')).toBeNull();
+    const requests = server.fetch.mock.calls.length;
+    element(fixture).querySelector<HTMLButtonElement>('.action')!.click();
     fixture.detectChanges();
-    const chat = fixture.debugElement.query(By.directive(ChatUiComponent))
-      .componentInstance as ChatUiComponent;
-    await vi.waitFor(
-      () => {
-        fixture.detectChanges();
-        expect(chat.composerDisabled()).toBe(false);
-      },
-      { timeout: 2500 },
-    );
-
-    chat.messageSubmitted.emit({ text: 'Show error', acknowledge: vi.fn() });
-    await vi.waitFor(
-      () => {
-        fixture.detectChanges();
-        expect(chat.conversationStatus()?.action?.id).toBe('demo-noop');
-      },
-      { timeout: 2500 },
-    );
-    const action = fixtureElement(fixture).querySelector('.action') as HTMLButtonElement;
-    const element = fixtureElement(fixture);
-    expect(element.querySelector('ai-chat-intermediate-message')?.textContent).toContain(
-      'This update remains visible after generation fails.',
-    );
-    expect(element.querySelector('ai-chat-assistant-message')).toBeNull();
-    expect(element.querySelectorAll('ai-chat-status.error')).toHaveLength(1);
-    expect(action.textContent).toContain('Demo-Aktion (ohne Funktion)');
-    action.click();
-    fixture.detectChanges();
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(chat.conversationStatus()?.action?.id).toBe('demo-noop');
+    expect(server.fetch).toHaveBeenCalledTimes(requests);
     expect(chat.composerDisabled()).toBe(false);
-    expect(element.querySelector('ai-chat-intermediate-message')?.textContent).toContain(
-      'This update remains visible after generation fails.',
+  });
+
+  it('simulates incompatibility only after three completed runs and retains the snapshot and draft', async () => {
+    const { fixture, chat, server } = await openDemo();
+    const history: PresentedSession['history'] = Array.from({ length: 4 }, (_, index) => ({
+      part_kind: 'turn',
+      lifecycle: {
+        ...LIFECYCLE,
+        run_id: `run-${index}`,
+        status: index === 2 ? 'failed' : 'completed',
+      },
+      parts: [
+        {
+          part_kind: 'text',
+          content: `Reply ${index}`,
+          phase: index === 2 ? 'commentary' : 'final_answer',
+        },
+      ],
+    }));
+    server.snapshot({ ...EMPTY, history });
+    await render(fixture, () => expect(chat.turns()).toHaveLength(4));
+    const turns = chat.turns();
+    const acknowledge = vi.fn();
+    const requests = server.fetch.mock.calls.length;
+    chat.messageSubmitted.emit({ text: 'After completion', acknowledge });
+    fixture.detectChanges();
+    expect(chat.conversationStatus()?.message).toBe('App und Backend sind nicht kompatibel.');
+    expect(chat.composerDisabled()).toBe(true);
+    expect(chat.composerEditingDisabled()).toBe(false);
+    expect(chat.turns()).toBe(turns);
+    expect(acknowledge).not.toHaveBeenCalled();
+    server.snapshot({ ...EMPTY, history });
+    await render(fixture, () =>
+      expect(chat.conversationStatus()?.message).toBe('App und Backend sind nicht kompatibel.'),
     );
+    expect(server.fetch).toHaveBeenCalledTimes(requests);
   });
 });
-
-function snapshotObservation(snapshot: SessionSnapshotResponse): Response {
-  const turn = snapshot.turns.at(-1)!;
-  const initial = { kind: 'snapshot', turn_id: turn.turn_id, snapshot };
-  const terminal = {
-    kind: 'terminal',
-    turn_id: turn.turn_id,
-    sequence: snapshot.sequence,
-    outcome: turn.status,
-  };
-  return new Response(`data: ${JSON.stringify(initial)}\n\ndata: ${JSON.stringify(terminal)}\n\n`, {
-    headers: { 'Content-Type': 'text/event-stream' },
-  });
-}
-
-function fixtureElement<T>(fixture: ComponentFixture<T>): HTMLElement {
-  return fixture.nativeElement as HTMLElement;
-}

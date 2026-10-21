@@ -6,11 +6,10 @@ export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =
   JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue };
 
-export type ChatTurnStatus = 'active' | 'completed' | 'failed' | 'unknown';
+export type ChatTurnStatus = 'active' | 'completed' | 'failed' | 'cancelled' | 'unknown' | 'prompt';
 
 export interface ChatTurn {
-  readonly id: string;
-  readonly userMessageId: string;
+  readonly runKey: string | null;
   readonly status: ChatTurnStatus;
   readonly content: readonly ChatContent[];
 }

@@ -19,11 +19,11 @@ The `/ui` entry point exports `ChatUiComponent` and the typed content, artifact 
 
 Tool content (`ChatToolCall`) has `kind: 'tool'`, stable `id`, `name`, and `status` (`requested`, `running`, `completed`, `failed`, `not_executed`, or `outcome_unknown`). Each call renders with a primary text name, the same packaged tool icon and a smaller secondary text German status label. Names render literally; arguments and result payloads are not displayed. Completed means a result was returned without explicitly reported failure. Failure content (`ChatTurnFailure`) has `kind: 'failure'`, `id`, and `text`; a trailing marker is covered by the current error status when present, and remains visible in later history.
 
-`turns` is the required ordered collection of host-supplied `ChatTurn` values. Each turn owns its ordered `content`, including interleaved artifacts, and has a stable `id`, `userMessageId` referencing its initiating user text, and `status` (`active`, `completed`, `failed`, or `unknown`). Active includes accepted work waiting to start and closing work whose answer has arrived before terminal completion. Rendering-only hosts supply these values independently of any backend. The component renders each turn and its content in order. Item `turnId` remains optional for rendering-only hosts; ownership is determined by the enclosing turn.
+`turns` is the required ordered collection of host-supplied `ChatTurn` values. Each group owns its ordered `content`, including interleaved artifacts, and has a required `runKey` and `status` (`prompt`, `active`, `completed`, `failed`, `cancelled`, or `unknown`). Prompts and execution groups are independent; no user-message association is required. Execution sections share one conversation-scoped `runKey`, including single-section runs; independent prompt sections use `null`. The renderer derives unique section tracking keys locally from the run key and its occurrence. There is no separate section ID in the input model. Scope run keys to the conversation so that a new session cannot inherit prior detail expansion state. Active includes accepted work waiting to start and closing work whose answer has arrived before terminal completion. Rendering-only hosts supply these values independently of any backend. The component renders each turn and its content in order. Item `turnId` remains optional for rendering-only hosts; ownership is determined by the enclosing turn.
 
-Completed turns with an explicitly final assistant text and at least one intermediate message or tool call start with those details collapsed. A single accessible details button appears immediately after the first explicitly final assistant text. Active, failed and unknown turns retain all details and have no toggle, even when final text has arrived. User text, ordinary and final assistant text, artifacts and failures remain visible; artifacts retain their order and local renderer/card state across toggles. Recoverable tool failures do not block collapse in a completed turn. Manual expansion is remembered by turn ID for the component lifetime, including subsequent submissions, and resets on component recreation. Expansion and collapse animate each detail item together with its spacing over 200 ms; reduced-motion preferences disable this transition. Collapsed details remain mounted but are inert and hidden from assistive technology. Manual toggles do not request scrolling or restore scroll offsets; the browser may clamp the offset when content becomes shorter. Native scroll anchoring is disabled for the history. Toggle changes do not trigger live-content bottom scrolling. Automatic collapse has no special focus transfer for a focused link inside the hidden details; this edge case is accepted without additional handling.
+Completed turns with an explicitly final assistant text and at least one intermediate message or tool call start with those details collapsed. A single accessible details button appears immediately after the first explicitly final assistant text. Active, failed and unknown turns retain all details and have no toggle, even when final text has arrived. User text, ordinary and final assistant text, artifacts and failures remain visible; artifacts retain their order and local renderer/card state across toggles. Recoverable tool failures do not block collapse in a completed turn. Manual expansion is remembered by run key for the component lifetime, including subsequent submissions, and resets on component recreation. Expansion and collapse animate each detail item together with its spacing over 200 ms; reduced-motion preferences disable this transition. Collapsed details remain mounted but are inert and hidden from assistive technology. Manual toggles do not request scrolling or restore scroll offsets; the browser may clamp the offset when content becomes shorter. Native scroll anchoring is disabled for the history. Toggle changes do not trigger live-content bottom scrolling. Automatic collapse has no special focus transfer for a focused link inside the hidden details; this edge case is accepted without additional handling.
 
-Text content has readonly `kind`, `id`, `role` (`user` or `assistant`), and `text` fields, plus required `isFinal: boolean`. Only an explicitly identified final assistant answer has `isFinal: true`; user text and unspecified assistant text have `false`. The marker does not depend on message position or turn outcome and determines disclosure eligibility and button placement. Artifacts have readonly `kind`, `id`, `type`, `headline`, optional `subtitle`, and recursive `JsonValue` payload fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
+Text content has readonly `kind`, `id`, `role` (`user` or `assistant`), and `text` fields, plus required `isFinal: boolean`. Only an explicitly identified final assistant answer has `isFinal: true`; user text and unspecified assistant text have `false`. The marker does not depend on message position or turn outcome and determines detail-toggle eligibility and button placement. Artifacts have readonly `kind`, `id`, `type`, `headline`, optional `subtitle`, and recursive `JsonValue` payload fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
 
 Intermediate assistant content (`ChatIntermediateMessage`) has readonly `kind: 'intermediate'`, `id`, and `text`. It uses the same safe Markdown renderer and primary text styling as final assistant messages and appears in recorded order among tool calls and artifacts, including after failed turns. These are user-facing progress explanations; provider reasoning is not displayed. Complete messages appear live and retain their supplied styling permanently. Final messages alone do not finish the busy state; terminal success is authoritative. All complete output and accepted artifacts survive later turn failure.
 
@@ -31,7 +31,7 @@ Map artifact type discriminators to typed Angular templates with `artifactRender
 
 The component trims a valid submission and emits it once as a `ChatSubmission`. It retains the draft until the host calls `acknowledge`, so the visible composer can remain truthful to backend acceptance. It never adds that text to `turns`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break. New content and status changes smoothly scroll the conversation history to the bottom, including when a delayed status becomes visible, even if the user had scrolled up.
 
-`conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. Conversation loading renders as text; assistant loading renders as the supplied three-dot animation, with the status message as its accessible label. Conversation loading text fades in over 180 ms; the dots use only their SVG animation. Dots inherit the muted theme color. A reusable Angular component uses the supplied animated SVG as its external template; the animation does not vary with the reduced-motion setting. Loading states can opt into `reveal: 'delayed'`: the UI reserves a line and waits 300 ms before revealing the loading content. Replacing the status cancels the pending reveal. The conversation controller shows no indicator while sending. It starts assistant loading immediately once the accepted user message is displayed in history. Errors appear immediately without animation. Changing the conversation loading label restarts its fade. Animations run regardless of the reduced-motion setting. Rendering-only hosts own the loading lifetime: clear assistant loading as soon as any response content from that turn can be displayed. `composerDisabled` blocks submissions. `composerEditingDisabled` separately blocks text edits while keeping the textarea enabled and focusable. The controller blocks editing only while sending and, after an ambiguous network failure, reconciling backend acceptance; it unlocks editing before acknowledging an accepted message, so the next draft can be written during the assistant response. Cancellable edits are prevented before input; other edits restore the retained draft. The send button remains disabled while submissions or edits are blocked, and the textarea exposes its editing lock through `aria-disabled`. This avoids disabling the focused textarea during sending; mobile keyboard persistence still depends on the browser. The composer does not move focus on initialization, state changes, or message acknowledgement; focus remains under user control. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
+`conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. Conversation loading renders as text; assistant loading renders as the supplied three-dot animation, with the status message as its accessible label. Conversation loading text fades in over 180 ms; the dots use only their SVG animation. Dots inherit the muted theme color. A reusable Angular component uses the supplied animated SVG as its external template; the animation does not vary with the reduced-motion setting. Loading states can opt into `reveal: 'delayed'`: the UI reserves a line and waits 300 ms before revealing the loading content. Replacing the status cancels the pending reveal. The conversation controller shows no indicator while sending. It starts assistant loading immediately once the accepted user message is displayed in history. Errors appear immediately without animation. Changing the conversation loading label restarts its fade. Animations run regardless of the reduced-motion setting. Rendering-only hosts own the loading lifetime: clear assistant loading as soon as any response content from that turn can be displayed. `composerDisabled` blocks submissions. `composerEditingDisabled` separately blocks text edits while keeping the textarea enabled and focusable. The controller blocks editing only while submission admission is pending. Acceptance unlocks editing before acknowledging the message, so the next draft can be written during the assistant response. A missing admission response retains the draft and blocks further submissions while allowing edits; the controller does not reconcile acceptance. Cancellable edits are prevented before input; other edits restore the retained draft. The send button remains disabled while submissions or edits are blocked, and the textarea exposes its editing lock through `aria-disabled`. This avoids disabling the focused textarea during sending; mobile keyboard persistence still depends on the browser. The composer does not move focus on initialization, state changes, or message acknowledgement; focus remains under user control. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
 
 ## Assets
 
@@ -66,7 +66,7 @@ Use `assets/chat-ui/images/mascot-idle.png` as an image URL or as a favicon:
 
 ## AI Service conversation integration
 
-The root entry point exports no API. This is a breaking import migration: replace root imports with `@roithme0/chat-ui/ui`. Import conversation support from `@roithme0/chat-ui/conversation`. Upgrade consumer imports together with the package; there are no compatibility re-exports. Both entry points share the existing package version and release lifecycle.
+Import rendering components from `@roithme0/chat-ui/ui` and conversation support from `@roithme0/chat-ui/conversation`. The root entry point exports no API. Both entry points share the package version and release lifecycle.
 
 A complete minimal standalone host (with the Material theme described below):
 
@@ -74,11 +74,9 @@ A complete minimal standalone host (with the Material theme described below):
 import { Component, OnInit, OnDestroy, signal } from '@angular/core';
 import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
 import {
-  AgentConfiguration,
-  ConversationController,
-  HttpConversationTransport,
-  presentJsonArtifact,
-  type ConversationViewState,
+  SessionController,
+  HttpSessionTransport,
+  type SessionViewState,
 } from '@roithme0/chat-ui/conversation';
 
 @Component({
@@ -96,16 +94,18 @@ import {
   />`,
 })
 export class ChatHost implements OnInit, OnDestroy {
-  readonly chat = signal<ConversationViewState>({
+  readonly chat = signal<SessionViewState>({
+    snapshot: null,
+    admission: 'idle',
+    observation: 'connecting',
     turns: [],
     composerDisabled: true,
     composerEditingDisabled: false,
     status: null,
   });
-  private readonly controller = new ConversationController(
-    new HttpConversationTransport('/api/v1', AgentConfiguration.demo, 'demo:default'),
+  private readonly controller = new SessionController(
+    new HttpSessionTransport('/api/v1', 'demo', 'demo:default'),
     (state) => this.chat.set(state),
-    presentJsonArtifact,
   );
 
   ngOnInit(): void {
@@ -123,29 +123,15 @@ export class ChatHost implements OnInit, OnDestroy {
 }
 ```
 
-The required base URL is the prefix immediately before `/agents`: `/api/v1` yields `/api/v1/agents/demo/sessions`; `/ai/api/v1/` yields `/ai/api/v1/agents/demo/sessions`. Trailing joining slashes are normalized; another `/api/v1` is never appended. Absolute URLs use the same joining behavior. Normal deployment uses a same-origin relative prefix.
+The base URL is the prefix immediately before `/agents`; the demo uses `/api/v1`. The transport takes a configuration key and an explicit application identity as `X-Application-User`. Server validation is authoritative. Supply initial context and advertised artifact capabilities to `start(initialization)` when needed; replacement sessions retain that initialization.
 
-`AgentConfiguration` exports the backend-derived `demo` and `kochwiki` values, plus the derived union type of the same name. Arbitrary string keys are rejected by the TypeScript contract. Known keys do not guarantee runtime availability; the server can return `agent_unavailable`.
+The controller receives complete backend snapshots and derives UI content through `presentSession`. Its optional third constructor argument is a `SessionArtifactMapper`, which receives the native artifact envelope and returns a `ChatArtifact` or `null` to omit it. The default `presentSessionArtifact` preserves artifact identity and type and unwraps its presentation payload. The host owns view-state binding and renderer registration. See session lifecycle and recovery below for admission and observation behavior.
 
-The transport binds the URL, agent key, and required third constructor argument for application identity, and optional fourth constructor argument for initialization input. Omitted input sends `{ input: {} }`; supplied input uses `{ input: suppliedInput }`. Replacement sessions use the same transport settings. Server validation is authoritative, and configurations requiring domain input can reject an empty input. No recipe types or fixtures are packaged.
-
-The controller's optional third constructor argument is an `ArtifactMapper`. It receives the full `ArtifactResponse` envelope and returns a `ChatArtifact` or `null` to omit it. `presentArtifact` is the default mapper: it preserves the advertised type and identity and unwraps the backend presentation payload `{ title, payload }`. `presentJsonArtifact` is an explicit adapter for hosts such as the deterministic demo that deliberately present arbitrary tool payloads using type `json` and `{ value: originalPayload }`; the controller follows the backend timeline exactly and maps the envelope embedded in each artifact item, preserving tool/artifact placement even without a final assistant answer. The host owns view-state binding, introductory text and custom renderer registration.
-
-Session snapshots contain session identity, expiry, sequence and ordered `turns`, with no parallel messages, artifacts or timeline collections. Each turn owns its ordered `timeline`, including its initiating user message and self-contained artifact envelopes, plus `turn_id`, `user_message_id` and precise `status`: `pending`, `in_progress`, `closing`, `completed`, `generation_failed` or `conflict`. These records are the sole snapshot lifecycle contract. The backend projects initiating user identities from its authoritative timeline, admission from its internal active turn and terminal outcomes from retained history. Timeline messages carry required `is_final`, projected only from retained explicit final records and mapped directly to UI `isFinal`. Intermediate messages keep their separate kind. Terminal outcomes take precedence over received final text; final content and its marker survive later failure. The controller maps pending, in-progress and closing work to UI `active`, and generation failure or conflict to UI `failed`, without reconstructing associations or inferring completion from answer text. Observer interruption marks only the observed active turn `unknown` and retains received content. The accepted user message is placed in its acknowledged turn immediately, using a provisional message identity until the first snapshot supplies the authoritative identity. If observation fails before that snapshot, this turn and message remain visible with an unknown outcome.
-
-The supported HTTP contract is this repository's AI Service conversation API. `ConversationTransport` exposes `generateTurn` for accepted start identity and `observeTurn` as an abortable async iterable of typed stream events. The HTTP transport validates generated runtime schemas for response bodies and decoded SSE events, and never reconnects automatically. The controller owns snapshot consistency checks for every transport, including custom ones: session ownership, initiating user anchors, turn/item identity uniqueness, and embedded artifact ownership. Snapshot checks, upserts, and built-in tool/failure presentation IDs use one shared timeline identity function. Stateful stream ordering and sequence checks remain in the controller. The controller retains one turn collection in the API timeline shape and derives the UI turns from it. Acceptance, snapshots, timeline upserts, closing, terminal outcomes, and observation loss all update this collection; there is no separate lifecycle patch on UI turns or closing flag. Its internal status also permits `unknown` for unfinished work whose observation was lost, while preserving already known terminal outcomes. The controller first attaches to its accepted turn, applies the retained snapshot, and inserts or replaces items within the supplied turn by stable identity and turn-local position. Invalid ownership, identity or position ends observation. The controller derives reconciliation users from these timelines and maps each supplied turn into a UI turn with its own ordered content. There is no separate flat content input. Artifact envelopes are available atomically with their rows. The controller hides assistant loading once the current turn has a visible intermediate message, tool call, artifact, answer or failure. An artifact omitted by the host mapper does not count as visible output; previous-turn content does not suppress a new turn?s indicator. Once hidden, it stays hidden for that turn. Backend closing also hides the indicator, including when supplied in the initial snapshot. Stream closing and terminal events derive from the same immutable snapshot as their preceding timeline upserts, so final output is delivered before terminal completion. Submission stays disabled until typed terminal state, while drafting is available once the user message is accepted; EOF, malformed events, and observation loss retain output and report an unknown outcome without reconnect or retry actions.
-
-Append/start request uncertainty uses authoritative session state once to avoid duplicate execution. Start recovery considers the latest submitted turn; a newly pending turn cannot be mistaken for an older terminal one, and no automatic retry is introduced. This is separate from observer interruption: no read or replacement request restores a lost observer. `start()` creates a fresh session; `dispose()` and replacement sessions abort observation and ignore stale callbacks while backend work continues. There is no resume API, refresh recovery, browser session persistence, generation retry, or cancellation control. The `/ui` entry point remains entirely controlled and network-independent.
-
-`HttpConversationTransport(apiBaseUrl, configuration, applicationUser, input?)` requires an explicit application identity. Every request, including SSE observation, carries it as `X-Application-User`. The backend accepts a `source:id` value with exactly one colon and non-empty portions without whitespace; prefixes are unrestricted and users are not looked up. Missing or malformed headers return HTTP 422 with a typed `request_validation` error. This trusted-LAN identity is not authenticated, and the backend binds each created session to that exact identity. Reads, messages, turn starts, and SSE observation require the same owner; another identity receives the existing HTTP 404 `unknown` error. Changing the caller identity does not transfer sessions or cancel admitted work. Create a transport for the host's selected identity; the demo uses `demo:default`.
-
-For selected-user changes, the host must immediately clear its visible content, status, and draft, dispose the previous controller, and discard it. `dispose()` invalidates pending request callbacks and aborts observation; it does not publish an empty view or cancel backend work. Require a selected user before creating a conversation. Construct a fresh transport and controller using the new stable identity (Kochwiki uses `kochwiki:<stable-user-id>`), then start a fresh conversation when the host needs one. Do not reuse the previous transport, mutate its identity, or resume its session when returning to a previously selected user.
-
-Expected routing is host frontend ? same-origin backend/proxy ? AI Service gateway. Relays must forward `X-Application-User`, preserve response bodies and status codes, allow agent-turn durations, and avoid automatic retries of state-changing message/turn requests. Consumer relay implementation and authentication/session authorization are deferred. Same-origin routing is not an authorization guarantee.
+For selected-user changes, clear visible content, status and draft, dispose the old controller and create a new transport and controller for the selected identity. Disposal aborts observation and ignores stale asynchronous results; it does not cancel backend execution. Sessions are not transferred between identities.
 
 ## Built-package verification
 
-From `frontend`, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This checks actual package exports and declarations with ordinary package resolution, exercises the built conversation module, rejects arbitrary configuration keys and checks that the root exports no API. Workspace source aliases are not used.
+From `frontend`, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This checks actual package exports and declarations with ordinary package resolution, exercises the built conversation module, checks required application identity and verifies that the root exports no API. Workspace source aliases are not used.
 
 ## Host theme
 
@@ -191,7 +177,7 @@ The component inherits typography. Its chat-specific styles are compiled into th
 
 The library publishes to `https://npm.pkg.github.com` and is associated with `roithme0/ai-service`. The `Build and publish app and chat UI` workflow builds the library on pull requests and pushed `v`-prefixed version tags in its distinct `build-chat-ui` job, uploading the built package as a workflow artifact. The `publish-chat-ui` job runs only for release tags and downloads that same artifact. Only this publish job receives `packages: write` permission. The same workflow publishes both Docker images through separate application jobs; every release publishes all three artifacts from the same commit, even when a component has not changed.
 
-The tag determines the published version and npm channel: `v1.2.0` publishes `1.2.0` under `latest`; `v1.2.0-alpha` or `v1.2.0-alpha.123` publishes the corresponding prerelease under `alpha`. Tags must start with `v` followed by three numeric version parts, optionally followed by `-alpha` or `-alpha.N`, where `N` contains one or more digits. Numeric parts cannot have leading zeroes except for `0`; other suffixes are rejected. The leading `v` is stripped from published versions. Prefix-free tags and the old `app-v*` and `chat-ui-v*` tags do not trigger releases. Release tags are validated before frontend dependency installation and the library build. The publish job sets the version in `dist/chat-ui/package.json` and publishes using its `GITHUB_TOKEN` with an explicit npm dist-tag. The source package keeps the local placeholder version `0.0.0` and is not modified by the workflow.
+The tag determines the published version and npm channel: `v1.2.0` publishes `1.2.0` under `latest`; `v1.2.0-alpha` or `v1.2.0-alpha.123` publishes the corresponding prerelease under `alpha`. Tags must start with `v` followed by three numeric version parts, optionally followed by `-alpha` or `-alpha.N`, where `N` contains one or more digits. Numeric parts cannot have leading zeroes except for `0`; other suffixes are rejected. The leading `v` is stripped from published versions. Release tags are validated before frontend dependency installation and the library build. The publish job sets the version in `dist/chat-ui/package.json` and publishes using its `GITHUB_TOKEN` with an explicit npm dist-tag. The source package keeps the local placeholder version `0.0.0` and is not modified by the workflow.
 
 To release the repository, commit the changes, then tag that commit and push the tag. For example:
 
@@ -207,11 +193,11 @@ git tag v1.3.0-alpha.1
 git push origin v1.3.0-alpha.1
 ```
 
-Each release needs a new version; choose the next shared version based on changes to either the application or library, including breaking changes. The first shared version should advance beyond the previously released versions of both components. Both publication jobs wait for the application and library builds to succeed, including the application build's contract checks and backend tests. A failed build prevents all publication. Publication remains independent between jobs, so a registry failure can still leave a partial release; check the entire workflow succeeded before treating a release as complete. Kochwiki has read access under the package's **Manage Actions access** settings and consumes the package from GitHub Packages. Its CI passes the repository's short-lived `GITHUB_TOKEN` to Docker as a BuildKit secret.
+Each release needs a new version; choose the next shared version based on changes to either the application or library, including breaking changes. Both publication jobs wait for the application and library builds to succeed, including the application build's contract checks and backend tests. A failed build prevents all publication. Publication remains independent between jobs, so a registry failure can still leave a partial release; check the entire workflow succeeded before treating a release as complete. Kochwiki has read access under the package's **Manage Actions access** settings and consumes the package from GitHub Packages. Its CI passes the repository's short-lived `GITHUB_TOKEN` to Docker as a BuildKit secret.
 
 ## Local development with Kochwiki
 
-After Kochwiki has migrated to the published package name, use a direct local link for interactive development. No global npm link is created.
+Use a direct local link for interactive development. No global npm link is created.
 
 Build the library once before creating the link, then leave its watcher running:
 
@@ -233,45 +219,11 @@ Kochwiki preserves the package symlink and excludes `@roithme0/chat-ui` from dev
 
 Docker, CI, and production builds always install the declared GitHub Packages version. They do not use the sibling checkout or its link.
 
-## Legacy local tarball handoff
-
-From `ai-service/frontend`:
-
-```powershell
-npm ci
-npm run pack:chat-ui
-```
-
-This builds a partially compiled Angular package under `dist/chat-ui` and creates `dist/roithme0-chat-ui-0.0.0.tgz`. Angular common/core/platform-browser and Angular Material/CDK are peer dependencies rather than bundled runtimes. The package contains the public declarations, compiled component styles, packaged SVG icon definitions, and library JavaScript. The application remains independently buildable with `npm run build:app`.
-
-From the common parent directory containing both repositories:
-
-```powershell
-New-Item -ItemType Directory -Force kochwiki-v2/frontend/vendor
-Copy-Item -LiteralPath ai-service/frontend/dist/roithme0-chat-ui-0.0.0.tgz -Destination kochwiki-v2/frontend/vendor/
-Set-Location kochwiki-v2/frontend
-npm install ./vendor/roithme0-chat-ui-0.0.0.tgz
-npm run build -- --configuration production --progress=false
-```
-
-When migrating from the original package name or the artifact-renderer POC, remove the old dependency, update UI imports to `@roithme0/chat-ui/ui`, and adapt the host to the controlled `content` input and `messageSubmitted` output before running its build. Run the consumer's focused tests for its current chat host after that migration; they should cover message projection and submission orchestration rather than the removed POC renderer. This library does not prescribe a consumer test-file path.
-
-The installed dependency points to the copied tarball in Kochwiki's build context. Keep the tarball and updated manifest/lockfile together so `npm ci` and Docker builds do not require the AI Service checkout. Do not install using a source alias, symlink, force flag, or sibling source import.
-
-Local builds always use the placeholder version. Rebuild and pack after changing the library:
-
-```powershell
-# In ai-service/frontend:
-npm run pack:chat-ui
-```
-
-Rebuilding alone does not update the legacy Kochwiki tarball installation. Repeatedly installing a changed tarball with the same filename and version can reuse an old installed copy. Prefer the direct-link workflow after the registry migration.
-
 ## Browser verification
 
 Run the backend on port 8004 and `npm run start:app` in `frontend`, then open `http://localhost:4204` at a portrait-phone viewport. The host creates an empty `demo` session and advances a scripted sequence through the real backend. No model credentials or Kochwiki access is required; see [frontend setup](../../README.md) for commands.
 
-Submit arbitrary text to check the loading state and introduction, then both the `demo.greeting` artifact and the `demo.greetings` list of 30 greetings in the same turn, then a scripted error and completion guidance on the following message. The error's “Demo-Aktion (ohne Funktion)” button leaves the state unchanged. The demo host explicitly selects JSON presentation for both artifacts before the assistant reply. Check that the list starts collapsed and that “Mehr anzeigen” and “Weniger anzeigen” expand and collapse it. One more message triggers a frontend-only simulated 405 compatibility error without a retry action; the backend continues accepting messages. Refresh to restart with empty history; no dedicated restart button is provided. Generic error recovery actions remain available when failures occur. Also check that history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling.
+Submit arbitrary text to check the loading state and introduction, then both JSON artifacts, titled `demo.greeting` and `demo.greetings` (a list of 30 greetings) in the same turn, then a scripted error and completion guidance on the following message. The error's “Demo-Aktion (ohne Funktion)” button leaves the state unchanged. The demo host explicitly selects JSON presentation for both artifacts before the assistant reply. Check that the list starts collapsed and that “Mehr anzeigen” and “Weniger anzeigen” expand and collapse it. One more message triggers a frontend-only simulated 405 compatibility error without a retry action; the backend continues accepting messages. Refresh to restart with empty history; no dedicated restart button is provided. Generic error recovery actions remain available when failures occur. Also check that history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling.
 
 ## Advertising presentation capabilities
 
@@ -282,23 +234,19 @@ supply them beside caller context when creating a model-backed session:
 
 ```typescript
 import { JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
+import { HttpSessionTransport } from '@roithme0/chat-ui/conversation';
 
-const input = {
-  context: { selectedItem: item },
-  artifactCapabilities: [JSON_ARTIFACT_CAPABILITY],
-};
-const transport = new HttpConversationTransport(
-  '/ai/api/v1',
-  AgentConfiguration.kochwiki,
-  'kochwiki:42',
-  input,
-);
+const transport = new HttpSessionTransport('/api/v1', 'demo', 'demo:default');
+const session = await transport.createSession({
+  initial_context: { selectedItem: item },
+  artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
+});
 ```
 
 The AI Service supplies the agent with a local `present_artifact` tool. The agent
 chooses when presentation helps and sends complete data; the renderer does not
 fetch missing details. JSON presentation uses type `json` and payload
-`{ value: <any JSON value> }`. With the default `presentArtifact` mapper, a backend
+`{ value: <any JSON value> }`. With the default `presentSessionArtifact` mapper, a backend
 presentation title becomes the card headline, and its optional `subtitle` appears
 as plain secondary text beneath it. The subtitle remains visible when the body
 is collapsed. Omitting capabilities keeps a
@@ -323,3 +271,68 @@ empty object, so schema-required fields remain required. The default mapper
 passes metadata to `ChatArtifact.metadata`; custom templates access it through
 `let-artifact="artifact"`. Metadata has no built-in rendering or action behavior;
 the consumer frontend interprets it and owns any domain actions.
+
+## Session HTTP transport
+
+The `/conversation` entry point exports `HttpSessionTransport` and its
+`SessionTransport` interface for the Pydantic AI session API used by the demo
+application at `/api/v1`. Kochwiki uses the same contract at `/api/v1`
+with configuration key `kochwiki`.
+
+```ts
+const transport = new HttpSessionTransport('/api/v1', 'demo', 'demo:default');
+const session = await transport.createSession({
+  initial_context: { selectedItem: item },
+  artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
+});
+const snapshot = await transport.readSession(session.session_id);
+await transport.submitPrompt(session.session_id, 'Please update this item.');
+```
+
+`submitPrompt()` returns `{ kind: 'accepted' }` after admission, without a turn ID.
+`observeSession(sessionId, signal)` returns an async iterable of complete snapshot
+events across turns and terminal observation error events. Snapshots preserve the
+backend's ordered `history` of independent user prompts and run groups, including
+empty groups whose native run ID is not yet available. Observation errors describe
+the connection; turn outcomes come from snapshot lifecycle status. Clean EOF means
+the observation ended, not that a turn completed. Aborting or leaving the iterable
+releases the reader and does not cancel execution. The transport does not retry;
+`SessionController` owns observation reconnection. There are no optimistic messages
+or frontend lifecycle reconstruction.
+
+HTTP failures throw `SessionHttpError` with status and kind; HTTP 405 uses
+`method_not_allowed` independently of its response body, and FastAPI 422 responses
+use `validation_error`. Network and malformed-response failures throw
+`SessionTransportError`. Observation error frames remain typed `SessionEvent`
+values, followed by the end of the iterable. The transport uses the generated
+schemas directly. The backend response schemas require explicit discriminators
+and describe recursive finite JSON values for context and artifact data.
+
+The `conversation/generated` contract is generated from an isolated
+FastAPI app mounting `app.agentic.http.create_session_router(lambda: {})`, using
+the existing `@hey-api/openapi-ts` TypeScript and Zod plugins. It does not depend
+on production mounting. Backend regression
+coverage compares its OpenAPI document with the actual router.
+
+The generation and drift-check commands cover this contract. From
+`frontend` in PowerShell:
+
+```powershell
+$env:PYTHON = (Resolve-Path ../backend/.venv/Scripts/python.exe).Path
+npm.cmd run generate:conversation-contract
+npm.cmd run check:conversation-contract
+```
+
+## Session lifecycle and recovery
+
+`SessionController` owns prompt submission, session observation and recovery.
+`HttpSessionTransport` handles HTTP and SSE, and `presentSession` projects the
+backend snapshot into the rendering component's view model.
+
+Create a `SessionController(transport, publish)` and bind its `SessionViewState.turns`, composer flags and `status` to the controlled component. Call `start(initialization?)`, forward submissions to `submit(text, acknowledge)`, forward status actions to `performAction(id)`, and call `dispose()` on teardown. `snapshot` exposes the latest generated `PresentedSession` contract; `admission` and `observation` report request and connection outcomes separately from its authoritative execution lifecycles. `SessionArtifactMapper` receives the generated artifact type and can omit artifacts with `null`; the default `presentSessionArtifact` maps its typed payload envelope directly.
+
+A snapshot with `error: 'conversation_limit_reached'` keeps history visible, disables submission, and shows `Conversation limit reached` through the existing assistant error status. An admission rejection with that kind also blocks submission while observation continues. Exhaustion has no retry action; reads and observation remain available until session expiry.
+
+Admission success calls the submission acknowledgement without inserting a prompt. Only observer snapshots supply conversation content. A missing admission response retains the draft, reports uncertainty and disables submission; healthy observation continues, without reconciliation reads, text matching, retries or guessed acknowledgement. Disposal aborts observation and ignores late HTTP results, without cancelling backend execution.
+
+`presentSession` derives ordered prompt fragments and execution groups directly from the native snapshot. Run keys use session identity and presentation ordinals, never prompt text or run IDs as application execution identity; section tracking keys remain internal to the renderer. Completed runs anchor shared detail toggles on the first explicit final answer, otherwise the last unphased text; commentary alone is not an answer. Failed, cancelled and execution-uncertain groups remain expanded. Known terminal lifecycle outcomes remain intact after observation loss. The controller reconnects after a one-second delay on network failures, unexpected EOF, observer capacity limits, overflow and internal observation errors. Sending stays disabled until a fresh snapshot arrives; its lifecycle determines whether execution is still active or finished. Compatibility failures, unavailable sessions and malformed responses stop reconnection. Disposal cancels pending reconnection. Observation recovery never resubmits a prompt or resolves uncertain admission.

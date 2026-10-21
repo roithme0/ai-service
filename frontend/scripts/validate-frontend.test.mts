@@ -197,7 +197,7 @@ void test('configuration checks typed code, external and inline templates, and s
     ),
   );
   const [library] = await eslint.lintText('Promise.resolve(1);', {
-    filePath: join(frontend, 'projects/chat-ui/conversation/src/conversation-controller.ts'),
+    filePath: join(frontend, 'projects/chat-ui/conversation/src/session-controller.ts'),
   });
   assert.ok(
     library.messages.some(
