@@ -39,6 +39,12 @@ const artifact: PresentationPart = {
   },
 };
 const answer: PresentationPart = { part_kind: 'text', phase: 'final_answer', content: 'Answer' };
+const unphased: PresentationPart = { part_kind: 'text', content: 'Unphased', phase: null };
+const commentary: PresentationPart = {
+  part_kind: 'text',
+  content: 'Commentary',
+  phase: 'commentary',
+};
 
 describe('native session presentation', () => {
   it('preserves independent repeated prompt fragments and ordered tool/artifact groups', () => {
@@ -84,13 +90,7 @@ describe('native session presentation', () => {
     expect(after[1].content[1]).toEqual(before[1].content[1]);
   });
 
-  it('chooses explicit final text across separated groups, otherwise the last unphased text, never commentary', () => {
-    const unphased: PresentationPart = { part_kind: 'text', content: 'Unphased', phase: null };
-    const commentary: PresentationPart = {
-      part_kind: 'text',
-      content: 'Commentary',
-      phase: 'commentary',
-    };
+  it('preserves explicit final markers across separated groups without promoting unphased text', () => {
     const explicit = presentSession(
       snapshot([
         run('completed', [tool, answer, { ...answer, content: 'Another final' }]),
@@ -106,22 +106,41 @@ describe('native session presentation', () => {
     });
     expect(explicit[2].content[0]).toMatchObject({ kind: 'text', isFinal: false });
     expect(explicit[2].content.map((item) => item.kind)).toEqual(['text', 'intermediate']);
-    const fallback = presentSession(
-      snapshot([run('completed', [tool, unphased, { ...unphased, content: 'Last' }, commentary])]),
-    );
-    expect(fallback[0].content.map((item) => item.kind)).toEqual([
-      'tool',
-      'text',
-      'text',
-      'intermediate',
-    ]);
-    expect(fallback[0].content[2]).toMatchObject({ isFinal: true, text: 'Last' });
     expect(
       presentSession(snapshot([run('completed', [tool, commentary])]))[0].content.every(
         (item) => item.kind !== 'text',
       ),
     ).toBe(true);
   });
+
+  it.each([
+    { status: 'running', observationLost: false },
+    { status: 'running', observationLost: true },
+    { status: 'completed', observationLost: false },
+    { status: 'failed', observationLost: false },
+    { status: 'cancelled', observationLost: false },
+  ] as const)(
+    'never infers a final answer from unphased text ($status, observationLost=$observationLost)',
+    ({ status, observationLost }) => {
+      const result = presentSession(
+        snapshot([
+          run(status, [tool, unphased]),
+          { part_kind: 'user-prompt', content: 'Independent prompt' },
+          run(status, [{ ...unphased, content: 'Last' }, commentary]),
+        ]),
+        observationLost,
+      );
+      const messages = result
+        .flatMap((group) => group.content)
+        .filter((item) => item.kind === 'text');
+      expect(messages.map((item) => ({ text: item.text, isFinal: item.isFinal }))).toEqual([
+        { text: 'Unphased', isFinal: false },
+        { text: 'Independent prompt', isFinal: false },
+        { text: 'Last', isFinal: false },
+      ]);
+      expect(result[2].content[1]).toMatchObject({ kind: 'intermediate', text: 'Commentary' });
+    },
+  );
 
   it('retains terminal lifecycles after observation loss and supports omitted artifacts', () => {
     const result = presentSession(

@@ -267,6 +267,52 @@ describe('ChatUiComponent', () => {
     ).toBe('false');
   });
 
+  it('keeps unphased session text visible without final-answer controls or automatic collapse', () => {
+    const time = '2026-10-21T12:00:00Z';
+    const turn: PresentedTurn = {
+      part_kind: 'turn',
+      lifecycle: { run_id: 'run', status: 'running', started_at: time, finished_at: null },
+      parts: [
+        { part_kind: 'text', phase: 'commentary', content: 'Checking' },
+        { part_kind: 'tool-call', tool_call_id: 'call', tool_name: 'check', status: 'success' },
+        { part_kind: 'text', phase: null, content: 'Unphased answer' },
+      ],
+    };
+    const fixture = createFixture([]);
+    const element = fixtureElement(fixture);
+
+    for (const status of ['running', 'completed'] as const) {
+      fixture.componentRef.setInput(
+        'turns',
+        presentSession({
+          session_id: 'session',
+          expires_at: time,
+          error: null,
+          history: [
+            {
+              ...turn,
+              lifecycle: {
+                ...turn.lifecycle,
+                status,
+                finished_at: status === 'completed' ? time : null,
+              },
+            },
+          ],
+        }),
+      );
+      fixture.detectChanges();
+      expect(element.querySelector('ai-chat-assistant-message .markdown')?.textContent).toBe(
+        'Unphased answer',
+      );
+      expect(element.querySelector('.details-toggle')).toBeNull();
+      expect(element.querySelector('[data-detail-anchor]')).toBeNull();
+      expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!)).toBe(
+        false,
+      );
+      expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(false);
+    }
+  });
+
   it('retains native artifacts and shared run detail expansion through replacement snapshots and nullable ID capture', () => {
     const lifecycle: PresentedTurn['lifecycle'] = {
       run_id: null,
@@ -333,7 +379,7 @@ describe('ChatUiComponent', () => {
         {
           part_kind: 'turn',
           lifecycle: completed,
-          parts: [{ part_kind: 'text', phase: null, content: 'Answer' }],
+          parts: [{ part_kind: 'text', phase: 'final_answer', content: 'Answer' }],
         },
       ],
     };
