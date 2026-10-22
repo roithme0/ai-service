@@ -22,6 +22,8 @@
         type="submit"
         aria-label="Nachricht senden"
         [disabled]="disabled() || editingDisabled() || draft().trim() === ''"
+        (pointerdown)="preserveComposerFocus($event, composer)"
+        (mousedown)="preserveComposerFocus($event, composer)"
       >
         <mat-icon svgIcon="ai-chat:send" aria-hidden="true" />
       </button>

@@ -18,6 +18,12 @@ export class ComposerComponent {
   readonly messageSubmitted = output<ChatSubmission>();
   protected readonly draft = signal('');
 
+  protected preserveComposerFocus(event: MouseEvent, textarea: HTMLTextAreaElement): void {
+    if (event.button === 0 && textarea.ownerDocument.activeElement === textarea) {
+      event.preventDefault();
+    }
+  }
+
   protected preventBlockedEdit(event: InputEvent): void {
     if (this.editingDisabled() && event.cancelable) {
       event.preventDefault();

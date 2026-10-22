@@ -715,6 +715,73 @@ describe('ChatUiComponent', () => {
     expect(document.activeElement).toBe(textarea);
   });
 
+  it.each(['mouse', 'touch', 'pen', 'mousedown'])(
+    'preserves composer focus when sending with %s',
+    (pointerType) => {
+      const fixture = createFixture([]);
+      const element = fixtureElement(fixture);
+      const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
+      const button = element.querySelector('.send-button') as HTMLButtonElement;
+      const emit = vi.spyOn(fixture.componentInstance.messageSubmitted, 'emit');
+      textarea.value = 'Hello';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      textarea.focus();
+      const blur = vi.fn();
+      textarea.addEventListener('blur', blur);
+      const press =
+        pointerType === 'mousedown'
+          ? new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true })
+          : new PointerEvent('pointerdown', {
+              pointerType,
+              button: 0,
+              isPrimary: true,
+              bubbles: true,
+              cancelable: true,
+            });
+
+      button.dispatchEvent(press);
+      expect(press.defaultPrevented).toBe(true);
+      expect(emit).not.toHaveBeenCalled();
+      button.click();
+      expect(emit).toHaveBeenCalledOnce();
+      fixture.componentRef.setInput('composerEditingDisabled', true);
+      fixture.detectChanges();
+      emit.mock.calls[0][0].acknowledge();
+      fixture.detectChanges();
+      expect(textarea.value).toBe('');
+      expect(document.activeElement).toBe(textarea);
+      expect(blur).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['pointerdown', 'mousedown'])(
+    'allows normal %s focus behavior outside an active composer and for secondary clicks',
+    (eventType) => {
+      const fixture = createFixture([]);
+      const element = fixtureElement(fixture);
+      const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
+      const button = element.querySelector('.send-button') as HTMLButtonElement;
+      textarea.value = 'Hello';
+      textarea.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      button.focus();
+      const press = new MouseEvent(eventType, { button: 0, bubbles: true, cancelable: true });
+      button.dispatchEvent(press);
+      expect(press.defaultPrevented).toBe(false);
+      expect(document.activeElement).toBe(button);
+
+      textarea.focus();
+      const secondaryPress = new MouseEvent(eventType, {
+        button: 2,
+        bubbles: true,
+        cancelable: true,
+      });
+      button.dispatchEvent(secondaryPress);
+      expect(secondaryPress.defaultPrevented).toBe(false);
+    },
+  );
+
   it.each(['insertText', 'insertFromPaste', 'deleteContentBackward', 'insertCompositionText'])(
     'blocks %s while sending without disabling or blurring the textarea',
     (inputType) => {
