@@ -34,6 +34,8 @@ const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
   },
 ];
 
+const FOCUS_CONTROLS = ['.send-button', '.details-toggle', '.artifact-toggle'] as const;
+
 const DETAILS_CONTENT: readonly ChatContent[] = [
   { kind: 'text', isFinal: false, id: 'request', role: 'user', text: 'Request' },
   { kind: 'intermediate', id: 'detail', text: 'Checking' },
@@ -1043,20 +1045,58 @@ describe('ChatUiComponent', () => {
     },
   );
 
-  it.each(['pointerdown', 'mousedown'])(
-    'allows normal %s focus behavior outside an active composer and for secondary clicks',
-    (eventType) => {
-      const fixture = createFixture([]);
+  it.each(
+    ['.details-toggle', '.artifact-toggle'].flatMap((selector) =>
+      ['mouse', 'touch', 'pen', 'mousedown'].map((pointerType) => ({ selector, pointerType })),
+    ),
+  )(
+    'preserves composer focus when toggling $selector with $pointerType',
+    ({ selector, pointerType }) => {
+      const fixture = createFocusFixture();
       const element = fixtureElement(fixture);
-      const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
-      const button = element.querySelector('.send-button') as HTMLButtonElement;
-      textarea.value = 'Hello';
-      textarea.dispatchEvent(new Event('input'));
-      fixture.detectChanges();
+      const textarea = element.querySelector('textarea')!;
+      const button = element.querySelector<HTMLButtonElement>(selector)!;
+      textarea.focus();
+      const blur = vi.fn();
+      textarea.addEventListener('blur', blur);
+
+      for (const expanded of [true, false]) {
+        const press =
+          pointerType === 'mousedown'
+            ? new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true })
+            : new PointerEvent('pointerdown', {
+                pointerType,
+                button: 0,
+                isPrimary: true,
+                bubbles: true,
+                cancelable: true,
+              });
+        button.dispatchEvent(press);
+        expect(press.defaultPrevented).toBe(true);
+        button.click();
+        fixture.detectChanges();
+        expect(button.getAttribute('aria-expanded')).toBe(String(expanded));
+        expect(document.activeElement).toBe(textarea);
+        expect(blur).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each(
+    FOCUS_CONTROLS.flatMap((selector) =>
+      ['pointerdown', 'mousedown'].map((eventType) => ({ selector, eventType })),
+    ),
+  )(
+    'prevents $eventType focus on $selector regardless of the focused element or mouse button',
+    ({ selector, eventType }) => {
+      const fixture = createFocusFixture();
+      const element = fixtureElement(fixture);
+      const textarea = element.querySelector('textarea')!;
+      const button = element.querySelector<HTMLButtonElement>(selector)!;
       button.focus();
       const press = new MouseEvent(eventType, { button: 0, bubbles: true, cancelable: true });
       button.dispatchEvent(press);
-      expect(press.defaultPrevented).toBe(false);
+      expect(press.defaultPrevented).toBe(true);
       expect(document.activeElement).toBe(button);
 
       textarea.focus();
@@ -1066,9 +1106,21 @@ describe('ChatUiComponent', () => {
         cancelable: true,
       });
       button.dispatchEvent(secondaryPress);
-      expect(secondaryPress.defaultPrevented).toBe(false);
+      expect(secondaryPress.defaultPrevented).toBe(true);
     },
   );
+
+  it.each(FOCUS_CONTROLS)('retains keyboard focus on %s when activated', (selector) => {
+    const fixture = createFocusFixture();
+    const button = fixtureElement(fixture).querySelector<HTMLButtonElement>(selector)!;
+    button.focus();
+    const key = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    button.dispatchEvent(key);
+    expect(key.defaultPrevented).toBe(false);
+    button.click();
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(button);
+  });
 
   it.each(['insertText', 'insertFromPaste', 'deleteContentBackward', 'insertCompositionText'])(
     'blocks %s while sending without disabling or blurring the textarea',
@@ -1581,6 +1633,32 @@ function createFixture(
   fixture.componentRef.setInput('bannerDescription', 'Description');
   setContent(fixture, messages);
   fixture.componentRef.setInput('composerDisabled', options.disabled ?? false);
+  fixture.detectChanges();
+  return fixture;
+}
+
+function createFocusFixture(): ComponentFixture<ChatUiComponent> {
+  const fixture = createFixture([
+    ...DETAILS_CONTENT,
+    {
+      kind: 'artifact',
+      id: 'focus-artifact',
+      type: 'json',
+      headline: 'Result',
+      payload: { value: 'Long result' },
+    },
+  ]);
+  const element = fixtureElement(fixture);
+  const body = element.querySelector<HTMLElement>('.artifact-body')!;
+  Object.defineProperty(body, 'scrollHeight', { configurable: true, value: 500 });
+  Object.defineProperty(body, 'clientHeight', { configurable: true, value: 100 });
+  const artifact = fixture.debugElement
+    .query(By.directive(ArtifactCardComponent))
+    .injector.get(ArtifactCardComponent);
+  artifact['measure']();
+  const textarea = element.querySelector('textarea')!;
+  textarea.value = 'Hello';
+  textarea.dispatchEvent(new Event('input'));
   fixture.detectChanges();
   return fixture;
 }

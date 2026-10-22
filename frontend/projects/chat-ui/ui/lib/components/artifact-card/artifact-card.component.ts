@@ -11,10 +11,11 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import type { ChatArtifact, ChatArtifactRenderer } from '../../models/chat-message';
+import { PreventPointerFocusDirective } from '../../directives/prevent-pointer-focus.directive';
 
 @Component({
   selector: 'ai-chat-artifact-card',
-  imports: [NgTemplateOutlet, MatIconModule],
+  imports: [NgTemplateOutlet, MatIconModule, PreventPointerFocusDirective],
   templateUrl: './artifact-card.component.html',
   styleUrl: './artifact-card.component.scss',
 })
