@@ -14,7 +14,7 @@ Run the local application from the repository root:
 docker compose -f deployment/docker-compose-local.yml up --build
 ```
 
-Open `http://localhost:8000` (or the configured `GATEWAY_PORT`) for the scripted
+Open `http://localhost:8004` (or the configured `GATEWAY_PORT`) for the scripted
 chat UI demo. It requires no OpenAI credentials, model configuration, or reachable
 Kochwiki service. Submit any text to advance through an introduction, two JSON artifacts, a scripted
 turn failure, and completion guidance. Refresh the page to restart with a new empty session.
@@ -36,7 +36,7 @@ Run backend tests in a container:
 docker compose -f deployment/tests/backend/compose.yml up --build --abort-on-container-exit --exit-code-from backend-tests
 ```
 
-The staging and production definitions deploy prebuilt backend and frontend images from Docker Hub. Staging uses the `alpha` tags and production uses the `latest` tags. The gateway is the only externally exposed application service; its port can be overridden with `GATEWAY_PORT`.
+The staging and production definitions deploy prebuilt backend and frontend images from Docker Hub. Staging uses the `alpha` tags and gateway port 8004; production uses the `latest` tags and gateway port 8005. The gateway is the only externally exposed application service; its port can be overridden with `GATEWAY_PORT`.
 
 Push a `v`-prefixed repository version tag to publish both application images and the chat UI package from the same commit through the `Build and publish app and chat UI` workflow. For example, `v1.2.0` publishes version `1.2.0` and updates `latest`; `v1.3.0-alpha.1` publishes version `1.3.0-alpha.1` and updates `alpha`. Every release publishes all components, including unchanged ones. The `build-app` job builds both images and exports OCI archives with provenance and SBOM metadata. Both `publish-app` and `publish-chat-ui` wait for the application and library builds to succeed, including the application build's contract checks and backend tests, before publishing the built artifacts. A failed build prevents all publication; a registry failure during publication can still leave a partial release. Verify the entire workflow succeeded before treating the release as complete. See the [library release instructions](../frontend/projects/chat-ui/README.md#github-packages-releases) for tag rules and commands.
 
