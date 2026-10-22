@@ -13,6 +13,6 @@ export class AssistantMessageComponent {
   readonly message = input.required<ChatTextMessage>();
   readonly showDetailsToggle = input(false);
   readonly detailsExpanded = input(false);
-  readonly detailsToggled = output<void>();
+  readonly detailsToggled = output<HTMLButtonElement>();
   protected readonly renderAssistantMarkdown = renderAssistantMarkdown;
 }

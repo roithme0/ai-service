@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   afterEveryRender,
   computed,
@@ -49,6 +50,8 @@ export class ChatUiComponent {
   private readonly history = viewChild.required<ElementRef<HTMLElement>>('history');
 
   private scrollHistoryToBottom = false;
+  private detailAnchor: { readonly button: HTMLButtonElement; readonly top: number } | null = null;
+  private anchorFrame: number | null = null;
   private readonly expandedRuns = signal<ReadonlySet<string>>(new Set());
 
   readonly bannerTitle = input.required<string>();
@@ -107,6 +110,7 @@ export class ChatUiComponent {
   }
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => this.clearDetailAnchor());
     registerChatIcons(this.iconRegistry, this.sanitizer);
     effect(() => {
       this.turns();
@@ -114,6 +118,7 @@ export class ChatUiComponent {
       this.scrollHistoryToBottom = true;
     });
     afterEveryRender(() => {
+      if (this.detailAnchor && this.anchorFrame === null) this.preserveDetailAnchor();
       if (!this.scrollHistoryToBottom) return;
       this.scrollHistoryToBottom = false;
       const history = this.history().nativeElement;
@@ -141,9 +146,11 @@ export class ChatUiComponent {
     );
   }
 
-  protected toggleDetails(turn: ChatTurn): void {
+  protected toggleDetails(turn: ChatTurn, button: HTMLButtonElement): void {
     const runKey = turn.runKey;
     if (runKey === null || !this.detailToggleAnchors().has(runKey)) return;
+    this.clearDetailAnchor();
+    this.detailAnchor = { button, top: button.getBoundingClientRect().top };
     const expanded = new Set(this.expandedRuns());
     if (expanded.has(runKey)) {
       expanded.delete(runKey);
@@ -151,5 +158,35 @@ export class ChatUiComponent {
       expanded.add(runKey);
     }
     this.expandedRuns.set(expanded);
+  }
+
+  private preserveDetailAnchor(): void {
+    this.anchorFrame = null;
+    const anchor = this.detailAnchor;
+    if (!anchor || !anchor.button.isConnected) {
+      this.clearDetailAnchor();
+      return;
+    }
+    const history = this.history().nativeElement;
+    history.scrollTop += anchor.button.getBoundingClientRect().top - anchor.top;
+    const transitioning = history
+      .getAnimations({ subtree: true })
+      .some(
+        (animation) =>
+          'transitionProperty' in animation &&
+          animation.transitionProperty === 'grid-template-rows' &&
+          animation.playState === 'running',
+      );
+    if (transitioning) {
+      this.anchorFrame = requestAnimationFrame(() => this.preserveDetailAnchor());
+    } else {
+      this.detailAnchor = null;
+    }
+  }
+
+  private clearDetailAnchor(): void {
+    if (this.anchorFrame !== null) cancelAnimationFrame(this.anchorFrame);
+    this.anchorFrame = null;
+    this.detailAnchor = null;
   }
 }

@@ -55,6 +55,7 @@ class RendererTemplateHost {
 describe('ChatUiComponent', () => {
   const scrollTo = vi.fn<Element['scrollTo']>();
   let originalScrollTo: PropertyDescriptor | undefined;
+  let originalGetAnimations: PropertyDescriptor | undefined;
 
   afterEach(() => {
     vi.useRealTimers();
@@ -64,12 +65,22 @@ describe('ChatUiComponent', () => {
     } else {
       Reflect.deleteProperty(Element.prototype, 'scrollTo');
     }
+    if (originalGetAnimations) {
+      Object.defineProperty(Element.prototype, 'getAnimations', originalGetAnimations);
+    } else {
+      Reflect.deleteProperty(Element.prototype, 'getAnimations');
+    }
   });
 
   beforeEach(() => {
     scrollTo.mockClear();
     originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
     Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scrollTo });
+    originalGetAnimations = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
+    Object.defineProperty(Element.prototype, 'getAnimations', {
+      configurable: true,
+      value: () => [],
+    });
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
 
@@ -390,7 +401,7 @@ describe('ChatUiComponent', () => {
     }
   });
 
-  it('expands and collapses details without requesting a scroll or changing the scroll offset', async () => {
+  it('anchors the toggle throughout expansion and collapse without requesting smooth scrolling', () => {
     const fixture = createFixture(DETAILS_CONTENT);
     const element = fixtureElement(fixture);
     const history = element.querySelector<HTMLElement>('.history')!;
@@ -398,15 +409,84 @@ describe('ChatUiComponent', () => {
     const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
     history.scrollTop = 300;
     scrollTo.mockClear();
+    let contentTop = 500;
+    let transitioning = true;
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
+      frames.push(callback);
+      return frames.length;
+    });
+    Object.defineProperty(history, 'getAnimations', {
+      value: () =>
+        transitioning ? [{ transitionProperty: 'grid-template-rows', playState: 'running' }] : [],
+    });
+    vi.spyOn(toggle, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, contentTop - history.scrollTop, 30, 30),
+    );
 
-    for (const collapsed of [false, true, false, true]) {
+    for (const collapsed of [false, true]) {
+      transitioning = true;
       toggle.click();
       fixture.detectChanges();
-      await fixture.whenStable();
       expect(isCollapsed(detail)).toBe(collapsed);
-      expect(history.scrollTop).toBe(300);
+      for (let step = 0; step < 3; step++) {
+        contentTop += collapsed ? -40 : 40;
+        transitioning = step < 2;
+        const pending = frames.splice(0);
+        expect(pending.length).toBeGreaterThan(0);
+        for (const frame of pending) frame(step * 16);
+        expect(toggle.getBoundingClientRect().top).toBe(200);
+      }
+      expect(frames).toHaveLength(0);
       expect(scrollTo).not.toHaveBeenCalled();
     }
+  });
+
+  it('anchors an immediate detail toggle when transitions are disabled', () => {
+    const fixture = createFixture(DETAILS_CONTENT);
+    const element = fixtureElement(fixture);
+    const history = element.querySelector<HTMLElement>('.history')!;
+    const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
+    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    history.scrollTop = 300;
+    vi.spyOn(toggle, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, (isCollapsed(detail) ? 500 : 620) - history.scrollTop, 30, 30),
+    );
+    const getAnimations = vi.fn<HTMLElement['getAnimations']>().mockReturnValue([]);
+    Object.defineProperty(history, 'getAnimations', { value: getAnimations });
+
+    for (const offset of [420, 300]) {
+      toggle.click();
+      fixture.detectChanges();
+      expect(history.scrollTop).toBe(offset);
+      expect(toggle.getBoundingClientRect().top).toBe(200);
+    }
+    expect(getAnimations).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels detail tracking on another toggle and on destruction', () => {
+    const fixture = createFixture(DETAILS_CONTENT);
+    const element = fixtureElement(fixture);
+    const history = element.querySelector<HTMLElement>('.history')!;
+    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    Object.defineProperty(history, 'getAnimations', {
+      value: () => [{ transitionProperty: 'grid-template-rows', playState: 'running' }],
+    });
+    const requestFrame = vi
+      .fn<typeof requestAnimationFrame>()
+      .mockReturnValueOnce(1)
+      .mockReturnValueOnce(2);
+    const cancelFrame = vi.fn<typeof cancelAnimationFrame>();
+    vi.stubGlobal('requestAnimationFrame', requestFrame);
+    vi.stubGlobal('cancelAnimationFrame', cancelFrame);
+
+    toggle.click();
+    fixture.detectChanges();
+    toggle.click();
+    fixture.detectChanges();
+    expect(cancelFrame).toHaveBeenCalledWith(1);
+    fixture.destroy();
+    expect(cancelFrame).toHaveBeenCalledWith(2);
   });
 
   it('renders ordered host messages and applies Markdown only to assistant text', () => {

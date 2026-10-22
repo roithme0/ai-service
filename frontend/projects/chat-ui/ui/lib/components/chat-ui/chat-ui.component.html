@@ -43,7 +43,7 @@
                         turn.runKey !== null && detailToggleAnchors().get(turn.runKey) === item.id
                       "
                       [detailsExpanded]="detailsExpanded(turn)"
-                      (detailsToggled)="toggleDetails(turn)"
+                      (detailsToggled)="toggleDetails(turn, $event)"
                     />
                   }
                 }
