@@ -16,6 +16,7 @@ export class ComposerComponent {
   readonly placeholder = input('Nachricht schreiben');
   readonly mascotSource = input.required<string>();
   readonly messageSubmitted = output<ChatSubmission>();
+  readonly focused = output<void>();
   protected readonly draft = signal('');
 
   protected preserveComposerFocus(event: MouseEvent, textarea: HTMLTextAreaElement): void {

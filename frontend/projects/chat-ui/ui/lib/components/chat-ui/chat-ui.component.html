@@ -71,5 +71,6 @@
     [editingDisabled]="composerEditingDisabled()"
     [placeholder]="composerPlaceholder()"
     (messageSubmitted)="messageSubmitted.emit($event)"
+    (focused)="requestHistoryScroll()"
   />
 </section>

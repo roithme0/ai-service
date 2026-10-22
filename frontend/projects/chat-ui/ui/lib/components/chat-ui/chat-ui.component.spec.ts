@@ -1037,6 +1037,26 @@ describe('ChatUiComponent', () => {
     expect(messages[0].textContent).toContain('Replacement state');
   });
 
+  it('scrolls history to the bottom each time the textarea gains focus', () => {
+    const fixture = createFixture(INITIAL_MESSAGES);
+    const element = fixtureElement(fixture);
+    const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
+    const history = element.querySelector('.history') as HTMLElement;
+    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+    scrollTo.mockClear();
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      history.scrollTop = 100;
+      textarea.focus();
+      fixture.detectChanges();
+      expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 1000, behavior: 'smooth' });
+      scrollTo.mockClear();
+      textarea.blur();
+      fixture.detectChanges();
+      expect(scrollTo).not.toHaveBeenCalled();
+    }
+  });
+
   it('scrolls history to new messages, statuses, and errors after rendering', () => {
     vi.useFakeTimers();
     const fixture = createFixture([]);
