@@ -84,10 +84,7 @@ export class ChatUiComponent {
   readonly statusActionTriggered = output<string>();
 
   protected readonly detailRuns = computed(() => {
-    const answers = new Map<
-      string,
-      { readonly answerId: string; readonly active: boolean; readonly completed: boolean }
-    >();
+    const answers = new Map<string, { readonly answerId: string; readonly completed: boolean }>();
     const groups = new Map<string, ChatTurn[]>();
     for (const turn of this.turns()) {
       const key = turn.runKey;
@@ -103,7 +100,6 @@ export class ChatUiComponent {
       if (answer) {
         answers.set(key, {
           answerId: answer.id,
-          active: turns.some((turn) => turn.status === 'active'),
           completed: turns.every((turn) => turn.status === 'completed'),
         });
       }
@@ -116,15 +112,16 @@ export class ChatUiComponent {
 
   constructor() {
     registerChatIcons(this.iconRegistry, this.sanitizer);
-    const initializedRuns = new Set<string>();
+    const initializedRuns = new Map<string, boolean>();
     effect(() => {
       this.turns();
       this.conversationStatus();
       untracked(() => {
         this.requestHistoryScroll();
         for (const [runKey, run] of this.detailRuns()) {
-          if (initializedRuns.has(runKey) || (!run.active && !run.completed)) continue;
-          if (run.completed) initializedRuns.add(runKey);
+          const wasCompleted = initializedRuns.get(runKey);
+          if (wasCompleted === true || wasCompleted === run.completed) continue;
+          initializedRuns.set(runKey, run.completed);
           this.setDetailsExpanded(runKey, !run.completed);
         }
       });
@@ -153,21 +150,23 @@ export class ChatUiComponent {
 
   protected detailsHidden(turn: ChatTurn): boolean {
     return (
-      turn.runKey !== null &&
-      this.detailRuns().get(turn.runKey)?.completed === true &&
-      !this.detailsExpanded(turn)
+      turn.runKey !== null && this.detailRuns().has(turn.runKey) && !this.detailsExpanded(turn)
     );
   }
 
   protected answerAnchorFor(turn: ChatTurn, item: ChatContent): string | null {
-    return turn.runKey !== null && this.detailRuns().get(turn.runKey)?.answerId === item.id
+    return turn.runKey !== null &&
+      this.detailRuns().has(turn.runKey) &&
+      item.kind === 'text' &&
+      item.role === 'assistant' &&
+      item.isFinal
       ? JSON.stringify([turn.runKey, item.id])
       : null;
   }
 
-  protected setDetailsExpanded(runKey: string | null, expanded: boolean): void {
+  protected setDetailsExpanded(runKey: string | null, expanded: boolean, messageId?: string): void {
     if (runKey === null) return;
-    const answerId = this.detailRuns().get(runKey)?.answerId;
+    const answerId = messageId ?? this.detailRuns().get(runKey)?.answerId;
     if (answerId === undefined) return;
     const anchor = JSON.stringify([runKey, answerId]);
     const anchors =

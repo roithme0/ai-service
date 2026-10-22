@@ -14,6 +14,7 @@
 
 .answer-actions {
   display: flex;
+  min-height: 2.25rem;
   margin-top: 0.5rem;
 }
 
@@ -49,6 +50,10 @@
 }
 
 @media (pointer: coarse) {
+  .answer-actions {
+    min-height: 2.75rem;
+  }
+
   .details-toggle {
     width: 2.75rem;
     height: 2.75rem;

@@ -121,7 +121,7 @@ describe('ChatUiComponent', () => {
     expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/maskot-working.png');
   });
 
-  it('collapses details only after completion and places an accessible toggle below the explicit answer', () => {
+  it('shows enabled final-answer actions while active and retains them through automatic collapse', () => {
     const fixture = createFixture([]);
     const turn: ChatTurn = {
       runKey: 'first',
@@ -134,7 +134,10 @@ describe('ChatUiComponent', () => {
     const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
     const answerRow = element.querySelector('ai-chat-assistant-message')!.closest('.history-item');
     expect(isCollapsed(detail)).toBe(false);
-    expect(element.querySelector('.details-toggle')).toBeNull();
+    const actions = answerRow!.querySelector('.answer-actions');
+    const activeToggle = answerRow!.querySelector<HTMLButtonElement>('.details-toggle')!;
+    expect(activeToggle.disabled).toBe(false);
+    expect(activeToggle.getAttribute('aria-expanded')).toBe('true');
     expect(element.querySelector('[data-detail-anchor]')).toBe(answerRow);
     const anchor = answerRow!.getAttribute('data-detail-anchor');
     expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
@@ -151,6 +154,8 @@ describe('ChatUiComponent', () => {
     ).toBe(true);
     expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(true);
     const toggle = answerRow!.querySelector<HTMLButtonElement>('.details-toggle')!;
+    expect(toggle).toBe(activeToggle);
+    expect(answerRow!.querySelector('.answer-actions')).toBe(actions);
     expect(toggle.type).toBe('button');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(toggle.getAttribute('aria-label')).toBe('Details anzeigen');
@@ -181,7 +186,12 @@ describe('ChatUiComponent', () => {
         false,
       );
       expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(false);
-      expect(element.querySelector('.details-toggle')).toBeNull();
+      const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+      expect(toggle.disabled).toBe(false);
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      toggle.click();
+      fixture.detectChanges();
+      expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(true);
     },
   );
 
@@ -202,7 +212,7 @@ describe('ChatUiComponent', () => {
     },
   );
 
-  it('uses the first explicitly final answer rather than later unspecified or additional final text', () => {
+  it('shows actions on every explicit final answer with shared expansion and the clicked answer anchor', () => {
     const fixture = createFixture([
       ...DETAILS_CONTENT,
       {
@@ -216,7 +226,9 @@ describe('ChatUiComponent', () => {
       { kind: 'failure', id: 'failure', text: 'Retained failure' },
     ]);
     const element = fixtureElement(fixture);
-    expect(element.querySelectorAll('.details-toggle')).toHaveLength(1);
+    const toggles = element.querySelectorAll<HTMLButtonElement>('.details-toggle');
+    expect(toggles).toHaveLength(2);
+    expect(element.querySelectorAll('.answer-actions')).toHaveLength(2);
     expect(element.querySelector('.answer-actions')?.previousElementSibling?.textContent).toBe(
       'Answer',
     );
@@ -230,6 +242,69 @@ describe('ChatUiComponent', () => {
       'Later ordinary text',
       'Retained failure',
     ]);
+    toggles[1].click();
+    fixture.detectChanges();
+    expect([...toggles].map((toggle) => toggle.getAttribute('aria-expanded'))).toEqual([
+      'true',
+      'true',
+    ]);
+    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([
+      toggles[1].closest('.history-item'),
+    ]);
+  });
+
+  it('preserves manual toggling while active across snapshots and automatically collapses on completion', () => {
+    const fixture = createFixture([]);
+    const turn: ChatTurn = { runKey: 'active', status: 'active', content: DETAILS_CONTENT };
+    fixture.componentRef.setInput('turns', [turn]);
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    toggle.click();
+    fixture.detectChanges();
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(true);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+    const content: readonly ChatContent[] = [
+      ...DETAILS_CONTENT,
+      { kind: 'intermediate', id: 'new-detail', text: 'More checking' },
+    ];
+    fixture.componentRef.setInput('turns', [{ ...turn, content }]);
+    fixture.detectChanges();
+    expect(element.querySelector('.details-toggle')).toBe(toggle);
+    for (const detail of element.querySelectorAll<HTMLElement>('ai-chat-intermediate-message')) {
+      expect(isCollapsed(detail)).toBe(true);
+    }
+    toggle.click();
+    fixture.detectChanges();
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(false);
+
+    fixture.componentRef.setInput('turns', [{ ...turn, status: 'completed', content }]);
+    fixture.detectChanges();
+    expect(element.querySelector('.details-toggle')).toBe(toggle);
+    expect(toggle.disabled).toBe(false);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(true);
+  });
+
+  it('renders the final action bar before details arrive and retains the bar when controls become available', () => {
+    const fixture = createFixture([]);
+    const answer = DETAILS_CONTENT[3];
+    fixture.componentRef.setInput('turns', [
+      { runKey: 'active', status: 'active', content: [answer] },
+    ]);
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const actions = element.querySelector('.answer-actions');
+    expect(actions).not.toBeNull();
+    expect(actions!.querySelector('button')).toBeNull();
+
+    fixture.componentRef.setInput('turns', [
+      { runKey: 'active', status: 'active', content: DETAILS_CONTENT },
+    ]);
+    fixture.detectChanges();
+    expect(element.querySelector('.answer-actions')).toBe(actions);
+    expect(actions!.querySelector<HTMLButtonElement>('.details-toggle')!.disabled).toBe(false);
   });
 
   it('remembers manual detail expansion per historical run across new inputs and resets on recreation', () => {
@@ -544,13 +619,16 @@ describe('ChatUiComponent', () => {
     const answerRow = element.querySelector('ai-chat-assistant-message')!.closest('.history-item');
     expect(element.querySelector('[data-detail-anchor]')).toBe(answerRow);
     expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
-    expect(element.querySelector('.details-toggle')).toBeNull();
+    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    expect(toggle.disabled).toBe(false);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
     scrollTo.mockClear();
 
     fixture.componentRef.setInput('turns', [first, { ...second, status: 'completed' }]);
     fixture.detectChanges();
     expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
-    expect(element.getElementsByClassName('details-toggle')).toHaveLength(1);
+    expect(element.querySelector('.details-toggle')).toBe(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(scrollTo).not.toHaveBeenCalled();
   });
 

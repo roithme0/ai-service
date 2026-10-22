@@ -46,9 +46,11 @@
                     } @else {
                       <ai-chat-assistant-message
                         [message]="item"
-                        [showDetailsToggle]="anchor !== null && run?.completed === true"
+                        [showDetailsToggle]="item.isFinal && !!run"
                         [detailsExpanded]="detailsExpanded(turn)"
-                        (detailsToggled)="setDetailsExpanded(turn.runKey, !detailsExpanded(turn))"
+                        (detailsToggled)="
+                          setDetailsExpanded(turn.runKey, !detailsExpanded(turn), item.id)
+                        "
                       />
                     }
                   }
