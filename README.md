@@ -2,7 +2,7 @@
 
 The AI Service is a personal project that provides shared, provider-neutral AI capabilities and an agent-based interface for related projects. It owns model integration, reusable AI operations, agent orchestration, and service connectors while domain services remain authoritative for their data and business rules.
 
-The current implementation includes configured KochWiki and deterministic demo agent services, bounded model/tool orchestration, and a reusable chat UI library. This repository is authoritative for its implementation, API contracts, and deployment configuration. The application runs a deterministic UI demo, described in the [chat UI demo concept](docs/concepts/2026-09-25-chat-ui-demo.md).
+The current implementation includes configured KochWiki and deterministic demo agent services, bounded model/tool orchestration, and a reusable chat UI library. This repository is authoritative for its implementation, API contracts, and deployment configuration. The application runs a deterministic UI demo.
 
 ## Core Features
 
@@ -34,6 +34,8 @@ The Angular demo uses `SessionController` and the HTTP transport with fixed `dem
 Run the complete application with `docker compose -f deployment/docker-compose-local.yml up --build` and open `http://localhost:8000` (or the configured gateway port). See [frontend setup](frontend/README.md) for separate development servers and [the library README](frontend/projects/chat-ui/README.md) for its public API and releases. The package exposes `/ui` for rendering and `/conversation` for AI Service integration.
 
 Use workflow skills only when explicitly invoked by the user.
+
+Implementation-specific concepts, plans, and specs live in `.agents/concepts/`, `.agents/plans/`, and `.agents/specs/`. These temporary files are gitignored and remain available through final review; cleanup is manual. Permanent documentation must never reference or depend on them.
 
 - `$prepare-spec`: pressure-test a scoped change and create or refine its lightweight spec.
 - `$deliver-spec`: plan and implement an approved spec continuously, pausing only for material exceptions.
