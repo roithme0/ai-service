@@ -43,7 +43,7 @@
   color: var(--ai-chat-banner-text, #f8eef1);
 }
 
-.history:has(.details-scroll-anchor) {
+.history:has(.history-scroll-anchor) {
   overflow-anchor: auto;
 }
 
@@ -61,7 +61,7 @@ ai-chat-history-item {
   --history-item-spacing: 0;
 }
 
-.history-item.details-scroll-anchor {
+.history-item.history-scroll-anchor {
   overflow-anchor: auto;
 }
 

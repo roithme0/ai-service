@@ -5,6 +5,7 @@ import {
   OnDestroy,
   computed,
   input,
+  output,
   signal,
   viewChild,
 } from '@angular/core';
@@ -25,6 +26,7 @@ export class ArtifactCardComponent implements AfterViewInit, OnDestroy {
 
   readonly artifact = input.required<ChatArtifact>();
   readonly renderer = input<ChatArtifactRenderer | null>(null);
+  readonly expansionToggled = output<void>();
   protected readonly expanded = signal(false);
   protected readonly overflowing = signal(false);
   protected readonly formattedPayload = computed(() => {
@@ -54,6 +56,11 @@ export class ArtifactCardComponent implements AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.observer?.disconnect();
+  }
+
+  protected toggleExpanded(): void {
+    this.expansionToggled.emit();
+    this.expanded.update((expanded) => !expanded);
   }
 
   private measure(): void {

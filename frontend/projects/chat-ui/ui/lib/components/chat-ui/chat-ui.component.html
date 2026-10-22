@@ -13,11 +13,11 @@
           @if (
             item.kind !== 'failure' || !lastTurn || !last || conversationStatus()?.kind !== 'error'
           ) {
-            @let anchor = answerAnchorFor(turn, item);
+            @let anchor = historyAnchorFor(turn, item);
             <div
               class="history-item"
-              [attr.data-detail-anchor]="anchor"
-              [class.details-scroll-anchor]="anchor !== null && anchor === detailScrollAnchor()"
+              [attr.data-scroll-anchor]="anchor"
+              [class.history-scroll-anchor]="anchor !== null && anchor === scrollAnchor()"
             >
               <ai-chat-history-item
                 [collapsed]="
@@ -26,7 +26,11 @@
               >
                 @switch (item.kind) {
                   @case ('artifact') {
-                    <ai-chat-artifact-card [artifact]="item" [renderer]="rendererFor(item.type)" />
+                    <ai-chat-artifact-card
+                      [artifact]="item"
+                      [renderer]="rendererFor(item.type)"
+                      (expansionToggled)="anchorArtifact(anchor)"
+                    />
                   }
                   @case ('tool') {
                     <ai-chat-tool-call [toolCall]="item" />

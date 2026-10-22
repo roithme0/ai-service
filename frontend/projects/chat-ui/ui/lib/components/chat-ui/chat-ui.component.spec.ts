@@ -140,15 +140,15 @@ describe('ChatUiComponent', () => {
     const activeToggle = answerRow!.querySelector<HTMLButtonElement>('.details-toggle')!;
     expect(activeToggle.disabled).toBe(false);
     expect(activeToggle.getAttribute('aria-expanded')).toBe('true');
-    expect(element.querySelector('[data-detail-anchor]')).toBe(answerRow);
-    const anchor = answerRow!.getAttribute('data-detail-anchor');
-    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('[data-scroll-anchor]')).toBe(answerRow);
+    const anchor = answerRow!.getAttribute('data-scroll-anchor');
+    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
 
     scrollTo.mockClear();
     fixture.componentRef.setInput('turns', [{ ...turn, status: 'completed' }]);
     fixture.detectChanges();
-    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
-    expect(answerRow!.getAttribute('data-detail-anchor')).toBe(anchor);
+    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
+    expect(answerRow!.getAttribute('data-scroll-anchor')).toBe(anchor);
     expect(scrollTo).not.toHaveBeenCalled();
     expect(isCollapsed(detail)).toBe(true);
     expect(
@@ -168,8 +168,8 @@ describe('ChatUiComponent', () => {
     expect(toggle.closest('article')?.getAttribute('aria-label')).toBe('Antwort des Assistenten');
     toggle.click();
     fixture.detectChanges();
-    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
-    expect(answerRow!.getAttribute('data-detail-anchor')).toBe(anchor);
+    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
+    expect(answerRow!.getAttribute('data-scroll-anchor')).toBe(anchor);
     expect(isCollapsed(detail)).toBe(false);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(toggle.getAttribute('aria-label')).toBe('Details ausblenden');
@@ -250,7 +250,7 @@ describe('ChatUiComponent', () => {
       'true',
       'true',
     ]);
-    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([
+    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([
       toggles[1].closest('.history-item'),
     ]);
   });
@@ -382,7 +382,7 @@ describe('ChatUiComponent', () => {
         'Unphased answer',
       );
       expect(element.querySelector('.details-toggle')).toBeNull();
-      expect(element.querySelector('[data-detail-anchor]')).toBeNull();
+      expect(element.querySelector('[data-scroll-anchor]')).toBeNull();
       expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!)).toBe(
         false,
       );
@@ -536,14 +536,14 @@ describe('ChatUiComponent', () => {
     const measurements = [...toggles].map((toggle) => vi.spyOn(toggle, 'getBoundingClientRect'));
     history.scrollTop = 300;
     scrollTo.mockClear();
-    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([
+    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([
       toggles[1].closest('.history-item'),
     ]);
 
     for (const index of [0, 1, 1, 0]) {
       toggles[index].click();
       fixture.detectChanges();
-      expect([...element.querySelectorAll('.details-scroll-anchor')]).toEqual([
+      expect([...element.querySelectorAll('.history-scroll-anchor')]).toEqual([
         toggles[index].closest('.history-item'),
       ]);
       expect(history.scrollTop).toBe(300);
@@ -556,6 +556,53 @@ describe('ChatUiComponent', () => {
     for (const measurement of measurements) expect(measurement).not.toHaveBeenCalled();
   });
 
+  it.each([null, 'turn-1'])(
+    'anchors the artifact wrapper for expansion and collapse with run key %s',
+    (runKey) => {
+      const fixture = createFocusFixture(runKey);
+      const element = fixtureElement(fixture);
+      const history = element.querySelector<HTMLElement>('.history')!;
+      const toggle = element.querySelector<HTMLButtonElement>('.artifact-toggle')!;
+      const wrapper = toggle.closest('.history-item')!;
+      const body = element.querySelector('.artifact-body')!;
+      const measurement = vi.spyOn(wrapper, 'getBoundingClientRect');
+      history.scrollTop = 300;
+      scrollTo.mockClear();
+
+      for (const expanded of [true, false]) {
+        toggle.click();
+        fixture.detectChanges();
+        expect([...element.querySelectorAll('.history-scroll-anchor')]).toEqual([wrapper]);
+        expect(wrapper.getAttribute('data-scroll-anchor')).toBe(
+          JSON.stringify([runKey, 'focus-artifact']),
+        );
+        expect(toggle.classList.contains('history-scroll-anchor')).toBe(false);
+        expect(body.classList.contains('artifact-body--expanded')).toBe(expanded);
+        expect(toggle.getAttribute('aria-expanded')).toBe(String(expanded));
+        expect(history.scrollTop).toBe(300);
+        expect(scrollTo).not.toHaveBeenCalled();
+      }
+      expect(measurement).not.toHaveBeenCalled();
+
+      if (runKey !== null) {
+        const detailsToggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+        detailsToggle.click();
+        fixture.detectChanges();
+        expect([...element.querySelectorAll('.history-scroll-anchor')]).toEqual([
+          detailsToggle.closest('.history-item'),
+        ]);
+        toggle.click();
+        fixture.detectChanges();
+        expect([...element.querySelectorAll('.history-scroll-anchor')]).toEqual([wrapper]);
+      }
+
+      element.querySelector('textarea')!.dispatchEvent(new FocusEvent('focus'));
+      fixture.detectChanges();
+      expect(element.querySelector('.history-scroll-anchor')).toBeNull();
+      expect(scrollTo).toHaveBeenCalledOnce();
+    },
+  );
+
   it('clears native detail anchoring for incoming content and composer scrolling', () => {
     const fixture = createFixture(DETAILS_CONTENT);
     const element = fixtureElement(fixture);
@@ -563,21 +610,21 @@ describe('ChatUiComponent', () => {
     const answerRow = toggle.closest('.history-item')!;
     toggle.click();
     fixture.detectChanges();
-    expect(answerRow.classList.contains('details-scroll-anchor')).toBe(true);
+    expect(answerRow.classList.contains('history-scroll-anchor')).toBe(true);
 
     fixture.componentRef.setInput('turns', [
       { runKey: 'turn-1', status: 'completed', content: [...DETAILS_CONTENT] },
     ]);
     fixture.detectChanges();
-    expect(element.querySelector('.details-scroll-anchor')).toBeNull();
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
 
     toggle.click();
     fixture.detectChanges();
-    expect(answerRow.classList.contains('details-scroll-anchor')).toBe(true);
+    expect(answerRow.classList.contains('history-scroll-anchor')).toBe(true);
     element.querySelector('textarea')!.dispatchEvent(new FocusEvent('focus'));
     fixture.detectChanges();
-    expect(element.querySelector('.details-scroll-anchor')).toBeNull();
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
   });
 
   it('retains bottom scrolling when completion has no existing answer anchor', () => {
@@ -587,7 +634,7 @@ describe('ChatUiComponent', () => {
     ]);
     fixture.detectChanges();
     const element = fixtureElement(fixture);
-    expect(element.querySelector('.details-scroll-anchor')).toBeNull();
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(element.querySelector('ai-chat-assistant-message')).toBeNull();
     scrollTo.mockClear();
 
@@ -595,11 +642,11 @@ describe('ChatUiComponent', () => {
       { runKey: 'first', status: 'completed', content: DETAILS_CONTENT },
     ]);
     fixture.detectChanges();
-    expect(element.querySelector('[data-detail-anchor]')).toBe(
+    expect(element.querySelector('[data-scroll-anchor]')).toBe(
       element.querySelector('ai-chat-assistant-message')!.closest('.history-item'),
     );
-    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([
-      element.querySelector('[data-detail-anchor]'),
+    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([
+      element.querySelector('[data-scroll-anchor]'),
     ]);
     expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!)).toBe(
       true,
@@ -619,8 +666,8 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     const element = fixtureElement(fixture);
     const answerRow = element.querySelector('ai-chat-assistant-message')!.closest('.history-item');
-    expect(element.querySelector('[data-detail-anchor]')).toBe(answerRow);
-    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('[data-scroll-anchor]')).toBe(answerRow);
+    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
     const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
     expect(toggle.disabled).toBe(false);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
@@ -628,7 +675,7 @@ describe('ChatUiComponent', () => {
 
     fixture.componentRef.setInput('turns', [first, { ...second, status: 'completed' }]);
     fixture.detectChanges();
-    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
+    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
     expect(element.querySelector('.details-toggle')).toBe(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(scrollTo).not.toHaveBeenCalled();
@@ -641,7 +688,7 @@ describe('ChatUiComponent', () => {
     ]);
     fixture.detectChanges();
     const element = fixtureElement(fixture);
-    const previous = element.querySelector('[data-detail-anchor]');
+    const previous = element.querySelector('[data-scroll-anchor]');
     scrollTo.mockClear();
 
     fixture.componentRef.setInput('turns', [
@@ -654,9 +701,9 @@ describe('ChatUiComponent', () => {
       },
     ]);
     fixture.detectChanges();
-    expect(element.querySelector('[data-detail-anchor]')).not.toBe(previous);
-    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([
-      element.querySelector('[data-detail-anchor]'),
+    expect(element.querySelector('[data-scroll-anchor]')).not.toBe(previous);
+    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([
+      element.querySelector('[data-scroll-anchor]'),
     ]);
     expect(scrollTo).toHaveBeenCalledOnce();
   });
@@ -679,7 +726,7 @@ describe('ChatUiComponent', () => {
     expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!)).toBe(
       false,
     );
-    expect(element.querySelector('.details-scroll-anchor')).toBeNull();
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(scrollTo).toHaveBeenCalledOnce();
   });
 
@@ -694,7 +741,7 @@ describe('ChatUiComponent', () => {
 
       fixture.componentRef.setInput('turns', [{ runKey: 'first', status, content }]);
       fixture.detectChanges();
-      expect(fixtureElement(fixture).querySelector('.details-scroll-anchor')).toBeNull();
+      expect(fixtureElement(fixture).querySelector('.history-scroll-anchor')).toBeNull();
       expect(scrollTo).toHaveBeenCalledOnce();
     },
   );
@@ -1637,7 +1684,7 @@ function createFixture(
   return fixture;
 }
 
-function createFocusFixture(): ComponentFixture<ChatUiComponent> {
+function createFocusFixture(runKey: string | null = 'turn-1'): ComponentFixture<ChatUiComponent> {
   const fixture = createFixture([
     ...DETAILS_CONTENT,
     {
@@ -1648,6 +1695,11 @@ function createFocusFixture(): ComponentFixture<ChatUiComponent> {
       payload: { value: 'Long result' },
     },
   ]);
+  fixture.componentRef.setInput(
+    'turns',
+    fixture.componentInstance.turns().map((turn) => ({ ...turn, runKey })),
+  );
+  fixture.detectChanges();
   const element = fixtureElement(fixture);
   const body = element.querySelector<HTMLElement>('.artifact-body')!;
   Object.defineProperty(body, 'scrollHeight', { configurable: true, value: 500 });

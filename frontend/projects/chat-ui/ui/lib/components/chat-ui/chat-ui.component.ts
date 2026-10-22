@@ -51,7 +51,7 @@ export class ChatUiComponent {
   private readonly history = viewChild<ElementRef<HTMLElement>>('history');
 
   private scrollHistoryToBottom = false;
-  protected readonly detailScrollAnchor = signal<string | null>(null);
+  protected readonly scrollAnchor = signal<string | null>(null);
   private readonly expandedRuns = signal<ReadonlySet<string>>(new Set());
 
   readonly bannerTitle = input.required<string>();
@@ -140,7 +140,7 @@ export class ChatUiComponent {
   }
 
   protected requestHistoryScroll(): void {
-    this.detailScrollAnchor.set(null);
+    this.scrollAnchor.set(null);
     this.scrollHistoryToBottom = true;
   }
 
@@ -154,7 +154,8 @@ export class ChatUiComponent {
     );
   }
 
-  protected answerAnchorFor(turn: ChatTurn, item: ChatContent): string | null {
+  protected historyAnchorFor(turn: ChatTurn, item: ChatContent): string | null {
+    if (item.kind === 'artifact') return JSON.stringify([turn.runKey, item.id]);
     return turn.runKey !== null &&
       this.detailRuns().has(turn.runKey) &&
       item.kind === 'text' &&
@@ -164,17 +165,26 @@ export class ChatUiComponent {
       : null;
   }
 
+  private selectScrollAnchor(anchor: string | null): boolean {
+    const anchors =
+      this.history()?.nativeElement.querySelectorAll<HTMLElement>('[data-scroll-anchor]');
+    const hasAnchor =
+      anchor !== null &&
+      [...(anchors ?? [])].some((element) => element.getAttribute('data-scroll-anchor') === anchor);
+    this.scrollAnchor.set(anchor);
+    return hasAnchor;
+  }
+
+  protected anchorArtifact(anchor: string | null): void {
+    this.scrollHistoryToBottom = !this.selectScrollAnchor(anchor);
+  }
+
   protected setDetailsExpanded(runKey: string | null, expanded: boolean, messageId?: string): void {
     if (runKey === null) return;
     const answerId = messageId ?? this.detailRuns().get(runKey)?.answerId;
     if (answerId === undefined) return;
     const anchor = JSON.stringify([runKey, answerId]);
-    const anchors =
-      this.history()?.nativeElement.querySelectorAll<HTMLElement>('[data-detail-anchor]');
-    const hasAnchor = [...(anchors ?? [])].some(
-      (element) => element.getAttribute('data-detail-anchor') === anchor,
-    );
-    this.detailScrollAnchor.set(anchor);
+    const hasAnchor = this.selectScrollAnchor(anchor);
     if (!hasAnchor) this.scrollHistoryToBottom = true;
     else if (this.expandedRuns().has(runKey) !== expanded) this.scrollHistoryToBottom = false;
     this.expandedRuns.update((runs) => {

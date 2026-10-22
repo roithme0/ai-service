@@ -28,7 +28,7 @@
       type="button"
       class="artifact-toggle"
       [attr.aria-expanded]="expanded()"
-      (click)="expanded.set(!expanded())"
+      (click)="toggleExpanded()"
     >
       <mat-icon
         [svgIcon]="expanded() ? 'ai-chat:arrow-up' : 'ai-chat:arrow-down'"
