@@ -72,5 +72,6 @@
     [placeholder]="composerPlaceholder()"
     (messageSubmitted)="messageSubmitted.emit($event)"
     (focused)="requestHistoryScroll()"
+    (viewportResized)="requestHistoryScroll()"
   />
 </section>

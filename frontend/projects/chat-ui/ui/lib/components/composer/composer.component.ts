@@ -1,4 +1,4 @@
-import { Component, input, output, signal } from '@angular/core';
+import { Component, DestroyRef, inject, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { TextFieldModule } from '@angular/cdk/text-field';
@@ -17,7 +17,33 @@ export class ComposerComponent {
   readonly mascotSource = input.required<string>();
   readonly messageSubmitted = output<ChatSubmission>();
   readonly focused = output<void>();
+  readonly viewportResized = output<void>();
   protected readonly draft = signal('');
+  private stopViewportObservation: (() => void) | null = null;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.stopObservingViewport());
+  }
+
+  protected onFocus(textarea: HTMLTextAreaElement): void {
+    this.stopObservingViewport();
+    const viewport = textarea.ownerDocument.defaultView?.visualViewport;
+    if (viewport) {
+      const onResize = (): void => {
+        if (textarea.ownerDocument.activeElement === textarea) {
+          this.viewportResized.emit();
+        }
+      };
+      viewport.addEventListener('resize', onResize);
+      this.stopViewportObservation = () => viewport.removeEventListener('resize', onResize);
+    }
+    this.focused.emit();
+  }
+
+  protected stopObservingViewport(): void {
+    this.stopViewportObservation?.();
+    this.stopViewportObservation = null;
+  }
 
   protected preserveComposerFocus(event: MouseEvent, textarea: HTMLTextAreaElement): void {
     if (event.button === 0 && textarea.ownerDocument.activeElement === textarea) {

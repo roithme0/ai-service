@@ -14,7 +14,8 @@
       (beforeinput)="preventBlockedEdit($event)"
       (input)="updateDraft(composer)"
       (keydown)="submitFromKeyboard($event)"
-      (focus)="focused.emit()"
+      (focus)="onFocus(composer)"
+      (blur)="stopObservingViewport()"
     ></textarea>
     <div class="actions">
       <button

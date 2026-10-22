@@ -1057,6 +1057,64 @@ describe('ChatUiComponent', () => {
     }
   });
 
+  it('scrolls after delayed viewport resizes only while the textarea is focused', async () => {
+    const viewport = new EventTarget();
+    vi.stubGlobal('visualViewport', viewport);
+    const fixture = createFixture(INITIAL_MESSAGES);
+    const element = fixtureElement(fixture);
+    const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
+    const button = element.querySelector('.send-button') as HTMLButtonElement;
+    const history = element.querySelector('.history') as HTMLElement;
+    scrollTo.mockClear();
+    viewport.dispatchEvent(new Event('resize'));
+    await fixture.whenStable();
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    textarea.focus();
+    await fixture.whenStable();
+    scrollTo.mockClear();
+    for (const height of [1000, 1200]) {
+      Object.defineProperty(history, 'scrollHeight', { configurable: true, value: height });
+      viewport.dispatchEvent(new Event('resize'));
+      await fixture.whenStable();
+      expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: height, behavior: 'smooth' });
+      scrollTo.mockClear();
+    }
+
+    textarea.value = 'Hello';
+    textarea.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    button.focus();
+    viewport.dispatchEvent(new Event('resize'));
+    await fixture.whenStable();
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    textarea.focus();
+    await fixture.whenStable();
+    scrollTo.mockClear();
+    viewport.dispatchEvent(new Event('resize'));
+    await fixture.whenStable();
+    expect(scrollTo).toHaveBeenCalledOnce();
+  });
+
+  it('removes the viewport resize listener on blur and destruction', () => {
+    const viewport = new EventTarget();
+    const add = vi.spyOn(viewport, 'addEventListener');
+    const remove = vi.spyOn(viewport, 'removeEventListener');
+    vi.stubGlobal('visualViewport', viewport);
+    const fixture = createFixture([]);
+    const textarea = fixtureElement(fixture).querySelector('textarea') as HTMLTextAreaElement;
+    textarea.focus();
+    const firstListener = add.mock.calls[0][1];
+    textarea.blur();
+    expect(remove).toHaveBeenCalledExactlyOnceWith('resize', firstListener);
+    textarea.focus();
+    const secondListener = add.mock.calls[1][1];
+    fixture.destroy();
+    expect(remove).toHaveBeenLastCalledWith('resize', secondListener);
+    expect(remove).toHaveBeenCalledTimes(2);
+  });
+
   it('scrolls history to new messages, statuses, and errors after rendering', () => {
     vi.useFakeTimers();
     const fixture = createFixture([]);
