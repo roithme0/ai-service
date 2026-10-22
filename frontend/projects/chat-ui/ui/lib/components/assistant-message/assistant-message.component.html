@@ -3,13 +3,12 @@
   @if (showDetailsToggle()) {
     <div class="answer-actions">
       <button
-        #detailsToggle
         type="button"
         class="details-toggle"
         [attr.aria-expanded]="detailsExpanded()"
         [attr.aria-label]="detailsExpanded() ? 'Details ausblenden' : 'Details anzeigen'"
         [title]="detailsExpanded() ? 'Details ausblenden' : 'Details anzeigen'"
-        (click)="detailsToggled.emit(detailsToggle)"
+        (click)="detailsToggled.emit()"
       >
         <mat-icon svgIcon="ai-chat:list-tree" aria-hidden="true" />
       </button>

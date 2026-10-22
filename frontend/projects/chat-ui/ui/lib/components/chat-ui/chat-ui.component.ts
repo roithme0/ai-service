@@ -1,6 +1,5 @@
 import {
   Component,
-  DestroyRef,
   ElementRef,
   afterEveryRender,
   computed,
@@ -9,6 +8,7 @@ import {
   input,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
@@ -24,6 +24,7 @@ import { ArtifactCardComponent } from '../artifact-card/artifact-card.component'
 import { StatusComponent } from '../status/status.component';
 import type {
   ChatArtifactRendererMap,
+  ChatContent,
   ChatConversationStatus,
   ChatSubmission,
   ChatTurn,
@@ -47,11 +48,10 @@ import type {
 export class ChatUiComponent {
   private readonly iconRegistry = inject(MatIconRegistry);
   private readonly sanitizer = inject(DomSanitizer);
-  private readonly history = viewChild.required<ElementRef<HTMLElement>>('history');
+  private readonly history = viewChild<ElementRef<HTMLElement>>('history');
 
   private scrollHistoryToBottom = false;
-  private detailAnchor: { readonly button: HTMLButtonElement; readonly top: number } | null = null;
-  private anchorFrame: number | null = null;
+  protected readonly detailScrollAnchor = signal<string | null>(null);
   private readonly expandedRuns = signal<ReadonlySet<string>>(new Set());
 
   readonly bannerTitle = input.required<string>();
@@ -83,8 +83,11 @@ export class ChatUiComponent {
   readonly messageSubmitted = output<ChatSubmission>();
   readonly statusActionTriggered = output<string>();
 
-  protected readonly detailToggleAnchors = computed(() => {
-    const answers = new Map<string, string>();
+  protected readonly detailRuns = computed(() => {
+    const answers = new Map<
+      string,
+      { readonly answerId: string; readonly active: boolean; readonly completed: boolean }
+    >();
     const groups = new Map<string, ChatTurn[]>();
     for (const turn of this.turns()) {
       const key = turn.runKey;
@@ -93,15 +96,17 @@ export class ChatUiComponent {
     }
     for (const [key, turns] of groups) {
       const content = turns.flatMap((turn) => turn.content);
-      if (
-        turns.some((turn) => turn.status !== 'completed') ||
-        !content.some((item) => item.kind === 'intermediate' || item.kind === 'tool')
-      )
-        continue;
+      if (!content.some((item) => item.kind === 'intermediate' || item.kind === 'tool')) continue;
       const answer = content.find(
         (item) => item.kind === 'text' && item.role === 'assistant' && item.isFinal,
       );
-      if (answer) answers.set(key, answer.id);
+      if (answer) {
+        answers.set(key, {
+          answerId: answer.id,
+          active: turns.some((turn) => turn.status === 'active'),
+          completed: turns.every((turn) => turn.status === 'completed'),
+        });
+      }
     }
     return answers;
   });
@@ -110,18 +115,25 @@ export class ChatUiComponent {
   }
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => this.clearDetailAnchor());
     registerChatIcons(this.iconRegistry, this.sanitizer);
+    const initializedRuns = new Set<string>();
     effect(() => {
       this.turns();
       this.conversationStatus();
-      this.scrollHistoryToBottom = true;
+      untracked(() => {
+        this.requestHistoryScroll();
+        for (const [runKey, run] of this.detailRuns()) {
+          if (initializedRuns.has(runKey) || (!run.active && !run.completed)) continue;
+          if (run.completed) initializedRuns.add(runKey);
+          this.setDetailsExpanded(runKey, !run.completed);
+        }
+      });
     });
     afterEveryRender(() => {
-      if (this.detailAnchor && this.anchorFrame === null) this.preserveDetailAnchor();
       if (!this.scrollHistoryToBottom) return;
       this.scrollHistoryToBottom = false;
-      const history = this.history().nativeElement;
+      const history = this.history()?.nativeElement;
+      if (!history) return;
       if (typeof history.scrollTo === 'function') {
         history.scrollTo({ top: history.scrollHeight, behavior: 'smooth' });
       } else {
@@ -131,6 +143,7 @@ export class ChatUiComponent {
   }
 
   protected requestHistoryScroll(): void {
+    this.detailScrollAnchor.set(null);
     this.scrollHistoryToBottom = true;
   }
 
@@ -141,52 +154,36 @@ export class ChatUiComponent {
   protected detailsHidden(turn: ChatTurn): boolean {
     return (
       turn.runKey !== null &&
-      this.detailToggleAnchors().has(turn.runKey) &&
+      this.detailRuns().get(turn.runKey)?.completed === true &&
       !this.detailsExpanded(turn)
     );
   }
 
-  protected toggleDetails(turn: ChatTurn, button: HTMLButtonElement): void {
-    const runKey = turn.runKey;
-    if (runKey === null || !this.detailToggleAnchors().has(runKey)) return;
-    this.clearDetailAnchor();
-    this.detailAnchor = { button, top: button.getBoundingClientRect().top };
-    const expanded = new Set(this.expandedRuns());
-    if (expanded.has(runKey)) {
-      expanded.delete(runKey);
-    } else {
-      expanded.add(runKey);
-    }
-    this.expandedRuns.set(expanded);
+  protected answerAnchorFor(turn: ChatTurn, item: ChatContent): string | null {
+    return turn.runKey !== null && this.detailRuns().get(turn.runKey)?.answerId === item.id
+      ? JSON.stringify([turn.runKey, item.id])
+      : null;
   }
 
-  private preserveDetailAnchor(): void {
-    this.anchorFrame = null;
-    const anchor = this.detailAnchor;
-    if (!anchor || !anchor.button.isConnected) {
-      this.clearDetailAnchor();
-      return;
-    }
-    const history = this.history().nativeElement;
-    history.scrollTop += anchor.button.getBoundingClientRect().top - anchor.top;
-    const transitioning = history
-      .getAnimations({ subtree: true })
-      .some(
-        (animation) =>
-          'transitionProperty' in animation &&
-          animation.transitionProperty === 'grid-template-rows' &&
-          animation.playState === 'running',
-      );
-    if (transitioning) {
-      this.anchorFrame = requestAnimationFrame(() => this.preserveDetailAnchor());
-    } else {
-      this.detailAnchor = null;
-    }
-  }
-
-  private clearDetailAnchor(): void {
-    if (this.anchorFrame !== null) cancelAnimationFrame(this.anchorFrame);
-    this.anchorFrame = null;
-    this.detailAnchor = null;
+  protected setDetailsExpanded(runKey: string | null, expanded: boolean): void {
+    if (runKey === null) return;
+    const answerId = this.detailRuns().get(runKey)?.answerId;
+    if (answerId === undefined) return;
+    const anchor = JSON.stringify([runKey, answerId]);
+    const anchors =
+      this.history()?.nativeElement.querySelectorAll<HTMLElement>('[data-detail-anchor]');
+    const hasAnchor = [...(anchors ?? [])].some(
+      (element) => element.getAttribute('data-detail-anchor') === anchor,
+    );
+    this.detailScrollAnchor.set(anchor);
+    if (!hasAnchor) this.scrollHistoryToBottom = true;
+    else if (this.expandedRuns().has(runKey) !== expanded) this.scrollHistoryToBottom = false;
+    this.expandedRuns.update((runs) => {
+      if (runs.has(runKey) === expanded) return runs;
+      const next = new Set(runs);
+      if (expanded) next.add(runKey);
+      else next.delete(runKey);
+      return next;
+    });
   }
 }

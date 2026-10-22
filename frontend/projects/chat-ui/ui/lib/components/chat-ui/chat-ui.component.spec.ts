@@ -55,7 +55,6 @@ class RendererTemplateHost {
 describe('ChatUiComponent', () => {
   const scrollTo = vi.fn<Element['scrollTo']>();
   let originalScrollTo: PropertyDescriptor | undefined;
-  let originalGetAnimations: PropertyDescriptor | undefined;
 
   afterEach(() => {
     vi.useRealTimers();
@@ -65,22 +64,12 @@ describe('ChatUiComponent', () => {
     } else {
       Reflect.deleteProperty(Element.prototype, 'scrollTo');
     }
-    if (originalGetAnimations) {
-      Object.defineProperty(Element.prototype, 'getAnimations', originalGetAnimations);
-    } else {
-      Reflect.deleteProperty(Element.prototype, 'getAnimations');
-    }
   });
 
   beforeEach(() => {
     scrollTo.mockClear();
     originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
     Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scrollTo });
-    originalGetAnimations = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
-    Object.defineProperty(Element.prototype, 'getAnimations', {
-      configurable: true,
-      value: () => [],
-    });
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
 
@@ -143,17 +132,25 @@ describe('ChatUiComponent', () => {
     fixture.detectChanges();
     const element = fixtureElement(fixture);
     const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
+    const answerRow = element.querySelector('ai-chat-assistant-message')!.closest('.history-item');
     expect(isCollapsed(detail)).toBe(false);
     expect(element.querySelector('.details-toggle')).toBeNull();
+    expect(element.querySelector('[data-detail-anchor]')).toBe(answerRow);
+    const anchor = answerRow!.getAttribute('data-detail-anchor');
+    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
 
+    scrollTo.mockClear();
     fixture.componentRef.setInput('turns', [{ ...turn, status: 'completed' }]);
     fixture.detectChanges();
+    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
+    expect(answerRow!.getAttribute('data-detail-anchor')).toBe(anchor);
+    expect(scrollTo).not.toHaveBeenCalled();
     expect(isCollapsed(detail)).toBe(true);
     expect(
       detail.closest('ai-chat-history-item')?.querySelector<HTMLElement>('.collapse')?.inert,
     ).toBe(true);
     expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-tool-call')!)).toBe(true);
-    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    const toggle = answerRow!.querySelector<HTMLButtonElement>('.details-toggle')!;
     expect(toggle.type).toBe('button');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(toggle.getAttribute('aria-label')).toBe('Details anzeigen');
@@ -164,6 +161,8 @@ describe('ChatUiComponent', () => {
     expect(toggle.closest('article')?.getAttribute('aria-label')).toBe('Antwort des Assistenten');
     toggle.click();
     fixture.detectChanges();
+    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
+    expect(answerRow!.getAttribute('data-detail-anchor')).toBe(anchor);
     expect(isCollapsed(detail)).toBe(false);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(toggle.getAttribute('aria-label')).toBe('Details ausblenden');
@@ -401,93 +400,178 @@ describe('ChatUiComponent', () => {
     }
   });
 
-  it('anchors the toggle throughout expansion and collapse without requesting smooth scrolling', () => {
-    const fixture = createFixture(DETAILS_CONTENT);
+  it('selects the clicked answer history item for native anchoring without manually scrolling', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('turns', [
+      { runKey: 'first', status: 'completed', content: DETAILS_CONTENT },
+      { runKey: 'second', status: 'completed', content: DETAILS_CONTENT },
+    ]);
+    fixture.detectChanges();
     const element = fixtureElement(fixture);
     const history = element.querySelector<HTMLElement>('.history')!;
-    const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
-    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
+    const toggles = element.querySelectorAll<HTMLButtonElement>('.details-toggle');
+    const measurements = [...toggles].map((toggle) => vi.spyOn(toggle, 'getBoundingClientRect'));
     history.scrollTop = 300;
     scrollTo.mockClear();
-    let contentTop = 500;
-    let transitioning = true;
-    const frames: FrameRequestCallback[] = [];
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
-      frames.push(callback);
-      return frames.length;
-    });
-    Object.defineProperty(history, 'getAnimations', {
-      value: () =>
-        transitioning ? [{ transitionProperty: 'grid-template-rows', playState: 'running' }] : [],
-    });
-    vi.spyOn(toggle, 'getBoundingClientRect').mockImplementation(
-      () => new DOMRect(0, contentTop - history.scrollTop, 30, 30),
-    );
+    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([
+      toggles[1].closest('.history-item'),
+    ]);
 
-    for (const collapsed of [false, true]) {
-      transitioning = true;
-      toggle.click();
+    for (const index of [0, 1, 1, 0]) {
+      toggles[index].click();
       fixture.detectChanges();
-      expect(isCollapsed(detail)).toBe(collapsed);
-      for (let step = 0; step < 3; step++) {
-        contentTop += collapsed ? -40 : 40;
-        transitioning = step < 2;
-        const pending = frames.splice(0);
-        expect(pending.length).toBeGreaterThan(0);
-        for (const frame of pending) frame(step * 16);
-        expect(toggle.getBoundingClientRect().top).toBe(200);
-      }
-      expect(frames).toHaveLength(0);
+      expect([...element.querySelectorAll('.details-scroll-anchor')]).toEqual([
+        toggles[index].closest('.history-item'),
+      ]);
+      expect(history.scrollTop).toBe(300);
       expect(scrollTo).not.toHaveBeenCalled();
     }
+    expect([...toggles].map((toggle) => toggle.getAttribute('aria-expanded'))).toEqual([
+      'false',
+      'false',
+    ]);
+    for (const measurement of measurements) expect(measurement).not.toHaveBeenCalled();
   });
 
-  it('anchors an immediate detail toggle when transitions are disabled', () => {
+  it('clears native detail anchoring for incoming content and composer scrolling', () => {
     const fixture = createFixture(DETAILS_CONTENT);
     const element = fixtureElement(fixture);
-    const history = element.querySelector<HTMLElement>('.history')!;
-    const detail = element.querySelector<HTMLElement>('ai-chat-intermediate-message')!;
     const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
-    history.scrollTop = 300;
-    vi.spyOn(toggle, 'getBoundingClientRect').mockImplementation(
-      () => new DOMRect(0, (isCollapsed(detail) ? 500 : 620) - history.scrollTop, 30, 30),
+    const answerRow = toggle.closest('.history-item')!;
+    toggle.click();
+    fixture.detectChanges();
+    expect(answerRow.classList.contains('details-scroll-anchor')).toBe(true);
+
+    fixture.componentRef.setInput('turns', [
+      { runKey: 'turn-1', status: 'completed', content: [...DETAILS_CONTENT] },
+    ]);
+    fixture.detectChanges();
+    expect(element.querySelector('.details-scroll-anchor')).toBeNull();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+
+    toggle.click();
+    fixture.detectChanges();
+    expect(answerRow.classList.contains('details-scroll-anchor')).toBe(true);
+    element.querySelector('textarea')!.dispatchEvent(new FocusEvent('focus'));
+    fixture.detectChanges();
+    expect(element.querySelector('.details-scroll-anchor')).toBeNull();
+  });
+
+  it('retains bottom scrolling when completion has no existing answer anchor', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('turns', [
+      { runKey: 'first', status: 'active', content: DETAILS_CONTENT.slice(0, -1) },
+    ]);
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    expect(element.querySelector('.details-scroll-anchor')).toBeNull();
+    expect(element.querySelector('ai-chat-assistant-message')).toBeNull();
+    scrollTo.mockClear();
+
+    fixture.componentRef.setInput('turns', [
+      { runKey: 'first', status: 'completed', content: DETAILS_CONTENT },
+    ]);
+    fixture.detectChanges();
+    expect(element.querySelector('[data-detail-anchor]')).toBe(
+      element.querySelector('ai-chat-assistant-message')!.closest('.history-item'),
     );
-    const getAnimations = vi.fn<HTMLElement['getAnimations']>().mockReturnValue([]);
-    Object.defineProperty(history, 'getAnimations', { value: getAnimations });
-
-    for (const offset of [420, 300]) {
-      toggle.click();
-      fixture.detectChanges();
-      expect(history.scrollTop).toBe(offset);
-      expect(toggle.getBoundingClientRect().top).toBe(200);
-    }
-    expect(getAnimations).toHaveBeenCalledTimes(2);
+    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([
+      element.querySelector('[data-detail-anchor]'),
+    ]);
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!)).toBe(
+      true,
+    );
+    expect(scrollTo).toHaveBeenCalledOnce();
   });
 
-  it('cancels detail tracking on another toggle and on destruction', () => {
+  it('uses the same shared run answer anchor before and after every section completes', () => {
+    const fixture = createFixture([]);
+    const first: ChatTurn = { runKey: 'shared', status: 'completed', content: DETAILS_CONTENT };
+    const second: ChatTurn = {
+      runKey: 'shared',
+      status: 'active',
+      content: [{ kind: 'intermediate', id: 'later-detail', text: 'Still checking' }],
+    };
+    fixture.componentRef.setInput('turns', [first, second]);
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const answerRow = element.querySelector('ai-chat-assistant-message')!.closest('.history-item');
+    expect(element.querySelector('[data-detail-anchor]')).toBe(answerRow);
+    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('.details-toggle')).toBeNull();
+    scrollTo.mockClear();
+
+    fixture.componentRef.setInput('turns', [first, { ...second, status: 'completed' }]);
+    fixture.detectChanges();
+    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.getElementsByClassName('details-toggle')).toHaveLength(1);
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('reveals a replacement final answer instead of selecting the previous answer anchor', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('turns', [
+      { runKey: 'first', status: 'active', content: DETAILS_CONTENT },
+    ]);
+    fixture.detectChanges();
+    const element = fixtureElement(fixture);
+    const previous = element.querySelector('[data-detail-anchor]');
+    scrollTo.mockClear();
+
+    fixture.componentRef.setInput('turns', [
+      {
+        runKey: 'first',
+        status: 'completed',
+        content: DETAILS_CONTENT.map((item) =>
+          item.id === 'answer' ? { ...item, id: 'replacement-answer' } : item,
+        ),
+      },
+    ]);
+    fixture.detectChanges();
+    expect(element.querySelector('[data-detail-anchor]')).not.toBe(previous);
+    expect([...element.getElementsByClassName('details-scroll-anchor')]).toEqual([
+      element.querySelector('[data-detail-anchor]'),
+    ]);
+    expect(scrollTo).toHaveBeenCalledOnce();
+  });
+
+  it('retains bottom scrolling when remembered expansion prevents automatic collapse', () => {
     const fixture = createFixture(DETAILS_CONTENT);
     const element = fixtureElement(fixture);
-    const history = element.querySelector<HTMLElement>('.history')!;
-    const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
-    Object.defineProperty(history, 'getAnimations', {
-      value: () => [{ transitionProperty: 'grid-template-rows', playState: 'running' }],
-    });
-    const requestFrame = vi
-      .fn<typeof requestAnimationFrame>()
-      .mockReturnValueOnce(1)
-      .mockReturnValueOnce(2);
-    const cancelFrame = vi.fn<typeof cancelAnimationFrame>();
-    vi.stubGlobal('requestAnimationFrame', requestFrame);
-    vi.stubGlobal('cancelAnimationFrame', cancelFrame);
+    element.querySelector<HTMLButtonElement>('.details-toggle')!.click();
+    fixture.detectChanges();
+    fixture.componentRef.setInput('turns', [
+      { runKey: 'turn-1', status: 'active', content: DETAILS_CONTENT },
+    ]);
+    fixture.detectChanges();
+    scrollTo.mockClear();
 
-    toggle.click();
+    fixture.componentRef.setInput('turns', [
+      { runKey: 'turn-1', status: 'completed', content: DETAILS_CONTENT },
+    ]);
     fixture.detectChanges();
-    toggle.click();
-    fixture.detectChanges();
-    expect(cancelFrame).toHaveBeenCalledWith(1);
-    fixture.destroy();
-    expect(cancelFrame).toHaveBeenCalledWith(2);
+    expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!)).toBe(
+      false,
+    );
+    expect(element.querySelector('.details-scroll-anchor')).toBeNull();
+    expect(scrollTo).toHaveBeenCalledOnce();
   });
+
+  it.each(['completed', 'failed', 'unknown'] as const)(
+    'retains bottom scrolling when a %s update does not collapse any details',
+    (status) => {
+      const fixture = createFixture([]);
+      const content = status === 'completed' ? INITIAL_MESSAGES : DETAILS_CONTENT;
+      fixture.componentRef.setInput('turns', [{ runKey: 'first', status: 'active', content }]);
+      fixture.detectChanges();
+      scrollTo.mockClear();
+
+      fixture.componentRef.setInput('turns', [{ runKey: 'first', status, content }]);
+      fixture.detectChanges();
+      expect(fixtureElement(fixture).querySelector('.details-scroll-anchor')).toBeNull();
+      expect(scrollTo).toHaveBeenCalledOnce();
+    },
+  );
 
   it('renders ordered host messages and applies Markdown only to assistant text', () => {
     const fixture = createFixture(INITIAL_MESSAGES);
@@ -1394,7 +1478,7 @@ function setContent(
 function timelineRows(element: HTMLElement): HTMLElement[] {
   return [
     ...element.querySelectorAll<HTMLElement>(
-      '.messages > ai-chat-history-item > .collapse > .clip > .item-content > *',
+      '.messages > .history-item > ai-chat-history-item > .collapse > .clip > .item-content > *',
     ),
   ];
 }
