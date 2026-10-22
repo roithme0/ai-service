@@ -1,13 +1,5 @@
 # Agents Guide
 
-## Mandatory Context Docs
-
-- Before non-trivial work, read `README.md`.
-
-## Plans and Specifications
-
-Plans and specification files are gitignored. Treat the current code and tracked documentation as the source of truth; do not rely on uncommitted plans or specs being available to other agents.
-
 ## Coding Rules
 
 - No destructive commands.
@@ -21,6 +13,13 @@ Plans and specification files are gitignored. Treat the current code and tracked
 - Summarize changes and call out risks.
 - Treat backend API as an internal contract for this repo's frontend by default: ship backend/frontend contract changes together, and do not preserve legacy compatibility unless explicitly required for a feature or an external consumer.
 - Write tests where they provide meaningful regression protection: critical user flows, branching logic, stateful behavior, contract boundaries, and bug-prone edge cases. Avoid low-signal tests that only restate implementation details. Do not remove existing tests unless they are redundant, obsolete, flaky, or block legitimate refactoring, and explain the reason when removing them.
+
+## Temporary AI Artifacts
+
+- Store implementation-specific concepts, plans, and specs in `.agents/concepts/`, `.agents/plans/`, and `.agents/specs/`, respectively, relative to the target repository root. Use these locations even when older artifacts live elsewhere.
+- Generated files in these folders are temporary and gitignored. Never commit or force-add them. Keep the folder scaffolding and reusable skill resources tracked.
+- Keep artifacts available through implementation and final review. Leave cleanup to the human; do not delete them automatically.
+- Permanent documentation must never link to, cite, or depend on these temporary files. Document lasting behavior and contracts directly in maintained documentation, grounded in the implementation.
 
 ## Frontend Validation
 
