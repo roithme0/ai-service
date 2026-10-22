@@ -82,7 +82,18 @@ The generator exports the session router's OpenAPI document without starting age
 
 From **frontend/**, run `npm run build:chat-ui`, then `npm run watch:chat-ui`. In the sibling **kochwiki-v2/frontend/** checkout, run `npm run link:chat-ui` and `npm start`. Reinstalling Kochwiki dependencies replaces the local link; link again when needed. CI and Docker use the published package.
 
-See the [package README](../frontend/projects/chat-ui/README.md) for component integration, themes, renderers, and browser checks.
+See the [package README](../frontend/projects/chat-ui/README.md) for component integration, themes, and renderers.
+
+### Package and browser checks
+
+From **frontend/**, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This verifies built exports, runtime behavior, explicit application identity, and strict consumer declarations without workspace aliases.
+
+With the [local servers](#run-locally) running, open `http://localhost:4204` at a portrait-phone viewport:
+
+- Submit arbitrary text through the introduction, two JSON artifacts (`demo.greeting` and `demo.greetings`, with 30 greetings), invalid publication, scripted failure, and completion guidance. The error's demo action is intentionally inert.
+- Expand/collapse the long artifact and run details; check retained content after failure and scroll position during toggles. Native final-answer anchoring still needs Chrome/Firefox verification.
+- Send one more message to trigger the frontend-only 405 compatibility error without retry. Refresh to restart; there is no restart button.
+- Check history/composer placement during viewport changes, no horizontal overflow, Enter/send submitting once, and Shift+Enter adding a line break.
 
 ## Agentic coding
 

@@ -1,46 +1,39 @@
-# Chat UI
+﻿# Chat UI
 
-`@roithme0/chat-ui` is one Angular 22 package with two public entry points. `@roithme0/chat-ui/ui` provides the controlled conversation component; `@roithme0/chat-ui/conversation` optionally provides the AI Service conversation controller and HTTP transport. The UI entry point renders ordered host-supplied text, tool activity, failure markers, and JSON-compatible artifacts, emits normalized user submissions and generic status actions, and leaves conversation state and transport orchestration to the host. It makes no backend requests.
+`@roithme0/chat-ui` provides an Angular 22 conversation UI with optional AI Service integration. It has no Kochwiki dependency.
 
-The `/ui` entry point exports `ChatUiComponent` and the typed content, artifact renderer, submission, status, and status-action contracts. Import the component into the host component's `imports`.
+| Entry point                      | API                                                                                                                         |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `@roithme0/chat-ui/ui`           | `ChatUiComponent`, content/status types, artifact renderers, and capabilities. Renders host state without backend requests. |
+| `@roithme0/chat-ui/conversation` | `SessionController`, `HttpSessionTransport`, snapshot mapping, and generated session types.                                 |
 
-```html
-<ai-chat-ui
-  bannerTitle="Rezept gemeinsam verbessern"
-  bannerDescription="Beschreibe, was du ändern möchtest."
-  [turns]="turns()"
-  [artifactRenderers]="artifactRenderers"
-  [composerDisabled]="pending()"
-  [conversationStatus]="status()"
-  (messageSubmitted)="handleMessage($event)"
-  (statusActionTriggered)="handleStatusAction($event)"
-/>
+The root entry point exports no API. Both entry points share one version.
+
+## Host setup
+
+Configure the scope in the consumer's `.npmrc` and authenticate with package read access:
+
+```ini
+@roithme0:registry=https://npm.pkg.github.com
 ```
 
-Tool content (`ChatToolCall`) has `kind: 'tool'`, stable `id`, `name`, and `status` (`requested`, `running`, `completed`, `failed`, `not_executed`, or `outcome_unknown`). Each call renders with a primary text name, the same packaged tool icon and a smaller secondary text German status label. Names render literally; arguments and result payloads are not displayed. Completed means a result was returned without explicitly reported failure. Failure content (`ChatTurnFailure`) has `kind: 'failure'`, `id`, and `text`; a trailing marker is covered by the current error status when present, and remains visible in later history.
+Then install:
 
-`turns` is the required ordered collection of host-supplied `ChatTurn` values. Each group owns its ordered `content`, including interleaved artifacts, and has a required `runKey` and `status` (`prompt`, `active`, `completed`, `failed`, `cancelled`, or `unknown`). Prompts and execution groups are independent; no user-message association is required. Execution sections share one conversation-scoped `runKey`, including single-section runs; independent prompt sections use `null`. The renderer derives unique section tracking keys locally from the run key and its occurrence. There is no separate section ID in the input model. Scope run keys to the conversation so that a new session cannot inherit prior detail expansion state. Active includes accepted work waiting to start and closing work whose answer has arrived before terminal completion. Rendering-only hosts supply these values independently of any backend. The component renders each turn and its content in order. Item `turnId` remains optional for rendering-only hosts; ownership is determined by the enclosing turn.
+```sh
+npm install @roithme0/chat-ui
+```
 
-Completed turns with an explicitly final assistant text and at least one intermediate message or tool call start with those details collapsed. Every explicitly final assistant message renders an action bar immediately, including while the run is active. When the run has intermediate messages or tool calls, each bar offers an enabled details toggle for the shared run. The bar reserves its control height even before details become available. Non-completed runs start expanded; manual choices persist across active snapshots, and completion still automatically collapses details once. User text, ordinary and final assistant text, artifacts and failures remain visible; artifacts retain their order and local renderer/card state across toggles. Recoverable tool failures do not block collapse in a completed turn. Manual choices after completion are remembered by run key for the component lifetime, including subsequent submissions, and reset on component recreation. Expansion and collapse animate each detail item together with its spacing over 200 ms; reduced-motion preferences disable this transition. Collapsed details remain mounted but are inert and hidden from assistive technology. Chat UI owns stable native scroll anchors on its final-answer and artifact wrappers, outside the individual history items; individual message components have no anchoring responsibilities. Before an artifact expands or collapses, its card notifies Chat UI to select the artifact wrapper as the anchor, keeping the top in place rather than the toggle button. The card retains its local expanded state. Active-answer initialization, completion, and manual toggles use one expansion method, which selects the answer anchor and changes the expanded state. Active answers start expanded, with their action bars already mounted; completion uses the same method to collapse them. Each eligible completed run is initialized once, preserving subsequent manual choices across snapshots. Answer anchors and action bars exist as soon as each explicit final answer is rendered. Manual toggles select the clicked answer's anchor; automatic collapse selects the first final answer in the run. If the answer anchor is not mounted yet, the same method retains the usual bottom scroll to reveal the new answer. Other host updates and composer scroll requests retain the usual bottom-scrolling behavior. Anchoring uses scoped styles, without a JavaScript animation loop or additional space at scroll boundaries; native browser behavior and the available scroll range determine the resulting position. Native anchoring remains experimental; Chrome and Firefox verification of the early action bar is pending. Toggle changes do not trigger live-content bottom scrolling. Automatic collapse has no special focus transfer for a focused link inside the hidden details; this edge case is accepted without additional handling.
+Provide compatible Angular 22, Material, and CDK dependencies and a global Material theme:
 
-Text content has readonly `kind`, `id`, `role` (`user` or `assistant`), and `text` fields, plus required `isFinal: boolean`. Only an explicitly identified final assistant answer has `isFinal: true`; user text and unspecified assistant text have `false`. The marker does not depend on message position or turn outcome and determines detail-toggle eligibility and button placement. Artifacts have readonly `kind`, `id`, `type`, `headline`, optional `subtitle`, and recursive `JsonValue` payload fields. Identity is host-supplied and should remain stable when the collection changes. User text is always rendered literally. Assistant text supports a constrained Markdown subset: headings, paragraphs, emphasis, strong text, inline and fenced code, ordered and unordered lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe link schemes are not interpreted.
+```css
+@import '@angular/material/prebuilt-themes/magenta-violet.css';
+```
 
-Intermediate assistant content (`ChatIntermediateMessage`) has readonly `kind: 'intermediate'`, `id`, and `text`. It uses the same safe Markdown renderer and primary text styling as final assistant messages and appears in recorded order among tool calls and artifacts, including after failed turns. These are user-facing progress explanations; provider reasoning is not displayed. Complete messages appear live and retain their supplied styling permanently. Final messages alone do not finish the busy state; terminal success is authoritative. All complete output and accepted artifacts survive later turn failure.
+Give the host a bounded height; the component fills it and scrolls history internally. Typography is inherited. Icons are bundled in the `ai-chat` namespace; no icon font or host registration is needed. See the packaged `MATERIAL_ICONS_LICENSE` for attribution and Apache 2.0 terms.
 
-Map artifact type discriminators to typed Angular templates with `artifactRenderer(template)`. The built-in `json` type renders the escaped, formatted `payload.value`. An absent mapping for any other type shows an unsupported-presentation message; it does not silently select JSON. The library frames every artifact and clips renderer bodies above `--ai-chat-artifact-collapsed-height` (default `18rem`) with German expand/collapse controls and no nested scrolling area.
+### Assets
 
-The component trims a valid submission and emits it once as a `ChatSubmission`. It retains the draft until the host calls `acknowledge`, so the visible composer can remain truthful to backend acceptance. It never adds that text to `turns`; the host updates or replaces its own collection in response. Enter submits, while Shift+Enter adds a line break. New content and status changes smoothly scroll the conversation history to the bottom, including when a delayed status becomes visible, even if the user had scrolled up.
-
-`conversationStatus` accepts a host-controlled loading or error state, its placement, and an optional generic action. Conversation loading renders as text; assistant loading renders as the supplied three-dot animation, with the status message as its accessible label. Conversation loading text fades in over 180 ms; the dots use only their SVG animation. Dots inherit the muted theme color. A reusable Angular component uses the supplied animated SVG as its external template; the animation does not vary with the reduced-motion setting. Loading states can opt into `reveal: 'delayed'`: the UI reserves a line and waits 300 ms before revealing the loading content. Replacing the status cancels the pending reveal. The conversation controller shows no indicator while sending. It starts assistant loading immediately once the accepted user message is displayed in history. Errors appear immediately without animation. Changing the conversation loading label restarts its fade. Animations run regardless of the reduced-motion setting. Rendering-only hosts own the loading lifetime: clear assistant loading as soon as any response content from that turn can be displayed. `composerDisabled` blocks submissions. `composerEditingDisabled` separately blocks text edits while keeping the textarea enabled and focusable. The controller blocks editing only while submission admission is pending. Acceptance unlocks editing before acknowledging the message, so the next draft can be written during the assistant response. A missing admission response retains the draft and blocks further submissions while allowing edits; the controller does not reconcile acceptance. Cancellable edits are prevented before input; other edits restore the retained draft. The send button remains disabled while submissions or edits are blocked, and the textarea exposes its editing lock through `aria-disabled`. This avoids disabling the focused textarea during sending; mobile keyboard persistence still depends on the browser. Send, final-message details, and artifact expand/collapse buttons share an internal directive that prevents pointer presses from moving focus, regardless of which element currently has focus. It handles pointerdown and mousedown, including mouse compatibility events. Click actions and keyboard navigation and activation retain their normal behavior. The composer does not move focus on initialization, state changes, or message acknowledgement; focus remains under user control. Status actions emit their opaque ID to the host; neither contract contains backend- or recipe-specific types.
-
-## Assets
-
-The package includes reusable library assets under `public/`, including
-`public/images/mascot-idle.png` and `public/images/maskot-working.png`.
-The demo application serves the same source folder (`projects/chat-ui/public`)
-and uses `images/mascot-idle.png` as its favicon.
-Angular consumer apps can copy the packaged assets by adding this
-entry to their application's build `assets` array in `angular.json`:
+Add to the application's build `assets` array in `angular.json`:
 
 ```json
 {
@@ -50,29 +43,19 @@ entry to their application's build `assets` array in `angular.json`:
 }
 ```
 
-Set `mascotAssetPath="assets/chat-ui/images"` on `<ai-chat-ui>` when using this
-asset mapping. The default path is `images`, relative to the application's base
-URL. The decorative duck sits above the composer's right edge and shows the
-working image while any supplied turn has status `active`, including after
-final text arrives until the turn finishes. It returns to idle for completed,
-failed, or unknown turns; loading indicators and composer locks do not select
-the working image.
+Set `mascotAssetPath="assets/chat-ui/images"`; the default is `images`, relative to the application base URL. The package supplies `mascot-idle.png` and `maskot-working.png` (spelling intentional). Any `active` turn selects the working mascot, even after final text arrives. The idle image can also serve as a favicon.
 
-Use `assets/chat-ui/images/mascot-idle.png` as an image URL or as a favicon:
+## AI Service integration
 
-```html
-<link rel="icon" type="image/png" href="assets/chat-ui/images/mascot-idle.png" />
-```
-
-## AI Service conversation integration
-
-Import rendering components from `@roithme0/chat-ui/ui` and conversation support from `@roithme0/chat-ui/conversation`. The root entry point exports no API. Both entry points share the package version and release lifecycle.
-
-A complete minimal standalone host (with the Material theme described below):
+A standalone host using the scripted `demo` configuration:
 
 ```typescript
 import { Component, OnInit, OnDestroy, signal } from '@angular/core';
-import { ChatUiComponent, type ChatSubmission } from '@roithme0/chat-ui/ui';
+import {
+  ChatUiComponent,
+  JSON_ARTIFACT_CAPABILITY,
+  type ChatSubmission,
+} from '@roithme0/chat-ui/ui';
 import {
   SessionController,
   HttpSessionTransport,
@@ -82,9 +65,10 @@ import {
 @Component({
   selector: 'app-chat',
   imports: [ChatUiComponent],
-  template: ` <ai-chat-ui
+  template: `<ai-chat-ui
     bannerTitle="Chat demo"
     bannerDescription="Any text advances the scripted sequence."
+    mascotAssetPath="assets/chat-ui/images"
     [turns]="chat().turns"
     [composerDisabled]="chat().composerDisabled"
     [composerEditingDisabled]="chat().composerEditingDisabled"
@@ -109,7 +93,7 @@ export class ChatHost implements OnInit, OnDestroy {
   );
 
   ngOnInit(): void {
-    void this.controller.start();
+    void this.controller.start({ artifact_capabilities: [JSON_ARTIFACT_CAPABILITY] });
   }
   ngOnDestroy(): void {
     this.controller.dispose();
@@ -123,216 +107,110 @@ export class ChatHost implements OnInit, OnDestroy {
 }
 ```
 
-The base URL is the prefix immediately before `/agents`; the demo uses `/api/v1`. The transport takes a configuration key and an explicit application identity as `X-Application-User`. Server validation is authoritative. Supply initial context and advertised artifact capabilities to `start(initialization)` when needed; replacement sessions retain that initialization.
+- The transport takes the URL prefix before `/agents`, configuration key, and explicit `application:user` identity sent as `X-Application-User`. This ownership header does not authenticate the caller.
+- `start(initialization?)` accepts `initial_context` and `artifact_capabilities`; replacement sessions reuse them. Server validation is authoritative.
+- Bind `turns`, both composer flags, and `status`. `snapshot` exposes the backend contract; `admission` and `observation` describe request/connection outcomes separately from execution.
+- The optional third controller argument, `SessionArtifactMapper`, maps a published artifact to `ChatArtifact` or `null`. The default preserves identity/type and maps title, subtitle, payload, and metadata.
+- On identity changes, clear content, status, and draft; dispose and recreate the transport/controller. Disposal ignores stale results and aborts observation without cancelling execution.
 
-The controller receives complete backend snapshots and derives UI content through `presentSession`. Its optional third constructor argument is a `SessionArtifactMapper`, which receives the native artifact envelope and returns a `ChatArtifact` or `null` to omit it. The default `presentSessionArtifact` preserves artifact identity and type and unwraps its presentation payload. The host owns view-state binding and renderer registration. See session lifecycle and recovery below for admission and observation behavior.
+## Rendering contract
 
-For selected-user changes, clear visible content, status and draft, dispose the old controller and create a new transport and controller for the selected identity. Disposal aborts observation and ignores stale asynchronous results; it does not cancel backend execution. Sessions are not transferred between identities.
+Rendering-only hosts import `ChatUiComponent` and supply their own state and handlers.
 
-## Built-package verification
+| Input/output                                   | Contract                                                                                                                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bannerTitle`, `bannerDescription`, `turns`    | Required inputs. Turns and content render in supplied order.                                                                                                  |
+| `artifactRenderers`                            | Type-to-`artifactRenderer(template)` map. Templates receive payload as `$implicit`, full artifact through `let-artifact="artifact"`.                          |
+| `conversationStatus`                           | Loading/error with `message`, `placement: 'conversation' \| 'assistant'`, optional action `{ id, label }`, and optional loading `reveal: 'delayed'` (300 ms). |
+| `composerDisabled` / `composerEditingDisabled` | Block submissions / edits independently; both default to `false`. Editing lock preserves textarea focusability.                                               |
+| `composerPlaceholder` / `mascotAssetPath`      | Defaults: `Nachricht schreiben` / `images`.                                                                                                                   |
+| `messageSubmitted`                             | Emits trimmed nonempty text and `acknowledge()`. Acknowledge acceptance to clear the matching draft. No optimistic prompt is inserted.                        |
+| `statusActionTriggered`                        | Emits the action's opaque ID for the host to handle.                                                                                                          |
 
-From `frontend`, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This checks actual package exports and declarations with ordinary package resolution, exercises the built conversation module, checks required application identity and verifies that the root exports no API. Workspace source aliases are not used.
+### Content and identity
 
-## Host theme
+Content items have stable host-supplied `id` values and readonly fields. Optional item `turnId` does not determine ownership: the enclosing turn does.
 
-The host must install compatible Angular Material and CDK versions and provide an Angular Material theme. For example, a host can import a prebuilt theme in its global stylesheet:
+| Type                      | Fields beyond `id`                                                                                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ChatTurn` (no item ID)   | `runKey`, ordered `content`, `status`: `prompt`, `active`, `completed`, `failed`, `cancelled`, or `unknown`.                                                 |
+| `ChatTextMessage`         | `kind: 'text'`, `role: 'user' \| 'assistant'`, `text`, `isFinal`. Only explicitly final assistant answers use `true`.                                        |
+| `ChatIntermediateMessage` | `kind: 'intermediate'`, `text`: user-facing progress, never provider reasoning.                                                                              |
+| `ChatToolCall`            | `kind: 'tool'`, literal `name`, `status`: `requested`, `running`, `completed`, `failed`, `not_executed`, or `outcome_unknown`. Arguments/results are hidden. |
+| `ChatTurnFailure`         | `kind: 'failure'`, `text`. Current error status covers a trailing failure marker; it remains in later history.                                               |
+| `ChatArtifact`            | `kind: 'artifact'`, `type`, `headline`, recursive JSON `payload`; optional `subtitle` and JSON-object `metadata`.                                            |
 
-```css
-@import '@angular/material/prebuilt-themes/magenta-violet.css';
-```
+- Share one conversation-scoped `runKey` across execution sections; independent prompts use `null`. Keep keys stable across snapshots and distinct across sessions. No section ID or prompt/run association is required.
+- `active` includes admitted work awaiting execution and final text awaiting completion. Final text alone must not end busy state. Retain complete output and accepted artifacts after failure.
+- User text is literal. Assistant/progress text supports headings, paragraphs, emphasis, code, lists, blockquotes, and safe HTTP(S), mail, root-relative, or fragment links. Raw HTML and unsafe schemes are not interpreted.
 
-The library uses Angular Material's `MatIconRegistry` to register packaged SVGs in the `ai-chat` namespace: the supplied custom outline `send` icon and selected Material Icons (`retry`, `tts`, and `add-file`). Its controls reference them through names such as `ai-chat:send`. A shared `ai-chat:tool` wrench SVG renders all tool calls. Hosts do not need to load the Material Icons font or register these icons. The Material Icons source and their Apache 2.0 terms are documented in `MATERIAL_ICONS_LICENSE` in the published package.
+### Interaction behavior
 
-Set these CSS variables on an ancestor of `ai-chat-ui`:
+- Enter submits; Shift+Enter inserts a line break. Drafts remain until acknowledgement. Pointer controls preserve focus; initialization/acknowledgement never move it. Mobile keyboard behavior depends on the browser.
+- Loading uses conversation text or assistant dots; errors appear immediately. Rendering-only hosts clear assistant loading when response content appears. The controller shows no sending indicator and starts loading once the accepted prompt is visible.
+- Completed runs with an explicit final answer collapse intermediate messages/tool calls once. Other runs start expanded. Final-answer bars share a details toggle; later manual choices persist for the component lifetime. Ordinary text, artifacts, and failures stay visible; artifact state survives toggles.
+- New content/status normally scrolls to the bottom, even after scrolling up. Detail/artifact toggles use native anchors; positioning depends on browser scroll range. Chrome/Firefox anchoring verification is pending. Collapsed details stay mounted but inert; focus inside them is not transferred automatically.
+- Detail transitions respect reduced motion; loading animations do not. Some controls/status labels are German.
 
-| Property                          | Purpose                        | Default      |
-| --------------------------------- | ------------------------------ | ------------ |
-| `--ai-chat-background`            | Container background           | `#130d0f`    |
-| `--ai-chat-text`                  | General text                   | `#f8eef1`    |
-| `--ai-chat-banner-background`     | Banner background              | `#291c21`    |
-| `--ai-chat-banner-text`           | Banner text                    | `#f8eef1`    |
-| `--ai-chat-user-background`       | User bubble background         | `#a9004f`    |
-| `--ai-chat-user-text`             | User bubble text               | `#ffffff`    |
-| `--ai-chat-assistant-text`        | Assistant text                 | General text |
-| `--ai-chat-muted-text`            | Secondary and placeholder text | `#c6b4bb`    |
-| `--ai-chat-accent`                | Focus and quote accent         | `#e00067`    |
-| `--ai-chat-link`                  | Assistant link text            | `#ff7aad`    |
-| `--ai-chat-code-background`       | Assistant code background      | `#251a1e`    |
-| `--ai-chat-artifact-background`   | Artifact card background       | `#21171b`    |
-| `--ai-chat-artifact-border`       | Artifact card border           | `#50363f`    |
-| `--ai-chat-artifact-subtitle`     | Artifact subtitle              | `#bda9b1`    |
-| `--ai-chat-artifact-heading`      | Artifact headline              | `#f8eef1`    |
-| `--ai-chat-artifact-text`         | JSON presentation text         | `#eadde2`    |
-| `--ai-chat-composer-background`   | Composer field background      | `#291c21`    |
-| `--ai-chat-composer-border`       | Composer field border          | `#50363f`    |
-| `--ai-chat-composer-text`         | Composer field text            | `#f8eef1`    |
-| `--ai-chat-send-background`       | Send control background        | `#c00059`    |
-| `--ai-chat-send-hover-background` | Send control hover background  | `#df0067`    |
-| `--ai-chat-send-text`             | Send control foreground        | `#ffffff`    |
-| `--ai-chat-focus`                 | Keyboard focus ring            | `#ff9fc1`    |
+## Artifact presentation
 
-The component inherits typography. Its chat-specific styles are compiled into the library, while the host-provided Angular Material theme styles its Material controls. CSS variable defaults are `var()` fallback values and do not mask inherited host values. The library has no Kochwiki dependency.
+The built-in `json` renderer displays escaped, formatted `payload.value`. Other types require explicit renderers; missing mappings show an unsupported-presentation message. Cards clip bodies at `--ai-chat-artifact-collapsed-height` (default `18rem`) with expand/collapse controls and no nested scrolling. Subtitles remain visible when collapsed.
 
-## GitHub Packages releases
+| Capability field                          | Meaning                                                                                                                                              |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`, `description`, `payloadSchema`    | Required type, usage guidance, and complete payload schema. `JSON_ARTIFACT_CAPABILITY` advertises `{ value: <JSON value> }`.                         |
+| `titleDescription`, `subtitleDescription` | Optional header guidance, not payload-field validation. Descriptions must be nonblank and at most 2,000 characters.                                  |
+| `metadataSchema`                          | Optional self-contained JSON Schema draft 2020-12. Metadata is validated separately; omission is checked as `{}`; unadvertised metadata is rejected. |
 
-The library publishes to `https://npm.pkg.github.com` and is associated with `roithme0/ai-service`. The `Build and publish app and chat UI` workflow builds the library on pull requests and pushed `v`-prefixed version tags in its distinct `build-chat-ui` job, uploading the built package as a workflow artifact. The `publish-chat-ui` job runs only for release tags and downloads that same artifact. Only this publish job receives `packages: write` permission. The same workflow publishes both Docker images through separate application jobs; every release publishes all three artifacts from the same commit, even when a component has not changed.
+Advertise capabilities at creation; renderer registration alone does not advertise them. Capabilities cannot change mid-session. Without them, model-backed sessions are text-only. Agents supply complete data; renderers do not fetch missing details. Metadata has no built-in rendering/actions. Publication does not save domain data.
 
-The tag determines the published version and npm channel: `v1.2.0` publishes `1.2.0` under `latest`; `v1.2.0-alpha` or `v1.2.0-alpha.123` publishes the corresponding prerelease under `alpha`. Tags must start with `v` followed by three numeric version parts, optionally followed by `-alpha` or `-alpha.N`, where `N` contains one or more digits. Numeric parts cannot have leading zeroes except for `0`; other suffixes are rejected. The leading `v` is stripped from published versions. Release tags are validated before frontend dependency installation and the library build. The publish job sets the version in `dist/chat-ui/package.json` and publishes using its `GITHUB_TOKEN` with an explicit npm dist-tag. The source package keeps the local placeholder version `0.0.0` and is not modified by the workflow.
+## Transport and recovery
 
-To release the repository, commit the changes, then tag that commit and push the tag. For example:
+Direct transport methods: `createSession(initialization?)`, `readSession(sessionId)`, `submitPrompt(sessionId, text)`, and `observeSession(sessionId, signal)`.
 
-```powershell
-git tag v1.2.0
-git push origin v1.2.0
-```
+| Outcome                                                | Behavior                                                                                                                                                                                                                           |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prompt accepted                                        | Returns `{ kind: 'accepted' }` without a turn ID. Controller acknowledges the draft; only snapshots supply content.                                                                                                                |
+| Admission response missing                             | Draft retained, edits allowed, submissions blocked as uncertain. No reconciliation, guessed acknowledgement, or automatic replay.                                                                                                  |
+| Observation                                            | Async iterable of complete snapshots and terminal error events. Lifecycle defines turn outcomes; EOF does not mean completion. Leaving/aborting releases the reader without cancelling execution.                                  |
+| Transient observation failure                          | Controller reconnects after one second for network loss, unexpected EOF, capacity limits, overflow, and internal observation errors. Sending waits for a fresh snapshot. Transport itself never retries.                           |
+| Compatibility, unavailable session, malformed response | Reconnection stops. Known terminal outcomes survive observation loss.                                                                                                                                                              |
+| Conversation budget exhausted                          | History stays visible; submissions stop without retry. Reads/observation remain available until expiry.                                                                                                                            |
+| Errors                                                 | `SessionHttpError` includes status/kind: 405 maps to `method_not_allowed`, FastAPI 422 to `validation_error`. Network/malformed responses throw `SessionTransportError`. SSE errors remain typed `SessionEvent` values before EOF. |
 
-For an alpha release, use a new prerelease version tag from the repository root. No package version edit is required:
+`presentSession` maps independent prompts and run groups, including groups without native run IDs. Keys use session identity and presentation ordinals. Only explicit `final_answer` text becomes `isFinal: true`; unphased text is never promoted by position or outcome. Generated TypeScript/Zod schemas validate the contract, including finite recursive JSON.
 
-```powershell
-git tag v1.3.0-alpha.1
-git push origin v1.3.0-alpha.1
-```
+## Theme
 
-Each release needs a new version; choose the next shared version based on changes to either the application or library, including breaking changes. Both publication jobs wait for the application and library builds to succeed, including the application build's contract checks and backend tests. A failed build prevents all publication. Publication remains independent between jobs, so a registry failure can still leave a partial release; check the entire workflow succeeded before treating a release as complete. Kochwiki has read access under the package's **Manage Actions access** settings and consumes the package from GitHub Packages. Its CI passes the repository's short-lived `GITHUB_TOKEN` to Docker as a BuildKit secret.
+Set CSS variables on an ancestor of `ai-chat-ui`; fallback defaults preserve inherited overrides. Material styles controls; library styles are bundled.
 
-## Local development with Kochwiki
+| Property                          | Purpose                    | Default      |
+| --------------------------------- | -------------------------- | ------------ |
+| `--ai-chat-background`            | Container background       | `#130d0f`    |
+| `--ai-chat-text`                  | General text               | `#f8eef1`    |
+| `--ai-chat-banner-background`     | Banner background          | `#291c21`    |
+| `--ai-chat-banner-text`           | Banner text                | `#f8eef1`    |
+| `--ai-chat-user-background`       | User bubble                | `#a9004f`    |
+| `--ai-chat-user-text`             | User text                  | `#ffffff`    |
+| `--ai-chat-assistant-text`        | Assistant text             | General text |
+| `--ai-chat-muted-text`            | Secondary/placeholder text | `#c6b4bb`    |
+| `--ai-chat-accent`                | Focus/quote accent         | `#e00067`    |
+| `--ai-chat-link`                  | Links                      | `#ff7aad`    |
+| `--ai-chat-code-background`       | Code background            | `#251a1e`    |
+| `--ai-chat-artifact-background`   | Artifact background        | `#21171b`    |
+| `--ai-chat-artifact-border`       | Artifact border            | `#50363f`    |
+| `--ai-chat-artifact-subtitle`     | Artifact subtitle          | `#bda9b1`    |
+| `--ai-chat-artifact-heading`      | Artifact headline          | `#f8eef1`    |
+| `--ai-chat-artifact-text`         | JSON text                  | `#eadde2`    |
+| `--ai-chat-composer-background`   | Composer background        | `#291c21`    |
+| `--ai-chat-composer-border`       | Composer border            | `#50363f`    |
+| `--ai-chat-composer-text`         | Composer text              | `#f8eef1`    |
+| `--ai-chat-send-background`       | Send background            | `#c00059`    |
+| `--ai-chat-send-hover-background` | Send hover                 | `#df0067`    |
+| `--ai-chat-send-text`             | Send text                  | `#ffffff`    |
+| `--ai-chat-focus`                 | Keyboard focus ring        | `#ff9fc1`    |
 
-Use a direct local link for interactive development. No global npm link is created.
+## Repository workflows
 
-Build the library once before creating the link, then leave its watcher running:
-
-```powershell
-# In ai-service/frontend:
-npm run build:chat-ui
-npm run watch:chat-ui
-```
-
-In another terminal, link Kochwiki directly to the compiled Angular package and start its development server:
-
-```powershell
-# In kochwiki-v2/frontend:
-npm run link:chat-ui
-npm start
-```
-
-Kochwiki preserves the package symlink and excludes `@roithme0/chat-ui` from development-server prebundling, so changes written to `dist/chat-ui` trigger a consumer rebuild and browser reload. Running `npm install` or `npm ci` in Kochwiki restores the declared registry dependency; rerun `npm run link:chat-ui` afterward when local library development is needed.
-
-Docker, CI, and production builds always install the declared GitHub Packages version. They do not use the sibling checkout or its link.
-
-## Browser verification
-
-Run the backend on port 8004 and `npm run start:app` in `frontend`, then open `http://localhost:4204` at a portrait-phone viewport. The host creates an empty `demo` session and advances a scripted sequence through the real backend. No model credentials or Kochwiki access is required; see [frontend setup](../../README.md) for commands.
-
-Submit arbitrary text to check the loading state and introduction, then both JSON artifacts, titled `demo.greeting` and `demo.greetings` (a list of 30 greetings) in the same turn, then a scripted error and completion guidance on the following message. The error's “Demo-Aktion (ohne Funktion)” button leaves the state unchanged. The demo host explicitly selects JSON presentation for both artifacts before the assistant reply. Check that the list starts collapsed and that “Mehr anzeigen” and “Weniger anzeigen” expand and collapse it. One more message triggers a frontend-only simulated 405 compatibility error without a retry action; the backend continues accepting messages. Refresh to restart with empty history; no dedicated restart button is provided. Generic error recovery actions remain available when failures occur. Also check that history scrolls without moving the page, the composer remains at the bottom through viewport-height changes, Enter and the send control submit once, Shift+Enter creates a line break, and long content causes no horizontal page scrolling.
-
-## Advertising presentation capabilities
-
-The UI entry point exports `ChatArtifactCapability` and
-`JSON_ARTIFACT_CAPABILITY`, including the shared JSON renderer's usage description
-and payload schema. Consumer frontends select the capabilities they support and
-supply them beside caller context when creating a model-backed session:
-
-```typescript
-import { JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
-import { HttpSessionTransport } from '@roithme0/chat-ui/conversation';
-
-const transport = new HttpSessionTransport('/api/v1', 'demo', 'demo:default');
-const session = await transport.createSession({
-  initial_context: { selectedItem: item },
-  artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
-});
-```
-
-The AI Service supplies the agent with a local `present_artifact` tool. The agent
-chooses when presentation helps and sends complete data; the renderer does not
-fetch missing details. JSON presentation uses type `json` and payload
-`{ value: <any JSON value> }`. With the default `presentSessionArtifact` mapper, a backend
-presentation title becomes the card headline, and its optional `subtitle` appears
-as plain secondary text beneath it. The subtitle remains visible when the body
-is collapsed. Omitting capabilities keeps a
-model-backed session text-only. Custom renderer registration does not itself
-advertise a capability: the consumer must select its matching description and
-schema explicitly. Capability changes during a session are not supported.
-
-Capabilities can include optional `titleDescription` and `subtitleDescription`
-to tell the agent which values belong in the header. For example, a foodstuff
-capability can specify the foodstuff name as its title and its brand as the
-subtitle, omitted when absent. This is agent guidance rather than validation
-against the payload. Descriptions must be nonblank and at most 2,000 characters.
-The shared JSON capability includes guidance for a short descriptive title and
-an optional explanatory subtitle.
-
-Capabilities may also advertise an optional `metadataSchema`, a self-contained
-JSON Schema (draft 2020-12). The agent follows its field descriptions when
-supplying the optional `metadata` object to `present_artifact`. The service
-validates metadata separately from the presentation payload and rejects metadata
-for capabilities that do not advertise it. Omitted metadata is validated as an
-empty object, so schema-required fields remain required. The default mapper
-passes metadata to `ChatArtifact.metadata`; custom templates access it through
-`let-artifact="artifact"`. Metadata has no built-in rendering or action behavior;
-the consumer frontend interprets it and owns any domain actions.
-
-## Session HTTP transport
-
-The `/conversation` entry point exports `HttpSessionTransport` and its
-`SessionTransport` interface for the Pydantic AI session API used by the demo
-application at `/api/v1`. Kochwiki uses the same contract at `/api/v1`
-with configuration key `kochwiki`.
-
-```ts
-const transport = new HttpSessionTransport('/api/v1', 'demo', 'demo:default');
-const session = await transport.createSession({
-  initial_context: { selectedItem: item },
-  artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
-});
-const snapshot = await transport.readSession(session.session_id);
-await transport.submitPrompt(session.session_id, 'Please update this item.');
-```
-
-`submitPrompt()` returns `{ kind: 'accepted' }` after admission, without a turn ID.
-`observeSession(sessionId, signal)` returns an async iterable of complete snapshot
-events across turns and terminal observation error events. Snapshots preserve the
-backend's ordered `history` of independent user prompts and run groups, including
-empty groups whose native run ID is not yet available. Observation errors describe
-the connection; turn outcomes come from snapshot lifecycle status. Clean EOF means
-the observation ended, not that a turn completed. Aborting or leaving the iterable
-releases the reader and does not cancel execution. The transport does not retry;
-`SessionController` owns observation reconnection. There are no optimistic messages
-or frontend lifecycle reconstruction.
-
-HTTP failures throw `SessionHttpError` with status and kind; HTTP 405 uses
-`method_not_allowed` independently of its response body, and FastAPI 422 responses
-use `validation_error`. Network and malformed-response failures throw
-`SessionTransportError`. Observation error frames remain typed `SessionEvent`
-values, followed by the end of the iterable. The transport uses the generated
-schemas directly. The backend response schemas require explicit discriminators
-and describe recursive finite JSON values for context and artifact data.
-
-The `conversation/generated` contract is generated from an isolated
-FastAPI app mounting `app.agentic.http.create_session_router(lambda: {})`, using
-the existing `@hey-api/openapi-ts` TypeScript and Zod plugins. It does not depend
-on production mounting. Backend regression
-coverage compares its OpenAPI document with the actual router.
-
-The generation and drift-check commands cover this contract. From
-`frontend` in PowerShell:
-
-```powershell
-$env:PYTHON = (Resolve-Path ../backend/.venv/Scripts/python.exe).Path
-npm.cmd run generate:conversation-contract
-npm.cmd run check:conversation-contract
-```
-
-## Session lifecycle and recovery
-
-`SessionController` owns prompt submission, session observation and recovery.
-`HttpSessionTransport` handles HTTP and SSE, and `presentSession` projects the
-backend snapshot into the rendering component's view model.
-
-Create a `SessionController(transport, publish)` and bind its `SessionViewState.turns`, composer flags and `status` to the controlled component. Call `start(initialization?)`, forward submissions to `submit(text, acknowledge)`, forward status actions to `performAction(id)`, and call `dispose()` on teardown. `snapshot` exposes the latest generated `PresentedSession` contract; `admission` and `observation` report request and connection outcomes separately from its authoritative execution lifecycles. `SessionArtifactMapper` receives the generated artifact type and can omit artifacts with `null`; the default `presentSessionArtifact` maps its typed payload envelope directly.
-
-A snapshot with `error: 'conversation_limit_reached'` keeps history visible, disables submission, and shows `Conversation limit reached` through the existing assistant error status. An admission rejection with that kind also blocks submission while observation continues. Exhaustion has no retry action; reads and observation remain available until session expiry.
-
-Admission success calls the submission acknowledgement without inserting a prompt. Only observer snapshots supply conversation content. A missing admission response retains the draft, reports uncertainty and disables submission; healthy observation continues, without reconciliation reads, text matching, retries or guessed acknowledgement. Disposal aborts observation and ignores late HTTP results, without cancelling backend execution.
-
-`presentSession` derives ordered prompt fragments and execution groups directly from the native snapshot. Run keys use session identity and presentation ordinals, never prompt text or run IDs as application execution identity; section tracking keys remain internal to the renderer. Only text with an explicit `final_answer` phase receives `isFinal: true`; unphased text is never promoted to a final answer, regardless of run status. Each explicit final answer can expose a shared run details toggle, even before completion; automatic collapse anchors on the first explicit final answer. Without one, messages remain visible, details remain expanded, and no details toggle is shown. Failed, cancelled and execution-uncertain groups are not automatically collapsed; their details can still be toggled manually. Known terminal lifecycle outcomes remain intact after observation loss. The controller reconnects after a one-second delay on network failures, unexpected EOF, observer capacity limits, overflow and internal observation errors. Sending stays disabled until a fresh snapshot arrives; its lifecycle determines whether execution is still active or finished. Compatibility failures, unavailable sessions and malformed responses stop reconnection. Disposal cancels pending reconnection. Observation recovery never resubmits a prompt or resolves uncertain admission.
+- [Development](https://github.com/roithme0/ai-service/blob/production/docs/development.md): local linking, validation, contract generation, built-package checks, and browser verification.
+- [Releases](https://github.com/roithme0/ai-service/blob/production/docs/operation.md#releases): shared tags, `latest`/`alpha` channels, and publication checks. CI/Docker consume published versions rather than sibling checkout links.
