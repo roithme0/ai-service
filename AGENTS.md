@@ -1,9 +1,5 @@
 # Agents Guide
 
-## Mandatory Context Docs
-
-- Before non-trivial work, read `README.md`.
-
 ## Coding Rules
 
 - No destructive commands.
