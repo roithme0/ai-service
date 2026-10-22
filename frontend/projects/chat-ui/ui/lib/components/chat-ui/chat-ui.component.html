@@ -8,59 +8,73 @@
     <div class="messages">
       @for (section of sections(); track section.key; let lastTurn = $last) {
         @let turn = section.turn;
+        @let run = turn.runKey === null ? null : detailRuns().get(turn.runKey);
         @for (item of turn.content; track item.id; let last = $last) {
           @if (
             item.kind !== 'failure' || !lastTurn || !last || conversationStatus()?.kind !== 'error'
           ) {
-            <ai-chat-history-item
-              [collapsed]="
-                (item.kind === 'tool' || item.kind === 'intermediate') && detailsHidden(turn)
-              "
+            @let anchor = historyAnchorFor(turn, item);
+            <div
+              class="history-item"
+              [attr.data-scroll-anchor]="anchor"
+              [class.history-scroll-anchor]="anchor !== null && anchor === scrollAnchor()"
             >
-              @switch (item.kind) {
-                @case ('artifact') {
-                  <ai-chat-artifact-card [artifact]="item" [renderer]="rendererFor(item.type)" />
-                }
-                @case ('tool') {
-                  <ai-chat-tool-call [toolCall]="item" />
-                }
-                @case ('failure') {
-                  <ai-chat-status
-                    [status]="{ kind: 'error', placement: 'assistant', message: item.text }"
-                    aria-label="Fehlgeschlagene Antwort"
-                  />
-                }
-                @case ('intermediate') {
-                  <ai-chat-intermediate-message [message]="item" />
-                }
-                @case ('text') {
-                  @if (item.role === 'user') {
-                    <ai-chat-user-message [message]="item" />
-                  } @else {
-                    <ai-chat-assistant-message
-                      [message]="item"
-                      [showDetailsToggle]="
-                        turn.runKey !== null && detailToggleAnchors().get(turn.runKey) === item.id
-                      "
-                      [detailsExpanded]="detailsExpanded(turn)"
-                      (detailsToggled)="toggleDetails(turn)"
+              <ai-chat-history-item
+                [collapsed]="
+                  (item.kind === 'tool' || item.kind === 'intermediate') && detailsHidden(turn)
+                "
+              >
+                @switch (item.kind) {
+                  @case ('artifact') {
+                    <ai-chat-artifact-card
+                      [artifact]="item"
+                      [renderer]="rendererFor(item.type)"
+                      (expansionToggled)="anchorArtifact(anchor)"
                     />
                   }
+                  @case ('tool') {
+                    <ai-chat-tool-call [toolCall]="item" />
+                  }
+                  @case ('failure') {
+                    <ai-chat-status
+                      [status]="{ kind: 'error', placement: 'assistant', message: item.text }"
+                      aria-label="Fehlgeschlagene Antwort"
+                    />
+                  }
+                  @case ('intermediate') {
+                    <ai-chat-intermediate-message [message]="item" />
+                  }
+                  @case ('text') {
+                    @if (item.role === 'user') {
+                      <ai-chat-user-message [message]="item" />
+                    } @else {
+                      <ai-chat-assistant-message
+                        [message]="item"
+                        [showDetailsToggle]="item.isFinal && !!run"
+                        [detailsExpanded]="detailsExpanded(turn)"
+                        (detailsToggled)="
+                          setDetailsExpanded(turn.runKey, !detailsExpanded(turn), item.id)
+                        "
+                      />
+                    }
+                  }
                 }
-              }
-            </ai-chat-history-item>
+              </ai-chat-history-item>
+            </div>
           }
         }
       }
 
       @if (conversationStatus(); as status) {
-        <ai-chat-history-item>
-          <ai-chat-status
-            [status]="status"
-            (actionTriggered)="statusActionTriggered.emit($event)"
-            (contentRevealed)="requestHistoryScroll()"
-          />
-        </ai-chat-history-item>
+        <div class="history-item">
+          <ai-chat-history-item>
+            <ai-chat-status
+              [status]="status"
+              (actionTriggered)="statusActionTriggered.emit($event)"
+              (contentRevealed)="requestHistoryScroll()"
+            />
+          </ai-chat-history-item>
+        </div>
       }
     </div>
   </div>

@@ -3,10 +3,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { TextFieldModule } from '@angular/cdk/text-field';
 import type { ChatSubmission } from '../../models/chat-message';
+import { PreventPointerFocusDirective } from '../../directives/prevent-pointer-focus.directive';
 
 @Component({
   selector: 'ai-chat-composer',
-  imports: [MatButtonModule, MatIconModule, TextFieldModule],
+  imports: [MatButtonModule, MatIconModule, TextFieldModule, PreventPointerFocusDirective],
   templateUrl: './composer.component.html',
   styleUrl: './composer.component.scss',
 })
@@ -43,12 +44,6 @@ export class ComposerComponent {
   protected stopObservingViewport(): void {
     this.stopViewportObservation?.();
     this.stopViewportObservation = null;
-  }
-
-  protected preserveComposerFocus(event: MouseEvent, textarea: HTMLTextAreaElement): void {
-    if (event.button === 0 && textarea.ownerDocument.activeElement === textarea) {
-      event.preventDefault();
-    }
   }
 
   protected preventBlockedEdit(event: InputEvent): void {

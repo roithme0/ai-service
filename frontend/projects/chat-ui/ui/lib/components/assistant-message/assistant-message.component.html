@@ -1,17 +1,20 @@
 <article aria-label="Antwort des Assistenten">
   <div class="markdown" [innerHTML]="renderAssistantMarkdown(message().text)"></div>
-  @if (showDetailsToggle()) {
+  @if (message().isFinal) {
     <div class="answer-actions">
-      <button
-        type="button"
-        class="details-toggle"
-        [attr.aria-expanded]="detailsExpanded()"
-        [attr.aria-label]="detailsExpanded() ? 'Details ausblenden' : 'Details anzeigen'"
-        [title]="detailsExpanded() ? 'Details ausblenden' : 'Details anzeigen'"
-        (click)="detailsToggled.emit()"
-      >
-        <mat-icon svgIcon="ai-chat:list-tree" aria-hidden="true" />
-      </button>
+      @if (showDetailsToggle()) {
+        <button
+          aiChatPreventPointerFocus
+          type="button"
+          class="details-toggle"
+          [attr.aria-expanded]="detailsExpanded()"
+          [attr.aria-label]="detailsExpanded() ? 'Details ausblenden' : 'Details anzeigen'"
+          [title]="detailsExpanded() ? 'Details ausblenden' : 'Details anzeigen'"
+          (click)="detailsToggled.emit()"
+        >
+          <mat-icon svgIcon="ai-chat:list-tree" aria-hidden="true" />
+        </button>
+      }
     </div>
   }
 </article>

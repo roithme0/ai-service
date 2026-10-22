@@ -8,6 +8,7 @@ import {
   input,
   output,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
@@ -23,6 +24,7 @@ import { ArtifactCardComponent } from '../artifact-card/artifact-card.component'
 import { StatusComponent } from '../status/status.component';
 import type {
   ChatArtifactRendererMap,
+  ChatContent,
   ChatConversationStatus,
   ChatSubmission,
   ChatTurn,
@@ -46,9 +48,10 @@ import type {
 export class ChatUiComponent {
   private readonly iconRegistry = inject(MatIconRegistry);
   private readonly sanitizer = inject(DomSanitizer);
-  private readonly history = viewChild.required<ElementRef<HTMLElement>>('history');
+  private readonly history = viewChild<ElementRef<HTMLElement>>('history');
 
   private scrollHistoryToBottom = false;
+  protected readonly scrollAnchor = signal<string | null>(null);
   private readonly expandedRuns = signal<ReadonlySet<string>>(new Set());
 
   readonly bannerTitle = input.required<string>();
@@ -80,8 +83,8 @@ export class ChatUiComponent {
   readonly messageSubmitted = output<ChatSubmission>();
   readonly statusActionTriggered = output<string>();
 
-  protected readonly detailToggleAnchors = computed(() => {
-    const answers = new Map<string, string>();
+  protected readonly detailRuns = computed(() => {
+    const answers = new Map<string, { readonly answerId: string; readonly completed: boolean }>();
     const groups = new Map<string, ChatTurn[]>();
     for (const turn of this.turns()) {
       const key = turn.runKey;
@@ -90,15 +93,16 @@ export class ChatUiComponent {
     }
     for (const [key, turns] of groups) {
       const content = turns.flatMap((turn) => turn.content);
-      if (
-        turns.some((turn) => turn.status !== 'completed') ||
-        !content.some((item) => item.kind === 'intermediate' || item.kind === 'tool')
-      )
-        continue;
+      if (!content.some((item) => item.kind === 'intermediate' || item.kind === 'tool')) continue;
       const answer = content.find(
         (item) => item.kind === 'text' && item.role === 'assistant' && item.isFinal,
       );
-      if (answer) answers.set(key, answer.id);
+      if (answer) {
+        answers.set(key, {
+          answerId: answer.id,
+          completed: turns.every((turn) => turn.status === 'completed'),
+        });
+      }
     }
     return answers;
   });
@@ -108,15 +112,25 @@ export class ChatUiComponent {
 
   constructor() {
     registerChatIcons(this.iconRegistry, this.sanitizer);
+    const initializedRuns = new Map<string, boolean>();
     effect(() => {
       this.turns();
       this.conversationStatus();
-      this.scrollHistoryToBottom = true;
+      untracked(() => {
+        this.requestHistoryScroll();
+        for (const [runKey, run] of this.detailRuns()) {
+          const wasCompleted = initializedRuns.get(runKey);
+          if (wasCompleted === true || wasCompleted === run.completed) continue;
+          initializedRuns.set(runKey, run.completed);
+          this.setDetailsExpanded(runKey, !run.completed);
+        }
+      });
     });
     afterEveryRender(() => {
       if (!this.scrollHistoryToBottom) return;
       this.scrollHistoryToBottom = false;
-      const history = this.history().nativeElement;
+      const history = this.history()?.nativeElement;
+      if (!history) return;
       if (typeof history.scrollTo === 'function') {
         history.scrollTo({ top: history.scrollHeight, behavior: 'smooth' });
       } else {
@@ -126,6 +140,7 @@ export class ChatUiComponent {
   }
 
   protected requestHistoryScroll(): void {
+    this.scrollAnchor.set(null);
     this.scrollHistoryToBottom = true;
   }
 
@@ -135,21 +150,49 @@ export class ChatUiComponent {
 
   protected detailsHidden(turn: ChatTurn): boolean {
     return (
-      turn.runKey !== null &&
-      this.detailToggleAnchors().has(turn.runKey) &&
-      !this.detailsExpanded(turn)
+      turn.runKey !== null && this.detailRuns().has(turn.runKey) && !this.detailsExpanded(turn)
     );
   }
 
-  protected toggleDetails(turn: ChatTurn): void {
-    const runKey = turn.runKey;
-    if (runKey === null || !this.detailToggleAnchors().has(runKey)) return;
-    const expanded = new Set(this.expandedRuns());
-    if (expanded.has(runKey)) {
-      expanded.delete(runKey);
-    } else {
-      expanded.add(runKey);
-    }
-    this.expandedRuns.set(expanded);
+  protected historyAnchorFor(turn: ChatTurn, item: ChatContent): string | null {
+    if (item.kind === 'artifact') return JSON.stringify([turn.runKey, item.id]);
+    return turn.runKey !== null &&
+      this.detailRuns().has(turn.runKey) &&
+      item.kind === 'text' &&
+      item.role === 'assistant' &&
+      item.isFinal
+      ? JSON.stringify([turn.runKey, item.id])
+      : null;
+  }
+
+  private selectScrollAnchor(anchor: string | null): boolean {
+    const anchors =
+      this.history()?.nativeElement.querySelectorAll<HTMLElement>('[data-scroll-anchor]');
+    const hasAnchor =
+      anchor !== null &&
+      [...(anchors ?? [])].some((element) => element.getAttribute('data-scroll-anchor') === anchor);
+    this.scrollAnchor.set(anchor);
+    return hasAnchor;
+  }
+
+  protected anchorArtifact(anchor: string | null): void {
+    this.scrollHistoryToBottom = !this.selectScrollAnchor(anchor);
+  }
+
+  protected setDetailsExpanded(runKey: string | null, expanded: boolean, messageId?: string): void {
+    if (runKey === null) return;
+    const answerId = messageId ?? this.detailRuns().get(runKey)?.answerId;
+    if (answerId === undefined) return;
+    const anchor = JSON.stringify([runKey, answerId]);
+    const hasAnchor = this.selectScrollAnchor(anchor);
+    if (!hasAnchor) this.scrollHistoryToBottom = true;
+    else if (this.expandedRuns().has(runKey) !== expanded) this.scrollHistoryToBottom = false;
+    this.expandedRuns.update((runs) => {
+      if (runs.has(runKey) === expanded) return runs;
+      const next = new Set(runs);
+      if (expanded) next.add(runKey);
+      else next.delete(runKey);
+      return next;
+    });
   }
 }
