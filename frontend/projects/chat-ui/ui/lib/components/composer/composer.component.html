@@ -14,9 +14,12 @@
       (beforeinput)="preventBlockedEdit($event)"
       (input)="updateDraft(composer)"
       (keydown)="submitFromKeyboard($event)"
+      (focus)="onFocus(composer)"
+      (blur)="stopObservingViewport()"
     ></textarea>
     <div class="actions">
       <button
+        aiChatPreventPointerFocus
         class="send-button"
         matIconButton
         type="submit"

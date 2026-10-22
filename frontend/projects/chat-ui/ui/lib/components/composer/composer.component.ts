@@ -1,12 +1,13 @@
-import { Component, input, output, signal } from '@angular/core';
+import { Component, DestroyRef, inject, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { TextFieldModule } from '@angular/cdk/text-field';
 import type { ChatSubmission } from '../../models/chat-message';
+import { PreventPointerFocusDirective } from '../../directives/prevent-pointer-focus.directive';
 
 @Component({
   selector: 'ai-chat-composer',
-  imports: [MatButtonModule, MatIconModule, TextFieldModule],
+  imports: [MatButtonModule, MatIconModule, TextFieldModule, PreventPointerFocusDirective],
   templateUrl: './composer.component.html',
   styleUrl: './composer.component.scss',
 })
@@ -16,7 +17,34 @@ export class ComposerComponent {
   readonly placeholder = input('Nachricht schreiben');
   readonly mascotSource = input.required<string>();
   readonly messageSubmitted = output<ChatSubmission>();
+  readonly focused = output<void>();
+  readonly viewportResized = output<void>();
   protected readonly draft = signal('');
+  private stopViewportObservation: (() => void) | null = null;
+
+  constructor() {
+    inject(DestroyRef).onDestroy(() => this.stopObservingViewport());
+  }
+
+  protected onFocus(textarea: HTMLTextAreaElement): void {
+    this.stopObservingViewport();
+    const viewport = textarea.ownerDocument.defaultView?.visualViewport;
+    if (viewport) {
+      const onResize = (): void => {
+        if (textarea.ownerDocument.activeElement === textarea) {
+          this.viewportResized.emit();
+        }
+      };
+      viewport.addEventListener('resize', onResize);
+      this.stopViewportObservation = () => viewport.removeEventListener('resize', onResize);
+    }
+    this.focused.emit();
+  }
+
+  protected stopObservingViewport(): void {
+    this.stopViewportObservation?.();
+    this.stopViewportObservation = null;
+  }
 
   protected preventBlockedEdit(event: InputEvent): void {
     if (this.editingDisabled() && event.cancelable) {

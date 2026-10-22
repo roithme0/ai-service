@@ -31,17 +31,13 @@ export function presentSession(
   mapArtifact: SessionArtifactMapper = presentSessionArtifact,
 ): readonly ChatTurn[] {
   const groups = presentHistory(snapshot, observationLost, mapArtifact);
-  const answerIds = findAnswerIds(groups);
   const lastGroupIndices = findLastGroupIndices(groups);
 
-  return groups.map((group, index) => {
-    if (group.runKey === null) return group;
-    return finishGroup(
-      group,
-      answerIds.get(group.runKey),
-      lastGroupIndices.get(group.runKey) === index,
-    );
-  });
+  return groups.map((group, index) =>
+    group.runKey !== null && lastGroupIndices.get(group.runKey) === index
+      ? appendRunFailure(group)
+      : group,
+  );
 }
 
 function presentHistory(
@@ -114,23 +110,6 @@ function presentRunStatus(
   return observationLost ? 'unknown' : 'active';
 }
 
-function findAnswerIds(groups: readonly ChatTurn[]): ReadonlyMap<string, string> {
-  const finalAnswers = new Map<string, string>();
-  const unphasedAnswers = new Map<string, string>();
-  for (const group of groups) {
-    const key = group.runKey;
-    if (key === null) continue;
-    for (const item of group.content) {
-      if (item.kind !== 'text') continue;
-      if (item.isFinal) {
-        if (!finalAnswers.has(key)) finalAnswers.set(key, item.id);
-      } else unphasedAnswers.set(key, item.id);
-    }
-  }
-
-  return new Map([...unphasedAnswers, ...finalAnswers]);
-}
-
 function findLastGroupIndices(groups: readonly ChatTurn[]): ReadonlyMap<string, number> {
   const lastGroups = new Map<string, number>();
   groups.forEach((group, index) => {
@@ -139,30 +118,22 @@ function findLastGroupIndices(groups: readonly ChatTurn[]): ReadonlyMap<string, 
   return lastGroups;
 }
 
-function finishGroup(
-  group: ChatTurn,
-  answerId: string | undefined,
-  isLastGroup: boolean,
-): ChatTurn {
-  if (group.status === 'prompt') return group;
-
-  const content = group.content.map((item): ChatContent => {
-    if (item.kind === 'text' && item.id === answerId) return { ...item, isFinal: true };
-    return item;
-  });
-
-  if (isLastGroup && (group.status === 'failed' || group.status === 'cancelled')) {
-    content.push({
-      kind: 'failure',
-      id: `${group.runKey}-failure`,
-      text:
-        group.status === 'cancelled'
-          ? 'Die Antwort wurde abgebrochen.'
-          : 'Die Antwort konnte nicht erstellt werden.',
-    });
-  }
-
-  return { ...group, content };
+function appendRunFailure(group: ChatTurn): ChatTurn {
+  if (group.status !== 'failed' && group.status !== 'cancelled') return group;
+  return {
+    ...group,
+    content: [
+      ...group.content,
+      {
+        kind: 'failure',
+        id: `${group.runKey}-failure`,
+        text:
+          group.status === 'cancelled'
+            ? 'Die Antwort wurde abgebrochen.'
+            : 'Die Antwort konnte nicht erstellt werden.',
+      },
+    ],
+  };
 }
 
 function presentPart(

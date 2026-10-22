@@ -22,11 +22,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding-top: 1.25rem;
-}
-
-:host(:first-child) .item-content {
-  padding-top: 0;
+  padding-top: var(--history-item-spacing, 1.25rem);
 }
 
 @media (prefers-reduced-motion: reduce) {
