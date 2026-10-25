@@ -5,8 +5,21 @@ import type { PresentedSession, SessionEvent } from '@roithme0/chat-ui/conversat
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app.component';
 
+const EMPTY_USAGE: PresentedSession['usage'] = {
+  input_tokens: 0,
+  output_tokens: 0,
+  total_tokens: 0,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  reasoning_tokens: 0,
+  requests: 0,
+  tool_calls: 0,
+  estimated_cost_usd: null,
+};
+
 const EMPTY: PresentedSession = {
   error: null,
+  usage: EMPTY_USAGE,
   session_id: 'demo-1',
   expires_at: '2026-10-21T12:00:00Z',
   history: [],
@@ -136,6 +149,7 @@ describe('Native demo application', () => {
           { part_kind: 'user-prompt', content: 'Any text' },
           {
             part_kind: 'turn',
+            usage: EMPTY_USAGE,
             lifecycle: LIFECYCLE,
             parts: [
               { part_kind: 'text', content: 'Creating a greeting.', phase: 'commentary' },
@@ -201,6 +215,7 @@ describe('Native demo application', () => {
         { part_kind: 'user-prompt', content: 'Show error' },
         {
           part_kind: 'turn',
+          usage: EMPTY_USAGE,
           lifecycle: { ...LIFECYCLE, status: 'failed' },
           parts: [
             { part_kind: 'text', content: 'This update remains visible.', phase: 'commentary' },
@@ -224,6 +239,7 @@ describe('Native demo application', () => {
     const { fixture, chat, server } = await openDemo();
     const history: PresentedSession['history'] = Array.from({ length: 4 }, (_, index) => ({
       part_kind: 'turn',
+      usage: EMPTY_USAGE,
       lifecycle: {
         ...LIFECYCLE,
         run_id: `run-${index}`,

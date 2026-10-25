@@ -2,20 +2,42 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpSessionTransport, SessionHttpError, SessionTransportError } from './session-transport';
 import type { SessionEvent, PresentedSession } from '../generated/types.gen';
 
+const EMPTY_USAGE: PresentedSession['usage'] = {
+  input_tokens: 0,
+  output_tokens: 0,
+  total_tokens: 0,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  reasoning_tokens: 0,
+  requests: 0,
+  tool_calls: 0,
+  estimated_cost_usd: null,
+};
+
 const expires = '2026-10-21T12:00:00Z';
 const snapshot: PresentedSession = {
   error: null,
+  usage: {
+    ...EMPTY_USAGE,
+    input_tokens: 100,
+    output_tokens: 20,
+    total_tokens: 120,
+    requests: 1,
+    estimated_cost_usd: '0.01234567890123456789',
+  },
   session_id: 's/1',
   expires_at: expires,
   history: [
     { part_kind: 'user-prompt', content: ['First', 'Second'] },
     {
       part_kind: 'turn',
+      usage: EMPTY_USAGE,
       lifecycle: { run_id: null, status: 'running', started_at: expires, finished_at: null },
       parts: [],
     },
     {
       part_kind: 'turn',
+      usage: { ...EMPTY_USAGE, estimated_cost_usd: '0' },
       lifecycle: {
         run_id: 'run-1',
         status: 'completed',
@@ -323,6 +345,11 @@ describe('session observation', () => {
   it.each([
     'data: {broken}\n\n',
     frame({ snapshot }),
+    frame({ kind: 'snapshot', snapshot: { ...snapshot, usage: undefined } }),
+    frame({
+      kind: 'snapshot',
+      snapshot: { ...snapshot, usage: { ...EMPTY_USAGE, estimated_cost_usd: 0.01 } },
+    }),
     frame({ kind: 'surprise' }),
     frame({ kind: 'error', reason: 'surprise' }),
     frame({ kind: 'snapshot', snapshot: { ...snapshot, history: [{ content: 'missing kind' }] } }),
@@ -333,6 +360,7 @@ describe('session observation', () => {
         history: [
           {
             part_kind: 'turn',
+            usage: EMPTY_USAGE,
             lifecycle: { run_id: null, status: 'running', started_at: expires, finished_at: null },
             parts: [
               { part_kind: 'tool-call', tool_name: 'x', tool_call_id: 'c', status: 'made_up' },

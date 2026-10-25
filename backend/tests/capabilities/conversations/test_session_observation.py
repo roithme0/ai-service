@@ -172,6 +172,7 @@ def test_observer_sees_presented_progress_and_complete_snapshots_without_interna
             assert "SECRET" not in active.model_dump_json()
             assert set(active.model_dump()) == {
                 "session_id",
+                "usage",
                 "expires_at",
                 "history",
                 "error",

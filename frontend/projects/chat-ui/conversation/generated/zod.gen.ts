@@ -79,6 +79,21 @@ export const zObservationErrorEvent = z.object({
 });
 
 /**
+ * PresentedUsage
+ */
+export const zPresentedUsage = z.object({
+    cache_read_tokens: z.int(),
+    cache_write_tokens: z.int(),
+    estimated_cost_usd: z.string().regex(/^(?!^[-+.]*$)[+-]?0*\d*\.?\d*$/).nullable(),
+    input_tokens: z.int(),
+    output_tokens: z.int(),
+    reasoning_tokens: z.int(),
+    requests: z.int(),
+    tool_calls: z.int(),
+    total_tokens: z.int()
+});
+
+/**
  * PromptSubmissionRequest
  */
 export const zPromptSubmissionRequest = z.object({
@@ -178,7 +193,8 @@ export const zTurnLifecycle = z.object({
 export const zPresentedTurn = z.object({
     lifecycle: zTurnLifecycle,
     part_kind: z.literal('turn'),
-    parts: z.array(zPresentationPart)
+    parts: z.array(zPresentationPart),
+    usage: zPresentedUsage
 });
 
 /**
@@ -204,7 +220,8 @@ export const zPresentedSession = z.object({
     error: z.literal('conversation_limit_reached').nullable(),
     expires_at: z.iso.datetime(),
     history: z.array(zHistoryItem),
-    session_id: z.string()
+    session_id: z.string(),
+    usage: zPresentedUsage
 });
 
 /**

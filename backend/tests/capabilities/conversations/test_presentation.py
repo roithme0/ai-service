@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Sequence
 from contextlib import aclosing
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -170,7 +171,7 @@ def test_serialized_contract_selects_only_display_data_and_preserves_native_orde
     assert "turns" not in projected.model_dump()
     assert groups(projected)[0].lifecycle == internal.turn_executions[0].lifecycle
     assert "SECRET" not in encoded
-    assert "usage" not in encoded and "provider_details" not in encoded
+    assert "provider_details" not in encoded
     assert PresentedSession.model_validate_json(encoded) == projected
     displayed = groups(projected)[0].parts[2]
     assert isinstance(displayed, AcceptedArtifact)
@@ -494,7 +495,11 @@ def test_prompt_visibility_uses_native_metadata_rather_than_text_or_run_attribut
         UserPrompt(content=("First fragment", "Second fragment")),
     )
     assert groups(projected) == (
-        PresentedTurn(lifecycle=internal.turn_executions[0].lifecycle, parts=()),
+        PresentedTurn(
+            lifecycle=internal.turn_executions[0].lifecycle,
+            usage=projected.usage,
+            parts=(),
+        ),
     )
     assert (
         PresentedSession.model_validate_json(projected.model_dump_json()) == projected
@@ -541,6 +546,18 @@ def test_prompt_between_responses_keeps_native_order_without_rebuilding_turn_bou
             ModelResponse(parts=[TextPart("Done")], run_id="run"),
         ]
     )
+    internal = replace(
+        internal,
+        turn_executions=(
+            replace(
+                internal.turn_executions[0],
+                usage=RunUsage(input_tokens=100, requests=1),
+            ),
+        ),
+        conversation=Conversation(
+            messages=internal.messages, usage=RunUsage(input_tokens=100, requests=1)
+        ),
+    )
     projected = present_session(internal)
     assert [item.part_kind for item in projected.history] == [
         "user-prompt",
@@ -551,6 +568,8 @@ def test_prompt_between_responses_keeps_native_order_without_rebuilding_turn_bou
     first, second = groups(projected)
     assert first.lifecycle == second.lifecycle == internal.turn_executions[0].lifecycle
     assert first.lifecycle.run_id == "run"
+    assert first.usage == second.usage == projected.usage
+    assert first.usage.input_tokens == 100
     assert (
         isinstance(first.parts[0], ToolActivity) and first.parts[0].status == "success"
     )

@@ -8,6 +8,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RequestUsage, RunUsage
 
+from app.capabilities.conversations.presentation import PresentedTurn, present_session
 from app.capabilities.conversations.sessions import AgentSessionRegistry
 from app.capabilities.conversations.session_state import SessionState
 from app.capabilities.conversations.turns import create_turn_agent
@@ -96,6 +97,31 @@ def test_usage_across_turns_and_live_snapshots(
                 assert active.usage.details == {"custom_tokens": 14}
                 assert read_usage().details == {"custom_tokens": 14}
                 assert active.conversation.usage.requests == 1
+                presented = present_session(active).model_dump(mode="json")
+                expected = {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "total_tokens": 120,
+                    "cache_read_tokens": 30,
+                    "cache_write_tokens": 10,
+                    "reasoning_tokens": 5,
+                    "requests": 1,
+                    "tool_calls": 0,
+                    "estimated_cost_usd": "0.0123",
+                }
+                public_turns = [
+                    item for item in presented["history"] if item["part_kind"] == "turn"
+                ]
+                assert [item["usage"] for item in public_turns] == [expected, expected]
+                assert presented["usage"] == {
+                    **{
+                        key: value * 2
+                        for key, value in expected.items()
+                        if isinstance(value, int)
+                    },
+                    "estimated_cost_usd": "0.0246",
+                }
+                assert "custom_tokens" not in str(presented)
 
                 if outcome == "cancelled":
                     task.cancel()
@@ -125,6 +151,13 @@ def test_usage_across_turns_and_live_snapshots(
             assert retained.usage.cost == Decimal("0.0123") * completed_responses
             assert settled.usage == settled.conversation.usage
             assert settled.usage.requests == 1 + completed_responses
+            public = present_session(settled)
+            public_turn = public.history[-1]
+            assert isinstance(public_turn, PresentedTurn)
+            assert public_turn.usage.requests == completed_responses
+            assert public_turn.usage.tool_calls == (0 if outcome == "cancelled" else 1)
+            assert public_turn.usage.estimated_cost_usd == retained.usage.cost
+            assert public.usage.requests == 1 + completed_responses
             assert settled.usage.details == {
                 "custom_tokens": 7 * (1 + completed_responses)
             }
@@ -233,5 +266,14 @@ def test_costs_preserve_native_unknown_zero_and_subtotal_semantics(
         ] == expected_turn_costs
         assert snapshot.usage.cost == expected_total
         assert snapshot.usage.input_tokens == 20
+        public = present_session(snapshot).model_dump(mode="json")
+        assert public["usage"]["estimated_cost_usd"] == (
+            str(expected_total) if expected_total is not None else None
+        )
+        assert [
+            item["usage"]["estimated_cost_usd"]
+            for item in public["history"]
+            if item["part_kind"] == "turn"
+        ] == [str(cost) if cost is not None else None for cost in expected_turn_costs]
 
     asyncio.run(exercise())

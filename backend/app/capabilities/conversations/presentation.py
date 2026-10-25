@@ -3,9 +3,11 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import Field
+from pydantic_ai.usage import RunUsage
 from pydantic_ai.messages import (
     NativeToolCallPart,
     NativeToolReturnPart,
@@ -20,6 +22,7 @@ from pydantic_ai.messages import (
 from app.capabilities.conversations.session_state import (
     INITIAL_CONTEXT_ORIGIN,
     SessionArtifact,
+    TurnExecution,
     TurnLifecycle,
     TurnStatus,
 )
@@ -61,9 +64,36 @@ type PresentationPart = Annotated[
 ]
 
 
+class PresentedUsage(ResponseModel):
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    reasoning_tokens: int
+    requests: int
+    tool_calls: int
+    estimated_cost_usd: Decimal | None
+
+
+def _present_usage(usage: RunUsage) -> PresentedUsage:
+    return PresentedUsage(
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        total_tokens=usage.total_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        cache_write_tokens=usage.cache_write_tokens,
+        reasoning_tokens=usage.output_reasoning_tokens,
+        requests=usage.requests,
+        tool_calls=usage.tool_calls,
+        estimated_cost_usd=usage.cost,
+    )
+
+
 class PresentedTurn(ResponseModel):
     part_kind: Literal["turn"] = "turn"
     lifecycle: TurnLifecycle
+    usage: PresentedUsage
     parts: tuple[PresentationPart, ...]
 
 
@@ -74,6 +104,7 @@ type HistoryItem = Annotated[
 
 class PresentedSession(ResponseModel):
     session_id: str
+    usage: PresentedUsage
     expires_at: datetime
     history: tuple[HistoryItem, ...]
     error: Literal["conversation_limit_reached"] | None
@@ -201,12 +232,20 @@ def _present_user_prompt(part: UserPromptPart) -> UserPrompt | None:
 
 def _present_history(
     history: Sequence[UserPrompt | _RunSection],
-    lifecycles: Sequence[TurnLifecycle],
+    executions: Sequence[TurnExecution],
 ) -> tuple[HistoryItem, ...]:
+    turns = tuple(
+        PresentedTurn(
+            lifecycle=execution.lifecycle,
+            usage=_present_usage(execution.usage),
+            parts=(),
+        )
+        for execution in executions
+    )
     turn_positions = {
-        lifecycle.run_id: index
-        for index, lifecycle in enumerate(lifecycles)
-        if lifecycle.run_id is not None
+        turn.lifecycle.run_id: index
+        for index, turn in enumerate(turns)
+        if turn.lifecycle.run_id is not None
     }
     result: list[HistoryItem] = []
     next_turn = 0
@@ -215,21 +254,10 @@ def _present_history(
             result.append(item)
             continue
         position = turn_positions[item.run_id]
-        result.extend(
-            PresentedTurn(lifecycle=lifecycle, parts=())
-            for lifecycle in lifecycles[next_turn:position]
-        )
-        result.append(
-            PresentedTurn(
-                lifecycle=lifecycles[position],
-                parts=tuple(item.parts),
-            )
-        )
+        result.extend(turns[next_turn:position])
+        result.append(turns[position].model_copy(update={"parts": tuple(item.parts)}))
         next_turn = max(next_turn, position + 1)
-    result.extend(
-        PresentedTurn(lifecycle=lifecycle, parts=())
-        for lifecycle in lifecycles[next_turn:]
-    )
+    result.extend(turns[next_turn:])
     return tuple(result)
 
 
@@ -297,10 +325,11 @@ def present_session(snapshot: SessionSnapshot) -> PresentedSession:
 
     return PresentedSession(
         session_id=snapshot.session_id,
+        usage=_present_usage(snapshot.usage),
         expires_at=snapshot.expires_at,
         error="conversation_limit_reached" if snapshot.limit_reached else None,
         history=_present_history(
             history_sections,
-            tuple(execution.lifecycle for execution in snapshot.turn_executions),
+            snapshot.turn_executions,
         ),
     )

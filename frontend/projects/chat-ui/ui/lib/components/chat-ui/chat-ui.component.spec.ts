@@ -17,6 +17,18 @@ import { ChatUiComponent } from './chat-ui.component';
 import { presentSession } from '../../../../conversation/src/session-presentation';
 import type { PresentedSession, PresentedTurn } from '../../../../conversation/generated/types.gen';
 
+const EMPTY_USAGE: PresentedSession['usage'] = {
+  input_tokens: 0,
+  output_tokens: 0,
+  total_tokens: 0,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  reasoning_tokens: 0,
+  requests: 0,
+  tool_calls: 0,
+  estimated_cost_usd: null,
+};
+
 const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
   {
     kind: 'text',
@@ -348,6 +360,7 @@ describe('ChatUiComponent', () => {
     const time = '2026-10-21T12:00:00Z';
     const turn: PresentedTurn = {
       part_kind: 'turn',
+      usage: EMPTY_USAGE,
       lifecycle: { run_id: 'run', status: 'running', started_at: time, finished_at: null },
       parts: [
         { part_kind: 'text', phase: 'commentary', content: 'Checking' },
@@ -365,6 +378,7 @@ describe('ChatUiComponent', () => {
           session_id: 'session',
           expires_at: time,
           error: null,
+          usage: EMPTY_USAGE,
           history: [
             {
               ...turn,
@@ -399,6 +413,7 @@ describe('ChatUiComponent', () => {
     };
     const first: PresentedTurn = {
       part_kind: 'turn',
+      usage: EMPTY_USAGE,
       lifecycle,
       parts: [
         { part_kind: 'tool-call', tool_call_id: 'call', tool_name: 'publish', status: 'running' },
@@ -416,6 +431,7 @@ describe('ChatUiComponent', () => {
     };
     const snapshot: PresentedSession = {
       error: null,
+      usage: EMPTY_USAGE,
       session_id: 's',
       expires_at: lifecycle.started_at,
       history: [first],
@@ -455,6 +471,7 @@ describe('ChatUiComponent', () => {
         { part_kind: 'user-prompt', content: ['same', 'same'] },
         {
           part_kind: 'turn',
+          usage: EMPTY_USAGE,
           lifecycle: completed,
           parts: [{ part_kind: 'text', phase: 'final_answer', content: 'Answer' }],
         },
