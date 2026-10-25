@@ -3,7 +3,6 @@ from contextlib import nullcontext
 
 import pytest
 from fastapi import FastAPI
-from openai import AsyncOpenAI
 from pydantic import SecretStr
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel
@@ -46,7 +45,7 @@ def test_later_application_startup_failure_closes_started_capabilities(
     configured_model: OpenAIResponsesModel,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    service = EmbeddingService(AsyncOpenAI(api_key="test-key"))
+    service = EmbeddingService("test-key")
     monkeypatch.setattr(EmbeddingService, "from_settings", lambda settings: service)
     monkeypatch.setattr(
         lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None)
@@ -79,7 +78,7 @@ def test_application_shutdown_clears_registry_and_closes_all_resources(
     monkeypatch: pytest.MonkeyPatch,
     fail_body: bool,
 ) -> None:
-    service = EmbeddingService(AsyncOpenAI(api_key="test-key"))
+    service = EmbeddingService("test-key")
     monkeypatch.setattr(EmbeddingService, "from_settings", lambda settings: service)
     monkeypatch.setattr(
         lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None)

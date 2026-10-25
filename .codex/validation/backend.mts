@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -90,6 +90,23 @@ export async function formatBackend(
   return { checked, formatted: await writeFormatting(pending) };
 }
 
+export async function runBackendPytest(
+  root: string,
+  cache: string,
+  python: string = backendPython(root),
+): Promise<void> {
+  await mkdir(cache, { recursive: true });
+  const run = await mkdtemp(join(cache, 'pytest-'));
+  await runCheck(
+    join(root, 'backend'),
+    'Backend pytest',
+    ['-m', 'pytest', `--basetemp=${join(run, 'tmp')}`, '-o', `cache_dir=${join(run, 'cache')}`],
+    join(cache, 'pytest.log'),
+    300_000,
+    python,
+  );
+}
+
 export function backendProfile(root: string): ValidationProfile {
   return {
     scope: 'backend',
@@ -113,14 +130,7 @@ export function backendProfile(root: string): ValidationProfile {
           join(cache, 'tooling-tests.log'),
           120_000,
         );
-        await runCheck(
-          join(root, 'backend'),
-          'Backend pytest',
-          ['-m', 'pytest'],
-          join(cache, 'pytest.log'),
-          300_000,
-          backendPython(root),
-        );
+        await runBackendPytest(root, cache);
       },
     }),
   };
