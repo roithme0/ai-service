@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import nullcontext
 
 from fastapi import FastAPI
 from openai import AsyncOpenAI
@@ -7,7 +8,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel
 import pytest
 
-from app import main
+from app import lifespan
 from app.capabilities.conversations import lifecycle
 from app.capabilities.conversations.config import KochwikiConversationSettings
 from app.capabilities.conversations.runner import AgentTurnRunner, RunnerClosedError
@@ -68,7 +69,7 @@ def test_later_application_startup_failure_closes_started_capabilities(
 ) -> None:
     service = EmbeddingService(AsyncOpenAI(api_key="test-key"))
     monkeypatch.setattr(EmbeddingService, "from_settings", lambda settings: service)
-    monkeypatch.setattr(main, "get_provider_settings", lambda: ProviderSettings(_env_file=None))
+    monkeypatch.setattr(lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None))
 
     def fail_demo() -> Agent[None, str]:
         raise RuntimeError("Demo initialization failed")
@@ -76,11 +77,44 @@ def test_later_application_startup_failure_closes_started_capabilities(
     monkeypatch.setattr(visual_conversation_demo_lifecycle, "create_visual_conversation_demo_agent", fail_demo)
 
     async def exercise() -> None:
+        application = FastAPI()
         with pytest.raises(RuntimeError, match="Demo initialization failed"):
-            async with main.AgentLifespan(FastAPI()):
+            async with lifespan.application_lifespan(application):
                 raise AssertionError("Startup should have failed")
         assert service.client is not None and service.client.is_closed()
         assert configured_model.client.is_closed()
+        assert application.state.agent_runners == {"kochwiki": None, "demo": None}
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("fail_body", [False, True])
+def test_application_shutdown_clears_registry_and_closes_all_resources(
+    configured_model: OpenAIResponsesModel, monkeypatch: pytest.MonkeyPatch, fail_body: bool,
+) -> None:
+    service = EmbeddingService(AsyncOpenAI(api_key="test-key"))
+    monkeypatch.setattr(EmbeddingService, "from_settings", lambda settings: service)
+    monkeypatch.setattr(lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None))
+
+    async def exercise() -> None:
+        application = FastAPI()
+        with pytest.raises(LookupError, match="Application failure") if fail_body else nullcontext():
+            async with lifespan.application_lifespan(application):
+                runners: dict[str, AgentTurnRunner | None] = application.state.agent_runners
+                active_runners = tuple(runners.values())
+                assert all(runner is not None for runner in active_runners)
+                assert application.state.embedding_service is service
+                assert service.client is not None and not service.client.is_closed()
+                assert not configured_model.client.is_closed()
+                if fail_body:
+                    raise LookupError("Application failure")
+        assert runners == {"kochwiki": None, "demo": None}
+        assert service.client is not None and service.client.is_closed()
+        assert configured_model.client.is_closed()
+        for runner in active_runners:
+            assert runner is not None
+            with pytest.raises(RunnerClosedError):
+                runner.create_session(owner=ApplicationIdentity("test", "user"))
 
     asyncio.run(exercise())
 

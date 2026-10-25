@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from openai import AsyncOpenAI
 
-from app import main
+from app import lifespan, main
 from app.capabilities.conversations import lifecycle
 from app.capabilities.conversations.config import KochwikiConversationSettings
 from app.capabilities.embeddings.config import DIMENSIONS, MODEL, PROFILE
@@ -30,7 +30,7 @@ def configured_embeddings(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[http
         max_retries=0, timeout=30.0,
     )
     monkeypatch.setattr(EmbeddingService, "from_settings", lambda settings: EmbeddingService(provider))
-    monkeypatch.setattr(main, "get_provider_settings", lambda: ProviderSettings(_env_file=None, openai_api_key=None))
+    monkeypatch.setattr(lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None, openai_api_key=None))
     monkeypatch.setattr(lifecycle, "get_kochwiki_conversation_settings", lambda: KochwikiConversationSettings(_env_file=None))
     yield requests
     assert provider.is_closed()
@@ -68,7 +68,7 @@ def test_embedding_validation_uses_application_error_envelope(
 
 def test_missing_provider_does_not_disable_demo(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(lifecycle, "get_kochwiki_conversation_settings", lambda: KochwikiConversationSettings(_env_file=None))
-    monkeypatch.setattr(main, "get_provider_settings", lambda: ProviderSettings(_env_file=None, openai_api_key=None))
+    monkeypatch.setattr(lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None, openai_api_key=None))
     with TestClient(main.app) as client:
         response = client.post("/api/v1/embeddings", json={"profile": PROFILE, "input": "Soup"})
         assert response.status_code == 503

@@ -26,7 +26,8 @@ The [gateway](../deployment/gateway/nginx.conf) serves the demo and API. The dem
 
 | Area | Responsibilities and starting points |
 | --- | --- |
-| [Application](../backend/app/main.py) | FastAPI assembly and capability lifetimes. Loads shared [provider settings](../backend/app/core/config.py) and [conversation settings](../backend/app/capabilities/conversations/config.py). |
+| [Application](../backend/app/main.py) | FastAPI assembly, router registration, and shared [HTTP error handling](../backend/app/core/http.py). |
+| [Application lifespan](../backend/app/lifespan.py) | Starts and stops capabilities and demos. Loads shared [provider settings](../backend/app/core/config.py); the conversation lifecycle loads [conversation settings](../backend/app/capabilities/conversations/config.py). |
 | [Session API](../backend/app/capabilities/conversations/http.py) | Session creation, reads, prompt admission, and SSE observation under `/api/v1/agents/{configuration}/sessions`. [Presentation](../backend/app/capabilities/conversations/presentation.py) projects native history into public snapshots. |
 | [Embeddings](../backend/app/capabilities/embeddings/) | Embedding endpoint and provider integration. See [usage and profiles](domains/embeddings.md). |
 | [Execution](../backend/app/capabilities/conversations/runner.py) | Owns background turns. [Registry](../backend/app/capabilities/conversations/sessions.py) handles ownership and expiry; [session state](../backend/app/capabilities/conversations/session_state.py) retains conversation, lifecycle, and artifacts. |

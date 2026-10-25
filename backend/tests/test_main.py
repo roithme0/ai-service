@@ -14,7 +14,7 @@ from pydantic_ai.mcp import MCPToolset
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from app import main
+from app import lifespan, main
 from app.core.identity import ApplicationIdentity
 from app.capabilities.conversations import lifecycle, wiring
 from app.capabilities.conversations.mcp import create_mcp_toolset
@@ -131,7 +131,7 @@ def test_kochwiki_cutover_mcp_outage_recovery_and_resource_cleanup(monkeypatch: 
                 _env_file=None, kochwiki_openai_model="test",
                 kochwiki_mcp_url="http://localhost/mcp/",
             ))
-            monkeypatch.setattr(main, "get_provider_settings", lambda: ProviderSettings(
+            monkeypatch.setattr(lifespan, "get_provider_settings", lambda: ProviderSettings(
                 _env_file=None, openai_api_key="test-key",
             ))
             async with app.router.lifespan_context(app), httpx.AsyncClient(
