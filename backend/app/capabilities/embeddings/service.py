@@ -1,7 +1,8 @@
 from openai import AsyncOpenAI
 
 from app.core.config import ProviderSettings
-from app.capabilities.embeddings.models import EmbeddingResponse, MODEL
+from app.capabilities.embeddings.config import MODEL
+from app.capabilities.embeddings.models import EmbeddingResponse
 
 
 class EmbeddingUnavailable(RuntimeError):

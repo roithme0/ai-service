@@ -2,11 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.capabilities.embeddings.config import DIMENSIONS, MODEL, PROFILE
 from app.core.models import ErrorEnvelope
-
-PROFILE = "semantic-text-v1"
-MODEL = "text-embedding-3-large"
-DIMENSIONS = 3072
 
 
 class EmbeddingRequest(BaseModel):

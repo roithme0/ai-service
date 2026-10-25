@@ -12,7 +12,7 @@ import pytest
 from app.core.config import ProviderSettings
 from app.capabilities.embeddings.http import router
 from app.capabilities.embeddings.lifecycle import embedding_service
-from app.capabilities.embeddings.models import DIMENSIONS, MODEL, PROFILE
+from app.capabilities.embeddings.config import DIMENSIONS, MODEL, PROFILE
 from app.capabilities.embeddings.service import EmbeddingService
 
 

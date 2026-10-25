@@ -8,7 +8,7 @@ from openai import AsyncOpenAI
 from app import main
 from app.capabilities.conversations import lifecycle
 from app.capabilities.conversations.config import KochwikiConversationSettings
-from app.capabilities.embeddings.models import DIMENSIONS, MODEL, PROFILE
+from app.capabilities.embeddings.config import DIMENSIONS, MODEL, PROFILE
 from app.capabilities.embeddings.service import EmbeddingService
 from app.core.config import ProviderSettings
 
