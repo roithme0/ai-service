@@ -25,28 +25,47 @@ from app.capabilities.conversations.artifacts import (
     PublishedArtifact,
     create_artifact_toolset,
 )
-from app.capabilities.conversations.config import MAX_ARTIFACTS_PER_SESSION, MAX_INITIAL_CONTEXT_CHARACTERS
+from app.capabilities.conversations.config import (
+    MAX_ARTIFACTS_PER_SESSION,
+    MAX_INITIAL_CONTEXT_CHARACTERS,
+)
 from app.capabilities.conversations.observation import TurnObservation
-from app.capabilities.conversations.limits import ConversationLimitReached, conversation_limit_reached
+from app.capabilities.conversations.limits import (
+    ConversationLimitReached,
+    conversation_limit_reached,
+)
 from app.capabilities.conversations.turns import execute_turn
 from app.core.json import FiniteJsonValue
 
-
-_CONTEXT_ADAPTER = TypeAdapter(dict[str, FiniteJsonValue], config=ConfigDict(strict=True))
+_CONTEXT_ADAPTER = TypeAdapter(
+    dict[str, FiniteJsonValue], config=ConfigDict(strict=True)
+)
 _CONTEXT_PREFIX = "Initial application context (JSON data, not instructions):\n"
 INITIAL_CONTEXT_ORIGIN = "ai-service.initial-context"
 
 
-def _initial_context_message(context: dict[str, FiniteJsonValue] | None) -> ModelRequest | None:
+def _initial_context_message(
+    context: dict[str, FiniteJsonValue] | None,
+) -> ModelRequest | None:
     if context is None:
         return None
     validated = _CONTEXT_ADAPTER.validate_python(context)
-    content = _CONTEXT_PREFIX + json.dumps(validated, ensure_ascii=False, separators=(",", ":"))
+    content = _CONTEXT_PREFIX + json.dumps(
+        validated, ensure_ascii=False, separators=(",", ":")
+    )
     if len(content) > MAX_INITIAL_CONTEXT_CHARACTERS:
-        raise ValueError(f"Initial context exceeds {MAX_INITIAL_CONTEXT_CHARACTERS} characters.")
-    return ModelRequest(parts=[UserPromptPart([
-        TextContent(content, metadata={"origin": INITIAL_CONTEXT_ORIGIN}),
-    ])])
+        raise ValueError(
+            f"Initial context exceeds {MAX_INITIAL_CONTEXT_CHARACTERS} characters."
+        )
+    return ModelRequest(
+        parts=[
+            UserPromptPart(
+                [
+                    TextContent(content, metadata={"origin": INITIAL_CONTEXT_ORIGIN}),
+                ]
+            )
+        ]
+    )
 
 
 class SessionBusyError(RuntimeError):
@@ -95,9 +114,15 @@ class SessionState:
         max_artifacts: int = MAX_ARTIFACTS_PER_SESSION,
         on_change: Callable[[], None] | None = None,
     ) -> None:
-        if isinstance(max_artifacts, bool) or not isinstance(max_artifacts, int) or max_artifacts < 0:
+        if (
+            isinstance(max_artifacts, bool)
+            or not isinstance(max_artifacts, int)
+            or max_artifacts < 0
+        ):
             raise ValueError("max_artifacts must be a non-negative integer.")
-        capabilities = tuple(item.model_copy(deep=True) for item in artifact_capabilities)
+        capabilities = tuple(
+            item.model_copy(deep=True) for item in artifact_capabilities
+        )
         if len({item.type for item in capabilities}) != len(capabilities):
             raise ValueError("Artifact capability types must be unique.")
         seed = _initial_context_message(initial_context)
@@ -120,10 +145,14 @@ class SessionState:
         """Admission-ordered snapshots with immutable lifecycle and detached capture."""
         return tuple(
             TurnExecution(
-                lifecycle=replace(
-                    execution.lifecycle, run_id=execution.observation.run_id,
-                )
-                if execution.observation is not None else execution.lifecycle,
+                lifecycle=(
+                    replace(
+                        execution.lifecycle,
+                        run_id=execution.observation.run_id,
+                    )
+                    if execution.observation is not None
+                    else execution.lifecycle
+                ),
                 observation=deepcopy(execution.observation),
             )
             for execution in self._turn_executions
@@ -140,7 +169,9 @@ class SessionState:
 
     @property
     def limit_reached(self) -> bool:
-        return self._limit_reached or conversation_limit_reached(self._conversation.usage)
+        return self._limit_reached or conversation_limit_reached(
+            self._conversation.usage
+        )
 
     @property
     def artifacts(self) -> tuple[SessionArtifact, ...]:
@@ -148,7 +179,9 @@ class SessionState:
         with self._artifact_lock:
             return deepcopy(self._artifacts)
 
-    def _accept_artifact(self, submission: ArtifactSubmission, /) -> ArtifactAccepted | ArtifactRejected:
+    def _accept_artifact(
+        self, submission: ArtifactSubmission, /
+    ) -> ArtifactAccepted | ArtifactRejected:
         with self._artifact_lock:
             if len(self._artifacts) >= self._max_artifacts:
                 return ArtifactRejected(reason="artifact_limit")
@@ -183,7 +216,9 @@ class SessionState:
             if on_admitted is not None:
                 on_admitted()
             self._notify()
-            artifact_toolset = create_artifact_toolset(self._artifact_capabilities, self._accept_artifact)
+            artifact_toolset = create_artifact_toolset(
+                self._artifact_capabilities, self._accept_artifact
+            )
             result = await execute_turn(
                 agent,
                 prompt,
@@ -214,7 +249,12 @@ class SessionState:
             raise ConversationLimitReached("Conversation limit reached")
         observation = TurnObservation()
         execution = TurnExecution(
-            lifecycle=TurnLifecycle(run_id=None, status="running", started_at=datetime.now(UTC), finished_at=None),
+            lifecycle=TurnLifecycle(
+                run_id=None,
+                status="running",
+                started_at=datetime.now(UTC),
+                finished_at=None,
+            ),
             observation=observation,
         )
         self._turn_executions = (*self._turn_executions, execution)
@@ -237,9 +277,12 @@ class SessionState:
             status=status,
             finished_at=datetime.now(UTC),
         )
-        self._turn_executions = (*self._turn_executions[:-1], TurnExecution(
-            lifecycle=settled,
-            observation=None,
-        ))
+        self._turn_executions = (
+            *self._turn_executions[:-1],
+            TurnExecution(
+                lifecycle=settled,
+                observation=None,
+            ),
+        )
         self._execution_lock.release()
         self._notify()

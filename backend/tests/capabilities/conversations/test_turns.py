@@ -5,7 +5,13 @@ from typing import cast
 import httpx2
 import pytest
 from pydantic import SecretStr
-from pydantic_ai import Conversation, Tool, ToolFailed, UnexpectedModelBehavior, capture_run_messages
+from pydantic_ai import (
+    Conversation,
+    Tool,
+    ToolFailed,
+    UnexpectedModelBehavior,
+    capture_run_messages,
+)
 from pydantic_ai import models
 from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import (
@@ -22,7 +28,11 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.usage import UsageLimits
 
 from app.capabilities.conversations import turns
-from app.capabilities.conversations.turns import create_openai_model, create_turn_agent, execute_turn
+from app.capabilities.conversations.turns import (
+    create_openai_model,
+    create_turn_agent,
+    execute_turn,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -48,8 +58,15 @@ def test_tool_result_and_serialized_history_continue_without_reexecuting_tool() 
         assert info.model_settings["request_timeout"] == 120
         if requests == 1:
             assert [tool.name for tool in info.function_tools] == ["lookup_value"]
-            return ModelResponse(parts=[ToolCallPart("lookup_value", {"label": "sample"}, "call-1")])
-        results = [part for message in messages for part in message.parts if isinstance(part, ToolReturnPart)]
+            return ModelResponse(
+                parts=[ToolCallPart("lookup_value", {"label": "sample"}, "call-1")]
+            )
+        results = [
+            part
+            for message in messages
+            for part in message.parts
+            if isinstance(part, ToolReturnPart)
+        ]
         assert len(results) == 1
         assert results[0].tool_call_id == "call-1"
         assert results[0].content == 42
@@ -67,21 +84,31 @@ def test_tool_result_and_serialized_history_continue_without_reexecuting_tool() 
         async with agent:
             first = await execute_turn(agent, "Find the sample value.")
             history = ModelMessagesTypeAdapter.validate_json(first.all_messages_json())
-            second = await execute_turn(agent, "Repeat the value.", conversation=Conversation(messages=list(history)))
+            second = await execute_turn(
+                agent,
+                "Repeat the value.",
+                conversation=Conversation(messages=list(history)),
+            )
         assert first.output == second.output == "The value is 42."
         assert first.usage.requests == 2
         assert first.usage.tool_calls == 1
         assert second.usage.requests == 1
         assert second.usage.tool_calls == 0
         assert len(second.all_messages()) > len(history)
-        assert not any(isinstance(part, ToolCallPart) for message in second.new_messages() for part in message.parts)
+        assert not any(
+            isinstance(part, ToolCallPart)
+            for message in second.new_messages()
+            for part in message.parts
+        )
 
     asyncio.run(exercise())
     assert calls == ["sample"]
     assert requests == 3
 
 
-def test_explicit_tool_failure_is_available_to_model_without_automatic_reexecution() -> None:
+def test_explicit_tool_failure_is_available_to_model_without_automatic_reexecution() -> (
+    None
+):
     calls = 0
 
     def lookup_value() -> str:
@@ -100,7 +127,11 @@ def test_explicit_tool_failure_is_available_to_model_without_automatic_reexecuti
         return ModelResponse(parts=[TextPart("I could not retrieve the value.")])
 
     async def exercise() -> None:
-        agent = create_turn_agent(FunctionModel(respond), instructions="Look up the value.", tools=[Tool(lookup_value)])
+        agent = create_turn_agent(
+            FunctionModel(respond),
+            instructions="Look up the value.",
+            tools=[Tool(lookup_value)],
+        )
         async with agent:
             result = await execute_turn(agent, "Find the value.")
         assert result.output == "I could not retrieve the value."
@@ -109,7 +140,9 @@ def test_explicit_tool_failure_is_available_to_model_without_automatic_reexecuti
     assert calls == 1
 
 
-def test_unexpected_tool_exception_propagates_and_native_history_is_inspectable() -> None:
+def test_unexpected_tool_exception_propagates_and_native_history_is_inspectable() -> (
+    None
+):
     calls = 0
 
     def lookup_value() -> str:
@@ -122,12 +155,20 @@ def test_unexpected_tool_exception_propagates_and_native_history_is_inspectable(
         return ModelResponse(parts=[ToolCallPart("lookup_value", {}, "call-1")])
 
     async def exercise() -> None:
-        agent = create_turn_agent(FunctionModel(respond), instructions="Look up the value.", tools=[Tool(lookup_value)])
+        agent = create_turn_agent(
+            FunctionModel(respond),
+            instructions="Look up the value.",
+            tools=[Tool(lookup_value)],
+        )
         async with agent:
             with capture_run_messages() as history:
                 with pytest.raises(RuntimeError, match="Unexpected tool failure"):
                     await execute_turn(agent, "Find the value.")
-            assert any(isinstance(part, ToolCallPart) for message in history for part in message.parts)
+            assert any(
+                isinstance(part, ToolCallPart)
+                for message in history
+                for part in message.parts
+            )
 
     asyncio.run(exercise())
     assert calls == 1
@@ -147,12 +188,23 @@ def test_repeated_tool_requests_stop_at_native_execution_limits(limit: str) -> N
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         nonlocal requests
         requests += 1
-        return ModelResponse(parts=[ToolCallPart("lookup_value", {}, f"call-{requests}")])
+        return ModelResponse(
+            parts=[ToolCallPart("lookup_value", {}, f"call-{requests}")]
+        )
 
     async def exercise() -> None:
-        agent = create_turn_agent(FunctionModel(respond), instructions="Look up the value.", tools=[Tool(lookup_value)])
-        limits = UsageLimits(request_limit=2, tool_calls_limit=10) if limit == "requests" else UsageLimits(
-            request_limit=10, tool_calls_limit=1,
+        agent = create_turn_agent(
+            FunctionModel(respond),
+            instructions="Look up the value.",
+            tools=[Tool(lookup_value)],
+        )
+        limits = (
+            UsageLimits(request_limit=2, tool_calls_limit=10)
+            if limit == "requests"
+            else UsageLimits(
+                request_limit=10,
+                tool_calls_limit=1,
+            )
         )
         async with agent:
             with pytest.raises(UsageLimitExceeded):
@@ -179,7 +231,11 @@ def test_invalid_tool_arguments_do_not_execute_or_retry() -> None:
         return ModelResponse(parts=[ToolCallPart("lookup_value", {}, "call-1")])
 
     async def exercise() -> None:
-        agent = create_turn_agent(FunctionModel(respond), instructions="Look up the value.", tools=[Tool(lookup_value)])
+        agent = create_turn_agent(
+            FunctionModel(respond),
+            instructions="Look up the value.",
+            tools=[Tool(lookup_value)],
+        )
         async with agent:
             with pytest.raises(UnexpectedModelBehavior):
                 await execute_turn(agent, "Find the value.")
@@ -206,7 +262,11 @@ def test_cancellation_reaches_the_running_tool() -> None:
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             return ModelResponse(parts=[ToolCallPart("lookup_value", {}, "call-1")])
 
-        agent = create_turn_agent(FunctionModel(respond), instructions="Look up the value.", tools=[Tool(lookup_value)])
+        agent = create_turn_agent(
+            FunctionModel(respond),
+            instructions="Look up the value.",
+            tools=[Tool(lookup_value)],
+        )
         async with agent:
             task = asyncio.create_task(execute_turn(agent, "Find the value."))
             await asyncio.wait_for(started.wait(), timeout=5)
@@ -218,23 +278,54 @@ def test_cancellation_reaches_the_running_tool() -> None:
     asyncio.run(exercise())
 
 
-def test_openai_responses_round_trip_uses_native_provider_and_explicit_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_openai_responses_round_trip_uses_native_provider_and_explicit_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     requests: list[dict[str, object]] = []
 
     def respond(request: httpx2.Request) -> httpx2.Response:
         assert request.url.path == "/v1/responses"
         requests.append(cast(dict[str, object], json.loads(request.content)))
-        output: list[dict[str, object]] = [{
-            "type": "function_call", "id": "fc_1", "call_id": "call-1",
-            "name": "lookup_value", "arguments": '{"label":"sample"}', "status": "completed",
-        }] if len(requests) == 1 else [{
-            "type": "message", "id": "msg_1", "role": "assistant", "status": "completed",
-            "content": [{"type": "output_text", "text": "The value is 42.", "annotations": []}],
-        }]
-        return httpx2.Response(200, json={
-            "id": f"resp_{len(requests)}", "object": "response", "created_at": 1,
-            "model": "gpt-5.2", "status": "completed", "output": output, "error": None,
-        })
+        output: list[dict[str, object]] = (
+            [
+                {
+                    "type": "function_call",
+                    "id": "fc_1",
+                    "call_id": "call-1",
+                    "name": "lookup_value",
+                    "arguments": '{"label":"sample"}',
+                    "status": "completed",
+                }
+            ]
+            if len(requests) == 1
+            else [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "The value is 42.",
+                            "annotations": [],
+                        }
+                    ],
+                }
+            ]
+        )
+        return httpx2.Response(
+            200,
+            json={
+                "id": f"resp_{len(requests)}",
+                "object": "response",
+                "created_at": 1,
+                "model": "gpt-5.2",
+                "status": "completed",
+                "output": output,
+                "error": None,
+            },
+        )
 
     def lookup_value(label: str) -> int:
         """Look up a value by label."""
@@ -242,7 +333,10 @@ def test_openai_responses_round_trip_uses_native_provider_and_explicit_settings(
         return 42
 
     async def exercise() -> None:
-        async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as http_client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(respond)
+        ) as http_client:
+
             def provider(*, api_key: str) -> OpenAIProvider:
                 assert api_key == "test"
                 return OpenAIProvider(api_key=api_key, http_client=http_client)
@@ -250,7 +344,9 @@ def test_openai_responses_round_trip_uses_native_provider_and_explicit_settings(
             monkeypatch.setattr(turns, "OpenAIProvider", provider)
             monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", True)
             agent = create_turn_agent(
-                create_openai_model("gpt-5.2", SecretStr("test"), reasoning_effort="low"),
+                create_openai_model(
+                    "gpt-5.2", SecretStr("test"), reasoning_effort="low"
+                ),
                 instructions="Look up the value.",
                 tools=[Tool(lookup_value)],
             )
@@ -268,4 +364,7 @@ def test_openai_responses_round_trip_uses_native_provider_and_explicit_settings(
         assert request["reasoning"] == {"effort": "low"}
     model_input = requests[1]["input"]
     assert isinstance(model_input, list)
-    assert any(item.get("type") == "function_call_output" and item["output"] == "42" for item in model_input)
+    assert any(
+        item.get("type") == "function_call_output" and item["output"] == "42"
+        for item in model_input
+    )

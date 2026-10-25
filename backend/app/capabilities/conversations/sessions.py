@@ -65,7 +65,9 @@ class SessionSnapshot:
     @property
     def messages(self) -> tuple[ModelMessage, ...]:
         """Current native execution view, falling back to settled state during setup."""
-        observation = self.turn_executions[-1].observation if self.turn_executions else None
+        observation = (
+            self.turn_executions[-1].observation if self.turn_executions else None
+        )
         if observation is not None and observation.run_id is not None:
             return tuple(observation.messages)
         return tuple(self.conversation.messages)
@@ -152,7 +154,9 @@ class AgentSessionRegistry:
             on_change=lambda: self._publish(session_id),
         )
         expires_at = now + self._lifetime
-        self._sessions[session_id] = _Session(owner=owner, expires_at=expires_at, state=state)
+        self._sessions[session_id] = _Session(
+            owner=owner, expires_at=expires_at, state=state
+        )
         return SessionCreated(session_id, expires_at)
 
     def _require_session(self, session_id: str, owner: ApplicationIdentity) -> _Session:
@@ -191,7 +195,9 @@ class AgentSessionRegistry:
             for observer in observers:
                 observer.close()
 
-    async def observe(self, session_id: str, *, owner: ApplicationIdentity) -> AsyncGenerator[SessionSnapshot, None]:
+    async def observe(
+        self, session_id: str, *, owner: ApplicationIdentity
+    ) -> AsyncGenerator[SessionSnapshot, None]:
         """Yield detached boundary snapshots; disconnect never controls execution."""
         session = self._require_session(session_id, owner)
         observers = self._observers.setdefault(session_id, set())
@@ -208,7 +214,9 @@ class AgentSessionRegistry:
                     return
                 timeout = (session.expires_at - self._now()).total_seconds()
                 try:
-                    snapshot = await asyncio.wait_for(observer.queue.get(), timeout=max(0.0, timeout))
+                    snapshot = await asyncio.wait_for(
+                        observer.queue.get(), timeout=max(0.0, timeout)
+                    )
                 except TimeoutError:
                     continue
                 self._require_session(session_id, owner)
@@ -242,4 +250,3 @@ class AgentSessionRegistry:
                 toolsets=toolsets,
                 on_admitted=on_admitted,
             )
-

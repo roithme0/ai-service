@@ -16,7 +16,9 @@ from app.capabilities.conversations.turns import create_openai_model
 from app.capabilities.embeddings.service import EmbeddingService
 from app.core.config import ProviderSettings
 from app.core.identity import ApplicationIdentity
-from app.demos.visual_conversation_demo import lifecycle as visual_conversation_demo_lifecycle
+from app.demos.visual_conversation_demo import (
+    lifecycle as visual_conversation_demo_lifecycle,
+)
 
 
 @pytest.fixture
@@ -25,26 +27,39 @@ def configured_model(monkeypatch: pytest.MonkeyPatch) -> OpenAIResponsesModel:
     agent: Agent[None, str] = Agent(model)
 
     def create(
-        settings: KochwikiConversationSettings, *, provider_settings: ProviderSettings,
+        settings: KochwikiConversationSettings,
+        *,
+        provider_settings: ProviderSettings,
     ) -> Agent[None, str]:
         return agent
 
     monkeypatch.setattr(lifecycle, "create_kochwiki_agent", create)
-    monkeypatch.setattr(lifecycle, "get_kochwiki_conversation_settings", lambda: KochwikiConversationSettings(_env_file=None))
+    monkeypatch.setattr(
+        lifecycle,
+        "get_kochwiki_conversation_settings",
+        lambda: KochwikiConversationSettings(_env_file=None),
+    )
     return model
 
 
 def test_later_application_startup_failure_closes_started_capabilities(
-    configured_model: OpenAIResponsesModel, monkeypatch: pytest.MonkeyPatch,
+    configured_model: OpenAIResponsesModel,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = EmbeddingService(AsyncOpenAI(api_key="test-key"))
     monkeypatch.setattr(EmbeddingService, "from_settings", lambda settings: service)
-    monkeypatch.setattr(lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None))
+    monkeypatch.setattr(
+        lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None)
+    )
 
     def fail_demo() -> Agent[None, str]:
         raise RuntimeError("Demo initialization failed")
 
-    monkeypatch.setattr(visual_conversation_demo_lifecycle, "create_visual_conversation_demo_agent", fail_demo)
+    monkeypatch.setattr(
+        visual_conversation_demo_lifecycle,
+        "create_visual_conversation_demo_agent",
+        fail_demo,
+    )
 
     async def exercise() -> None:
         application = FastAPI()
@@ -60,17 +75,27 @@ def test_later_application_startup_failure_closes_started_capabilities(
 
 @pytest.mark.parametrize("fail_body", [False, True])
 def test_application_shutdown_clears_registry_and_closes_all_resources(
-    configured_model: OpenAIResponsesModel, monkeypatch: pytest.MonkeyPatch, fail_body: bool,
+    configured_model: OpenAIResponsesModel,
+    monkeypatch: pytest.MonkeyPatch,
+    fail_body: bool,
 ) -> None:
     service = EmbeddingService(AsyncOpenAI(api_key="test-key"))
     monkeypatch.setattr(EmbeddingService, "from_settings", lambda settings: service)
-    monkeypatch.setattr(lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None))
+    monkeypatch.setattr(
+        lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None)
+    )
 
     async def exercise() -> None:
         application = FastAPI()
-        with pytest.raises(LookupError, match="Application failure") if fail_body else nullcontext():
+        with (
+            pytest.raises(LookupError, match="Application failure")
+            if fail_body
+            else nullcontext()
+        ):
             async with lifespan.application_lifespan(application):
-                runners: dict[str, AgentTurnRunner | None] = application.state.agent_runners
+                runners: dict[str, AgentTurnRunner | None] = (
+                    application.state.agent_runners
+                )
                 active_runners = tuple(runners.values())
                 assert all(runner is not None for runner in active_runners)
                 assert application.state.embedding_service is service

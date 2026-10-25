@@ -30,12 +30,15 @@ def prevent_live_model_requests(monkeypatch: pytest.MonkeyPatch) -> None:
 def returns(messages: Sequence[ModelMessage]) -> dict[str, ToolReturnPart]:
     return {
         part.tool_call_id: part
-        for message in messages for part in message.parts
+        for message in messages
+        for part in message.parts
         if isinstance(part, ToolReturnPart)
     }
 
 
-def test_capture_uses_native_history_without_streaming_and_detaches_completed_turn() -> None:
+def test_capture_uses_native_history_without_streaming_and_detaches_completed_turn() -> (
+    None
+):
     calls = 0
 
     def lookup() -> int:
@@ -46,11 +49,18 @@ def test_capture_uses_native_history_without_streaming_and_detaches_completed_tu
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         if calls == 0:
-            return ModelResponse(parts=[TextPart("I'll look that up."), ToolCallPart("lookup", {}, "lookup-1")])
+            return ModelResponse(
+                parts=[
+                    TextPart("I'll look that up."),
+                    ToolCallPart("lookup", {}, "lookup-1"),
+                ]
+            )
         return ModelResponse(parts=[TextPart("The value is 42.")])
 
     async def exercise() -> None:
-        agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)])
+        agent = create_turn_agent(
+            FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)]
+        )
         first = TurnObservation()
         second = TurnObservation()
         async with agent:
@@ -58,12 +68,26 @@ def test_capture_uses_native_history_without_streaming_and_detaches_completed_tu
             assert list(first.messages) == result.all_messages()
             assert first.usage == result.usage
             assert first.run_id == result.run_id
-            assert [call.tool_call_id for call in first.started_tool_calls] == ["lookup-1"]
+            assert [call.tool_call_id for call in first.started_tool_calls] == [
+                "lookup-1"
+            ]
             assert returns(first.messages)["lookup-1"].outcome == "success"
-            text = [part.content for msg in first.messages for part in msg.parts if isinstance(part, TextPart)]
+            text = [
+                part.content
+                for msg in first.messages
+                for part in msg.parts
+                if isinstance(part, TextPart)
+            ]
             assert text == ["I'll look that up.", "The value is 42."]
-            history = ModelMessagesTypeAdapter.validate_json(ModelMessagesTypeAdapter.dump_json(first.messages))
-            await execute_turn(agent, "Repeat the value.", conversation=Conversation(messages=list(history)), observation=second)
+            history = ModelMessagesTypeAdapter.validate_json(
+                ModelMessagesTypeAdapter.dump_json(first.messages)
+            )
+            await execute_turn(
+                agent,
+                "Repeat the value.",
+                conversation=Conversation(messages=list(history)),
+                observation=second,
+            )
         assert second.started_tool_calls == ()
         assert second.run_id != first.run_id
         assert second.usage.tool_calls == 0
@@ -75,7 +99,9 @@ def test_capture_uses_native_history_without_streaming_and_detaches_completed_tu
     asyncio.run(exercise())
 
 
-def test_lost_response_preserves_completed_output_and_native_followup_does_not_replay() -> None:
+def test_lost_response_preserves_completed_output_and_native_followup_does_not_replay() -> (
+    None
+):
     executed: list[str] = []
     requests = 0
 
@@ -90,33 +116,58 @@ def test_lost_response_preserves_completed_output_and_native_followup_does_not_r
         nonlocal requests
         requests += 1
         if requests == 1:
-            return ModelResponse(parts=[
-                TextPart("I'll update the values."),
-                ToolCallPart("update", {"label": "confirmed"}, "confirmed"),
-                ToolCallPart("update", {"label": "lost"}, "lost"),
-                ToolCallPart("update", {"label": "unstarted"}, "unstarted"),
-            ])
+            return ModelResponse(
+                parts=[
+                    TextPart("I'll update the values."),
+                    ToolCallPart("update", {"label": "confirmed"}, "confirmed"),
+                    ToolCallPart("update", {"label": "lost"}, "lost"),
+                    ToolCallPart("update", {"label": "unstarted"}, "unstarted"),
+                ]
+            )
         results = returns(messages)
         assert results["confirmed"].content == "Updated confirmed"
         assert results["confirmed"].outcome == "success"
         assert results["lost"].outcome == results["unstarted"].outcome == "interrupted"
-        return ModelResponse(parts=[TextPart("The first update was confirmed; the second outcome is uncertain.")])
+        return ModelResponse(
+            parts=[
+                TextPart(
+                    "The first update was confirmed; the second outcome is uncertain."
+                )
+            ]
+        )
 
     async def exercise() -> None:
-        agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(update, sequential=True)])
+        agent = create_turn_agent(
+            FunctionModel(respond),
+            instructions="Help.",
+            tools=[Tool(update, sequential=True)],
+        )
         observation = TurnObservation()
         async with agent:
             with pytest.raises(httpx2.ReadError, match="Response lost"):
                 await execute_turn(agent, "Update the values.", observation=observation)
-            assert [call.tool_call_id for call in observation.started_tool_calls] == ["confirmed", "lost"]
+            assert [call.tool_call_id for call in observation.started_tool_calls] == [
+                "confirmed",
+                "lost",
+            ]
             assert returns(observation.messages)["confirmed"].outcome == "success"
             assert "lost" not in returns(observation.messages)
             tail = observation.messages[-1]
             assert isinstance(tail, ModelRequest)
             assert tail.state == "interrupted"
-            assert any(isinstance(part, TextPart) for msg in observation.messages for part in msg.parts)
-            history = ModelMessagesTypeAdapter.validate_json(ModelMessagesTypeAdapter.dump_json(observation.messages))
-            result = await execute_turn(agent, "What was confirmed?", conversation=Conversation(messages=list(history)))
+            assert any(
+                isinstance(part, TextPart)
+                for msg in observation.messages
+                for part in msg.parts
+            )
+            history = ModelMessagesTypeAdapter.validate_json(
+                ModelMessagesTypeAdapter.dump_json(observation.messages)
+            )
+            result = await execute_turn(
+                agent,
+                "What was confirmed?",
+                conversation=Conversation(messages=list(history)),
+            )
             assert result.usage.tool_calls == 0
         assert executed == ["confirmed", "lost"]
         assert requests == 2
@@ -140,10 +191,14 @@ def test_explicit_failure_keeps_native_failed_outcome_and_allows_answer() -> Non
         return ModelResponse(parts=[TextPart("The lookup failed.")])
 
     async def exercise() -> None:
-        agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)])
+        agent = create_turn_agent(
+            FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)]
+        )
         observation = TurnObservation()
         async with agent:
-            result = await execute_turn(agent, "Find the value.", observation=observation)
+            result = await execute_turn(
+                agent, "Find the value.", observation=observation
+            )
         assert result.output == "The lookup failed."
         assert returns(observation.messages)["lookup-1"].outcome == "failed"
         assert len(observation.started_tool_calls) == 1
@@ -159,17 +214,35 @@ def test_rejected_calls_are_observed_without_claiming_execution(failure: str) ->
         pytest.fail("A rejected call must not execute")
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        return ModelResponse(parts=[ToolCallPart("lookup", {} if failure == "arguments" else {"label": "x"}, "call")])
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    "lookup", {} if failure == "arguments" else {"label": "x"}, "call"
+                )
+            ]
+        )
 
     async def exercise() -> None:
-        agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)])
+        agent = create_turn_agent(
+            FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)]
+        )
         observation = TurnObservation()
         limits = UsageLimits(tool_calls_limit=0) if failure == "budget" else None
         async with agent:
-            with pytest.raises(UnexpectedModelBehavior if failure == "arguments" else UsageLimitExceeded):
-                await execute_turn(agent, "Find it.", observation=observation, usage_limits=limits)
+            with pytest.raises(
+                UnexpectedModelBehavior
+                if failure == "arguments"
+                else UsageLimitExceeded
+            ):
+                await execute_turn(
+                    agent, "Find it.", observation=observation, usage_limits=limits
+                )
         assert observation.started_tool_calls == ()
-        assert any(isinstance(part, ToolCallPart) for msg in observation.messages for part in msg.parts)
+        assert any(
+            isinstance(part, ToolCallPart)
+            for msg in observation.messages
+            for part in msg.parts
+        )
         assert not returns(observation.messages)
 
     asyncio.run(exercise())
@@ -190,7 +263,9 @@ def test_model_failure_keeps_successful_tool_result() -> None:
         raise RuntimeError("Model unavailable")
 
     async def exercise() -> None:
-        agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)])
+        agent = create_turn_agent(
+            FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)]
+        )
         observation = TurnObservation()
         async with agent:
             with pytest.raises(RuntimeError, match="Model unavailable"):
@@ -202,7 +277,9 @@ def test_model_failure_keeps_successful_tool_result() -> None:
     asyncio.run(exercise())
 
 
-def test_cancellation_settles_capture_after_tool_cleanup_and_preserves_exception() -> None:
+def test_cancellation_settles_capture_after_tool_cleanup_and_preserves_exception() -> (
+    None
+):
     async def exercise() -> None:
         started = asyncio.Event()
         cleaned_up = asyncio.Event()
@@ -219,12 +296,18 @@ def test_cancellation_settles_capture_after_tool_cleanup_and_preserves_exception
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             return ModelResponse(parts=[ToolCallPart("lookup", {}, "call")])
 
-        agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)])
+        agent = create_turn_agent(
+            FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)]
+        )
         observation = TurnObservation()
         async with agent:
-            task = asyncio.create_task(execute_turn(agent, "Find it.", observation=observation))
+            task = asyncio.create_task(
+                execute_turn(agent, "Find it.", observation=observation)
+            )
             await asyncio.wait_for(started.wait(), timeout=5)
-            assert [call.tool_call_id for call in observation.started_tool_calls] == ["call"]
+            assert [call.tool_call_id for call in observation.started_tool_calls] == [
+                "call"
+            ]
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
@@ -235,7 +318,9 @@ def test_cancellation_settles_capture_after_tool_cleanup_and_preserves_exception
     asyncio.run(exercise())
 
 
-def test_concurrent_turns_have_independent_capture_and_capture_cannot_be_reused() -> None:
+def test_concurrent_turns_have_independent_capture_and_capture_cannot_be_reused() -> (
+    None
+):
     async def exercise() -> None:
         both_started = asyncio.Event()
         labels: set[str] = set()
@@ -249,13 +334,26 @@ def test_concurrent_turns_have_independent_capture_and_capture_cannot_be_reused(
             return label
 
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-            prompt = next(part for msg in messages for part in msg.parts if isinstance(part, UserPromptPart))
+            prompt = next(
+                part
+                for msg in messages
+                for part in msg.parts
+                if isinstance(part, UserPromptPart)
+            )
             assert isinstance(prompt.content, str)
             if not returns(messages):
-                return ModelResponse(parts=[ToolCallPart("lookup", {"label": prompt.content}, prompt.content)])
+                return ModelResponse(
+                    parts=[
+                        ToolCallPart(
+                            "lookup", {"label": prompt.content}, prompt.content
+                        )
+                    ]
+                )
             return ModelResponse(parts=[TextPart(prompt.content)])
 
-        agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)])
+        agent = create_turn_agent(
+            FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)]
+        )
         left, right = TurnObservation(), TurnObservation()
         async with agent:
             await asyncio.gather(

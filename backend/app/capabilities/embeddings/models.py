@@ -36,5 +36,7 @@ class EmbeddingResponse(BaseModel):
         return value
 
 
-class EmbeddingErrorResponse(ErrorEnvelope[Literal["embedding_unavailable", "embedding_failed"]]):
+class EmbeddingErrorResponse(
+    ErrorEnvelope[Literal["embedding_unavailable", "embedding_failed"]]
+):
     pass

@@ -86,7 +86,9 @@ async def execute_turn(
 ) -> AgentRunResult[str]:
     state = conversation if conversation is not None else Conversation()
     limits = turn_usage_limits(state.usage, usage_limits)
-    with observation.capture(on_change) if observation is not None else nullcontext() as hooks:
+    with (
+        observation.capture(on_change) if observation is not None else nullcontext()
+    ) as hooks:
         return await agent.run(
             prompt,
             conversation=state,

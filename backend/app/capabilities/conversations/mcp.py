@@ -21,7 +21,11 @@ def create_mcp_toolset(
     return MCPToolset(
         url,
         id=id,
-        headers={"X-Application-User": identity.to_header()} if identity is not None else None,
+        headers=(
+            {"X-Application-User": identity.to_header()}
+            if identity is not None
+            else None
+        ),
         include_instructions=True,
         tool_error_behavior="failed",
         max_retries=VALIDATION_MAX_RETRIES,

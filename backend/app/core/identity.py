@@ -6,7 +6,6 @@ import re
 from dataclasses import dataclass
 from urllib.parse import quote, unquote
 
-
 _COMPONENT = r"(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+"
 IDENTITY_HEADER_PATTERN = f"^{_COMPONENT}:{_COMPONENT}$"
 _ENCODING_SAFE = "~!*'()"

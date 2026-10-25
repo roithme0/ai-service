@@ -20,9 +20,12 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
 )
-app.include_router(create_session_router(get_agent_registry), responses={
-    405: {"model": HttpErrorResponse},
-    500: {"model": HttpErrorResponse},
-})
+app.include_router(
+    create_session_router(get_agent_registry),
+    responses={
+        405: {"model": HttpErrorResponse},
+        500: {"model": HttpErrorResponse},
+    },
+)
 app.include_router(embedding_router)
 register_error_handlers(app)
