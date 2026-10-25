@@ -22,7 +22,8 @@ from app.agentic.runner import AgentTurnRunner
 from app.agentic.sessions import AgentSessionRegistry
 from app.agentic.turns import create_turn_agent
 from app.agentic.wiring import create_kochwiki_agent
-from app.core.config import Settings
+from app.core.config import ProviderSettings
+from app.agentic.config import KochwikiConversationSettings
 from app.core.identity import ApplicationIdentity
 
 
@@ -144,10 +145,10 @@ def test_background_turns_forward_isolated_assertions_on_actual_mcp_requests(mon
                 return ModelResponse(parts=[ToolCallPart("caller_identity", {}, "identity")])
             return ModelResponse(parts=[TextPart(str(returns[-1].content))])
 
-        agent = create_kochwiki_agent(Settings(
-            _env_file=None, openai_api_key="test", kochwiki_openai_model="gpt-5.2",
+        agent = create_kochwiki_agent(KochwikiConversationSettings(
+            _env_file=None, kochwiki_openai_model="gpt-5.2",
             kochwiki_mcp_url="http://localhost/mcp/",
-        ))
+        ), provider_settings=ProviderSettings(_env_file=None, openai_api_key="test"))
         runner = AgentTurnRunner(agent)
         app = FastAPI()
         app.include_router(create_session_router(lambda: {"kochwiki": runner}))

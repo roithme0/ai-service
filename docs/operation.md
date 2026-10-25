@@ -17,7 +17,7 @@ Create `deployment/.env` from [.env.example](../deployment/.env.example); host-s
 | Variable | Purpose |
 | --- | --- |
 | `GATEWAY_PORT` | Published gateway port for Compose. The example selects 8004. |
-| `OPENAI_API_KEY` | Credentials for the Kochwiki model. |
+| `OPENAI_API_KEY` | Provider credentials for embeddings and the Kochwiki conversation model. |
 | `KOCHWIKI_OPENAI_MODEL` | Model used by the Kochwiki agent. |
 | `KOCHWIKI_MCP_URL` | External Streamable HTTP MCP endpoint, including its path. |
 | `KOCHWIKI_OPENAI_REASONING_EFFORT` | Optional model reasoning effort; blank uses the model default. Support depends on the selected model. |
@@ -66,6 +66,7 @@ Retain deployment configuration and protect backups of credentials. Application 
 | --- | --- |
 | Kochwiki returns 503 | Backend initialization logs and the required agent settings; restart after correcting startup configuration. |
 | A turn fails | Backend logs, model access, and MCP reachability from the backend. Interrupted external operations may already have taken effect. |
+| Embedding generation fails | `OPENAI_API_KEY`, provider reachability, and embedding logs. |
 | Session returns 404 | Agent configuration, owner header, fixed session expiry, or backend restart. See [session rules](domains/conversations.md#session-rules). |
 | Submission returns 409 | A turn is already running, or the conversation budget is exhausted. |
 | Observation disconnects | Gateway/upstream connectivity. The controller reconnects transient failures; this does not resubmit prompts. |

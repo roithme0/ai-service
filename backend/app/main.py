@@ -10,11 +10,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
 from app.agentic.http import create_session_router
+from app.agentic.lifecycle import kochwiki_runner
 from app.agentic.runner import AgentTurnRunner
-from app.agentic.wiring import create_kochwiki_agent
-from app.core.config import get_settings
+from app.core.config import get_provider_settings
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
-from app.demo.agent import create_demo_agent
+from app.demo.lifecycle import demo_runner
+from app.embeddings.http import router as embedding_router
+from app.embeddings.lifecycle import embedding_service
 
 
 class AgentLifespan:
@@ -23,6 +25,7 @@ class AgentLifespan:
         self._runners: dict[str, AgentTurnRunner | None] = {"kochwiki": None, "demo": None}
         application.state.agent_runners = self._runners
         self._resource_stack = AsyncExitStack()
+        self._application = application
 
     @staticmethod
     def _configure_logging() -> None:
@@ -36,24 +39,15 @@ class AgentLifespan:
 
     async def __aenter__(self) -> None:
         try:
-            await self._start_kochwiki()
-            demo_agent = await self._resource_stack.enter_async_context(create_demo_agent())
-            self._runners["demo"] = await self._resource_stack.enter_async_context(AgentTurnRunner(demo_agent))
+            provider_settings = get_provider_settings()
+            self._application.state.embedding_service = await self._resource_stack.enter_async_context(
+                embedding_service(provider_settings),
+            )
+            self._runners["kochwiki"] = await self._resource_stack.enter_async_context(kochwiki_runner(provider_settings))
+            self._runners["demo"] = await self._resource_stack.enter_async_context(demo_runner())
         except BaseException:
             await self._resource_stack.aclose()
             raise
-
-    async def _start_kochwiki(self) -> None:
-        try:
-            async with AsyncExitStack() as resources:
-                agent = await resources.enter_async_context(create_kochwiki_agent(get_settings()))
-                runner = await resources.enter_async_context(AgentTurnRunner(agent))
-                self._resource_stack.push_async_callback(resources.pop_all().aclose)
-                self._runners["kochwiki"] = runner
-        except Exception as error:
-            logging.getLogger(__name__).warning(
-                "Kochwiki agent unavailable during initialization (%s).", type(error).__name__,
-            )
 
     async def __aexit__(
         self,
@@ -80,6 +74,7 @@ app.include_router(create_session_router(get_agent_registry), responses={
     405: {"model": HttpErrorResponse},
     500: {"model": HttpErrorResponse},
 })
+app.include_router(embedding_router)
 
 
 @app.exception_handler(StarletteHTTPException)

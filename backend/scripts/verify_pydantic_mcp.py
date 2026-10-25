@@ -11,13 +11,15 @@ from pydantic_ai.usage import UsageLimits
 from app.agentic.config import MAX_MODEL_REQUESTS_PER_TURN
 from app.agentic.mcp import create_mcp_toolset
 from app.agentic.turns import create_openai_model, create_turn_agent, execute_turn
-from app.core.config import Settings
+from app.core.config import ProviderSettings
+from app.agentic.config import KochwikiConversationSettings
 
 
 async def verify(tool_name: str, prompt: str) -> None:
-    settings = Settings()
+    settings = KochwikiConversationSettings()
+    provider_settings = ProviderSettings()
     if (
-        settings.openai_api_key is None
+        provider_settings.openai_api_key is None
         or settings.kochwiki_openai_model is None
         or settings.kochwiki_mcp_url is None
     ):
@@ -37,7 +39,7 @@ async def verify(tool_name: str, prompt: str) -> None:
         agent = create_turn_agent(
             create_openai_model(
                 settings.kochwiki_openai_model,
-                settings.openai_api_key,
+                provider_settings.openai_api_key,
                 reasoning_effort=settings.kochwiki_openai_reasoning_effort,
             ),
             instructions=(

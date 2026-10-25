@@ -19,7 +19,8 @@ from app.core.identity import ApplicationIdentity
 from app.agentic.artifacts import ArtifactAccepted, ArtifactCapability
 from app.agentic.session_state import SessionState
 from app.agentic.mcp import create_mcp_toolset
-from app.core.config import Settings
+from app.core.config import ProviderSettings
+from app.agentic.config import KochwikiConversationSettings
 
 
 @pytest.fixture(autouse=True)
@@ -27,13 +28,13 @@ def prevent_live_model_requests(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)
 
 
-def settings(**changes: object) -> Settings:
+def settings(**changes: object) -> KochwikiConversationSettings:
     values: dict[str, object] = {
-        "openai_api_key": "test-key", "kochwiki_openai_model": "gpt-5.2",
+        "kochwiki_openai_model": "gpt-5.2",
         "kochwiki_openai_reasoning_effort": "low", "kochwiki_mcp_url": "http://localhost/mcp/",
     }
     values.update(changes)
-    return Settings(_env_file=None, **values)
+    return KochwikiConversationSettings(_env_file=None, **values)
 
 
 @pytest.mark.parametrize(("field", "value", "name"), [
@@ -60,7 +61,11 @@ def test_invalid_settings_fail_before_constructing_resources(
 
     monkeypatch.setattr(wiring, "create_openai_model", unexpected_model)
     with pytest.raises(ValueError) as failure:
-        wiring.create_kochwiki_agent(settings(**{field: value}))
+        conversation = settings() if field == "openai_api_key" else settings(**{field: value})
+        provider = ProviderSettings(_env_file=None, **{
+            "openai_api_key": value if field == "openai_api_key" else "test-key",
+        })
+        wiring.create_kochwiki_agent(conversation, provider_settings=provider)
     assert str(failure.value) == "Invalid or missing agent configuration: " + name
     assert "test-key" not in str(failure.value)
     assert "password" not in str(failure.value)
@@ -126,7 +131,9 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
                 return toolset
 
             monkeypatch.setattr(wiring, "create_mcp_toolset", mcp)
-            agent = wiring.create_kochwiki_agent(settings())
+            agent = wiring.create_kochwiki_agent(
+                settings(), provider_settings=ProviderSettings(_env_file=None, openai_api_key="test-key"),
+            )
             assert agent.name == "kochwiki"
             model = agent.model
             assert isinstance(model, OpenAIResponsesModel)
@@ -183,7 +190,9 @@ def test_configured_mcp_failure_is_confined_to_each_run(
                 return toolset
 
             monkeypatch.setattr(wiring, "create_mcp_toolset", mcp)
-            agent = wiring.create_kochwiki_agent(settings())
+            agent = wiring.create_kochwiki_agent(
+                settings(), provider_settings=ProviderSettings(_env_file=None, openai_api_key="test-key"),
+            )
             async with agent:
                 assert attempts == 0
                 with bind_turn_identity(ApplicationIdentity("test", "alice")), agent.override(model=FunctionModel(lambda messages, info: ModelResponse(parts=[TextPart("Hello")]))):

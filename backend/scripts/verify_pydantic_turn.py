@@ -7,12 +7,14 @@ from pydantic_ai import Tool
 from pydantic_ai.messages import ToolCallPart, ToolReturnPart
 
 from app.agentic.turns import create_openai_model, create_turn_agent, execute_turn
-from app.core.config import Settings
+from app.core.config import ProviderSettings
+from app.agentic.config import KochwikiConversationSettings
 
 
 async def verify() -> None:
-    settings = Settings()
-    if settings.openai_api_key is None or settings.kochwiki_openai_model is None:
+    settings = KochwikiConversationSettings()
+    provider_settings = ProviderSettings()
+    if provider_settings.openai_api_key is None or settings.kochwiki_openai_model is None:
         raise SystemExit("Set OPENAI_API_KEY and KOCHWIKI_OPENAI_MODEL in backend/.env.")
 
     probe_value = uuid4().hex
@@ -27,7 +29,7 @@ async def verify() -> None:
     agent = create_turn_agent(
         create_openai_model(
             settings.kochwiki_openai_model,
-            settings.openai_api_key,
+            provider_settings.openai_api_key,
             reasoning_effort=settings.kochwiki_openai_reasoning_effort,
         ),
         instructions="Use the lookup tool when asked for the verification value. Reply with its exact value.",
