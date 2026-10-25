@@ -6,9 +6,9 @@ from uuid import uuid4
 from pydantic_ai import Tool
 from pydantic_ai.messages import ToolCallPart, ToolReturnPart
 
-from app.agentic.turns import create_openai_model, create_turn_agent, execute_turn
+from app.capabilities.agentic.turns import create_openai_model, create_turn_agent, execute_turn
 from app.core.config import ProviderSettings
-from app.agentic.config import KochwikiConversationSettings
+from app.capabilities.agentic.config import KochwikiConversationSettings
 
 
 async def verify() -> None:

@@ -4,13 +4,13 @@ import httpx
 import pytest
 from pydantic_ai import models
 
-from app.agentic.http import SnapshotEvent
-from app.agentic.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity
-from app.agentic.runner import AgentTurnRunner
+from app.capabilities.agentic.http import SnapshotEvent
+from app.capabilities.agentic.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity
+from app.capabilities.agentic.runner import AgentTurnRunner
 from app.demo.agent import COMPLETE_REPLY, FAILED_GENERATION_UPDATE, FIRST_REPLY, SECOND_REPLY, create_demo_agent
 from app import main
 from app.main import app
-from tests.test_pydantic_http import stream
+from tests.capabilities.agentic.test_pydantic_http import stream
 
 
 BASE = "/api/v1/agents/demo/sessions"

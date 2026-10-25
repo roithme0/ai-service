@@ -7,7 +7,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from app.agentic.turns import create_turn_agent
+from app.capabilities.agentic.turns import create_turn_agent
 
 
 TURN_DELAY_SECONDS = 1.5

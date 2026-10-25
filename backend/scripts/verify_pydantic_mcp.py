@@ -8,11 +8,11 @@ from pydantic_ai.messages import ToolReturnPart
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import UsageLimits
 
-from app.agentic.config import MAX_MODEL_REQUESTS_PER_TURN
-from app.agentic.mcp import create_mcp_toolset
-from app.agentic.turns import create_openai_model, create_turn_agent, execute_turn
+from app.capabilities.agentic.config import MAX_MODEL_REQUESTS_PER_TURN
+from app.capabilities.agentic.mcp import create_mcp_toolset
+from app.capabilities.agentic.turns import create_openai_model, create_turn_agent, execute_turn
 from app.core.config import ProviderSettings
-from app.agentic.config import KochwikiConversationSettings
+from app.capabilities.agentic.config import KochwikiConversationSettings
 
 
 async def verify(tool_name: str, prompt: str) -> None:

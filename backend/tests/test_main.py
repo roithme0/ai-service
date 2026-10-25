@@ -16,14 +16,14 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from app import main
 from app.core.identity import ApplicationIdentity
-from app.agentic import lifecycle, wiring
-from app.agentic.mcp import create_mcp_toolset
-from app.agentic.presentation import PresentedTurn
-from app.agentic.runner import AgentTurnRunner, RunnerClosedError
+from app.capabilities.agentic import lifecycle, wiring
+from app.capabilities.agentic.mcp import create_mcp_toolset
+from app.capabilities.agentic.presentation import PresentedTurn
+from app.capabilities.agentic.runner import AgentTurnRunner, RunnerClosedError
 from app.core.config import ProviderSettings
-from app.agentic.config import KochwikiConversationSettings
+from app.capabilities.agentic.config import KochwikiConversationSettings
 from app.main import app
-from tests.test_pydantic_http import stream
+from tests.capabilities.agentic.test_pydantic_http import stream
 
 client = TestClient(app)
 

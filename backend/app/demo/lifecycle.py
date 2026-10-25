@@ -1,7 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from app.agentic.runner import AgentTurnRunner
+from app.capabilities.agentic.runner import AgentTurnRunner
 from app.demo.agent import create_demo_agent
 
 

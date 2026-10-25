@@ -9,14 +9,14 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
-from app.agentic.http import create_session_router
-from app.agentic.lifecycle import kochwiki_runner
-from app.agentic.runner import AgentTurnRunner
+from app.capabilities.agentic.http import create_session_router
+from app.capabilities.agentic.lifecycle import kochwiki_runner
+from app.capabilities.agentic.runner import AgentTurnRunner
 from app.core.config import get_provider_settings
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
 from app.demo.lifecycle import demo_runner
-from app.embeddings.http import router as embedding_router
-from app.embeddings.lifecycle import embedding_service
+from app.capabilities.embeddings.http import router as embedding_router
+from app.capabilities.embeddings.lifecycle import embedding_service
 
 
 class AgentLifespan:

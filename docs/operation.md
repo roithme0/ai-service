@@ -71,4 +71,4 @@ Retain deployment configuration and protect backups of credentials. Application 
 | Submission returns 409 | A turn is already running, or the conversation budget is exhausted. |
 | Observation disconnects | Gateway/upstream connectivity. The controller reconnects transient failures; this does not resubmit prompts. |
 
-The [gateway](../deployment/gateway/nginx.conf) has a 600-second read inactivity timeout and no upstream retries. SSE has no heartbeat, so idle connections can time out. A lost admission response does not establish whether execution started; do not blindly replay it. Execution budgets live in [agentic/config.py](../backend/app/agentic/config.py).
+The [gateway](../deployment/gateway/nginx.conf) has a 600-second read inactivity timeout and no upstream retries. SSE has no heartbeat, so idle connections can time out. A lost admission response does not establish whether execution started; do not blindly replay it. Execution budgets live in [agentic/config.py](../backend/app/capabilities/agentic/config.py).

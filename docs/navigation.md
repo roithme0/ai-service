@@ -26,11 +26,11 @@ The [gateway](../deployment/gateway/nginx.conf) serves the demo and API. The dem
 
 | Area | Responsibilities and starting points |
 | --- | --- |
-| [Application](../backend/app/main.py) | FastAPI assembly and capability lifetimes. Loads shared [provider settings](../backend/app/core/config.py) and [conversation settings](../backend/app/agentic/config.py). |
-| [Session API](../backend/app/agentic/http.py) | Session creation, reads, prompt admission, and SSE observation under `/api/v1/agents/{configuration}/sessions`. [Presentation](../backend/app/agentic/presentation.py) projects native history into public snapshots. |
-| [Embeddings](../backend/app/embeddings/) | Embedding endpoint and provider integration. See [usage and profiles](domains/embeddings.md). |
-| [Execution](../backend/app/agentic/runner.py) | Owns background turns. [Registry](../backend/app/agentic/sessions.py) handles ownership and expiry; [session state](../backend/app/agentic/session_state.py) retains conversation, lifecycle, and artifacts. |
-| [Agent composition](../backend/app/agentic/wiring.py) | Configures the Kochwiki model and MCP connection. [Turns](../backend/app/agentic/turns.py) execute through Pydantic AI; [artifacts](../backend/app/agentic/artifacts.py) validate and publish presentation data. |
+| [Application](../backend/app/main.py) | FastAPI assembly and capability lifetimes. Loads shared [provider settings](../backend/app/core/config.py) and [conversation settings](../backend/app/capabilities/agentic/config.py). |
+| [Session API](../backend/app/capabilities/agentic/http.py) | Session creation, reads, prompt admission, and SSE observation under `/api/v1/agents/{configuration}/sessions`. [Presentation](../backend/app/capabilities/agentic/presentation.py) projects native history into public snapshots. |
+| [Embeddings](../backend/app/capabilities/embeddings/) | Embedding endpoint and provider integration. See [usage and profiles](domains/embeddings.md). |
+| [Execution](../backend/app/capabilities/agentic/runner.py) | Owns background turns. [Registry](../backend/app/capabilities/agentic/sessions.py) handles ownership and expiry; [session state](../backend/app/capabilities/agentic/session_state.py) retains conversation, lifecycle, and artifacts. |
+| [Agent composition](../backend/app/capabilities/agentic/wiring.py) | Configures the Kochwiki model and MCP connection. [Turns](../backend/app/capabilities/agentic/turns.py) execute through Pydantic AI; [artifacts](../backend/app/capabilities/agentic/artifacts.py) validate and publish presentation data. |
 | [Chat UI package](../frontend/projects/chat-ui/) | `@roithme0/chat-ui/ui` renders host-supplied content; `@roithme0/chat-ui/conversation` supplies the [controller](../frontend/projects/chat-ui/conversation/src/session-controller.ts), HTTP/SSE transport, and snapshot mapping. |
 | [Demo app](../frontend/src/app/app.component.ts) | Hosts the chat UI and connects it to the [scripted backend agent](../backend/app/demo/agent.py). Includes simulated delays and error states. |
 | [Deployment](../deployment/) | Environment-specific Compose definitions and gateway routing. The [publishing workflow](../.github/workflows/publish-app.yml) builds and publishes application images and the chat UI package. |

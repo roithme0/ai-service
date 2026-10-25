@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import ProviderSettings
-from app.agentic.config import KochwikiConversationSettings
+from app.capabilities.agentic.config import KochwikiConversationSettings
 
 
 def clear_provider_environment(monkeypatch: pytest.MonkeyPatch) -> None:
