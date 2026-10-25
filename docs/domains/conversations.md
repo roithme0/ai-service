@@ -25,7 +25,7 @@ A session connects one owner to one configured agent. The service manages execut
 - Only one turn may run per session. An overlapping submission is rejected without creating another execution.
 - An admitted turn may finish after expiry, but expiry still prevents further reads and submissions.
 - Failure or cancellation retains captured history and accepted artifacts. It does not establish whether interrupted external actions occurred.
-- Conversation budget exhaustion blocks further submissions; reads and observation remain available until expiry. [Execution limits](../../backend/app/agentic/config.py) are separate from session lifetime.
+- Conversation budget exhaustion blocks further submissions; reads and observation remain available until expiry. [Execution limits](../../backend/app/capabilities/conversations/config.py) are separate from session lifetime.
 
 ## Observation and recovery
 
@@ -34,4 +34,4 @@ A session connects one owner to one configured agent. The service manages execut
 - A missing admission response leaves submission uncertain and the draft retained. Observation recovery does not resolve that uncertainty or automatically retry submission.
 - Session state is held in memory and disappears on backend restart.
 
-Start with [session state](../../backend/app/agentic/session_state.py), [registry](../../backend/app/agentic/sessions.py), and the [frontend controller](../../frontend/projects/chat-ui/conversation/src/session-controller.ts).
+Start with [session state](../../backend/app/capabilities/conversations/session_state.py), [registry](../../backend/app/capabilities/conversations/sessions.py), and the [frontend controller](../../frontend/projects/chat-ui/conversation/src/session-controller.ts).

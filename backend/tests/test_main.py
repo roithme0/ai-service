@@ -14,15 +14,16 @@ from pydantic_ai.mcp import MCPToolset
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from app import main
+from app import lifespan, main
 from app.core.identity import ApplicationIdentity
-from app.agentic import wiring
-from app.agentic.mcp import create_mcp_toolset
-from app.agentic.presentation import PresentedTurn
-from app.agentic.runner import AgentTurnRunner, RunnerClosedError
-from app.core.config import Settings
+from app.capabilities.conversations import lifecycle, wiring
+from app.capabilities.conversations.mcp import create_mcp_toolset
+from app.capabilities.conversations.presentation import PresentedTurn
+from app.capabilities.conversations.runner import AgentTurnRunner, RunnerClosedError
+from app.core.config import ProviderSettings
+from app.capabilities.conversations.config import KochwikiConversationSettings
 from app.main import app
-from tests.test_pydantic_http import stream
+from tests.capabilities.conversations.test_http import stream
 
 client = TestClient(app)
 
@@ -58,10 +59,12 @@ def test_application_http_errors_remain_typed_and_hide_internal_details() -> Non
 def test_kochwiki_initialization_failure_does_not_block_application(
     monkeypatch: pytest.MonkeyPatch, failure: Exception,
 ) -> None:
-    def unavailable(settings: Settings) -> Agent[None, str]:
+    def unavailable(
+        settings: KochwikiConversationSettings, *, provider_settings: ProviderSettings,
+    ) -> Agent[None, str]:
         raise failure
 
-    monkeypatch.setattr(main, "create_kochwiki_agent", unavailable)
+    monkeypatch.setattr(lifecycle, "create_kochwiki_agent", unavailable)
     with TestClient(app) as client:
         headers = {"X-Application-User": "test:user"}
         unavailable_response = client.post("/api/v1/agents/kochwiki/sessions", json={}, headers=headers)
@@ -124,9 +127,12 @@ def test_kochwiki_cutover_mcp_outage_recovery_and_resource_cleanup(monkeypatch: 
 
             monkeypatch.setattr(wiring, "create_mcp_toolset", mcp)
             monkeypatch.setattr(wiring, "create_openai_model", model)
-            monkeypatch.setattr(main, "get_settings", lambda: Settings(
-                _env_file=None, openai_api_key="test-key", kochwiki_openai_model="test",
+            monkeypatch.setattr(lifecycle, "get_kochwiki_conversation_settings", lambda: KochwikiConversationSettings(
+                _env_file=None, kochwiki_openai_model="test",
                 kochwiki_mcp_url="http://localhost/mcp/",
+            ))
+            monkeypatch.setattr(lifespan, "get_provider_settings", lambda: ProviderSettings(
+                _env_file=None, openai_api_key="test-key",
             ))
             async with app.router.lifespan_context(app), httpx.AsyncClient(
                 transport=httpx.ASGITransport(app), base_url="http://service",

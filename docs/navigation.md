@@ -1,6 +1,6 @@
 # Repository navigation
 
-AI Service runs agent conversations and provides a reusable Angular chat UI. This repository also includes a scripted demo application and a model-backed Kochwiki agent.
+The conversation capability combines backend execution with a reusable Angular chat UI. The Visual Conversation Demo illustrates integration; the Kochwiki configuration connects execution to external domain tools.
 
 ## System overview
 
@@ -12,9 +12,12 @@ flowchart LR
     Frontend --> ChatUI[Chat UI package]
     Consumer[External consumer frontend] --> ChatUI
     Consumer -->|HTTP + SSE| Backend
-    Backend --> Engine[Pydantic AI]
-    Engine --> OpenAI[OpenAI API]
-    Engine -->|MCP| Kochwiki[External Kochwiki backend]
+    Backend --> Conversations[Conversation capability]
+    Kochwiki -->|embedding HTTP requests| Backend
+    Backend --> Embeddings[Embedding capability]
+    Embeddings --> OpenAI
+    Conversations --> OpenAI[OpenAI API]
+    Conversations -->|MCP| Kochwiki[External Kochwiki backend]
 ```
 
 The [gateway](../deployment/gateway/nginx.conf) serves the demo and API. The demo uses a deterministic local model without external credentials; the Kochwiki agent uses OpenAI and external MCP tools. Sessions live in backend memory and do not survive restarts.
@@ -23,12 +26,14 @@ The [gateway](../deployment/gateway/nginx.conf) serves the demo and API. The dem
 
 | Area | Responsibilities and starting points |
 | --- | --- |
-| [Application](../backend/app/main.py) | FastAPI assembly and agent lifetimes. Registers the `demo` and `kochwiki` configurations; [settings](../backend/app/core/config.py) supply environment configuration. |
-| [Session API](../backend/app/agentic/http.py) | Session creation, reads, prompt admission, and SSE observation under `/api/v1/agents/{configuration}/sessions`. [Presentation](../backend/app/agentic/presentation.py) projects native history into public snapshots. |
-| [Execution](../backend/app/agentic/runner.py) | Owns background turns. [Registry](../backend/app/agentic/sessions.py) handles ownership and expiry; [session state](../backend/app/agentic/session_state.py) retains conversation, lifecycle, and artifacts. |
-| [Agent composition](../backend/app/agentic/wiring.py) | Configures the Kochwiki model and MCP connection. [Turns](../backend/app/agentic/turns.py) execute through Pydantic AI; [artifacts](../backend/app/agentic/artifacts.py) validate and publish presentation data. |
+| [Application](../backend/app/main.py) | FastAPI assembly, router registration, and shared [HTTP error handling](../backend/app/core/http.py). |
+| [Application lifespan](../backend/app/lifespan.py) | Starts and stops capabilities and demos. Loads shared [provider settings](../backend/app/core/config.py); the conversation lifecycle loads [conversation settings](../backend/app/capabilities/conversations/config.py). |
+| [Session API](../backend/app/capabilities/conversations/http.py) | Session creation, reads, prompt admission, and SSE observation under `/api/v1/agents/{configuration}/sessions`. [Presentation](../backend/app/capabilities/conversations/presentation.py) projects native history into public snapshots. |
+| [Embeddings](../backend/app/capabilities/embeddings/) | Embedding endpoint and provider integration. See [usage and profiles](domains/embeddings.md). |
+| [Execution](../backend/app/capabilities/conversations/runner.py) | Owns background turns. [Registry](../backend/app/capabilities/conversations/sessions.py) handles ownership and expiry; [session state](../backend/app/capabilities/conversations/session_state.py) retains conversation, lifecycle, and artifacts. |
+| [Agent composition](../backend/app/capabilities/conversations/wiring.py) | Configures the Kochwiki model and MCP connection. [Turns](../backend/app/capabilities/conversations/turns.py) execute through Pydantic AI; [artifacts](../backend/app/capabilities/conversations/artifacts.py) validate and publish presentation data. |
 | [Chat UI package](../frontend/projects/chat-ui/) | `@roithme0/chat-ui/ui` renders host-supplied content; `@roithme0/chat-ui/conversation` supplies the [controller](../frontend/projects/chat-ui/conversation/src/session-controller.ts), HTTP/SSE transport, and snapshot mapping. |
-| [Demo app](../frontend/src/app/app.component.ts) | Hosts the chat UI and connects it to the [scripted backend agent](../backend/app/demo/agent.py). Includes simulated delays and error states. |
+| [Visual Conversation Demo](../backend/app/demos/visual_conversation_demo/) | Scripted conversation with messages, artifacts, simulated delays, and error states. The [frontend demo app](../frontend/src/app/app.component.ts) hosts its chat UI. |
 | [Deployment](../deployment/) | Environment-specific Compose definitions and gateway routing. The [publishing workflow](../.github/workflows/publish-app.yml) builds and publishes application images and the chat UI package. |
 
 The [contract generator](../frontend/scripts/conversation-contract.mjs) produces [TypeScript types and Zod schemas](../frontend/projects/chat-ui/conversation/generated/) from the session router's OpenAPI document.
@@ -41,6 +46,9 @@ The [contract generator](../frontend/scripts/conversation-contract.mjs) produces
 
 ## Find related tests
 
-- Backend: [backend/tests/](../backend/tests/), covering session state, execution, HTTP/SSE, artifacts, agent wiring, and the demo.
+- Conversations: [backend/tests/capabilities/conversations/](../backend/tests/capabilities/conversations/), covering session state, execution, HTTP/SSE, artifacts, agent wiring, and conversation resource lifecycle.
+- Embeddings: [backend/tests/capabilities/embeddings/](../backend/tests/capabilities/embeddings/).
+- Application: [test_lifespan.py](../backend/tests/test_lifespan.py) covers startup and shutdown across capabilities and demos; [test_capability_integration.py](../backend/tests/test_capability_integration.py) covers capability independence. Application HTTP and shared infrastructure tests also live under [backend/tests/](../backend/tests/).
+- Demos: [backend/tests/demos/](../backend/tests/demos/), with Visual Conversation Demo execution and lifecycle tests under `visual_conversation_demo/`.
 - Frontend: `*.spec.ts` beside application and library code; tooling checks in [frontend/scripts/](../frontend/scripts/).
 - Deployment: [deployment/tests/](../deployment/tests/), with backend and gateway test runners.

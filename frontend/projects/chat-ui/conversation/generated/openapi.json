@@ -817,7 +817,7 @@
         },
         "summary": "Create Session",
         "tags": [
-          "agentic"
+          "conversations"
         ]
       }
     },
@@ -900,7 +900,7 @@
         },
         "summary": "Read Session",
         "tags": [
-          "agentic"
+          "conversations"
         ]
       }
     },
@@ -994,7 +994,7 @@
         },
         "summary": "Observe Session",
         "tags": [
-          "agentic"
+          "conversations"
         ]
       }
     },
@@ -1097,7 +1097,7 @@
         },
         "summary": "Submit Prompt",
         "tags": [
-          "agentic"
+          "conversations"
         ]
       }
     }

@@ -24,7 +24,7 @@ npm ci
 npm run start:app
 ```
 
-Open `http://localhost:4204`; API requests proxy to port 8004. The scripted demo needs no model credentials or Kochwiki connection. Refresh to start a new session.
+Open `http://localhost:4204`; API requests proxy to port 8004. The [Visual Conversation Demo](../backend/app/demos/visual_conversation_demo/) needs no model credentials or Kochwiki connection. Refresh to start a new session.
 
 For the model-backed agent, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [Kochwiki settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
 
@@ -95,7 +95,7 @@ With the [local servers](#run-locally) running, open `http://localhost:4204` at 
 - Send one more message to trigger the frontend-only 405 compatibility error without retry. Refresh to restart; there is no restart button.
 - Check history/composer placement during viewport changes, no horizontal overflow, Enter/send submitting once, and Shift+Enter adding a line break.
 
-## Agentic coding
+## AI-assisted development
 
 | Resource | Purpose |
 | --- | --- |
