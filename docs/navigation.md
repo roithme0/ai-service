@@ -46,8 +46,9 @@ The [contract generator](../frontend/scripts/conversation-contract.mjs) produces
 
 ## Find related tests
 
-- Conversations: [backend/tests/capabilities/conversations/](../backend/tests/capabilities/conversations/), covering session state, execution, HTTP/SSE, artifacts, and agent wiring.
-- Embeddings: [backend/tests/capabilities/embeddings/](../backend/tests/capabilities/embeddings/). Cross-capability lifecycle tests live directly under [backend/tests/capabilities/](../backend/tests/capabilities/); application and shared infrastructure tests live under [backend/tests/](../backend/tests/).
-- Demos: [backend/tests/demos/](../backend/tests/demos/), with the Visual Conversation Demo under `visual_conversation_demo/`.
+- Conversations: [backend/tests/capabilities/conversations/](../backend/tests/capabilities/conversations/), covering session state, execution, HTTP/SSE, artifacts, agent wiring, and conversation resource lifecycle.
+- Embeddings: [backend/tests/capabilities/embeddings/](../backend/tests/capabilities/embeddings/).
+- Application: [test_lifespan.py](../backend/tests/test_lifespan.py) covers startup and shutdown across capabilities and demos; [test_capability_integration.py](../backend/tests/test_capability_integration.py) covers capability independence. Application HTTP and shared infrastructure tests also live under [backend/tests/](../backend/tests/).
+- Demos: [backend/tests/demos/](../backend/tests/demos/), with Visual Conversation Demo execution and lifecycle tests under `visual_conversation_demo/`.
 - Frontend: `*.spec.ts` beside application and library code; tooling checks in [frontend/scripts/](../frontend/scripts/).
 - Deployment: [deployment/tests/](../deployment/tests/), with backend and gateway test runners.
