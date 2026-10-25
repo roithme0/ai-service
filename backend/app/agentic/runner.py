@@ -19,6 +19,7 @@ from app.agentic.presentation import PresentedSession, present_session
 from app.agentic.sessions import AgentSessionRegistry, SessionCreated
 from app.agentic.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
+from app.core.identity import ApplicationIdentity
 
 
 _logger = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ class AgentTurnRunner:
     def create_session(
         self,
         *,
-        owner: str,
+        owner: ApplicationIdentity,
         initial_context: dict[str, FiniteJsonValue] | None = None,
         artifact_capabilities: Sequence[ArtifactCapability] = (),
         max_artifacts: int = MAX_ARTIFACTS_PER_SESSION,
@@ -74,11 +75,11 @@ class AgentTurnRunner:
             artifact_capabilities=artifact_capabilities, max_artifacts=max_artifacts,
         )
 
-    def read_session(self, session_id: str, *, owner: str) -> PresentedSession:
+    def read_session(self, session_id: str, *, owner: ApplicationIdentity) -> PresentedSession:
         """Read detached state, including settled outcomes after runner shutdown."""
         return present_session(self._sessions.read(session_id, owner=owner))
 
-    async def observe_session(self, session_id: str, *, owner: str) -> AsyncGenerator[PresentedSession, None]:
+    async def observe_session(self, session_id: str, *, owner: ApplicationIdentity) -> AsyncGenerator[PresentedSession, None]:
         """Observe complete presentation snapshots until expiry, shutdown or disconnect."""
         async with aclosing(self._sessions.observe(session_id, owner=owner)) as snapshots:
             async for snapshot in snapshots:
@@ -88,7 +89,7 @@ class AgentTurnRunner:
         self,
         session_id: str,
         *,
-        owner: str,
+        owner: ApplicationIdentity,
         prompt: str,
         usage_limits: UsageLimits | None = None,
         toolsets: Sequence[AbstractToolset[None]] = (),

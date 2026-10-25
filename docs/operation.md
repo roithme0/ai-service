@@ -26,7 +26,7 @@ The demo works without these agent settings. Invalid startup configuration leave
 
 For a Kochwiki server on the Docker host, the example uses `http://host.docker.internal:8002/mcp/`; ensure that name resolves on your host. Container `localhost` refers to the container itself.
 
-The API trusts the caller-supplied `X-Application-User` header (`application:user`) for session ownership. It does not authenticate that identity. External consumers must establish trusted identity before forwarding requests. Configure HTTPS at the hosting edge.
+The API uses the caller-supplied `X-Application-User` header (`encodeURIComponent(issuer):encodeURIComponent(subject)`) for session ownership and forwards the session owner's assertion to Kochwiki MCP on every turn. Both boundaries temporarily accept unverified assertions; authenticated delegation remains future work. Configure HTTPS at the hosting edge.
 
 ## Deploy or update
 

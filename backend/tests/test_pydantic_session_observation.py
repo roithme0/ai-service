@@ -8,6 +8,7 @@ from pydantic_ai import Tool, models
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+from app.core.identity import ApplicationIdentity
 from app.agentic.config import MAX_OBSERVERS_PER_SESSION, MAX_PENDING_OBSERVATION_UPDATES
 from app.agentic.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity, UserPrompt, present_session
 from app.agentic.runner import AgentTurnRunner
@@ -78,11 +79,11 @@ def test_observer_sees_presented_progress_and_complete_snapshots_without_interna
 
         agent = create_turn_agent(FunctionModel(respond), instructions="SECRET_INSTRUCTIONS", tools=[Tool(lookup)])
         runner = AgentTurnRunner(agent)
-        session = runner.create_session(owner="alice", initial_context={"secret": "SECRET_CONTEXT"})
-        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner="alice")) as updates:
+        session = runner.create_session(owner=ApplicationIdentity("test", "alice"), initial_context={"secret": "SECRET_CONTEXT"})
+        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as updates:
             initial = await anext(updates)
             assert groups(initial) == ()
-            await runner.submit(session.session_id, owner="alice", prompt="Find it.")
+            await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Find it.")
             await asyncio.wait_for(started.wait(), 5)
             admitted = await anext(updates)
             assert groups(admitted)[-1].lifecycle.status == "running"
@@ -94,7 +95,7 @@ def test_observer_sees_presented_progress_and_complete_snapshots_without_interna
                 ToolActivity(part_kind="tool-call", tool_name="lookup", tool_call_id="lookup", status="running"),
             )
             assert active.history[0] == UserPrompt(content="Find it.")
-            assert runner.read_session(session.session_id, owner="alice") == active
+            assert runner.read_session(session.session_id, owner=ApplicationIdentity("test", "alice")) == active
             assert PresentedSession.model_validate_json(active.model_dump_json()) == active
             assert "SECRET" not in active.model_dump_json()
             assert set(active.model_dump()) == {"session_id", "expires_at", "history", "error"}
@@ -108,7 +109,7 @@ def test_observer_sees_presented_progress_and_complete_snapshots_without_interna
             assert groups(final)[-1].parts[-1] == AssistantText(content="Found 42.")
             assert final.history[0] == active.history[0]
             assert has_started(active) and has_result(final)
-            assert runner.read_session(session.session_id, owner="alice") == final
+            assert runner.read_session(session.session_id, owner=ApplicationIdentity("test", "alice")) == final
             assert "SECRET" not in final.model_dump_json()
 
 
@@ -133,12 +134,12 @@ def test_artifacts_survive_outcomes_and_shutdown_delivers_final_snapshot(outcome
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
-        session = runner.create_session(owner="alice", artifact_capabilities=[ArtifactCapability(
+        session = runner.create_session(owner=ApplicationIdentity("test", "alice"), artifact_capabilities=[ArtifactCapability(
             type="example", description="Present data.", payloadSchema={"type": "object"},
         )])
-        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner="alice")) as updates:
+        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as updates:
             await anext(updates)
-            await runner.submit(session.session_id, owner="alice", prompt="Present.")
+            await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Present.")
             await asyncio.wait_for(continuing.wait(), 5)
             published = await until(updates, lambda snapshot: bool(artifacts(snapshot)))
             assert groups(published)[-1].lifecycle.status == "running"
@@ -147,7 +148,7 @@ def test_artifacts_survive_outcomes_and_shutdown_delivers_final_snapshot(outcome
             assert activity.part_kind == "tool-call" and activity.tool_call_id == "artifact"
             assert groups(published)[-1].parts[1] == artifacts(published)[0]
             artifacts(published)[0].artifact.content.payload["consumer"] = "changed"
-            assert "consumer" not in artifacts(runner.read_session(session.session_id, owner="alice"))[0].artifact.content.payload
+            assert "consumer" not in artifacts(runner.read_session(session.session_id, owner=ApplicationIdentity("test", "alice")))[0].artifact.content.payload
             artifacts(published)[0].artifact.content.payload.pop("consumer")
             if outcome == "cancelled":
                 await runner.close()
@@ -160,7 +161,7 @@ def test_artifacts_survive_outcomes_and_shutdown_delivers_final_snapshot(outcome
             await runner.close()
             async for remaining in updates:
                 assert groups(remaining)[-1].lifecycle.status == outcome
-        async with aclosing(runner.observe_session(session.session_id, owner="alice")) as after_close:
+        async with aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as after_close:
             assert settled(await anext(after_close))
             with pytest.raises(StopAsyncIteration):
                 await anext(after_close)
@@ -179,24 +180,24 @@ def test_observers_are_independent_and_disconnect_does_not_cancel_execution() ->
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
-        first = runner.create_session(owner="alice")
-        second = runner.create_session(owner="bob")
+        first = runner.create_session(owner=ApplicationIdentity("test", "alice"))
+        second = runner.create_session(owner=ApplicationIdentity("test", "bob"))
         async with agent, runner, AsyncExitStack() as stack:
-            first_updates = await stack.enter_async_context(aclosing(runner.observe_session(first.session_id, owner="alice")))
-            duplicate = await stack.enter_async_context(aclosing(runner.observe_session(first.session_id, owner="alice")))
-            second_updates = await stack.enter_async_context(aclosing(runner.observe_session(second.session_id, owner="bob")))
+            first_updates = await stack.enter_async_context(aclosing(runner.observe_session(first.session_id, owner=ApplicationIdentity("test", "alice"))))
+            duplicate = await stack.enter_async_context(aclosing(runner.observe_session(first.session_id, owner=ApplicationIdentity("test", "alice"))))
+            second_updates = await stack.enter_async_context(aclosing(runner.observe_session(second.session_id, owner=ApplicationIdentity("test", "bob"))))
             await anext(first_updates)
             await anext(duplicate)
             await anext(second_updates)
-            await runner.submit(first.session_id, owner="alice", prompt="Work.")
+            await runner.submit(first.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Work.")
             await asyncio.wait_for(started.wait(), 5)
             first_snapshot = await until(first_updates, lambda snapshot: bool(groups(snapshot)))
             assert first_snapshot.session_id == first.session_id
             await first_updates.aclose()
-            assert groups(runner.read_session(first.session_id, owner="alice"))[-1].lifecycle.status == "running"
+            assert groups(runner.read_session(first.session_id, owner=ApplicationIdentity("test", "alice")))[-1].lifecycle.status == "running"
             release.set()
             assert groups(await until(duplicate, settled))[-1].lifecycle.status == "completed"
-            assert groups(runner.read_session(second.session_id, owner="bob")) == ()
+            assert groups(runner.read_session(second.session_id, owner=ApplicationIdentity("test", "bob"))) == ()
             await runner.close()
             with pytest.raises(StopAsyncIteration):
                 await anext(second_updates)
@@ -213,24 +214,24 @@ def test_owner_expiry_and_observer_limits_release_slots() -> None:
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent, clock=lambda: now)
-        session = runner.create_session(owner="alice")
+        session = runner.create_session(owner=ApplicationIdentity("test", "alice"))
         async with agent, runner, AsyncExitStack() as stack:
-            for session_id, owner in ((session.session_id, "bob"), ("missing", "alice")):
+            for session_id, owner in ((session.session_id, ApplicationIdentity("test", "bob")), ("missing", ApplicationIdentity("test", "alice"))):
                 async with aclosing(runner.observe_session(session_id, owner=owner)) as denied:
                     with pytest.raises(SessionNotFoundError):
                         await anext(denied)
-            observers = [await stack.enter_async_context(aclosing(runner.observe_session(session.session_id, owner="alice")))
+            observers = [await stack.enter_async_context(aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))))
                          for _ in range(MAX_OBSERVERS_PER_SESSION)]
             for updates in observers:
                 await anext(updates)
-            async with aclosing(runner.observe_session(session.session_id, owner="alice")) as excess:
+            async with aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as excess:
                 with pytest.raises(ObservationLimitError):
                     await anext(excess)
             # A denied owner must not learn that all observer slots are occupied.
             with pytest.raises(SessionNotFoundError):
-                await anext(runner.observe_session(session.session_id, owner="bob"))
+                await anext(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "bob")))
             await observers.pop().aclose()
-            replacement = await stack.enter_async_context(aclosing(runner.observe_session(session.session_id, owner="alice")))
+            replacement = await stack.enter_async_context(aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))))
             await anext(replacement)
             now = session.expires_at - timedelta(milliseconds=10)
             pending = asyncio.create_task(anext(replacement))
@@ -239,7 +240,7 @@ def test_owner_expiry_and_observer_limits_release_slots() -> None:
             with pytest.raises(SessionNotFoundError):
                 await asyncio.wait_for(pending, 5)
             with pytest.raises(SessionNotFoundError):
-                await anext(runner.observe_session(session.session_id, owner="alice"))
+                await anext(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice")))
 
     asyncio.run(exercise())
 
@@ -256,20 +257,20 @@ def test_slow_observer_overflow_is_explicit_and_does_not_fail_execution(monkeypa
         monkeypatch.setattr("app.agentic.sessions.MAX_PENDING_OBSERVATION_UPDATES", 1)
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
-        session = runner.create_session(owner="alice")
-        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner="alice")) as slow:
+        session = runner.create_session(owner=ApplicationIdentity("test", "alice"))
+        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as slow:
             await anext(slow)
-            await runner.submit(session.session_id, owner="alice", prompt="Work.")
+            await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Work.")
             await asyncio.wait_for(continuing.wait(), 5)
             with pytest.raises(ObservationOverflowError):
                 await anext(slow)
-            async with aclosing(runner.observe_session(session.session_id, owner="alice")) as replacement:
+            async with aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as replacement:
                 active = await anext(replacement)
                 assert groups(active)[-1].lifecycle.status == "running"
                 await replacement.aclose()
             release.set()
             monkeypatch.setattr("app.agentic.sessions.MAX_PENDING_OBSERVATION_UPDATES", MAX_PENDING_OBSERVATION_UPDATES)
-            async with aclosing(runner.observe_session(session.session_id, owner="alice")) as healthy:
+            async with aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as healthy:
                 assert groups(await until(healthy, settled))[-1].lifecycle.status == "completed"
 
     asyncio.run(exercise())
@@ -289,23 +290,23 @@ def test_cancelling_waiting_observer_releases_capacity_and_late_observer_follows
         monkeypatch.setattr("app.agentic.sessions.MAX_OBSERVERS_PER_SESSION", 1)
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
-        session = runner.create_session(owner="alice")
-        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner="alice")) as disconnected:
+        session = runner.create_session(owner=ApplicationIdentity("test", "alice"))
+        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as disconnected:
             await anext(disconnected)
             waiting = asyncio.create_task(anext(disconnected))
             await asyncio.sleep(0)
             waiting.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await waiting
-            await runner.submit(session.session_id, owner="alice", prompt="First.")
+            await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="First.")
             await asyncio.wait_for(started.wait(), 5)
-            async with aclosing(runner.observe_session(session.session_id, owner="alice")) as late:
+            async with aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as late:
                 initial = await anext(late)
                 assert groups(initial)[-1].lifecycle.status == "running"
                 assert initial.history[0] == UserPrompt(content="First.")
                 release.set()
                 assert groups(await until(late, settled))[-1].lifecycle.status == "completed"
-                await runner.submit(session.session_id, owner="alice", prompt="Second.")
+                await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Second.")
                 final = await until(late, lambda snapshot: len(groups(snapshot)) == 2 and settled(snapshot))
                 assert [turn.lifecycle.status for turn in groups(final)] == ["completed", "completed"]
                 assert groups(final)[0].parts == (AssistantText(content="Done."),)
@@ -321,8 +322,8 @@ def test_observer_sees_setup_failure_without_native_run_id(monkeypatch: pytest.M
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
-        session = runner.create_session(owner="alice", initial_context={"recipe": 42})
-        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner="alice")) as updates:
+        session = runner.create_session(owner=ApplicationIdentity("test", "alice"), initial_context={"recipe": 42})
+        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as updates:
             initial = await anext(updates)
 
             def reject_tools(*_args: object) -> None:
@@ -330,7 +331,7 @@ def test_observer_sees_setup_failure_without_native_run_id(monkeypatch: pytest.M
 
             with monkeypatch.context() as setup_patch:
                 setup_patch.setattr("app.agentic.session_state.create_artifact_toolset", reject_tools)
-                await runner.submit(session.session_id, owner="alice", prompt="Work.")
+                await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Work.")
                 final = await until(updates, settled)
             assert groups(final)[-1].lifecycle.status == "failed"
             assert groups(final)[-1].lifecycle.run_id is None
@@ -352,16 +353,16 @@ def test_projection_failure_closes_subscription_and_releases_capacity(monkeypatc
         monkeypatch.setattr("app.agentic.sessions.MAX_OBSERVERS_PER_SESSION", 1)
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
-        session = runner.create_session(owner="alice")
+        session = runner.create_session(owner=ApplicationIdentity("test", "alice"))
         async with agent, runner:
             monkeypatch.setattr("app.agentic.runner.present_session", reject_projection)
-            async with aclosing(runner.observe_session(session.session_id, owner="alice")) as broken:
+            async with aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as broken:
                 with pytest.raises(RuntimeError, match="Projection failed"):
                     await anext(broken)
             monkeypatch.setattr("app.agentic.runner.present_session", present_session)
-            async with aclosing(runner.observe_session(session.session_id, owner="alice")) as replacement:
+            async with aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as replacement:
                 assert (await anext(replacement)).history == ()
-                await runner.submit(session.session_id, owner="alice", prompt="Work.")
+                await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Work.")
                 final = await until(replacement, settled)
                 assert groups(final)[-1].lifecycle.status == "completed"
 

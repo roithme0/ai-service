@@ -367,6 +367,8 @@ export type CreateSessionApiV1AgentsConfigurationSessionsPostData = {
     headers: {
         /**
          * X-Application-User
+         *
+         * Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).
          */
         'X-Application-User': string;
     };
@@ -415,6 +417,8 @@ export type ReadSessionApiV1AgentsConfigurationSessionsSessionIdGetData = {
     headers: {
         /**
          * X-Application-User
+         *
+         * Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).
          */
         'X-Application-User': string;
     };
@@ -463,6 +467,8 @@ export type ObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetData
     headers: {
         /**
          * X-Application-User
+         *
+         * Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).
          */
         'X-Application-User': string;
     };
@@ -515,6 +521,8 @@ export type SubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostData =
     headers: {
         /**
          * X-Application-User
+         *
+         * Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).
          */
         'X-Application-User': string;
     };

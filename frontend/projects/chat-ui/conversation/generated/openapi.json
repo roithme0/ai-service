@@ -741,11 +741,13 @@
             }
           },
           {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
             "in": "header",
             "name": "X-Application-User",
             "required": true,
             "schema": {
-              "pattern": "^[^\\s:]+:[^\\s:]+$",
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
               "title": "X-Application-User",
               "type": "string"
             }
@@ -842,11 +844,13 @@
             }
           },
           {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
             "in": "header",
             "name": "X-Application-User",
             "required": true,
             "schema": {
-              "pattern": "^[^\\s:]+:[^\\s:]+$",
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
               "title": "X-Application-User",
               "type": "string"
             }
@@ -923,11 +927,13 @@
             }
           },
           {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
             "in": "header",
             "name": "X-Application-User",
             "required": true,
             "schema": {
-              "pattern": "^[^\\s:]+:[^\\s:]+$",
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
               "title": "X-Application-User",
               "type": "string"
             }
@@ -1015,11 +1021,13 @@
             }
           },
           {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
             "in": "header",
             "name": "X-Application-User",
             "required": true,
             "schema": {
-              "pattern": "^[^\\s:]+:[^\\s:]+$",
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
               "title": "X-Application-User",
               "type": "string"
             }

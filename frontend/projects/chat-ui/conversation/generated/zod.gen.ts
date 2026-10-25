@@ -246,7 +246,7 @@ export const zHttpValidationError = z.object({
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostBody = zSessionCreationRequest;
 
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostHeaders = z.object({
-    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+    'X-Application-User': z.string().regex(/^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$/)
 });
 
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostPath = z.object({
@@ -259,7 +259,7 @@ export const zCreateSessionApiV1AgentsConfigurationSessionsPostPath = z.object({
 export const zCreateSessionApiV1AgentsConfigurationSessionsPostResponse = zSessionCreated;
 
 export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetHeaders = z.object({
-    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+    'X-Application-User': z.string().regex(/^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$/)
 });
 
 export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetPath = z.object({
@@ -273,7 +273,7 @@ export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetPath = z.ob
 export const zReadSessionApiV1AgentsConfigurationSessionsSessionIdGetResponse = zPresentedSession;
 
 export const zObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetHeaders = z.object({
-    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+    'X-Application-User': z.string().regex(/^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$/)
 });
 
 export const zObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetPath = z.object({
@@ -289,7 +289,7 @@ export const zObserveSessionApiV1AgentsConfigurationSessionsSessionIdEventsGetRe
 export const zSubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostBody = zPromptSubmissionRequest;
 
 export const zSubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostHeaders = z.object({
-    'X-Application-User': z.string().regex(/^[^\s:]+:[^\s:]+$/)
+    'X-Application-User': z.string().regex(/^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$/)
 });
 
 export const zSubmitPromptApiV1AgentsConfigurationSessionsSessionIdTurnsPostPath = z.object({

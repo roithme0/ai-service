@@ -82,7 +82,11 @@ async function collect(source: AsyncIterable<SessionEvent>): Promise<SessionEven
 describe('HttpSessionTransport', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('creates, reads, submits and observes using the new session contract and owner header', async () => {
+  it.each([
+    'test:alice',
+    `${encodeURIComponent('https://idp.example/realms/cooks')}:${encodeURIComponent("cook:ä !'()*%")}`,
+  ])('preserves owner assertion %s across create, read, submit and observe', async (identity) => {
+    const sessionTransport = new HttpSessionTransport('/ai/api/v1///', 'new/agent', identity);
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -98,15 +102,17 @@ describe('HttpSessionTransport', () => {
         { type: 'json', description: 'JSON', payloadSchema: { type: 'object' } },
       ],
     };
-    await expect(transport().createSession(initialization)).resolves.toEqual({
+    await expect(sessionTransport.createSession(initialization)).resolves.toEqual({
       session_id: 's/1',
       expires_at: expires,
     });
-    await expect(transport().readSession('s/1')).resolves.toEqual(snapshot);
-    await expect(transport().submitPrompt('s/1', '  Hello  ')).resolves.toEqual({
+    await expect(sessionTransport.readSession('s/1')).resolves.toEqual(snapshot);
+    await expect(sessionTransport.submitPrompt('s/1', '  Hello  ')).resolves.toEqual({
       kind: 'accepted',
     });
-    await expect(collect(events())).resolves.toEqual([snapshotEvent]);
+    await expect(
+      collect(sessionTransport.observeSession('s/1', new AbortController().signal)),
+    ).resolves.toEqual([snapshotEvent]);
     const base = '/ai/api/v1/agents/new%2Fagent/sessions';
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       base,
@@ -117,7 +123,7 @@ describe('HttpSessionTransport', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual(initialization);
     expect(fetchMock.mock.calls[2][1]?.body).toBe(JSON.stringify({ prompt: '  Hello  ' }));
     for (const [, options] of fetchMock.mock.calls) {
-      expect(new Headers(options?.headers).get('X-Application-User')).toBe('test:alice');
+      expect(new Headers(options?.headers).get('X-Application-User')).toBe(identity);
     }
   });
 

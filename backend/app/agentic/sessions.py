@@ -24,7 +24,9 @@ from app.agentic.session_state import (
     TurnExecution,
 )
 from app.agentic.artifacts import ArtifactCapability
+from app.agentic.identity import bind_turn_identity
 from app.core.json import FiniteJsonValue
+from app.core.identity import ApplicationIdentity
 
 
 def _utc_now() -> datetime:
@@ -71,7 +73,7 @@ class SessionSnapshot:
 
 @dataclass(frozen=True)
 class _Session:
-    owner: str
+    owner: ApplicationIdentity
     expires_at: datetime
     state: SessionState
 
@@ -135,13 +137,11 @@ class AgentSessionRegistry:
     def create(
         self,
         *,
-        owner: str,
+        owner: ApplicationIdentity,
         initial_context: dict[str, FiniteJsonValue] | None = None,
         artifact_capabilities: Sequence[ArtifactCapability] = (),
         max_artifacts: int = MAX_ARTIFACTS_PER_SESSION,
     ) -> SessionCreated:
-        if not owner.strip():
-            raise ValueError("Session owner must not be blank.")
         now = self._now()
         self._discard_expired(now)
         session_id = str(uuid4())
@@ -155,14 +155,14 @@ class AgentSessionRegistry:
         self._sessions[session_id] = _Session(owner=owner, expires_at=expires_at, state=state)
         return SessionCreated(session_id, expires_at)
 
-    def _require_session(self, session_id: str, owner: str) -> _Session:
+    def _require_session(self, session_id: str, owner: ApplicationIdentity) -> _Session:
         self._discard_expired(self._now())
         session = self._sessions.get(session_id)
         if session is None or session.owner != owner:
             raise SessionNotFoundError("Session not found.")
         return session
 
-    def read(self, session_id: str, *, owner: str) -> SessionSnapshot:
+    def read(self, session_id: str, *, owner: ApplicationIdentity) -> SessionSnapshot:
         session = self._require_session(session_id, owner)
         return self._create_snapshot(session_id, session)
 
@@ -191,7 +191,7 @@ class AgentSessionRegistry:
             for observer in observers:
                 observer.close()
 
-    async def observe(self, session_id: str, *, owner: str) -> AsyncGenerator[SessionSnapshot, None]:
+    async def observe(self, session_id: str, *, owner: ApplicationIdentity) -> AsyncGenerator[SessionSnapshot, None]:
         """Yield detached boundary snapshots; disconnect never controls execution."""
         session = self._require_session(session_id, owner)
         observers = self._observers.setdefault(session_id, set())
@@ -225,7 +225,7 @@ class AgentSessionRegistry:
         self,
         session_id: str,
         *,
-        owner: str,
+        owner: ApplicationIdentity,
         agent: Agent[None, str],
         prompt: str,
         usage_limits: UsageLimits | None = None,
@@ -234,11 +234,12 @@ class AgentSessionRegistry:
     ) -> AgentRunResult[str]:
         """Check access, then await turn execution through settlement."""
         session = self._require_session(session_id, owner)
-        return await session.state.execute_turn(
-            agent,
-            prompt,
-            usage_limits=usage_limits,
-            toolsets=toolsets,
-            on_admitted=on_admitted,
-        )
+        with bind_turn_identity(session.owner):
+            return await session.state.execute_turn(
+                agent,
+                prompt,
+                usage_limits=usage_limits,
+                toolsets=toolsets,
+                on_admitted=on_admitted,
+            )
 
