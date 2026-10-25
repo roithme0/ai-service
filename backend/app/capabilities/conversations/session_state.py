@@ -15,7 +15,7 @@ from pydantic_ai import Agent, Conversation
 from pydantic_ai.messages import ModelMessage, ModelRequest, TextContent, UserPromptPart
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from app.capabilities.conversations.artifacts import (
     ArtifactAccepted,
@@ -87,10 +87,11 @@ class TurnLifecycle:
 
 @dataclass(frozen=True)
 class TurnExecution:
-    """Lifecycle and live observation, released when the turn settles."""
+    """Detached turn usage survives release of the live observation."""
 
     lifecycle: TurnLifecycle
     observation: TurnObservation | None
+    usage: RunUsage
 
 
 @dataclass(frozen=True)
@@ -154,6 +155,11 @@ class SessionState:
                     else execution.lifecycle
                 ),
                 observation=deepcopy(execution.observation),
+                usage=(
+                    execution.observation.turn_usage
+                    if execution.observation is not None
+                    else deepcopy(execution.usage)
+                ),
             )
             for execution in self._turn_executions
         )
@@ -247,7 +253,7 @@ class SessionState:
         if self.limit_reached:
             self._execution_lock.release()
             raise ConversationLimitReached("Conversation limit reached")
-        observation = TurnObservation()
+        observation = TurnObservation(usage_baseline=self._conversation.usage)
         execution = TurnExecution(
             lifecycle=TurnLifecycle(
                 run_id=None,
@@ -256,6 +262,7 @@ class SessionState:
                 finished_at=None,
             ),
             observation=observation,
+            usage=RunUsage(),
         )
         self._turn_executions = (*self._turn_executions, execution)
         return execution
@@ -282,6 +289,7 @@ class SessionState:
             TurnExecution(
                 lifecycle=settled,
                 observation=None,
+                usage=observation.turn_usage,
             ),
         )
         self._execution_lock.release()

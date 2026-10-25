@@ -24,6 +24,7 @@ from pydantic_ai.messages import (
     repair_messages,
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.usage import RunUsage
 
 from app.core.identity import ApplicationIdentity
 from app.capabilities.conversations.session_state import (
@@ -70,6 +71,7 @@ def execution(
             finished_at=None if status == "running" else NOW,
         ),
         observation,
+        RunUsage(),
     )
 
 
