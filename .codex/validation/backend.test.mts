@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rename, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rename, symlink, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { backendFingerprint, backendPython, formatBackend } from './backend.mts';
+import { backendFingerprint, backendPython, formatBackend, runBackendPytest } from './backend.mts';
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const python = backendPython(repository);
@@ -150,4 +150,43 @@ void test('directory links cannot redirect formatting outside the backend', asyn
   const { sourcePath } = await import('./shared.mts');
   await assert.rejects(sourcePath(root, 'backend', 'backend/linked/linked.py'), /outside backend/);
   assert.equal(await readFile(join(outside, 'linked.py'), 'utf8'), 'value=  2\n');
+});
+
+void test('hook pytest runs isolate temporary and cache paths from manual runs and each other', async () => {
+  const root = await fixture();
+  for (const directory of ['.pytest_tmp', '.pytest_cache']) {
+    const path = join(root, 'backend/tests', directory);
+    await mkdir(path, { recursive: true });
+    await writeFile(join(path, 'sentinel'), 'manual run');
+  }
+  await writeFile(
+    join(root, 'backend/tests/test_paths.py'),
+    `from pathlib import Path
+from pytest import Config
+
+
+def test_paths(tmp_path: Path, pytestconfig: Config) -> None:
+    temporary = tmp_path.parent
+    cache = Path(pytestconfig.getini("cache_dir"))
+    assert temporary.name == "tmp"
+    assert cache.name == "cache"
+    assert temporary.parent == cache.parent
+    assert temporary.parent.parent == pytestconfig.rootpath / ".codex-validation" / "checks"
+`,
+  );
+  const cache = join(root, 'backend/.codex-validation/checks');
+  await runBackendPytest(root, cache, python);
+  await runBackendPytest(root, cache, python);
+  const runs = (await readdir(cache)).filter((name) => name.startsWith('pytest-'));
+  assert.equal(runs.length, 2);
+  for (const run of runs) {
+    assert.ok((await stat(join(cache, run, 'tmp'))).isDirectory());
+    assert.ok((await stat(join(cache, run, 'cache'))).isDirectory());
+  }
+  for (const directory of ['.pytest_tmp', '.pytest_cache']) {
+    assert.equal(
+      await readFile(join(root, 'backend/tests', directory, 'sentinel'), 'utf8'),
+      'manual run',
+    );
+  }
 });
