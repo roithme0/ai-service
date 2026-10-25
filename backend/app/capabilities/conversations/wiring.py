@@ -6,11 +6,11 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPToolset
 from pydantic_ai.toolsets import DynamicToolset
 
-from app.capabilities.agentic.instructions import CONVERSATION_INSTRUCTIONS
-from app.capabilities.agentic.config import KochwikiConversationSettings
-from app.capabilities.agentic.identity import current_turn_identity
-from app.capabilities.agentic.mcp import create_mcp_toolset
-from app.capabilities.agentic.turns import create_openai_model, create_turn_agent
+from app.capabilities.conversations.instructions import CONVERSATION_INSTRUCTIONS
+from app.capabilities.conversations.config import KochwikiConversationSettings
+from app.capabilities.conversations.identity import current_turn_identity
+from app.capabilities.conversations.mcp import create_mcp_toolset
+from app.capabilities.conversations.turns import create_openai_model, create_turn_agent
 from app.core.config import ProviderSettings
 
 

@@ -13,14 +13,14 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.native_tools import WebSearchTool
 
-from app.capabilities.agentic import wiring
-from app.capabilities.agentic.identity import bind_turn_identity
+from app.capabilities.conversations import wiring
+from app.capabilities.conversations.identity import bind_turn_identity
 from app.core.identity import ApplicationIdentity
-from app.capabilities.agentic.artifacts import ArtifactAccepted, ArtifactCapability
-from app.capabilities.agentic.session_state import SessionState
-from app.capabilities.agentic.mcp import create_mcp_toolset
+from app.capabilities.conversations.artifacts import ArtifactAccepted, ArtifactCapability
+from app.capabilities.conversations.session_state import SessionState
+from app.capabilities.conversations.mcp import create_mcp_toolset
 from app.core.config import ProviderSettings
-from app.capabilities.agentic.config import KochwikiConversationSettings
+from app.capabilities.conversations.config import KochwikiConversationSettings
 
 
 @pytest.fixture(autouse=True)

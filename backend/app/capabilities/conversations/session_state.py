@@ -17,7 +17,7 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
-from app.capabilities.agentic.artifacts import (
+from app.capabilities.conversations.artifacts import (
     ArtifactAccepted,
     ArtifactCapability,
     ArtifactRejected,
@@ -25,10 +25,10 @@ from app.capabilities.agentic.artifacts import (
     PublishedArtifact,
     create_artifact_toolset,
 )
-from app.capabilities.agentic.config import MAX_ARTIFACTS_PER_SESSION, MAX_INITIAL_CONTEXT_CHARACTERS
-from app.capabilities.agentic.observation import TurnObservation
-from app.capabilities.agentic.limits import ConversationLimitReached, conversation_limit_reached
-from app.capabilities.agentic.turns import execute_turn
+from app.capabilities.conversations.config import MAX_ARTIFACTS_PER_SESSION, MAX_INITIAL_CONTEXT_CHARACTERS
+from app.capabilities.conversations.observation import TurnObservation
+from app.capabilities.conversations.limits import ConversationLimitReached, conversation_limit_reached
+from app.capabilities.conversations.turns import execute_turn
 from app.core.json import FiniteJsonValue
 
 

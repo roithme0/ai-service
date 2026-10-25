@@ -11,12 +11,12 @@ from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
 from app.core.identity import ApplicationIdentity
-from app.capabilities.agentic.session_state import SessionState, SessionBusyError, TurnExecution
-from app.capabilities.agentic.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity, UserPrompt
-from app.capabilities.agentic.runner import AgentTurnRunner, RunnerClosedError
-from app.capabilities.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
-from app.capabilities.agentic.turns import create_turn_agent
-from app.capabilities.agentic.artifacts import ArtifactCapability
+from app.capabilities.conversations.session_state import SessionState, SessionBusyError, TurnExecution
+from app.capabilities.conversations.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity, UserPrompt
+from app.capabilities.conversations.runner import AgentTurnRunner, RunnerClosedError
+from app.capabilities.conversations.sessions import AgentSessionRegistry, SessionNotFoundError
+from app.capabilities.conversations.turns import create_turn_agent
+from app.capabilities.conversations.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
 
 
@@ -168,7 +168,7 @@ def test_caller_cancellation_before_admission_leaves_no_turn(monkeypatch: pytest
                     usage_limits=usage_limits, toolsets=toolsets, on_admitted=on_admitted,
                 )
 
-        monkeypatch.setattr("app.capabilities.agentic.runner.AgentSessionRegistry", DelayedSessions)
+        monkeypatch.setattr("app.capabilities.conversations.runner.AgentSessionRegistry", DelayedSessions)
 
         async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             pytest.fail("Cancelled submission reached the model")

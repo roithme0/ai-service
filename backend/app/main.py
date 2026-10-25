@@ -9,9 +9,9 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
-from app.capabilities.agentic.http import create_session_router
-from app.capabilities.agentic.lifecycle import kochwiki_runner
-from app.capabilities.agentic.runner import AgentTurnRunner
+from app.capabilities.conversations.http import create_session_router
+from app.capabilities.conversations.lifecycle import kochwiki_runner
+from app.capabilities.conversations.runner import AgentTurnRunner
 from app.core.config import get_provider_settings
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
 from app.demo.lifecycle import demo_runner

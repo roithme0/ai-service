@@ -2,9 +2,9 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
-from app.capabilities.agentic.config import get_kochwiki_conversation_settings
-from app.capabilities.agentic.runner import AgentTurnRunner
-from app.capabilities.agentic.wiring import create_kochwiki_agent
+from app.capabilities.conversations.config import get_kochwiki_conversation_settings
+from app.capabilities.conversations.runner import AgentTurnRunner
+from app.capabilities.conversations.wiring import create_kochwiki_agent
 from app.core.config import ProviderSettings
 
 

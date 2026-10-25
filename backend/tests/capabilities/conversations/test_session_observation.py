@@ -9,17 +9,17 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from app.core.identity import ApplicationIdentity
-from app.capabilities.agentic.config import MAX_OBSERVERS_PER_SESSION, MAX_PENDING_OBSERVATION_UPDATES
-from app.capabilities.agentic.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity, UserPrompt, present_session
-from app.capabilities.agentic.runner import AgentTurnRunner
-from app.capabilities.agentic.sessions import (
+from app.capabilities.conversations.config import MAX_OBSERVERS_PER_SESSION, MAX_PENDING_OBSERVATION_UPDATES
+from app.capabilities.conversations.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity, UserPrompt, present_session
+from app.capabilities.conversations.runner import AgentTurnRunner
+from app.capabilities.conversations.sessions import (
     ObservationLimitError,
     ObservationOverflowError,
     SessionNotFoundError,
     SessionSnapshot,
 )
-from app.capabilities.agentic.turns import create_turn_agent
-from app.capabilities.agentic.artifacts import ArtifactCapability
+from app.capabilities.conversations.turns import create_turn_agent
+from app.capabilities.conversations.artifacts import ArtifactCapability
 
 
 def groups(snapshot: PresentedSession) -> tuple[PresentedTurn, ...]:
@@ -254,7 +254,7 @@ def test_slow_observer_overflow_is_explicit_and_does_not_fail_execution(monkeypa
             await release.wait()
             return ModelResponse(parts=[TextPart("Done.")])
 
-        monkeypatch.setattr("app.capabilities.agentic.sessions.MAX_PENDING_OBSERVATION_UPDATES", 1)
+        monkeypatch.setattr("app.capabilities.conversations.sessions.MAX_PENDING_OBSERVATION_UPDATES", 1)
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
         session = runner.create_session(owner=ApplicationIdentity("test", "alice"))
@@ -269,7 +269,7 @@ def test_slow_observer_overflow_is_explicit_and_does_not_fail_execution(monkeypa
                 assert groups(active)[-1].lifecycle.status == "running"
                 await replacement.aclose()
             release.set()
-            monkeypatch.setattr("app.capabilities.agentic.sessions.MAX_PENDING_OBSERVATION_UPDATES", MAX_PENDING_OBSERVATION_UPDATES)
+            monkeypatch.setattr("app.capabilities.conversations.sessions.MAX_PENDING_OBSERVATION_UPDATES", MAX_PENDING_OBSERVATION_UPDATES)
             async with aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as healthy:
                 assert groups(await until(healthy, settled))[-1].lifecycle.status == "completed"
 
@@ -287,7 +287,7 @@ def test_cancelling_waiting_observer_releases_capacity_and_late_observer_follows
             await release.wait()
             return ModelResponse(parts=[TextPart("Done.")])
 
-        monkeypatch.setattr("app.capabilities.agentic.sessions.MAX_OBSERVERS_PER_SESSION", 1)
+        monkeypatch.setattr("app.capabilities.conversations.sessions.MAX_OBSERVERS_PER_SESSION", 1)
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
         session = runner.create_session(owner=ApplicationIdentity("test", "alice"))
@@ -330,7 +330,7 @@ def test_observer_sees_setup_failure_without_native_run_id(monkeypatch: pytest.M
                 raise RuntimeError("Setup unavailable")
 
             with monkeypatch.context() as setup_patch:
-                setup_patch.setattr("app.capabilities.agentic.session_state.create_artifact_toolset", reject_tools)
+                setup_patch.setattr("app.capabilities.conversations.session_state.create_artifact_toolset", reject_tools)
                 await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Work.")
                 final = await until(updates, settled)
             assert groups(final)[-1].lifecycle.status == "failed"
@@ -350,16 +350,16 @@ def test_projection_failure_closes_subscription_and_releases_capacity(monkeypatc
         def reject_projection(snapshot: SessionSnapshot) -> PresentedSession:
             raise RuntimeError("Projection failed")
 
-        monkeypatch.setattr("app.capabilities.agentic.sessions.MAX_OBSERVERS_PER_SESSION", 1)
+        monkeypatch.setattr("app.capabilities.conversations.sessions.MAX_OBSERVERS_PER_SESSION", 1)
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
         session = runner.create_session(owner=ApplicationIdentity("test", "alice"))
         async with agent, runner:
-            monkeypatch.setattr("app.capabilities.agentic.runner.present_session", reject_projection)
+            monkeypatch.setattr("app.capabilities.conversations.runner.present_session", reject_projection)
             async with aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as broken:
                 with pytest.raises(RuntimeError, match="Projection failed"):
                     await anext(broken)
-            monkeypatch.setattr("app.capabilities.agentic.runner.present_session", present_session)
+            monkeypatch.setattr("app.capabilities.conversations.runner.present_session", present_session)
             async with aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as replacement:
                 assert (await anext(replacement)).history == ()
                 await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Work.")

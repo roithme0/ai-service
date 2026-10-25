@@ -9,10 +9,10 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 
 from app.core.identity import ApplicationIdentity
-from app.capabilities.agentic.artifacts import ArtifactAccepted, ArtifactCapability
-from app.capabilities.agentic.session_state import SessionBusyError
-from app.capabilities.agentic.sessions import AgentSessionRegistry, SessionNotFoundError
-from app.capabilities.agentic.turns import create_turn_agent
+from app.capabilities.conversations.artifacts import ArtifactAccepted, ArtifactCapability
+from app.capabilities.conversations.session_state import SessionBusyError
+from app.capabilities.conversations.sessions import AgentSessionRegistry, SessionNotFoundError
+from app.capabilities.conversations.turns import create_turn_agent
 
 
 @pytest.fixture(autouse=True)

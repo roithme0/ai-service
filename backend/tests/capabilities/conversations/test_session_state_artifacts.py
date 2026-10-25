@@ -8,9 +8,9 @@ from pydantic_ai import Tool, models
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from app.capabilities.agentic.artifacts import ArtifactAccepted, ArtifactCapability
-from app.capabilities.agentic.session_state import SessionState, SessionBusyError
-from app.capabilities.agentic.turns import create_turn_agent
+from app.capabilities.conversations.artifacts import ArtifactAccepted, ArtifactCapability
+from app.capabilities.conversations.session_state import SessionState, SessionBusyError
+from app.capabilities.conversations.turns import create_turn_agent
 
 
 @pytest.fixture(autouse=True)

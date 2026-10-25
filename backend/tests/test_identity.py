@@ -15,15 +15,15 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from starlette.requests import Request
 
-from app.capabilities.agentic.http import create_session_router
-from app.capabilities.agentic.identity import current_turn_identity
-from app.capabilities.agentic.presentation import PresentedTurn
-from app.capabilities.agentic.runner import AgentTurnRunner
-from app.capabilities.agentic.sessions import AgentSessionRegistry
-from app.capabilities.agentic.turns import create_turn_agent
-from app.capabilities.agentic.wiring import create_kochwiki_agent
+from app.capabilities.conversations.http import create_session_router
+from app.capabilities.conversations.identity import current_turn_identity
+from app.capabilities.conversations.presentation import PresentedTurn
+from app.capabilities.conversations.runner import AgentTurnRunner
+from app.capabilities.conversations.sessions import AgentSessionRegistry
+from app.capabilities.conversations.turns import create_turn_agent
+from app.capabilities.conversations.wiring import create_kochwiki_agent
 from app.core.config import ProviderSettings
-from app.capabilities.agentic.config import KochwikiConversationSettings
+from app.capabilities.conversations.config import KochwikiConversationSettings
 from app.core.identity import ApplicationIdentity
 
 

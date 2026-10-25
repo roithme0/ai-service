@@ -18,8 +18,8 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import UsageLimits
 
-from app.capabilities.agentic.observation import TurnObservation
-from app.capabilities.agentic.turns import create_turn_agent, execute_turn
+from app.capabilities.conversations.observation import TurnObservation
+from app.capabilities.conversations.turns import create_turn_agent, execute_turn
 
 
 @pytest.fixture(autouse=True)

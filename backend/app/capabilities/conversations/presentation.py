@@ -17,12 +17,12 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
-from app.capabilities.agentic.session_state import (
+from app.capabilities.conversations.session_state import (
     INITIAL_CONTEXT_ORIGIN, SessionArtifact, TurnLifecycle, TurnStatus,
 )
-from app.capabilities.agentic.sessions import SessionSnapshot
-from app.capabilities.agentic.response import ResponseModel
-from app.capabilities.agentic.artifacts import PublishedArtifact
+from app.capabilities.conversations.sessions import SessionSnapshot
+from app.capabilities.conversations.response import ResponseModel
+from app.capabilities.conversations.artifacts import PublishedArtifact
 
 type ToolStatus = Literal[
     "requested", "running", "success", "failed", "denied", "interrupted"

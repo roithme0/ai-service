@@ -21,8 +21,8 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.usage import UsageLimits
 
-from app.capabilities.agentic import turns
-from app.capabilities.agentic.turns import create_openai_model, create_turn_agent, execute_turn
+from app.capabilities.conversations import turns
+from app.capabilities.conversations.turns import create_openai_model, create_turn_agent, execute_turn
 
 
 @pytest.fixture(autouse=True)

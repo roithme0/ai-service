@@ -8,9 +8,9 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.usage import RequestUsage, UsageLimits
 
-from app.capabilities.agentic import limits
-from app.capabilities.agentic.session_state import SessionState
-from app.capabilities.agentic.turns import create_turn_agent
+from app.capabilities.conversations import limits
+from app.capabilities.conversations.session_state import SessionState
+from app.capabilities.conversations.turns import create_turn_agent
 
 
 @pytest.fixture(autouse=True)

@@ -10,7 +10,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from app.capabilities.agentic.artifacts import (
+from app.capabilities.conversations.artifacts import (
     ArtifactAccepted,
     ArtifactCapability,
     ArtifactRejected,
@@ -18,8 +18,8 @@ from app.capabilities.agentic.artifacts import (
     PublishedArtifact,
     create_artifact_toolset,
 )
-from app.capabilities.agentic.observation import TurnObservation
-from app.capabilities.agentic.turns import create_turn_agent, execute_turn
+from app.capabilities.conversations.observation import TurnObservation
+from app.capabilities.conversations.turns import create_turn_agent, execute_turn
 
 
 @pytest.fixture(autouse=True)

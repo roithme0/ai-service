@@ -9,13 +9,13 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 from starlette.types import Receive, Scope, Send
 
-from app.capabilities.agentic.config import MAX_PROMPT_CHARACTERS
-from app.capabilities.agentic.limits import ConversationLimitReached
-from app.capabilities.agentic.session_state import SessionBusyError
-from app.capabilities.agentic.presentation import PresentedSession
-from app.capabilities.agentic.response import ResponseModel
-from app.capabilities.agentic.runner import AgentTurnRunner, RunnerClosedError
-from app.capabilities.agentic.sessions import (
+from app.capabilities.conversations.config import MAX_PROMPT_CHARACTERS
+from app.capabilities.conversations.limits import ConversationLimitReached
+from app.capabilities.conversations.session_state import SessionBusyError
+from app.capabilities.conversations.presentation import PresentedSession
+from app.capabilities.conversations.response import ResponseModel
+from app.capabilities.conversations.runner import AgentTurnRunner, RunnerClosedError
+from app.capabilities.conversations.sessions import (
     ObservationLimitError,
     ObservationOverflowError,
     SessionCreated,
@@ -23,7 +23,7 @@ from app.capabilities.agentic.sessions import (
 )
 from app.core.http import require_application_user
 from app.core.identity import ApplicationIdentity
-from app.capabilities.agentic.artifacts import ArtifactCapability
+from app.capabilities.conversations.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
 
 _logger = logging.getLogger(__name__)
@@ -155,7 +155,7 @@ def create_session_router(
 ) -> APIRouter:
     """Composition owns runner/agent lifetimes; routes stay on their event loop."""
     router = APIRouter(
-        prefix="/api/v1/agents/{configuration}/sessions", tags=["agentic"]
+        prefix="/api/v1/agents/{configuration}/sessions", tags=["conversations"]
     )
 
     def resolve_runner(

@@ -20,9 +20,9 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.usage import UsageLimits
 
-from app.capabilities.agentic.config import MAX_INITIAL_CONTEXT_CHARACTERS
-from app.capabilities.agentic.session_state import SessionState, SessionBusyError
-from app.capabilities.agentic.turns import create_turn_agent
+from app.capabilities.conversations.config import MAX_INITIAL_CONTEXT_CHARACTERS
+from app.capabilities.conversations.session_state import SessionState, SessionBusyError
+from app.capabilities.conversations.turns import create_turn_agent
 from app.core.json import FiniteJsonValue
 
 

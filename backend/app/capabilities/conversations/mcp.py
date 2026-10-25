@@ -3,7 +3,7 @@
 from httpx2 import AsyncClient
 from pydantic_ai.mcp import MCPToolset
 
-from app.capabilities.agentic.config import (
+from app.capabilities.conversations.config import (
     MCP_CONNECT_TIMEOUT_SECONDS,
     MCP_READ_TIMEOUT_SECONDS,
     VALIDATION_MAX_RETRIES,

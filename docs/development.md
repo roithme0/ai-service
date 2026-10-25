@@ -95,7 +95,7 @@ With the [local servers](#run-locally) running, open `http://localhost:4204` at 
 - Send one more message to trigger the frontend-only 405 compatibility error without retry. Refresh to restart; there is no restart button.
 - Check history/composer placement during viewport changes, no horizontal overflow, Enter/send submitting once, and Shift+Enter adding a line break.
 
-## Agentic coding
+## AI-assisted development
 
 | Resource | Purpose |
 | --- | --- |

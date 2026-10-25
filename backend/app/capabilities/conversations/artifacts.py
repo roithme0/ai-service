@@ -19,7 +19,7 @@ from referencing import Registry, Resource
 from referencing.exceptions import Unresolvable
 from referencing.jsonschema import DRAFT202012
 
-from app.capabilities.agentic.config import (
+from app.capabilities.conversations.config import (
     MAX_ARTIFACT_DESCRIPTION_LENGTH,
     MAX_ARTIFACT_HEADER_LENGTH,
     TOOL_TIMEOUT_SECONDS,

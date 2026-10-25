@@ -21,10 +21,10 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.usage import UsageLimits
 
-from app.capabilities.agentic import turns
-from app.capabilities.agentic.mcp import create_mcp_toolset
-from app.capabilities.agentic.observation import TurnObservation
-from app.capabilities.agentic.turns import create_openai_model, create_turn_agent, execute_turn
+from app.capabilities.conversations import turns
+from app.capabilities.conversations.mcp import create_mcp_toolset
+from app.capabilities.conversations.observation import TurnObservation
+from app.capabilities.conversations.turns import create_openai_model, create_turn_agent, execute_turn
 
 
 @asynccontextmanager

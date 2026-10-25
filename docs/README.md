@@ -11,7 +11,7 @@ These docs contain only the essential guidance for getting started with the repo
 | [decisions/](decisions/) | Why we chose an approach | A shared [ADR template](decisions/template.md) and one numbered record per significant architectural decision: context, decision, alternatives, consequences, status, and acceptance date. |
 | [domains/](domains/) | What our language means | Contracts and terminology for [conversations](domains/conversations.md), [artifacts](domains/artifacts.md), and [embeddings](domains/embeddings.md). |
 | [navigation.md](navigation.md) | How the current system fits together | Responsibilities, boundaries, code entry points, and representative flows. Link to relevant code and tests. |
-| [development.md](development.md) | How to work on the code | Local setup, running, testing, debugging, contract generation, and agentic workflows, skills, and hooks. |
+| [development.md](development.md) | How to work on the code | Local setup, running, testing, debugging, contract generation, and AI-assisted development workflows, skills, and hooks. |
 | [operation.md](operation.md) | How to run deployed environments | Deployment, configuration, updates, persistence, backup/recovery, and troubleshooting. Document available procedures and their limitations. |
 | [assets/screenshots/](assets/screenshots/) | Where documentation images live | Screenshots referenced by documentation and the root README. |
 

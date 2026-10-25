@@ -12,19 +12,19 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
-from app.capabilities.agentic.config import (
+from app.capabilities.conversations.config import (
     DEFAULT_SESSION_LIFETIME,
     MAX_ARTIFACTS_PER_SESSION,
     MAX_OBSERVERS_PER_SESSION,
     MAX_PENDING_OBSERVATION_UPDATES,
 )
-from app.capabilities.agentic.session_state import (
+from app.capabilities.conversations.session_state import (
     SessionState,
     SessionArtifact,
     TurnExecution,
 )
-from app.capabilities.agentic.artifacts import ArtifactCapability
-from app.capabilities.agentic.identity import bind_turn_identity
+from app.capabilities.conversations.artifacts import ArtifactCapability
+from app.capabilities.conversations.identity import bind_turn_identity
 from app.core.json import FiniteJsonValue
 from app.core.identity import ApplicationIdentity
 

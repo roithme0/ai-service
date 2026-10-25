@@ -26,11 +26,11 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from app.core.identity import ApplicationIdentity
-from app.capabilities.agentic.session_state import (
+from app.capabilities.conversations.session_state import (
     INITIAL_CONTEXT_ORIGIN, SessionArtifact, TurnExecution, TurnLifecycle, TurnStatus,
 )
-from app.capabilities.agentic.observation import TurnObservation
-from app.capabilities.agentic.presentation import (
+from app.capabilities.conversations.observation import TurnObservation
+from app.capabilities.conversations.presentation import (
     AcceptedArtifact,
     AssistantText,
     PresentedSession,
@@ -40,10 +40,10 @@ from app.capabilities.agentic.presentation import (
     UserPrompt,
     present_session,
 )
-from app.capabilities.agentic.runner import AgentTurnRunner
-from app.capabilities.agentic.sessions import SessionSnapshot
-from app.capabilities.agentic.turns import create_turn_agent
-from app.capabilities.agentic.artifacts import ArtifactContent
+from app.capabilities.conversations.runner import AgentTurnRunner
+from app.capabilities.conversations.sessions import SessionSnapshot
+from app.capabilities.conversations.turns import create_turn_agent
+from app.capabilities.conversations.artifacts import ArtifactContent
 
 
 NOW = datetime(2026, 10, 21, tzinfo=UTC)

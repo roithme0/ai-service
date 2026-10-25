@@ -1,16 +1,17 @@
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 import asyncio
 import json
 
 import httpx2
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from openai import AsyncOpenAI
 import pytest
 
-from app import main
-from app.capabilities.agentic import lifecycle
 from app.core.config import ProviderSettings
-from app.capabilities.agentic.config import KochwikiConversationSettings
+from app.capabilities.embeddings.http import router
+from app.capabilities.embeddings.lifecycle import embedding_service
 from app.capabilities.embeddings.models import DIMENSIONS, MODEL, PROFILE
 from app.capabilities.embeddings.service import EmbeddingService
 
@@ -39,18 +40,31 @@ def configured_embeddings(
     http_client = httpx2.AsyncClient(transport=httpx2.MockTransport(send))
     provider = AsyncOpenAI(api_key="test-key", http_client=http_client, max_retries=0, timeout=30.0)
     monkeypatch.setattr(EmbeddingService, "from_settings", lambda settings: EmbeddingService(provider))
-    monkeypatch.setattr(lifecycle, "get_kochwiki_conversation_settings", lambda: KochwikiConversationSettings(_env_file=None))
     yield
     assert http_client.is_closed
 
 
 @pytest.fixture
-def client(configured_embeddings: None) -> Iterator[TestClient]:
-    with TestClient(main.app) as client:
+def application() -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        settings = ProviderSettings(_env_file=None, openai_api_key=None)
+        async with embedding_service(settings) as service:
+            app.state.embedding_service = service
+            yield
+
+    app = FastAPI(lifespan=lifespan)
+    app.include_router(router)
+    return app
+
+
+@pytest.fixture
+def client(application: FastAPI, configured_embeddings: None) -> Iterator[TestClient]:
+    with TestClient(application) as client:
         yield client
 
 
-def test_embedding_is_independent_of_identity_and_agent_configuration(
+def test_embedding_request_and_response_are_independent_of_identity(
     client: TestClient, provider_requests: list[httpx2.Request],
 ) -> None:
     response = client.post("/api/v1/embeddings", json={"profile": PROFILE, "input": "Soup\nBrand: Farm"})
@@ -64,9 +78,6 @@ def test_embedding_is_independent_of_identity_and_agent_configuration(
         "input": "Soup\nBrand: Farm", "model": MODEL, "encoding_format": "float",
     }
     assert "X-Application-User" not in provider_requests[0].headers
-    assert client.post("/api/v1/agents/kochwiki/sessions", json={}, headers={
-        "X-Application-User": "test:user",
-    }).status_code == 503
 
 
 @pytest.mark.parametrize("body", [
@@ -82,21 +93,7 @@ def test_invalid_requests_never_call_provider(
 ) -> None:
     response = client.post("/api/v1/embeddings", json=body)
     assert response.status_code == 422
-    assert response.json()["kind"] == "request_validation"
     assert provider_requests == []
-
-
-def test_invalid_conversation_settings_do_not_block_embeddings(
-    configured_embeddings: None, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv("KOCHWIKI_OPENAI_REASONING_EFFORT", "invalid")
-    monkeypatch.setattr(lifecycle, "get_kochwiki_conversation_settings", lambda: KochwikiConversationSettings(_env_file=None))
-    with TestClient(main.app) as independent_client:
-        response = independent_client.post("/api/v1/embeddings", json={"profile": PROFILE, "input": "Soup"})
-        assert response.status_code == 200
-        assert independent_client.post("/api/v1/agents/kochwiki/sessions", json={}, headers={
-            "X-Application-User": "test:user",
-        }).status_code == 503
 
 
 @pytest.mark.parametrize("invalid", ["model", "count", "index", "dimension", "zero", "nonfinite"])
@@ -121,21 +118,18 @@ def test_malformed_provider_response_is_sanitized(
     assert response.json() == {"kind": "embedding_failed", "detail": "Embedding generation failed"}
 
 
-def test_missing_provider_does_not_disable_demo(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(lifecycle, "get_kochwiki_conversation_settings", lambda: KochwikiConversationSettings(_env_file=None))
-    monkeypatch.setattr(main, "get_provider_settings", lambda: ProviderSettings(_env_file=None, openai_api_key=None))
-    with TestClient(main.app) as client:
+def test_missing_provider_returns_unavailable(application: FastAPI) -> None:
+    with TestClient(application) as client:
         response = client.post("/api/v1/embeddings", json={"profile": PROFILE, "input": "Soup"})
         assert response.status_code == 503
-        assert response.json()["kind"] == "embedding_unavailable"
-        assert client.post("/api/v1/agents/demo/sessions", json={}, headers={
-            "X-Application-User": "test:user",
-        }).status_code == 201
+        assert response.json() == {
+            "kind": "embedding_unavailable", "detail": "Embedding provider is not configured",
+        }
 
 
 @pytest.mark.parametrize("failure", ["timeout", "rate_limit"])
 def test_provider_failure_is_not_retried_or_exposed(
-    monkeypatch: pytest.MonkeyPatch, failure: str,
+    application: FastAPI, monkeypatch: pytest.MonkeyPatch, failure: str,
 ) -> None:
     attempts = 0
 
@@ -151,12 +145,12 @@ def test_provider_failure_is_not_retried_or_exposed(
         max_retries=0, timeout=30.0,
     )
     monkeypatch.setattr(EmbeddingService, "from_settings", lambda settings: EmbeddingService(provider))
-    monkeypatch.setattr(lifecycle, "get_kochwiki_conversation_settings", lambda: KochwikiConversationSettings(_env_file=None))
-    with TestClient(main.app) as client:
+    with TestClient(application) as client:
         response = client.post("/api/v1/embeddings", json={"profile": PROFILE, "input": "Soup"})
         assert response.status_code == 502
         assert response.json() == {"kind": "embedding_failed", "detail": "Embedding generation failed"}
     assert attempts == 1
+    assert provider.is_closed()
 
 
 def test_provider_configuration_preserves_timeout_and_retry_policy() -> None:

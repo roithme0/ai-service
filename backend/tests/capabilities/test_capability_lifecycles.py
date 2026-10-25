@@ -8,10 +8,10 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 import pytest
 
 from app import main
-from app.capabilities.agentic import lifecycle
-from app.capabilities.agentic.config import KochwikiConversationSettings
-from app.capabilities.agentic.runner import AgentTurnRunner, RunnerClosedError
-from app.capabilities.agentic.turns import create_openai_model
+from app.capabilities.conversations import lifecycle
+from app.capabilities.conversations.config import KochwikiConversationSettings
+from app.capabilities.conversations.runner import AgentTurnRunner, RunnerClosedError
+from app.capabilities.conversations.turns import create_openai_model
 from app.core.config import ProviderSettings
 from app.core.identity import ApplicationIdentity
 from app.demo import lifecycle as demo_lifecycle

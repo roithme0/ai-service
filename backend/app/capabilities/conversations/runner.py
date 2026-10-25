@@ -14,10 +14,10 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
-from app.capabilities.agentic.config import DEFAULT_SESSION_LIFETIME, MAX_ARTIFACTS_PER_SESSION
-from app.capabilities.agentic.presentation import PresentedSession, present_session
-from app.capabilities.agentic.sessions import AgentSessionRegistry, SessionCreated
-from app.capabilities.agentic.artifacts import ArtifactCapability
+from app.capabilities.conversations.config import DEFAULT_SESSION_LIFETIME, MAX_ARTIFACTS_PER_SESSION
+from app.capabilities.conversations.presentation import PresentedSession, present_session
+from app.capabilities.conversations.sessions import AgentSessionRegistry, SessionCreated
+from app.capabilities.conversations.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
 from app.core.identity import ApplicationIdentity
 

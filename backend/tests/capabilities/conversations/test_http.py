@@ -17,11 +17,11 @@ from starlette.types import Message
 from starlette.requests import ClientDisconnect
 
 from app.core.identity import ApplicationIdentity
-from app.capabilities.agentic.http import ObservationErrorEvent, SessionEvent, SnapshotEvent, create_session_router
-from app.capabilities.agentic.presentation import AcceptedArtifact, PresentedSession, PresentedTurn, ToolActivity
-from app.capabilities.agentic.runner import AgentTurnRunner
-from app.capabilities.agentic.sessions import ObservationOverflowError, SessionNotFoundError
-from app.capabilities.agentic.turns import create_turn_agent
+from app.capabilities.conversations.http import ObservationErrorEvent, SessionEvent, SnapshotEvent, create_session_router
+from app.capabilities.conversations.presentation import AcceptedArtifact, PresentedSession, PresentedTurn, ToolActivity
+from app.capabilities.conversations.runner import AgentTurnRunner
+from app.capabilities.conversations.sessions import ObservationOverflowError, SessionNotFoundError
+from app.capabilities.conversations.turns import create_turn_agent
 
 
 BASE = "/api/v1/agents/test/sessions"
@@ -51,7 +51,7 @@ def test_native_frontend_contract_matches_router() -> None:
 
 
 def test_exhausted_conversation_is_readable_observable_and_rejects_submission(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("app.capabilities.agentic.limits.MAX_MODEL_REQUESTS_PER_CONVERSATION", 1)
+    monkeypatch.setattr("app.capabilities.conversations.limits.MAX_MODEL_REQUESTS_PER_CONVERSATION", 1)
 
     async def exercise() -> None:
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -262,7 +262,7 @@ def test_stream_disconnect_releases_capacity_without_cancelling_execution(monkey
             await release.wait()
             return ModelResponse(parts=[TextPart("Done.")])
 
-        monkeypatch.setattr("app.capabilities.agentic.sessions.MAX_OBSERVERS_PER_SESSION", 1)
+        monkeypatch.setattr("app.capabilities.conversations.sessions.MAX_OBSERVERS_PER_SESSION", 1)
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
         app = application(runner)
@@ -401,7 +401,7 @@ def test_failed_socket_send_releases_preacquired_subscription(
         async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             return ModelResponse(parts=[TextPart("Done.")])
 
-        monkeypatch.setattr("app.capabilities.agentic.sessions.MAX_OBSERVERS_PER_SESSION", 1)
+        monkeypatch.setattr("app.capabilities.conversations.sessions.MAX_OBSERVERS_PER_SESSION", 1)
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
         app = application(runner)

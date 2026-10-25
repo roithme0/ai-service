@@ -14,7 +14,7 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
-from app.capabilities.agentic.config import (
+from app.capabilities.conversations.config import (
     MAX_NATIVE_TOOL_CALLS_PER_RESPONSE,
     MAX_OUTPUT_TOKENS,
     MODEL_REQUEST_MAX_RETRIES,
@@ -23,8 +23,8 @@ from app.capabilities.agentic.config import (
     TOOL_TIMEOUT_SECONDS,
     VALIDATION_MAX_RETRIES,
 )
-from app.capabilities.agentic.observation import TurnObservation
-from app.capabilities.agentic.limits import turn_usage_limits
+from app.capabilities.conversations.observation import TurnObservation
+from app.capabilities.conversations.limits import turn_usage_limits
 
 
 def create_openai_model(

@@ -26,4 +26,4 @@ Artifacts are structured presentation data published by an agent within a [sessi
 
 MCP services own domain tools and workflow instructions. AI Service owns generic conversation and publication behavior. Consumer frontends choose supported capabilities, renderers, and domain actions.
 
-Start with [artifact validation](../../backend/app/capabilities/agentic/artifacts.py), [UI capabilities](../../frontend/projects/chat-ui/ui/lib/artifact-capabilities.ts), and the [presentation mapper](../../frontend/projects/chat-ui/conversation/src/session-presentation.ts).
+Start with [artifact validation](../../backend/app/capabilities/conversations/artifacts.py), [UI capabilities](../../frontend/projects/chat-ui/ui/lib/artifact-capabilities.ts), and the [presentation mapper](../../frontend/projects/chat-ui/conversation/src/session-presentation.ts).

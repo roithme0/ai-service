@@ -10,7 +10,7 @@ def main() -> None:
     options = parser.parse_args()
     if options.native:
         from fastapi import FastAPI
-        from app.capabilities.agentic.http import create_session_router
+        from app.capabilities.conversations.http import create_session_router
 
         app = FastAPI()
         app.include_router(create_session_router(lambda: {}))

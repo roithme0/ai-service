@@ -5,7 +5,7 @@ from decimal import Decimal
 from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.usage import RunUsage, UsageLimits
 
-from app.capabilities.agentic.config import (
+from app.capabilities.conversations.config import (
     MAX_MODEL_REQUESTS_PER_CONVERSATION,
     MAX_MODEL_REQUESTS_PER_TURN,
     MAX_TOOL_CALLS_PER_CONVERSATION,
