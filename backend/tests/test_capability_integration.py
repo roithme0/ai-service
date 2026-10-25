@@ -3,7 +3,6 @@ from collections.abc import Iterator
 import httpx2
 import pytest
 from fastapi.testclient import TestClient
-from openai import AsyncOpenAI
 
 from app import lifespan, main
 from app.capabilities.conversations import lifecycle
@@ -37,14 +36,11 @@ def configured_embeddings(
             },
         )
 
-    provider = AsyncOpenAI(
-        api_key="test-key",
-        http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(send)),
-        max_retries=0,
-        timeout=30.0,
-    )
+    http_client = httpx2.AsyncClient(transport=httpx2.MockTransport(send))
     monkeypatch.setattr(
-        EmbeddingService, "from_settings", lambda settings: EmbeddingService(provider)
+        EmbeddingService,
+        "from_settings",
+        lambda settings: EmbeddingService("test-key", http_client=http_client),
     )
     monkeypatch.setattr(
         lifespan,
@@ -57,7 +53,7 @@ def configured_embeddings(
         lambda: KochwikiConversationSettings(_env_file=None),
     )
     yield requests
-    assert provider.is_closed()
+    assert http_client.is_closed
 
 
 @pytest.mark.parametrize("configuration", ["missing", "invalid"])

@@ -6,7 +6,6 @@ import json
 import httpx2
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from openai import AsyncOpenAI
 import pytest
 
 from app.core.config import ProviderSettings
@@ -48,11 +47,10 @@ def configured_embeddings(
         return httpx2.Response(200, json=provider_response)
 
     http_client = httpx2.AsyncClient(transport=httpx2.MockTransport(send))
-    provider = AsyncOpenAI(
-        api_key="test-key", http_client=http_client, max_retries=0, timeout=30.0
-    )
     monkeypatch.setattr(
-        EmbeddingService, "from_settings", lambda settings: EmbeddingService(provider)
+        EmbeddingService,
+        "from_settings",
+        lambda settings: EmbeddingService("test-key", http_client=http_client),
     )
     yield
     assert http_client.is_closed
@@ -94,7 +92,7 @@ def test_embedding_request_and_response_are_independent_of_identity(
     }
     assert len(provider_requests) == 1
     assert json.loads(provider_requests[0].content) == {
-        "input": "Soup\nBrand: Farm",
+        "input": ["Soup\nBrand: Farm"],
         "model": MODEL,
         "encoding_format": "float",
     }
@@ -123,7 +121,7 @@ def test_invalid_requests_never_call_provider(
 
 
 @pytest.mark.parametrize(
-    "invalid", ["model", "count", "index", "dimension", "zero", "nonfinite"]
+    "invalid", ["model", "count", "multiple", "dimension", "zero", "nonfinite"]
 )
 def test_malformed_provider_response_is_sanitized(
     client: TestClient,
@@ -134,6 +132,11 @@ def test_malformed_provider_response_is_sanitized(
         provider_response["model"] = "different-model"
     elif invalid == "count":
         provider_response["data"] = []
+    elif invalid == "multiple":
+        provider_response["data"] = [
+            {"index": index, "embedding": [1.0] + [0.0] * (DIMENSIONS - 1)}
+            for index in range(2)
+        ]
     else:
         vector: list[float | str] = [1.0] + [0.0] * (DIMENSIONS - 1)
         if invalid == "dimension":
@@ -142,9 +145,7 @@ def test_malformed_provider_response_is_sanitized(
             vector = [0.0] * DIMENSIONS
         elif invalid == "nonfinite":
             vector[0] = "NaN"
-        provider_response["data"] = [
-            {"index": 1 if invalid == "index" else 0, "embedding": vector}
-        ]
+        provider_response["data"] = [{"index": 0, "embedding": vector}]
     response = client.post(
         "/api/v1/embeddings", json={"profile": PROFILE, "input": "Soup"}
     )
@@ -184,15 +185,11 @@ def test_provider_failure_is_not_retried_or_exposed(
             429, json={"error": {"message": "private provider detail"}}
         )
 
-    provider = AsyncOpenAI(
-        api_key="test-key",
+    service = EmbeddingService(
+        "test-key",
         http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(send)),
-        max_retries=0,
-        timeout=30.0,
     )
-    monkeypatch.setattr(
-        EmbeddingService, "from_settings", lambda settings: EmbeddingService(provider)
-    )
+    monkeypatch.setattr(EmbeddingService, "from_settings", lambda settings: service)
     with TestClient(application) as client:
         response = client.post(
             "/api/v1/embeddings", json={"profile": PROFILE, "input": "Soup"}
@@ -203,7 +200,8 @@ def test_provider_failure_is_not_retried_or_exposed(
             "detail": "Embedding generation failed",
         }
     assert attempts == 1
-    assert provider.is_closed()
+    assert service.client is not None
+    assert service.client.is_closed()
 
 
 def test_provider_configuration_preserves_timeout_and_retry_policy() -> None:
