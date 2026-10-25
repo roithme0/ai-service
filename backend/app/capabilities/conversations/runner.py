@@ -14,13 +14,18 @@ from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
 
-from app.capabilities.conversations.config import DEFAULT_SESSION_LIFETIME, MAX_ARTIFACTS_PER_SESSION
-from app.capabilities.conversations.presentation import PresentedSession, present_session
+from app.capabilities.conversations.config import (
+    DEFAULT_SESSION_LIFETIME,
+    MAX_ARTIFACTS_PER_SESSION,
+)
+from app.capabilities.conversations.presentation import (
+    PresentedSession,
+    present_session,
+)
 from app.capabilities.conversations.sessions import AgentSessionRegistry, SessionCreated
 from app.capabilities.conversations.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
 from app.core.identity import ApplicationIdentity
-
 
 _logger = logging.getLogger(__name__)
 
@@ -71,17 +76,25 @@ class AgentTurnRunner:
         if self._closed:
             raise RunnerClosedError("The turn runner is closed.")
         return self._sessions.create(
-            owner=owner, initial_context=initial_context,
-            artifact_capabilities=artifact_capabilities, max_artifacts=max_artifacts,
+            owner=owner,
+            initial_context=initial_context,
+            artifact_capabilities=artifact_capabilities,
+            max_artifacts=max_artifacts,
         )
 
-    def read_session(self, session_id: str, *, owner: ApplicationIdentity) -> PresentedSession:
+    def read_session(
+        self, session_id: str, *, owner: ApplicationIdentity
+    ) -> PresentedSession:
         """Read detached state, including settled outcomes after runner shutdown."""
         return present_session(self._sessions.read(session_id, owner=owner))
 
-    async def observe_session(self, session_id: str, *, owner: ApplicationIdentity) -> AsyncGenerator[PresentedSession, None]:
+    async def observe_session(
+        self, session_id: str, *, owner: ApplicationIdentity
+    ) -> AsyncGenerator[PresentedSession, None]:
         """Observe complete presentation snapshots until expiry, shutdown or disconnect."""
-        async with aclosing(self._sessions.observe(session_id, owner=owner)) as snapshots:
+        async with aclosing(
+            self._sessions.observe(session_id, owner=owner)
+        ) as snapshots:
             async for snapshot in snapshots:
                 yield present_session(snapshot)
 
@@ -97,14 +110,21 @@ class AgentTurnRunner:
         """Wait for admission; execution then continues under runner ownership."""
         if self._closed:
             raise RunnerClosedError("The turn runner is closed.")
-        admission_future: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        admission_future: asyncio.Future[None] = (
+            asyncio.get_running_loop().create_future()
+        )
 
         def admitted() -> None:
             admission_future.set_result(None)
 
         execution = self._sessions.execute_turn(
-            session_id, owner=owner, agent=self._agent, prompt=prompt,
-            usage_limits=usage_limits, toolsets=tuple(toolsets), on_admitted=admitted,
+            session_id,
+            owner=owner,
+            agent=self._agent,
+            prompt=prompt,
+            usage_limits=usage_limits,
+            toolsets=tuple(toolsets),
+            on_admitted=admitted,
         )
         try:
             execution_task = asyncio.create_task(execution)
@@ -113,7 +133,9 @@ class AgentTurnRunner:
             raise
         self._turn_tasks.add(execution_task)
 
-        def on_execution_finished(completed_task: asyncio.Task[AgentRunResult[str]]) -> None:
+        def on_execution_finished(
+            completed_task: asyncio.Task[AgentRunResult[str]],
+        ) -> None:
             self._handle_turn_completion(completed_task, admission_future)
 
         execution_task.add_done_callback(on_execution_finished)
@@ -132,7 +154,9 @@ class AgentTurnRunner:
         error = execution_task.exception()
         if not admission_future.done():
             admission_future.set_exception(
-                error if error is not None else RuntimeError("Turn admission was not acknowledged.")
+                error
+                if error is not None
+                else RuntimeError("Turn admission was not acknowledged.")
             )
         elif error is not None and not admission_future.cancelled():
             _logger.error("Background agent turn failed (%s).", type(error).__name__)

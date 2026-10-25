@@ -31,7 +31,9 @@ class TurnObservation:
     _used: bool = field(default=False, init=False, repr=False)
 
     @contextmanager
-    def capture(self, on_change: Callable[[], None] | None = None) -> Iterator[Hooks[None]]:
+    def capture(
+        self, on_change: Callable[[], None] | None = None
+    ) -> Iterator[Hooks[None]]:
         if self._used:
             raise ValueError("Use a new TurnObservation for each turn.")
         self._used = True
@@ -46,20 +48,26 @@ class TurnObservation:
                 on_change()
 
         @hooks.on.before_node_run
-        async def observe_node(ctx: RunContext[None], *, node: AgentNode[None]) -> AgentNode[None]:
+        async def observe_node(
+            ctx: RunContext[None], *, node: AgentNode[None]
+        ) -> AgentNode[None]:
             observe(ctx)
             return node
 
         @hooks.on.after_node_run
         async def observe_completed_node(
-            ctx: RunContext[None], *, node: AgentNode[None], result: NodeResult[None],
+            ctx: RunContext[None],
+            *,
+            node: AgentNode[None],
+            result: NodeResult[None],
         ) -> NodeResult[None]:
             observe(ctx)
             return result
 
         @hooks.on.before_model_request
         async def observe_request(
-            ctx: RunContext[None], request_context: ModelRequestContext,
+            ctx: RunContext[None],
+            request_context: ModelRequestContext,
         ) -> ModelRequestContext:
             observe(ctx)
             return request_context

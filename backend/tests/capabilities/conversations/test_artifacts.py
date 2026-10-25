@@ -6,7 +6,13 @@ import pytest
 from pydantic import JsonValue, ValidationError
 from pydantic_ai import Conversation, UnexpectedModelBehavior, models
 from pydantic_ai.messages import (
-    ModelMessage, ModelMessagesTypeAdapter, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart,
+    ModelMessage,
+    ModelMessagesTypeAdapter,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
@@ -29,33 +35,60 @@ def prevent_live_model_requests(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def capability(*, metadata: bool = False) -> ArtifactCapability:
     return ArtifactCapability(
-        type="example", description="Show a name.", titleDescription="Use the name as the title.",
-        payloadSchema={"$defs": {"name": {"type": "string"}}, "type": "object",
-                       "properties": {"name": {"$ref": "#/$defs/name"}},
-                       "required": ["name"], "additionalProperties": False},
-        metadataSchema={"type": "object", "properties": {"reference": {"type": "string", "format": "uuid"}},
-                        "required": ["reference"], "additionalProperties": False} if metadata else None,
+        type="example",
+        description="Show a name.",
+        titleDescription="Use the name as the title.",
+        payloadSchema={
+            "$defs": {"name": {"type": "string"}},
+            "type": "object",
+            "properties": {"name": {"$ref": "#/$defs/name"}},
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+        metadataSchema=(
+            {
+                "type": "object",
+                "properties": {"reference": {"type": "string", "format": "uuid"}},
+                "required": ["reference"],
+                "additionalProperties": False,
+            }
+            if metadata
+            else None
+        ),
     )
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
 @pytest.mark.parametrize("field", ["payloadSchema", "metadataSchema"])
-def test_capability_schemas_reject_nested_nonfinite_numbers(field: str, value: float) -> None:
+def test_capability_schemas_reject_nested_nonfinite_numbers(
+    field: str, value: float
+) -> None:
     data = capability().model_dump(by_alias=True)
     data[field] = {"const": {"nested": [value]}}
     with pytest.raises(ValidationError, match="finite"):
         ArtifactCapability.model_validate(data)
 
 
-def arguments(name: str = "Oats", *, changes: dict[str, JsonValue] | None = None) -> dict[str, JsonValue]:
+def arguments(
+    name: str = "Oats", *, changes: dict[str, JsonValue] | None = None
+) -> dict[str, JsonValue]:
     updates = changes or {}
-    payload: dict[str, JsonValue] = {"title": name, "subtitle": "Brand", "payload": {"name": name}}
+    payload: dict[str, JsonValue] = {
+        "title": name,
+        "subtitle": "Brand",
+        "payload": {"name": name},
+    }
     payload.update({key: value for key, value in updates.items() if key != "type"})
     return {"type": updates.get("type", "example"), "content": payload}
 
 
 def returns(messages: list[ModelMessage]) -> list[ToolReturnPart]:
-    return [part for message in messages for part in message.parts if isinstance(part, ToolReturnPart)]
+    return [
+        part
+        for message in messages
+        for part in message.parts
+        if isinstance(part, ToolReturnPart)
+    ]
 
 
 @dataclass
@@ -65,32 +98,52 @@ class MemoryAcceptance:
     artifacts: list[PublishedArtifact] = field(default_factory=list)
     submissions: list[ArtifactSubmission] = field(default_factory=list)
 
-    def __call__(self, submission: ArtifactSubmission, /) -> ArtifactAccepted | ArtifactRejected:
+    def __call__(
+        self, submission: ArtifactSubmission, /
+    ) -> ArtifactAccepted | ArtifactRejected:
         self.submissions.append(submission)
         if len(self.artifacts) >= self.limit:
             return ArtifactRejected(reason="artifact_limit")
         artifact_id = f"{self.owner}-{len(self.artifacts) + 1}"
-        self.artifacts.append(PublishedArtifact(
-            artifact_id=artifact_id, type=submission.candidate.type, created_at=datetime.now(UTC),
-            run_id=submission.run_id, content=submission.candidate.content.model_copy(deep=True),
-        ))
+        self.artifacts.append(
+            PublishedArtifact(
+                artifact_id=artifact_id,
+                type=submission.candidate.type,
+                created_at=datetime.now(UTC),
+                run_id=submission.run_id,
+                content=submission.candidate.content.model_copy(deep=True),
+            )
+        )
         return ArtifactAccepted(artifact_id=artifact_id)
 
 
-def test_publications_are_accepted_in_order_before_model_continues_and_survive_failure() -> None:
+def test_publications_are_accepted_in_order_before_model_continues_and_survive_failure() -> (
+    None
+):
     acceptance = MemoryAcceptance("session")
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         if not returns(messages):
-            definition = next(tool for tool in info.function_tools if tool.name == "present_artifact")
+            definition = next(
+                tool for tool in info.function_tools if tool.name == "present_artifact"
+            )
             schema = definition.parameters_json_schema
             assert schema["properties"]["type"]["enum"] == ["example"]
             assert definition.sequential
             assert "Use the name as the title" in str(info.instructions)
-            return ModelResponse(parts=[ToolCallPart("present_artifact", arguments("First"), "first"),
-                                        ToolCallPart("present_artifact", arguments("Second"), "second")])
-        assert [artifact.content.title for artifact in acceptance.artifacts] == ["First", "Second"]
-        for result, artifact in zip(returns(messages), acceptance.artifacts, strict=True):
+            return ModelResponse(
+                parts=[
+                    ToolCallPart("present_artifact", arguments("First"), "first"),
+                    ToolCallPart("present_artifact", arguments("Second"), "second"),
+                ]
+            )
+        assert [artifact.content.title for artifact in acceptance.artifacts] == [
+            "First",
+            "Second",
+        ]
+        for result, artifact in zip(
+            returns(messages), acceptance.artifacts, strict=True
+        ):
             assert result.outcome == "success"
             assert result.content == ArtifactAccepted(artifact_id=artifact.artifact_id)
         raise RuntimeError("Model failed after publication")
@@ -100,53 +153,83 @@ def test_publications_are_accepted_in_order_before_model_continues_and_survive_f
         observation = TurnObservation()
         async with agent:
             with pytest.raises(RuntimeError, match="after publication"):
-                await execute_turn(agent, "Present two items.", observation=observation,
-                                   toolsets=[create_artifact_toolset([capability()], acceptance)])
-            def followup(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+                await execute_turn(
+                    agent,
+                    "Present two items.",
+                    observation=observation,
+                    toolsets=[create_artifact_toolset([capability()], acceptance)],
+                )
+
+            def followup(
+                messages: list[ModelMessage], info: AgentInfo
+            ) -> ModelResponse:
                 assert info.function_tools == []
                 assert [part.content for part in returns(messages)] == [
-                    {"artifact_id": artifact.artifact_id} for artifact in acceptance.artifacts
+                    {"artifact_id": artifact.artifact_id}
+                    for artifact in acceptance.artifacts
                 ]
                 return ModelResponse(parts=[TextPart("Both artifacts were accepted.")])
 
-            history = ModelMessagesTypeAdapter.validate_json(ModelMessagesTypeAdapter.dump_json(observation.messages))
+            history = ModelMessagesTypeAdapter.validate_json(
+                ModelMessagesTypeAdapter.dump_json(observation.messages)
+            )
             with agent.override(model=FunctionModel(followup)):
-                result = await execute_turn(agent, "What was accepted?", conversation=Conversation(messages=list(history)))
+                result = await execute_turn(
+                    agent,
+                    "What was accepted?",
+                    conversation=Conversation(messages=list(history)),
+                )
             assert result.usage.tool_calls == 0
         assert len(acceptance.artifacts) == 2
-        assert [item.tool_call_id for item in acceptance.submissions] == ["first", "second"]
+        assert [item.tool_call_id for item in acceptance.submissions] == [
+            "first",
+            "second",
+        ]
         assert all(item.run_id == observation.run_id for item in acceptance.submissions)
         assert len(returns(observation.messages)) == 2
 
     asyncio.run(exercise())
 
 
-@pytest.mark.parametrize(("changes", "metadata", "reason"), [
-    ({"type": "missing"}, False, "unsupported_type"),
-    ({"payload": {"name": 1}}, False, "invalid_payload"),
-    ({"payload": {"name": "x", "extra": True}}, False, "invalid_payload"),
-    ({"metadata": {}}, False, "invalid_metadata"),
-    ({}, True, "invalid_metadata"),
-    ({"metadata": {"reference": "not-a-uuid"}}, True, "invalid_metadata"),
-])
+@pytest.mark.parametrize(
+    ("changes", "metadata", "reason"),
+    [
+        ({"type": "missing"}, False, "unsupported_type"),
+        ({"payload": {"name": 1}}, False, "invalid_payload"),
+        ({"payload": {"name": "x", "extra": True}}, False, "invalid_payload"),
+        ({"metadata": {}}, False, "invalid_metadata"),
+        ({}, True, "invalid_metadata"),
+        ({"metadata": {"reference": "not-a-uuid"}}, True, "invalid_metadata"),
+    ],
+)
 def test_schema_rejections_are_native_failed_results_without_acceptance(
-    changes: dict[str, JsonValue], metadata: bool, reason: str,
+    changes: dict[str, JsonValue],
+    metadata: bool,
+    reason: str,
 ) -> None:
     acceptance = MemoryAcceptance("session")
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         if not returns(messages):
-            return ModelResponse(parts=[ToolCallPart("present_artifact", arguments(changes=changes), "call")])
-        result, = returns(messages)
+            return ModelResponse(
+                parts=[
+                    ToolCallPart("present_artifact", arguments(changes=changes), "call")
+                ]
+            )
+        (result,) = returns(messages)
         assert result.outcome == "failed"
         assert reason in str(result.content)
         return ModelResponse(parts=[TextPart("The artifact was rejected.")])
 
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
-        result = await execute_turn(agent, "Present it.", toolsets=[
-            create_artifact_toolset([capability(metadata=metadata)], acceptance),
-        ])
+        result = await execute_turn(
+            agent,
+            "Present it.",
+            toolsets=[
+                create_artifact_toolset([capability(metadata=metadata)], acceptance),
+            ],
+        )
         assert result.output == "The artifact was rejected."
         assert acceptance.submissions == []
         assert acceptance.artifacts == []
@@ -155,13 +238,19 @@ def test_schema_rejections_are_native_failed_results_without_acceptance(
 
 
 @pytest.mark.parametrize("field", ["payload", "metadata"])
-@pytest.mark.parametrize(("format_name", "value", "accepted"), [
-    ("uuid", "00000000-0000-4000-8000-000000000001", True),
-    ("uuid", "not-a-uuid", False),
-    ("application-specific-format", "arbitrary", True),
-])
+@pytest.mark.parametrize(
+    ("format_name", "value", "accepted"),
+    [
+        ("uuid", "00000000-0000-4000-8000-000000000001", True),
+        ("uuid", "not-a-uuid", False),
+        ("application-specific-format", "arbitrary", True),
+    ],
+)
 def test_payload_and_metadata_formats_follow_the_same_validation_policy(
-    field: str, format_name: str, value: str, accepted: bool,
+    field: str,
+    format_name: str,
+    value: str,
+    accepted: bool,
 ) -> None:
     data = capability().model_dump(by_alias=True)
     data[f"{field}Schema"] = {
@@ -175,10 +264,16 @@ def test_payload_and_metadata_formats_follow_the_same_validation_policy(
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         if not returns(messages):
-            return ModelResponse(parts=[ToolCallPart(
-                "present_artifact", arguments(changes={field: {"reference": value}}), "call",
-            )])
-        result, = returns(messages)
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        "present_artifact",
+                        arguments(changes={field: {"reference": value}}),
+                        "call",
+                    )
+                ]
+            )
+        (result,) = returns(messages)
         assert result.outcome == ("success" if accepted else "failed")
         if not accepted:
             assert f"invalid_{field}" in str(result.content)
@@ -186,39 +281,68 @@ def test_payload_and_metadata_formats_follow_the_same_validation_policy(
 
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
-        await execute_turn(agent, "Present it.", toolsets=[
-            create_artifact_toolset([advertised], acceptance),
-        ])
+        await execute_turn(
+            agent,
+            "Present it.",
+            toolsets=[
+                create_artifact_toolset([advertised], acceptance),
+            ],
+        )
         assert len(acceptance.submissions) == int(accepted)
         assert len(acceptance.artifacts) == int(accepted)
 
     asyncio.run(exercise())
 
 
-@pytest.mark.parametrize("changes", [{"title": " "}, {"subtitle": " "}, {"title": 1}, {"extra": True},
-                                     {"payload": float("nan")}, {"payload": {"name": float("inf")}},
-                                     {"metadata": {"value": float("-inf")}}])
-def test_native_argument_validation_prevents_acceptance(changes: dict[str, JsonValue]) -> None:
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"title": " "},
+        {"subtitle": " "},
+        {"title": 1},
+        {"extra": True},
+        {"payload": float("nan")},
+        {"payload": {"name": float("inf")}},
+        {"metadata": {"value": float("-inf")}},
+    ],
+)
+def test_native_argument_validation_prevents_acceptance(
+    changes: dict[str, JsonValue],
+) -> None:
     acceptance = MemoryAcceptance("session")
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        return ModelResponse(parts=[ToolCallPart("present_artifact", arguments(changes=changes), "call")])
+        return ModelResponse(
+            parts=[ToolCallPart("present_artifact", arguments(changes=changes), "call")]
+        )
 
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         with pytest.raises(UnexpectedModelBehavior):
-            await execute_turn(agent, "Present it.", toolsets=[create_artifact_toolset([capability()], acceptance)])
+            await execute_turn(
+                agent,
+                "Present it.",
+                toolsets=[create_artifact_toolset([capability()], acceptance)],
+            )
         assert acceptance.submissions == []
 
     asyncio.run(exercise())
 
 
-@pytest.mark.parametrize("invalid", [
-    {"type": "example", "title": "Oats", "payload": {"name": "Oats"}},
-    {"type": "example", "extra": True,
-                   "content": {"title": "Oats", "payload": {"name": "Oats"}}},
-])
-def test_tool_requires_candidate_shape_without_unknown_candidate_fields(invalid: dict[str, JsonValue]) -> None:
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {"type": "example", "title": "Oats", "payload": {"name": "Oats"}},
+        {
+            "type": "example",
+            "extra": True,
+            "content": {"title": "Oats", "payload": {"name": "Oats"}},
+        },
+    ],
+)
+def test_tool_requires_candidate_shape_without_unknown_candidate_fields(
+    invalid: dict[str, JsonValue],
+) -> None:
     acceptance = MemoryAcceptance("session")
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -227,7 +351,11 @@ def test_tool_requires_candidate_shape_without_unknown_candidate_fields(invalid:
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         with pytest.raises(UnexpectedModelBehavior):
-            await execute_turn(agent, "Present it.", toolsets=[create_artifact_toolset([capability()], acceptance)])
+            await execute_turn(
+                agent,
+                "Present it.",
+                toolsets=[create_artifact_toolset([capability()], acceptance)],
+            )
         assert acceptance.submissions == []
 
     asyncio.run(exercise())
@@ -238,8 +366,12 @@ def test_capacity_rejection_preserves_previous_artifact_and_reports_failure() ->
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         if not returns(messages):
-            return ModelResponse(parts=[ToolCallPart("present_artifact", arguments(), "first"),
-                                        ToolCallPart("present_artifact", arguments("Second"), "second")])
+            return ModelResponse(
+                parts=[
+                    ToolCallPart("present_artifact", arguments(), "first"),
+                    ToolCallPart("present_artifact", arguments("Second"), "second"),
+                ]
+            )
         first, second = returns(messages)
         assert first.outcome == "success"
         assert second.outcome == "failed"
@@ -248,33 +380,59 @@ def test_capacity_rejection_preserves_previous_artifact_and_reports_failure() ->
 
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
-        await execute_turn(agent, "Present two.", toolsets=[create_artifact_toolset([capability()], acceptance)])
+        await execute_turn(
+            agent,
+            "Present two.",
+            toolsets=[create_artifact_toolset([capability()], acceptance)],
+        )
         assert len(acceptance.artifacts) == 1
         assert len(acceptance.submissions) == 2
 
     asyncio.run(exercise())
 
 
-def test_concurrent_runs_on_shared_agent_isolate_capabilities_acceptance_and_retained_data() -> None:
+def test_concurrent_runs_on_shared_agent_isolate_capabilities_acceptance_and_retained_data() -> (
+    None
+):
     async def exercise() -> None:
         both_started = asyncio.Event()
         started: set[str] = set()
         left, right = MemoryAcceptance("left"), MemoryAcceptance("right")
         left_capability, right_capability = capability(), capability(metadata=True)
 
-        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-            prompt = next(part.content for msg in messages for part in msg.parts if isinstance(part, UserPromptPart))
+        async def respond(
+            messages: list[ModelMessage], info: AgentInfo
+        ) -> ModelResponse:
+            prompt = next(
+                part.content
+                for msg in messages
+                for part in msg.parts
+                if isinstance(part, UserPromptPart)
+            )
             assert isinstance(prompt, str)
             if not returns(messages):
                 started.add(prompt)
                 if len(started) == 2:
                     both_started.set()
                 await asyncio.wait_for(both_started.wait(), timeout=5)
-                args = arguments(prompt, changes={
-                    "metadata": {"reference": "00000000-0000-4000-8000-000000000001"},
-                } if prompt == "right" else None)
-                return ModelResponse(parts=[ToolCallPart("present_artifact", args, prompt)])
-            assert returns(messages)[0].content == ArtifactAccepted(artifact_id=f"{prompt}-1")
+                args = arguments(
+                    prompt,
+                    changes=(
+                        {
+                            "metadata": {
+                                "reference": "00000000-0000-4000-8000-000000000001"
+                            },
+                        }
+                        if prompt == "right"
+                        else None
+                    ),
+                )
+                return ModelResponse(
+                    parts=[ToolCallPart("present_artifact", args, prompt)]
+                )
+            assert returns(messages)[0].content == ArtifactAccepted(
+                artifact_id=f"{prompt}-1"
+            )
             return ModelResponse(parts=[TextPart(prompt)])
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
@@ -283,14 +441,20 @@ def test_concurrent_runs_on_shared_agent_isolate_capabilities_acceptance_and_ret
         async with agent:
             results = await asyncio.gather(
                 execute_turn(agent, "left", toolsets=[left_tools]),
-                execute_turn(agent, "right", toolsets=[create_artifact_toolset([right_capability], right)]),
+                execute_turn(
+                    agent,
+                    "right",
+                    toolsets=[create_artifact_toolset([right_capability], right)],
+                ),
             )
         assert [item.content.title for item in left.artifacts] == ["left"]
         assert [item.content.title for item in right.artifacts] == ["right"]
         assert left.artifacts[0].content.metadata is None
         assert right.artifacts[0].content.metadata is not None
         assert right.artifacts[0].content.subtitle == "Brand"
-        assert right.artifacts[0].content.metadata == {"reference": "00000000-0000-4000-8000-000000000001"}
+        assert right.artifacts[0].content.metadata == {
+            "reference": "00000000-0000-4000-8000-000000000001"
+        }
         assert left.artifacts[0].run_id != right.artifacts[0].run_id
         left_request = left.submissions[0].candidate.content.payload
         assert isinstance(left_request, dict)
@@ -306,9 +470,13 @@ def test_accepted_artifact_survives_cancellation_during_next_model_request() -> 
         acceptance = MemoryAcceptance("session")
         continuing = asyncio.Event()
 
-        async def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        async def respond(
+            messages: list[ModelMessage], info: AgentInfo
+        ) -> ModelResponse:
             if not returns(messages):
-                return ModelResponse(parts=[ToolCallPart("present_artifact", arguments(), "call")])
+                return ModelResponse(
+                    parts=[ToolCallPart("present_artifact", arguments(), "call")]
+                )
             assert len(acceptance.artifacts) == 1
             continuing.set()
             await asyncio.Event().wait()
@@ -317,8 +485,14 @@ def test_accepted_artifact_survives_cancellation_during_next_model_request() -> 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         observation = TurnObservation()
         async with agent:
-            task = asyncio.create_task(execute_turn(agent, "Present it.", observation=observation,
-                toolsets=[create_artifact_toolset([capability()], acceptance)]))
+            task = asyncio.create_task(
+                execute_turn(
+                    agent,
+                    "Present it.",
+                    observation=observation,
+                    toolsets=[create_artifact_toolset([capability()], acceptance)],
+                )
+            )
             await asyncio.wait_for(continuing.wait(), timeout=5)
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -338,14 +512,20 @@ def test_unexpected_acceptance_error_aborts_without_fabricating_success() -> Non
         raise RuntimeError("Acceptance unavailable")
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        return ModelResponse(parts=[ToolCallPart("present_artifact", arguments(), "call")])
+        return ModelResponse(
+            parts=[ToolCallPart("present_artifact", arguments(), "call")]
+        )
 
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         observation = TurnObservation()
         with pytest.raises(RuntimeError, match="Acceptance unavailable"):
-            await execute_turn(agent, "Present it.", observation=observation,
-                               toolsets=[create_artifact_toolset([capability()], accept)])
+            await execute_turn(
+                agent,
+                "Present it.",
+                observation=observation,
+                toolsets=[create_artifact_toolset([capability()], accept)],
+            )
         assert calls == 1
         assert returns(observation.messages) == []
 
@@ -361,7 +541,9 @@ def test_empty_capabilities_offer_no_tool_and_duplicate_types_are_rejected() -> 
 
     async def exercise() -> None:
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
-        await execute_turn(agent, "Help.", toolsets=[create_artifact_toolset([], acceptance)])
+        await execute_turn(
+            agent, "Help.", toolsets=[create_artifact_toolset([], acceptance)]
+        )
         with pytest.raises(ValueError, match="unique"):
             create_artifact_toolset([capability(), capability()], acceptance)
 

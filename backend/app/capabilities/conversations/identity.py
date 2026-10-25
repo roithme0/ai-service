@@ -6,7 +6,6 @@ from contextvars import ContextVar
 
 from app.core.identity import ApplicationIdentity
 
-
 _turn_identity: ContextVar[ApplicationIdentity] = ContextVar("turn_identity")
 
 

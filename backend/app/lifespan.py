@@ -24,8 +24,12 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.embedding_service = await resources.enter_async_context(
             embedding_service(provider_settings),
         )
-        runners["kochwiki"] = await resources.enter_async_context(kochwiki_runner(provider_settings))
-        runners["demo"] = await resources.enter_async_context(visual_conversation_demo_runner())
+        runners["kochwiki"] = await resources.enter_async_context(
+            kochwiki_runner(provider_settings)
+        )
+        runners["demo"] = await resources.enter_async_context(
+            visual_conversation_demo_runner()
+        )
         yield
     finally:
         runners["kochwiki"] = None

@@ -70,9 +70,7 @@ class SnapshotEvent(ResponseModel):
 
 class ObservationErrorEvent(ResponseModel):
     kind: Literal["error"] = "error"
-    reason: Literal[
-        "unknown", "observation_overflow", "internal_error"
-    ]
+    reason: Literal["unknown", "observation_overflow", "internal_error"]
 
 
 type SessionEvent = Annotated[

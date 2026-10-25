@@ -59,9 +59,12 @@ def test_blank_settings_are_treated_as_unset() -> None:
     assert settings.kochwiki_openai_reasoning_effort is None
 
 
-@pytest.mark.parametrize("effort", ["none", "minimal", "low", "medium", "high", "xhigh", "max", "", "   "])
+@pytest.mark.parametrize(
+    "effort", ["none", "minimal", "low", "medium", "high", "xhigh", "max", "", "   "]
+)
 def test_reasoning_effort_from_process_environment(
-    monkeypatch: pytest.MonkeyPatch, effort: str,
+    monkeypatch: pytest.MonkeyPatch,
+    effort: str,
 ) -> None:
     monkeypatch.setenv("KOCHWIKI_OPENAI_REASONING_EFFORT", effort)
     settings = KochwikiConversationSettings(_env_file=None)
@@ -71,7 +74,8 @@ def test_reasoning_effort_from_process_environment(
 
 @pytest.mark.parametrize("effort", ["invalid", "HIGH", "default"])
 def test_unknown_reasoning_effort_is_rejected(
-    monkeypatch: pytest.MonkeyPatch, effort: str,
+    monkeypatch: pytest.MonkeyPatch,
+    effort: str,
 ) -> None:
     monkeypatch.setenv("KOCHWIKI_OPENAI_REASONING_EFFORT", effort)
 
@@ -79,7 +83,9 @@ def test_unknown_reasoning_effort_is_rejected(
         KochwikiConversationSettings(_env_file=None)
 
 
-def test_provider_settings_ignore_invalid_conversation_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_settings_ignore_invalid_conversation_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", " test-key ")
     monkeypatch.setenv("KOCHWIKI_OPENAI_REASONING_EFFORT", "invalid")
 

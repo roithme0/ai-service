@@ -6,7 +6,9 @@ from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
-HttpErrorKind = Literal["not_found", "method_not_allowed", "http_error", "internal_error"]
+HttpErrorKind = Literal[
+    "not_found", "method_not_allowed", "http_error", "internal_error"
+]
 RequestValidationErrorKind = Literal["request_validation"]
 KindT = TypeVar("KindT", bound=str)
 
@@ -34,5 +36,7 @@ class ValidationErrorEnvelope(BaseModel, Generic[KindT]):
     kind: KindT
 
 
-class RequestValidationErrorResponse(ValidationErrorEnvelope[RequestValidationErrorKind]):
+class RequestValidationErrorResponse(
+    ValidationErrorEnvelope[RequestValidationErrorKind]
+):
     pass

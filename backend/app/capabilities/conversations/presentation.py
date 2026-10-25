@@ -18,7 +18,10 @@ from pydantic_ai.messages import (
 )
 
 from app.capabilities.conversations.session_state import (
-    INITIAL_CONTEXT_ORIGIN, SessionArtifact, TurnLifecycle, TurnStatus,
+    INITIAL_CONTEXT_ORIGIN,
+    SessionArtifact,
+    TurnLifecycle,
+    TurnStatus,
 )
 from app.capabilities.conversations.sessions import SessionSnapshot
 from app.capabilities.conversations.response import ResponseModel
@@ -64,7 +67,9 @@ class PresentedTurn(ResponseModel):
     parts: tuple[PresentationPart, ...]
 
 
-type HistoryItem = Annotated[UserPrompt | PresentedTurn, Field(discriminator="part_kind")]
+type HistoryItem = Annotated[
+    UserPrompt | PresentedTurn, Field(discriminator="part_kind")
+]
 
 
 class PresentedSession(ResponseModel):
@@ -114,13 +119,15 @@ def _initial_tool_status(turn_status: TurnStatus, *, started: bool) -> ToolStatu
 
 
 def _present_artifact(artifact: SessionArtifact) -> AcceptedArtifact:
-    return AcceptedArtifact(artifact=PublishedArtifact(
-        artifact_id=artifact.artifact_id,
-        type=artifact.type,
-        created_at=artifact.created_at,
-        run_id=artifact.run_id,
-        content=artifact.content.model_copy(deep=True),
-    ))
+    return AcceptedArtifact(
+        artifact=PublishedArtifact(
+            artifact_id=artifact.artifact_id,
+            type=artifact.type,
+            created_at=artifact.created_at,
+            run_id=artifact.run_id,
+            content=artifact.content.model_copy(deep=True),
+        )
+    )
 
 
 def _present_tool_call(
@@ -166,7 +173,8 @@ def _update_tool_activity(
 
 
 def _current_run_section(
-    history_sections: list[UserPrompt | _RunSection], run_id: str,
+    history_sections: list[UserPrompt | _RunSection],
+    run_id: str,
 ) -> _RunSection:
     previous = history_sections[-1] if history_sections else None
     if isinstance(previous, _RunSection) and previous.run_id == run_id:
@@ -196,7 +204,8 @@ def _present_history(
     lifecycles: Sequence[TurnLifecycle],
 ) -> tuple[HistoryItem, ...]:
     turn_positions = {
-        lifecycle.run_id: index for index, lifecycle in enumerate(lifecycles)
+        lifecycle.run_id: index
+        for index, lifecycle in enumerate(lifecycles)
         if lifecycle.run_id is not None
     }
     result: list[HistoryItem] = []
@@ -210,9 +219,12 @@ def _present_history(
             PresentedTurn(lifecycle=lifecycle, parts=())
             for lifecycle in lifecycles[next_turn:position]
         )
-        result.append(PresentedTurn(
-            lifecycle=lifecycles[position], parts=tuple(item.parts),
-        ))
+        result.append(
+            PresentedTurn(
+                lifecycle=lifecycles[position],
+                parts=tuple(item.parts),
+            )
+        )
         next_turn = max(next_turn, position + 1)
     result.extend(
         PresentedTurn(lifecycle=lifecycle, parts=())
@@ -241,9 +253,9 @@ def present_session(snapshot: SessionSnapshot) -> PresentedSession:
     }
     artifacts_by_call: dict[tuple[str, str], list[SessionArtifact]] = {}
     for artifact in snapshot.artifacts:
-        artifacts_by_call.setdefault((artifact.run_id, artifact.tool_call_id), []).append(
-            artifact
-        )
+        artifacts_by_call.setdefault(
+            (artifact.run_id, artifact.tool_call_id), []
+        ).append(artifact)
     tool_call_locations: dict[tuple[bool, str, str], tuple[_RunSection, int]] = {}
 
     for message in snapshot.messages:
@@ -272,18 +284,23 @@ def present_session(snapshot: SessionSnapshot) -> PresentedSession:
                     section,
                     len(parts),
                 )
-                parts.extend(_present_tool_call(
-                    part,
-                    turn_status=lifecycles_by_run_id[run_id].status,
-                    started=(run_id, part.tool_call_id) in started_tool_calls,
-                    artifacts=artifacts_by_call.get((run_id, part.tool_call_id), ()),
-                ))
+                parts.extend(
+                    _present_tool_call(
+                        part,
+                        turn_status=lifecycles_by_run_id[run_id].status,
+                        started=(run_id, part.tool_call_id) in started_tool_calls,
+                        artifacts=artifacts_by_call.get(
+                            (run_id, part.tool_call_id), ()
+                        ),
+                    )
+                )
 
     return PresentedSession(
         session_id=snapshot.session_id,
         expires_at=snapshot.expires_at,
         error="conversation_limit_reached" if snapshot.limit_reached else None,
         history=_present_history(
-            history_sections, tuple(execution.lifecycle for execution in snapshot.turn_executions),
+            history_sections,
+            tuple(execution.lifecycle for execution in snapshot.turn_executions),
         ),
     )

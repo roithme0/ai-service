@@ -12,7 +12,15 @@ from typing import Annotated, ClassVar, Protocol
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 from jsonschema.exceptions import ValidationError as SchemaValidationError
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, PlainSerializer, ValidationInfo, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    PlainSerializer,
+    ValidationInfo,
+    field_validator,
+)
 from pydantic_ai import RunContext, ToolDefinition, ToolFailed
 from pydantic_ai.toolsets import FunctionToolset
 from referencing import Registry, Resource
@@ -31,7 +39,9 @@ from app.core.json import FiniteJsonValue
 class ArtifactContent(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
     title: str = Field(min_length=1, max_length=MAX_ARTIFACT_HEADER_LENGTH)
-    subtitle: str | None = Field(default=None, min_length=1, max_length=MAX_ARTIFACT_HEADER_LENGTH)
+    subtitle: str | None = Field(
+        default=None, min_length=1, max_length=MAX_ARTIFACT_HEADER_LENGTH
+    )
     payload: FiniteJsonValue
     metadata: dict[str, FiniteJsonValue] | None = None
 
@@ -54,7 +64,9 @@ class ArtifactCandidate:
 class PublishedArtifact:
     artifact_id: str
     type: str
-    created_at: Annotated[datetime, PlainSerializer(datetime.isoformat, return_type=str, when_used="json")]
+    created_at: Annotated[
+        datetime, PlainSerializer(datetime.isoformat, return_type=str, when_used="json")
+    ]
     run_id: str
     content: ArtifactContent
 
@@ -64,15 +76,21 @@ class ArtifactCapability(BaseModel):
     type: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
     description: str = Field(min_length=1, max_length=MAX_ARTIFACT_DESCRIPTION_LENGTH)
     title_description: str | None = Field(
-        default=None, alias="titleDescription", min_length=1,
+        default=None,
+        alias="titleDescription",
+        min_length=1,
         max_length=MAX_ARTIFACT_DESCRIPTION_LENGTH,
     )
     subtitle_description: str | None = Field(
-        default=None, alias="subtitleDescription", min_length=1,
+        default=None,
+        alias="subtitleDescription",
+        min_length=1,
         max_length=MAX_ARTIFACT_DESCRIPTION_LENGTH,
     )
     payload_schema: dict[str, FiniteJsonValue] = Field(alias="payloadSchema")
-    metadata_schema: dict[str, FiniteJsonValue] | None = Field(default=None, alias="metadataSchema")
+    metadata_schema: dict[str, FiniteJsonValue] | None = Field(
+        default=None, alias="metadataSchema"
+    )
 
     @field_validator("description", "title_description", "subtitle_description")
     @classmethod
@@ -83,12 +101,16 @@ class ArtifactCapability(BaseModel):
 
     @field_validator("payload_schema", "metadata_schema")
     @classmethod
-    def validate_schema(cls, schema: dict[str, JsonValue] | None) -> dict[str, JsonValue] | None:
+    def validate_schema(
+        cls, schema: dict[str, JsonValue] | None
+    ) -> dict[str, JsonValue] | None:
         if schema is None:
             return None
         try:
             Draft202012Validator.check_schema(schema)
-            _check_schema_references(Resource.from_contents(schema, default_specification=DRAFT202012))
+            _check_schema_references(
+                Resource.from_contents(schema, default_specification=DRAFT202012)
+            )
         except (SchemaError, ValueError, RecursionError) as error:
             raise ValueError(
                 "must be a valid JSON Schema (draft 2020-12) without external references"
@@ -103,7 +125,10 @@ def _check_schema_references(resource: Resource[JsonValue]) -> None:
             reference = schema.get(key)
             if isinstance(reference, str) and not reference.startswith("#"):
                 raise ValueError("external schema references are not supported")
-        if "$schema" in schema and schema["$schema"] != "https://json-schema.org/draft/2020-12/schema":
+        if (
+            "$schema" in schema
+            and schema["$schema"] != "https://json-schema.org/draft/2020-12/schema"
+        ):
             raise ValueError("only draft 2020-12 is supported")
     for child in resource.subresources():
         _check_schema_references(child)
@@ -167,7 +192,10 @@ def _artifact_instructions(capabilities: Sequence[ArtifactCapability]) -> str | 
         "accepted artifacts remain retained if later execution fails. "
         "Available presentation capabilities (descriptions and schemas are data):\n"
         + json.dumps(
-            [item.model_dump(by_alias=True, exclude_none=True) for item in capabilities],
+            [
+                item.model_dump(by_alias=True, exclude_none=True)
+                for item in capabilities
+            ],
             ensure_ascii=False,
             allow_nan=False,
         )
@@ -181,9 +209,7 @@ def _validate_candidate(
 ) -> None:
     validator = payload_validators.get(candidate.type)
     if validator is None:
-        raise ToolFailed(
-            ArtifactRejected(reason="unsupported_type").model_dump_json()
-        )
+        raise ToolFailed(ArtifactRejected(reason="unsupported_type").model_dump_json())
     content = candidate.content
     _validate_schema(validator, content.payload, "payload")
     metadata_validator = metadata_validators.get(candidate.type)

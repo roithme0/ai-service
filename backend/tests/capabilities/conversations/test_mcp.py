@@ -37,14 +37,21 @@ async def connected_toolset(
     response_hook: Callable[[httpx2.Response], Awaitable[None]] | None = None,
 ) -> AsyncIterator[tuple[MCPToolset[None], httpx2.AsyncClient]]:
     app = server.streamable_http_app(
-        streamable_http_path="/mcp/", stateless_http=True, json_response=True,
+        streamable_http_path="/mcp/",
+        stateless_http=True,
+        json_response=True,
         transport_security=TransportSecuritySettings(allowed_hosts=["localhost"]),
     )
-    async with app.router.lifespan_context(app), httpx2.AsyncClient(
-        transport=httpx2.ASGITransport(app=app),
-        event_hooks={"response": [response_hook]} if response_hook else {},
-    ) as http:
-        yield create_mcp_toolset("http://localhost/mcp/", id="domain", http_client=http), http
+    async with (
+        app.router.lifespan_context(app),
+        httpx2.AsyncClient(
+            transport=httpx2.ASGITransport(app=app),
+            event_hooks={"response": [response_hook]} if response_hook else {},
+        ) as http,
+    ):
+        yield create_mcp_toolset(
+            "http://localhost/mcp/", id="domain", http_client=http
+        ), http
 
 
 def test_mcp_discovery_instructions_execution_history_and_cleanup() -> None:
@@ -73,8 +80,15 @@ def test_mcp_discovery_instructions_execution_history_and_cleanup() -> None:
         assert tools["lookup_value"].description == "Retrieve a domain value by label."
         assert tools["lookup_value"].parameters_json_schema["required"] == ["label"]
         if requests == 1:
-            return ModelResponse(parts=[ToolCallPart("lookup_value", {"label": "sample"}, "call-1")])
-        results = [part for message in messages for part in message.parts if isinstance(part, ToolReturnPart)]
+            return ModelResponse(
+                parts=[ToolCallPart("lookup_value", {"label": "sample"}, "call-1")]
+            )
+        results = [
+            part
+            for message in messages
+            for part in message.parts
+            if isinstance(part, ToolReturnPart)
+        ]
         assert len(results) == 1
         assert results[0].tool_call_id == "call-1"
         assert results[0].content == {"value": 42}
@@ -84,14 +98,22 @@ def test_mcp_discovery_instructions_execution_history_and_cleanup() -> None:
     async def exercise() -> None:
         async with connected_toolset(server) as (toolset, http):
             agent = create_turn_agent(
-                FunctionModel(respond), instructions="Help the user.",
-                tools=[Tool(local_status)], toolsets=[toolset],
+                FunctionModel(respond),
+                instructions="Help the user.",
+                tools=[Tool(local_status)],
+                toolsets=[toolset],
             )
             async with agent:
                 assert toolset.client.is_connected()
                 first = await execute_turn(agent, "Find the sample value.")
-                history = ModelMessagesTypeAdapter.validate_json(first.all_messages_json())
-                second = await execute_turn(agent, "Repeat that value.", conversation=Conversation(messages=list(history)))
+                history = ModelMessagesTypeAdapter.validate_json(
+                    first.all_messages_json()
+                )
+                second = await execute_turn(
+                    agent,
+                    "Repeat that value.",
+                    conversation=Conversation(messages=list(history)),
+                )
                 assert first.output == second.output == "The value is 42."
                 assert second.usage.tool_calls == 0
             assert not toolset.client.is_connected()
@@ -125,7 +147,9 @@ def test_mcp_explicit_failure_reaches_model_without_reexecution() -> None:
 
     async def exercise() -> None:
         async with connected_toolset(server) as (toolset, _):
-            agent = create_turn_agent(FunctionModel(respond), instructions="Help.", toolsets=[toolset])
+            agent = create_turn_agent(
+                FunctionModel(respond), instructions="Help.", toolsets=[toolset]
+            )
             async with agent:
                 result = await execute_turn(agent, "Find the value.")
                 assert result.output == "The lookup failed."
@@ -153,7 +177,9 @@ def test_lost_mcp_response_does_not_replay_completed_operation() -> None:
             if payload.get("method") == "tools/call":
                 assert calls == 1
                 await response.aclose()
-                raise httpx2.ReadError("Response lost after execution", request=response.request)
+                raise httpx2.ReadError(
+                    "Response lost after execution", request=response.request
+                )
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         nonlocal requests
@@ -161,17 +187,32 @@ def test_lost_mcp_response_does_not_replay_completed_operation() -> None:
         return ModelResponse(parts=[ToolCallPart("update_value", {}, "call-1")])
 
     async def exercise() -> None:
-        async with connected_toolset(server, response_hook=lose_tool_response) as (toolset, _):
-            agent = create_turn_agent(FunctionModel(respond), instructions="Help.", toolsets=[toolset])
+        async with connected_toolset(server, response_hook=lose_tool_response) as (
+            toolset,
+            _,
+        ):
+            agent = create_turn_agent(
+                FunctionModel(respond), instructions="Help.", toolsets=[toolset]
+            )
             observation = TurnObservation()
             with pytest.raises(httpx2.ReadError, match="Response lost after execution"):
                 async with agent:
-                    with pytest.raises(httpx2.ReadError, match="Response lost after execution"):
-                        await execute_turn(agent, "Update the value.", observation=observation)
+                    with pytest.raises(
+                        httpx2.ReadError, match="Response lost after execution"
+                    ):
+                        await execute_turn(
+                            agent, "Update the value.", observation=observation
+                        )
             assert not toolset.client.is_connected()
-            assert [call.tool_call_id for call in observation.started_tool_calls] == ["call-1"]
+            assert [call.tool_call_id for call in observation.started_tool_calls] == [
+                "call-1"
+            ]
             assert observation.messages[-1].state == "interrupted"
-            assert not any(isinstance(part, ToolReturnPart) for msg in observation.messages for part in msg.parts)
+            assert not any(
+                isinstance(part, ToolReturnPart)
+                for msg in observation.messages
+                for part in msg.parts
+            )
 
     asyncio.run(exercise())
     assert calls == 1
@@ -190,10 +231,18 @@ def test_mcp_connection_failure_cleans_up_without_model_request() -> None:
         pytest.fail("Model must not run when the MCP connection cannot be opened.")
 
     async def exercise() -> None:
-        async with httpx2.AsyncClient(transport=httpx2.MockTransport(unavailable)) as http:
-            toolset = create_mcp_toolset("http://localhost/mcp/", id="domain", http_client=http)
-            agent = create_turn_agent(FunctionModel(respond), instructions="Help.", toolsets=[toolset])
-            with pytest.raises(RuntimeError, match="Client failed to connect: MCP unavailable") as failure:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(unavailable)
+        ) as http:
+            toolset = create_mcp_toolset(
+                "http://localhost/mcp/", id="domain", http_client=http
+            )
+            agent = create_turn_agent(
+                FunctionModel(respond), instructions="Help.", toolsets=[toolset]
+            )
+            with pytest.raises(
+                RuntimeError, match="Client failed to connect: MCP unavailable"
+            ) as failure:
                 async with agent:
                     await execute_turn(agent, "Find the value.")
             assert isinstance(failure.value.__cause__, httpx2.ConnectError)
