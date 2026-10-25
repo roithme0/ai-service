@@ -25,6 +25,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+from app.core.identity import ApplicationIdentity
 from app.agentic.session_state import (
     INITIAL_CONTEXT_ORIGIN, SessionArtifact, TurnExecution, TurnLifecycle, TurnStatus,
 )
@@ -384,12 +385,12 @@ def test_real_runner_projection_tracks_tool_cancellation_and_native_followup_rep
 
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.", tools=[Tool(lookup)])
         runner = AgentTurnRunner(agent)
-        session = runner.create_session(owner="alice", initial_context={"secret": "SECRET_CONTEXT"})
-        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner="alice")) as updates:
+        session = runner.create_session(owner=ApplicationIdentity("test", "alice"), initial_context={"secret": "SECRET_CONTEXT"})
+        async with agent, runner, aclosing(runner.observe_session(session.session_id, owner=ApplicationIdentity("test", "alice"))) as updates:
             assert (await anext(updates)).history == ()
-            await runner.submit(session.session_id, owner="alice", prompt="Find it")
+            await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Find it")
             await asyncio.wait_for(started.wait(), 5)
-            running = runner.read_session(session.session_id, owner="alice")
+            running = runner.read_session(session.session_id, owner=ApplicationIdentity("test", "alice"))
             assert isinstance(running.history[0], UserPrompt)
             activity = groups(running)[0].parts[-1]
             assert isinstance(activity, ToolActivity) and activity.status == "running"
@@ -403,7 +404,7 @@ def test_real_runner_projection_tracks_tool_cancellation_and_native_followup_rep
             activity = groups(failed)[0].parts[-1]
             assert isinstance(activity, ToolActivity) and activity.status == "interrupted"
             assert "SECRET" not in failed.model_dump_json()
-            await runner.submit(session.session_id, owner="alice", prompt="Follow up")
+            await runner.submit(session.session_id, owner=ApplicationIdentity("test", "alice"), prompt="Follow up")
             async with asyncio.timeout(5):
                 async for update in updates:
                     if len(groups(update)) == 2 and groups(update)[-1].lifecycle.status == "completed":

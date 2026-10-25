@@ -8,17 +8,20 @@ from app.agentic.config import (
     MCP_READ_TIMEOUT_SECONDS,
     VALIDATION_MAX_RETRIES,
 )
+from app.core.identity import ApplicationIdentity
 
 
 def create_mcp_toolset(
     url: str,
     *,
     id: str,
+    identity: ApplicationIdentity | None = None,
     http_client: AsyncClient | None = None,
 ) -> MCPToolset[None]:
     return MCPToolset(
         url,
         id=id,
+        headers={"X-Application-User": identity.to_header()} if identity is not None else None,
         include_instructions=True,
         tool_error_behavior="failed",
         max_retries=VALIDATION_MAX_RETRIES,

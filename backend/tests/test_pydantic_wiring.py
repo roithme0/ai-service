@@ -14,6 +14,8 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.native_tools import WebSearchTool
 
 from app.agentic import wiring
+from app.agentic.identity import bind_turn_identity
+from app.core.identity import ApplicationIdentity
 from app.agentic.artifacts import ArtifactAccepted, ArtifactCapability
 from app.agentic.session_state import SessionState
 from app.agentic.mcp import create_mcp_toolset
@@ -115,9 +117,10 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
         async with app.router.lifespan_context(app), httpx2.AsyncClient(
             transport=httpx2.ASGITransport(app=app),
         ) as http:
-            def mcp(url: str, *, id: str) -> MCPToolset[None]:
+            def mcp(url: str, *, id: str, identity: ApplicationIdentity) -> MCPToolset[None]:
                 assert url == "http://localhost/mcp/"
                 assert id == "kochwiki"
+                assert identity == ApplicationIdentity("test", "alice")
                 toolset = create_mcp_toolset(url, id=id, http_client=http)
                 toolsets.append(toolset)
                 return toolset
@@ -137,7 +140,7 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
             async with agent:
                 assert toolsets == []
                 assert not model.client.is_closed()
-                with agent.override(model=FunctionModel(respond)):
+                with bind_turn_identity(ApplicationIdentity("test", "alice")), agent.override(model=FunctionModel(respond)):
                     result = await first.execute_turn(agent, "Find and present soup.")
                     followup = await first.execute_turn(agent, "Repeat that.")
                     separate = await independent.execute_turn(agent, "Hello.")
@@ -173,7 +176,8 @@ def test_configured_mcp_failure_is_confined_to_each_run(
 
     async def exercise() -> None:
         async with httpx2.AsyncClient(transport=httpx2.MockTransport(unavailable)) as http:
-            def mcp(url: str, *, id: str) -> MCPToolset[None]:
+            def mcp(url: str, *, id: str, identity: ApplicationIdentity) -> MCPToolset[None]:
+                assert identity == ApplicationIdentity("test", "alice")
                 toolset = create_mcp_toolset(url, id=id, http_client=http)
                 toolsets.append(toolset)
                 return toolset
@@ -182,7 +186,7 @@ def test_configured_mcp_failure_is_confined_to_each_run(
             agent = wiring.create_kochwiki_agent(settings())
             async with agent:
                 assert attempts == 0
-                with agent.override(model=FunctionModel(lambda messages, info: ModelResponse(parts=[TextPart("Hello")]))):
+                with bind_turn_identity(ApplicationIdentity("test", "alice")), agent.override(model=FunctionModel(lambda messages, info: ModelResponse(parts=[TextPart("Hello")]))):
                     session_state = SessionState()
                     for prompt in ("First", "Try again"):
                         with pytest.raises(RuntimeError, match="Client failed to connect: MCP unavailable"):

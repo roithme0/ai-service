@@ -107,7 +107,7 @@ export class ChatHost implements OnInit, OnDestroy {
 }
 ```
 
-- The transport takes the URL prefix before `/agents`, configuration key, and explicit `application:user` identity sent as `X-Application-User`. This ownership header does not authenticate the caller.
+- The transport takes the URL prefix before `/agents`, configuration key, and identity string `${encodeURIComponent(issuer)}:${encodeURIComponent(subject)}` sent as `X-Application-User` on every request. Both components must be nonempty; ownership compares the decoded issuer/subject pair. The demo uses issuer `demo` and subject `default`. This temporary assertion does not authenticate the caller. The backend forwards the session owner's assertion to Kochwiki MCP separately for each turn.
 - `start(initialization?)` accepts `initial_context` and `artifact_capabilities`; replacement sessions reuse them. Server validation is authoritative.
 - Bind `turns`, both composer flags, and `status`. `snapshot` exposes the backend contract; `admission` and `observation` describe request/connection outcomes separately from execution.
 - The optional third controller argument, `SessionArtifactMapper`, maps a published artifact to `ChatArtifact` or `null`. The default preserves identity/type and maps title, subtitle, payload, and metadata.

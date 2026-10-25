@@ -8,7 +8,7 @@ A session connects one owner to one configured agent. The service manages execut
 | --- | --- |
 | Agent configuration | A named application composition: `demo` or `kochwiki`. |
 | Session | An expiring, owner-scoped container for conversation state, executions, and [artifacts](artifacts.md). Its ID is separate from native conversation and run IDs. |
-| Owner | The `application:user` identity supplied through `X-Application-User`. Ownership checks do not authenticate the caller. |
+| Owner | The exact issuer/subject pair supplied through `X-Application-User`. Ownership checks do not authenticate the caller. |
 | Conversation | Native Pydantic AI continuation state: messages, usage, and conversation identity. |
 | Initial context | Caller-provided JSON object retained as model input, outside the public timeline. It is data, not agent instructions. |
 | Turn | One admitted prompt execution, with status `running`, `completed`, `failed`, or `cancelled`. Its native run ID may be absent before execution starts. |
@@ -18,6 +18,9 @@ A session connects one owner to one configured agent. The service manages execut
 
 ## Session rules
 
+- Every request supplies exactly one `X-Application-User: encodeURIComponent(issuer):encodeURIComponent(subject)` assertion. Both components must be nonempty, correctly percent-encoded UTF-8. Ownership compares decoded pairs, preserving exact issuer spelling and decoding once; equivalent encodings identify the same owner.
+- Kochwiki MCP requests carry the session owner's assertion in the same header, encoded independently for each background turn. Identity is transport metadata and is not added to model context or tool arguments. Kochwiki resolves the pair to its own user ID for proposal ownership checks.
+- This is a temporary, unverified assertion flow. Neither the session API nor this MCP forwarding authenticates the caller; authenticated delegation remains future work.
 - Sessions expire 90 minutes after creation; activity does not extend them. Unknown, expired, and other-owner sessions return the same not-found result.
 - Only one turn may run per session. An overlapping submission is rejected without creating another execution.
 - An admitted turn may finish after expiry, but expiry still prevents further reads and submissions.

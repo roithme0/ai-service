@@ -7,6 +7,7 @@ from pydantic_ai.mcp import MCPToolset
 from pydantic_ai.toolsets import DynamicToolset
 
 from app.agentic.instructions import CONVERSATION_INSTRUCTIONS
+from app.agentic.identity import current_turn_identity
 from app.agentic.mcp import create_mcp_toolset
 from app.agentic.turns import create_openai_model, create_turn_agent
 from app.core.config import Settings
@@ -31,7 +32,7 @@ def create_kochwiki_agent(settings: Settings) -> Agent[None, str]:
     assert api_key is not None and model_name is not None and mcp_url is not None
 
     def create_kochwiki_toolset(_ctx: RunContext[None]) -> MCPToolset[None]:
-        return create_mcp_toolset(mcp_url, id="kochwiki")
+        return create_mcp_toolset(mcp_url, id="kochwiki", identity=current_turn_identity())
 
     agent = create_turn_agent(
         create_openai_model(

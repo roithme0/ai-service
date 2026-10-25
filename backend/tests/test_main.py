@@ -15,6 +15,7 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from app import main
+from app.core.identity import ApplicationIdentity
 from app.agentic import wiring
 from app.agentic.mcp import create_mcp_toolset
 from app.agentic.presentation import PresentedTurn
@@ -115,7 +116,7 @@ def test_kochwiki_cutover_mcp_outage_recovery_and_resource_cleanup(monkeypatch: 
         async with mcp_app.router.lifespan_context(mcp_app), httpx2.AsyncClient(
             transport=httpx2.MockTransport(send),
         ) as mcp_http:
-            def mcp(url: str, *, id: str) -> MCPToolset[None]:
+            def mcp(url: str, *, id: str, identity: ApplicationIdentity) -> MCPToolset[None]:
                 return create_mcp_toolset(url, id=id, http_client=mcp_http)
 
             def model(model_name: str, api_key: SecretStr, *, reasoning_effort: ReasoningEffort) -> FunctionModel:
@@ -150,6 +151,6 @@ def test_kochwiki_cutover_mcp_outage_recovery_and_resource_cleanup(monkeypatch: 
                 assert calls == ["Soup", "Soup", "Soup"]
                 assert (await client.get(path, headers={"X-Application-User": "test:other"})).status_code == 404
             with pytest.raises(RunnerClosedError):
-                runner.create_session(owner="test:alice")
+                runner.create_session(owner=ApplicationIdentity("test", "alice"))
 
     asyncio.run(exercise())

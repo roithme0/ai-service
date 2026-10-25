@@ -16,6 +16,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from starlette.types import Message
 from starlette.requests import ClientDisconnect
 
+from app.core.identity import ApplicationIdentity
 from app.agentic.http import ObservationErrorEvent, SessionEvent, SnapshotEvent, create_session_router
 from app.agentic.presentation import AcceptedArtifact, PresentedSession, PresentedTurn, ToolActivity
 from app.agentic.runner import AgentTurnRunner
@@ -342,7 +343,7 @@ def test_errors_after_headers_are_typed_and_close_observation(
         closed = asyncio.Event()
 
         class FailingRunner(AgentTurnRunner):
-            async def observe_session(self, session_id: str, *, owner: str) -> AsyncGenerator[PresentedSession, None]:
+            async def observe_session(self, session_id: str, *, owner: ApplicationIdentity) -> AsyncGenerator[PresentedSession, None]:
                 try:
                     yield self.read_session(session_id, owner=owner)
                     raise failure("SECRET_OBSERVATION_ERROR")
@@ -405,7 +406,7 @@ def test_failed_socket_send_releases_preacquired_subscription(
         runner = AgentTurnRunner(agent)
         app = application(runner)
         async with agent, runner:
-            session = runner.create_session(owner="test:alice")
+            session = runner.create_session(owner=ApplicationIdentity("test", "alice"))
             path = f"{BASE}/{session.session_id}/events"
             broken = BrokenStream(app, path)
             broken.spec_version = "2.4"

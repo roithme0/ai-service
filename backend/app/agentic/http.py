@@ -22,6 +22,7 @@ from app.agentic.sessions import (
     SessionNotFoundError,
 )
 from app.core.http import require_application_user
+from app.core.identity import ApplicationIdentity
 from app.agentic.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
 
@@ -179,7 +180,7 @@ def create_session_router(
     async def create_session(
         configuration: str,
         body: SessionCreationRequest,
-        owner: str = Depends(require_application_user),
+        owner: ApplicationIdentity = Depends(require_application_user),
         runners: Mapping[str, AgentTurnRunner | None] = Depends(runners_provider),
     ) -> SessionCreated | JSONResponse:
         runner = resolve_runner(configuration, runners)
@@ -202,7 +203,7 @@ def create_session_router(
     async def read_session(
         configuration: str,
         session_id: str,
-        owner: str = Depends(require_application_user),
+        owner: ApplicationIdentity = Depends(require_application_user),
         runners: Mapping[str, AgentTurnRunner | None] = Depends(runners_provider),
     ) -> PresentedSession | JSONResponse:
         runner = resolve_runner(configuration, runners)
@@ -223,7 +224,7 @@ def create_session_router(
         configuration: str,
         session_id: str,
         body: PromptSubmissionRequest,
-        owner: str = Depends(require_application_user),
+        owner: ApplicationIdentity = Depends(require_application_user),
         runners: Mapping[str, AgentTurnRunner | None] = Depends(runners_provider),
     ) -> TurnAccepted | JSONResponse:
         runner = resolve_runner(configuration, runners)
@@ -255,7 +256,7 @@ def create_session_router(
     async def observe_session(
         configuration: str,
         session_id: str,
-        owner: str = Depends(require_application_user),
+        owner: ApplicationIdentity = Depends(require_application_user),
         runners: Mapping[str, AgentTurnRunner | None] = Depends(runners_provider),
     ) -> StreamingResponse | JSONResponse:
         runner = resolve_runner(configuration, runners)
