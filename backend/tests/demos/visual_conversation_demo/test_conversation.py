@@ -7,7 +7,7 @@ from pydantic_ai import models
 from app.capabilities.conversations.http import SnapshotEvent
 from app.capabilities.conversations.presentation import AcceptedArtifact, AssistantText, PresentedSession, PresentedTurn, ToolActivity
 from app.capabilities.conversations.runner import AgentTurnRunner
-from app.demo.agent import COMPLETE_REPLY, FAILED_GENERATION_UPDATE, FIRST_REPLY, SECOND_REPLY, create_demo_agent
+from app.demos.visual_conversation_demo.agent import COMPLETE_REPLY, FAILED_GENERATION_UPDATE, FIRST_REPLY, SECOND_REPLY, create_visual_conversation_demo_agent
 from app import main
 from app.main import app
 from tests.capabilities.conversations.test_http import stream
@@ -27,11 +27,11 @@ def _turns(snapshot: PresentedSession) -> list[PresentedTurn]:
     return [item for item in snapshot.history if isinstance(item, PresentedTurn)]
 
 
-def test_demo_script_through_http_and_live_snapshots(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_visual_conversation_demo_through_http_and_live_snapshots(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)
 
     async def exercise() -> None:
-        agent = create_demo_agent(delay_seconds=0)
+        agent = create_visual_conversation_demo_agent(delay_seconds=0)
         async with agent, AgentTurnRunner(agent) as runner:
             monkeypatch.setitem(app.dependency_overrides, main.get_agent_registry, lambda: {"demo": runner})
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test", headers={"X-Application-User": "test:alice"}) as client:

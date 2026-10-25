@@ -24,7 +24,7 @@ npm ci
 npm run start:app
 ```
 
-Open `http://localhost:4204`; API requests proxy to port 8004. The scripted demo needs no model credentials or Kochwiki connection. Refresh to start a new session.
+Open `http://localhost:4204`; API requests proxy to port 8004. The [Visual Conversation Demo](../backend/app/demos/visual_conversation_demo/) needs no model credentials or Kochwiki connection. Refresh to start a new session.
 
 For the model-backed agent, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [Kochwiki settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
 

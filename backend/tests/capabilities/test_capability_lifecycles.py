@@ -14,7 +14,7 @@ from app.capabilities.conversations.runner import AgentTurnRunner, RunnerClosedE
 from app.capabilities.conversations.turns import create_openai_model
 from app.core.config import ProviderSettings
 from app.core.identity import ApplicationIdentity
-from app.demo import lifecycle as demo_lifecycle
+from app.demos.visual_conversation_demo import lifecycle as visual_conversation_demo_lifecycle
 from app.capabilities.embeddings.service import EmbeddingService
 
 
@@ -73,7 +73,7 @@ def test_later_application_startup_failure_closes_started_capabilities(
     def fail_demo() -> Agent[None, str]:
         raise RuntimeError("Demo initialization failed")
 
-    monkeypatch.setattr(demo_lifecycle, "create_demo_agent", fail_demo)
+    monkeypatch.setattr(visual_conversation_demo_lifecycle, "create_visual_conversation_demo_agent", fail_demo)
 
     async def exercise() -> None:
         with pytest.raises(RuntimeError, match="Demo initialization failed"):
@@ -85,11 +85,11 @@ def test_later_application_startup_failure_closes_started_capabilities(
     asyncio.run(exercise())
 
 
-def test_demo_body_failure_propagates_and_closes_runner() -> None:
+def test_visual_conversation_demo_body_failure_propagates_and_closes_runner() -> None:
     async def exercise() -> None:
         owner = ApplicationIdentity("test", "user")
         with pytest.raises(LookupError, match="Application failure"):
-            async with demo_lifecycle.demo_runner() as runner:
+            async with visual_conversation_demo_lifecycle.visual_conversation_demo_runner() as runner:
                 runner.create_session(owner=owner)
                 raise LookupError("Application failure")
         with pytest.raises(RunnerClosedError):

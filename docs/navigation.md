@@ -1,6 +1,6 @@
 # Repository navigation
 
-The conversation capability combines backend execution with a reusable Angular chat UI. A scripted demo illustrates integration; the Kochwiki configuration connects execution to external domain tools.
+The conversation capability combines backend execution with a reusable Angular chat UI. The Visual Conversation Demo illustrates integration; the Kochwiki configuration connects execution to external domain tools.
 
 ## System overview
 
@@ -32,7 +32,7 @@ The [gateway](../deployment/gateway/nginx.conf) serves the demo and API. The dem
 | [Execution](../backend/app/capabilities/conversations/runner.py) | Owns background turns. [Registry](../backend/app/capabilities/conversations/sessions.py) handles ownership and expiry; [session state](../backend/app/capabilities/conversations/session_state.py) retains conversation, lifecycle, and artifacts. |
 | [Agent composition](../backend/app/capabilities/conversations/wiring.py) | Configures the Kochwiki model and MCP connection. [Turns](../backend/app/capabilities/conversations/turns.py) execute through Pydantic AI; [artifacts](../backend/app/capabilities/conversations/artifacts.py) validate and publish presentation data. |
 | [Chat UI package](../frontend/projects/chat-ui/) | `@roithme0/chat-ui/ui` renders host-supplied content; `@roithme0/chat-ui/conversation` supplies the [controller](../frontend/projects/chat-ui/conversation/src/session-controller.ts), HTTP/SSE transport, and snapshot mapping. |
-| [Demo app](../frontend/src/app/app.component.ts) | Hosts the chat UI and connects it to the [scripted backend agent](../backend/app/demo/agent.py). Includes simulated delays and error states. |
+| [Visual Conversation Demo](../backend/app/demos/visual_conversation_demo/) | Scripted conversation with messages, artifacts, simulated delays, and error states. The [frontend demo app](../frontend/src/app/app.component.ts) hosts its chat UI. |
 | [Deployment](../deployment/) | Environment-specific Compose definitions and gateway routing. The [publishing workflow](../.github/workflows/publish-app.yml) builds and publishes application images and the chat UI package. |
 
 The [contract generator](../frontend/scripts/conversation-contract.mjs) produces [TypeScript types and Zod schemas](../frontend/projects/chat-ui/conversation/generated/) from the session router's OpenAPI document.
@@ -46,6 +46,7 @@ The [contract generator](../frontend/scripts/conversation-contract.mjs) produces
 ## Find related tests
 
 - Conversations: [backend/tests/capabilities/conversations/](../backend/tests/capabilities/conversations/), covering session state, execution, HTTP/SSE, artifacts, and agent wiring.
-- Embeddings: [backend/tests/capabilities/embeddings/](../backend/tests/capabilities/embeddings/). Cross-capability lifecycle tests live directly under [backend/tests/capabilities/](../backend/tests/capabilities/); application, shared infrastructure, and demo tests live under [backend/tests/](../backend/tests/).
+- Embeddings: [backend/tests/capabilities/embeddings/](../backend/tests/capabilities/embeddings/). Cross-capability lifecycle tests live directly under [backend/tests/capabilities/](../backend/tests/capabilities/); application and shared infrastructure tests live under [backend/tests/](../backend/tests/).
+- Demos: [backend/tests/demos/](../backend/tests/demos/), with the Visual Conversation Demo under `visual_conversation_demo/`.
 - Frontend: `*.spec.ts` beside application and library code; tooling checks in [frontend/scripts/](../frontend/scripts/).
 - Deployment: [deployment/tests/](../deployment/tests/), with backend and gateway test runners.

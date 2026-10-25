@@ -1,4 +1,4 @@
-"""Scripted demo agent exercising messages, artifacts, and failures."""
+"""Visual Conversation Demo agent exercising messages, artifacts, and failures."""
 
 import asyncio
 
@@ -17,7 +17,7 @@ FAILED_GENERATION_UPDATE = "I'll start another response. This demo will delibera
 COMPLETE_REPLY = "This scripted demo is complete. Refresh the page to restart it."
 
 
-def create_demo_agent(*, delay_seconds: float = TURN_DELAY_SECONDS) -> Agent[None, str]:
+def create_visual_conversation_demo_agent(*, delay_seconds: float = TURN_DELAY_SECONDS) -> Agent[None, str]:
     if delay_seconds < 0:
         raise ValueError("delay_seconds must not be negative")
 

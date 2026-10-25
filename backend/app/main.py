@@ -14,7 +14,7 @@ from app.capabilities.conversations.lifecycle import kochwiki_runner
 from app.capabilities.conversations.runner import AgentTurnRunner
 from app.core.config import get_provider_settings
 from app.core.models import HttpErrorResponse, RequestValidationErrorResponse, ValidationDetail
-from app.demo.lifecycle import demo_runner
+from app.demos.visual_conversation_demo.lifecycle import visual_conversation_demo_runner
 from app.capabilities.embeddings.http import router as embedding_router
 from app.capabilities.embeddings.lifecycle import embedding_service
 
@@ -44,7 +44,7 @@ class AgentLifespan:
                 embedding_service(provider_settings),
             )
             self._runners["kochwiki"] = await self._resource_stack.enter_async_context(kochwiki_runner(provider_settings))
-            self._runners["demo"] = await self._resource_stack.enter_async_context(demo_runner())
+            self._runners["demo"] = await self._resource_stack.enter_async_context(visual_conversation_demo_runner())
         except BaseException:
             await self._resource_stack.aclose()
             raise
