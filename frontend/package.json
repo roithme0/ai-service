@@ -13,10 +13,10 @@
     "watch:app": "ng build ai-service-frontend --watch --configuration development",
     "watch:chat-ui": "ng build chat-ui --watch",
     "pack:chat-ui": "npm run build:chat-ui && npm pack ./dist/chat-ui --pack-destination ./dist",
-    "format:changed": "node scripts/format-changed.mts",
-    "lint": "eslint . --max-warnings=0",
-    "lint:fix": "eslint . --max-warnings=0 --fix",
-    "test:tooling": "node --test scripts/format-changed.test.mts scripts/validate-frontend.test.mts"
+    "format:changed": "node ../.codex/validation/frontend.mts --format",
+    "lint": "eslint . ../.codex/validation --max-warnings=0",
+    "lint:fix": "eslint . ../.codex/validation --max-warnings=0 --fix",
+    "test:tooling": "node --test ../.codex/validation/shared.test.mts ../.codex/validation/frontend.test.mts"
   },
   "private": true,
   "packageManager": "npm@10.7.0",

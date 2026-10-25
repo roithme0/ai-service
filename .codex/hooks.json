@@ -5,9 +5,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:/Code/ai-service/.codex/validate-frontend.ps1 -Mode start",
+            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:/Code/ai-service/.codex/validate.ps1 -Mode start",
             "timeout": 30,
-            "statusMessage": "Recording frontend content before this turn"
+            "statusMessage": "Recording frontend and backend content before this turn"
           }
         ]
       }
@@ -17,9 +17,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:/Code/ai-service/.codex/validate-frontend.ps1 -Mode stop",
-            "timeout": 900,
-            "statusMessage": "Formatting changed frontend files, checking lint and running all frontend tests"
+            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:/Code/ai-service/.codex/validate.ps1 -Mode stop",
+            "timeout": 1500,
+            "statusMessage": "Formatting changed files and validating affected frontend and backend code"
           }
         ]
       }
