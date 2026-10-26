@@ -24,7 +24,7 @@ npm ci
 npm run start:app
 ```
 
-Open `http://localhost:4204`; API requests proxy to port 8004. The [Visual Conversation Demo](../backend/app/demos/visual_conversation_demo/) needs no model credentials or Kochwiki connection. Refresh to start a new session.
+Open `http://localhost:4204`; API requests proxy to port 8004. The [Visual Demo](../backend/app/demos/visual_conversation_demo/) uses the `visual-demo` agent configuration and needs no model credentials or Kochwiki connection. Refresh to start a new session.
 
 For the model-backed agent, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [Kochwiki settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
 
@@ -98,7 +98,7 @@ From **frontend/**, run `npm run build:chat-ui`, then `node scripts/check-chat-u
 
 With the [local servers](#run-locally) running, open `http://localhost:4204` at a portrait-phone viewport:
 
-- Submit arbitrary text through the introduction, two JSON artifacts (`demo.greeting` and `demo.greetings`, with 30 greetings), invalid publication, scripted failure, and completion guidance. The error's demo action is intentionally inert.
+- Submit arbitrary text through the introduction, two JSON artifacts (`visual-demo.greeting` and `visual-demo.greetings`, with 30 greetings), invalid publication, scripted failure, and completion guidance. The error's demo action is intentionally inert.
 - Expand/collapse the long artifact and run details; check retained content after failure and scroll position during toggles. Native final-answer anchoring still needs Chrome/Firefox verification.
 - Send one more message to trigger the frontend-only 405 compatibility error without retry. Refresh to restart; there is no restart button.
 - Check history/composer placement during viewport changes, no horizontal overflow, Enter/send submitting once, and Shift+Enter adding a line break.

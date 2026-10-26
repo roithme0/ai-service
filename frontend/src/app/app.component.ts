@@ -6,11 +6,11 @@ import {
   type ChatUsage,
 } from '@roithme0/chat-ui/ui';
 import { SessionController, type SessionViewState } from '@roithme0/chat-ui/conversation';
-import { DemoTransport } from './demo-transport';
+import { VisualDemoTransport } from './visual-demo-transport';
 
-const DEMO_ERROR_MESSAGE =
+const VISUAL_DEMO_ERROR_MESSAGE =
   'Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.';
-const DEMO_ACTION_ID = 'demo-noop';
+const VISUAL_DEMO_ACTION_ID = 'visual-demo-noop';
 
 const INITIAL_STATE: SessionViewState = {
   snapshot: null,
@@ -51,8 +51,8 @@ export class App implements OnInit, OnDestroy {
       : null;
   });
   private compatibilityFailure = false;
-  private readonly controller = new SessionController(new DemoTransport(), (state) =>
-    this.publishDemoState(state),
+  private readonly controller = new SessionController(new VisualDemoTransport(), (state) =>
+    this.publishVisualDemoState(state),
   );
 
   ngOnInit(): void {
@@ -65,17 +65,17 @@ export class App implements OnInit, OnDestroy {
     this.controller.dispose();
   }
 
-  private publishDemoState(state: SessionViewState): void {
+  private publishVisualDemoState(state: SessionViewState): void {
     if (this.compatibilityFailure) {
       this.chat.set(this.compatibilityError(state));
       return;
     }
-    if (state.status?.kind === 'error' && state.status.message === DEMO_ERROR_MESSAGE) {
+    if (state.status?.kind === 'error' && state.status.message === VISUAL_DEMO_ERROR_MESSAGE) {
       this.chat.set({
         ...state,
         status: {
           ...state.status,
-          action: { id: DEMO_ACTION_ID, label: 'Demo-Aktion (ohne Funktion)' },
+          action: { id: VISUAL_DEMO_ACTION_ID, label: 'Demo-Aktion (ohne Funktion)' },
         },
       });
       return;
@@ -113,7 +113,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   protected handleStatusAction(actionId: string): void {
-    if (actionId === DEMO_ACTION_ID) return;
+    if (actionId === VISUAL_DEMO_ACTION_ID) return;
     void this.controller.performAction(actionId);
   }
 }

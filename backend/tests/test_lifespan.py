@@ -51,23 +51,26 @@ def test_later_application_startup_failure_closes_started_capabilities(
         lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None)
     )
 
-    def fail_demo() -> Agent[None, str]:
-        raise RuntimeError("Demo initialization failed")
+    def fail_visual_demo() -> Agent[None, str]:
+        raise RuntimeError("Visual demo initialization failed")
 
     monkeypatch.setattr(
         visual_conversation_demo_lifecycle,
         "create_visual_conversation_demo_agent",
-        fail_demo,
+        fail_visual_demo,
     )
 
     async def exercise() -> None:
         application = FastAPI()
-        with pytest.raises(RuntimeError, match="Demo initialization failed"):
+        with pytest.raises(RuntimeError, match="Visual demo initialization failed"):
             async with lifespan.application_lifespan(application):
                 raise AssertionError("Startup should have failed")
         assert service.client is not None and service.client.is_closed()
         assert configured_model.client.is_closed()
-        assert application.state.agent_runners == {"kochwiki": None, "demo": None}
+        assert application.state.agent_runners == {
+            "kochwiki": None,
+            "visual-demo": None,
+        }
 
     asyncio.run(exercise())
 
@@ -102,7 +105,7 @@ def test_application_shutdown_clears_registry_and_closes_all_resources(
                 assert not configured_model.client.is_closed()
                 if fail_body:
                     raise LookupError("Application failure")
-        assert runners == {"kochwiki": None, "demo": None}
+        assert runners == {"kochwiki": None, "visual-demo": None}
         assert service.client is not None and service.client.is_closed()
         assert configured_model.client.is_closed()
         for runner in active_runners:

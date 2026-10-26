@@ -49,7 +49,7 @@ globalThis.fetch = async (url, options) => {
   );
 };
 const controller = new conversation.SessionController(
-  new conversation.HttpSessionTransport('/ai/api/v1/', 'demo', 'demo:default'),
+  new conversation.HttpSessionTransport('/ai/api/v1/', 'visual-demo', 'demo:default'),
   () => {},
 );
 try {
@@ -62,10 +62,10 @@ try {
   assert.equal(requests.length, 4);
   for (const request of requests) {
     if (request.options.method === 'POST') {
-      assert.equal(request.url, '/ai/api/v1/agents/demo/sessions');
+      assert.equal(request.url, '/ai/api/v1/agents/visual-demo/sessions');
       assert.deepEqual(JSON.parse(request.options.body), {});
     } else {
-      assert.equal(request.url, '/ai/api/v1/agents/demo/sessions/built-session/events');
+      assert.equal(request.url, '/ai/api/v1/agents/visual-demo/sessions/built-session/events');
     }
     assert.equal(request.options.headers['X-Application-User'], 'demo:default');
   }
@@ -96,12 +96,12 @@ import { SessionController, HttpSessionTransport, presentSessionArtifact,
 import * as Root from '@roithme0/chat-ui';
 const emptyRoot: keyof typeof Root extends never ? true : false = true;
 const publish = (state: SessionViewState): void => { const turns: readonly ChatTurn[] = state.turns; };
-const transport: SessionTransport = new HttpSessionTransport('/api/v1', 'demo', 'demo:default');
+const transport: SessionTransport = new HttpSessionTransport('/api/v1', 'visual-demo', 'demo:default');
 const controller = new SessionController(transport, publish);
 const mapper: SessionArtifactMapper = presentSessionArtifact;
 new SessionController(new HttpSessionTransport('/ai/api/v1/', 'kochwiki', 'kochwiki:42'), publish, mapper);
 // @ts-expect-error Application identity is required.
-new HttpSessionTransport('/api/v1', 'demo');
+new HttpSessionTransport('/api/v1', 'visual-demo');
 // @ts-expect-error Root compatibility exports must be absent.
 Root.ChatUiComponent;
 // @ts-expect-error Internal parsing is not public API.

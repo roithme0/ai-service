@@ -1,4 +1,4 @@
-"""Visual Conversation Demo agent exercising messages, artifacts, and failures."""
+"""Visual Demo agent exercising messages, artifacts, and failures."""
 
 import asyncio
 
@@ -16,7 +16,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from app.capabilities.conversations.turns import create_turn_agent
 
 TURN_DELAY_SECONDS = 1.5
-FIRST_REPLY = "Hello! This is a scripted chat UI demo. Send another message to see two tools create artifacts."
+FIRST_REPLY = "Hello! This is a scripted visual demo. Send another message to see two tools create artifacts."
 SECOND_REPLY = "This scripted demo created two greetings artifacts. Expand the longer list to see them all. An additional artifact call deliberately omitted the required JSON value and failed validation, so it created no artifact. Send another message to see an error state."
 FAILED_GENERATION_UPDATE = "I'll start another response. This demo will deliberately stop generation after this update, leaving it visible without a final answer."
 COMPLETE_REPLY = "This scripted demo is complete. Refresh the page to restart it."
@@ -63,7 +63,7 @@ def create_visual_conversation_demo_agent(
             raise RuntimeError("Scripted demo generation failure")
         return output
 
-    agent.name = "demo"
+    agent.name = "visual-demo"
     return agent
 
 
@@ -76,11 +76,11 @@ def _artifact_step(step: int) -> ModelResponse:
     match step:
         case 0:
             commentary = "I'll create a single greeting first."
-            title = "demo.greeting"
+            title = "visual-demo.greeting"
             payload = {"value": {"message": "Hello, World!"}}
         case 1:
             commentary = "The single greeting is ready. Next I'll create a list of 30 greetings to demonstrate expanding a larger artifact."
-            title = "demo.greetings"
+            title = "visual-demo.greetings"
             payload = {
                 "value": {
                     "messages": [f"Hello, Visitor {index}!" for index in range(1, 31)]
@@ -88,7 +88,7 @@ def _artifact_step(step: int) -> ModelResponse:
             }
         case 2:
             commentary = "Both artifacts are ready. I'll now deliberately omit the required JSON value to show how a failed tool call appears."
-            title = "demo.greeting"
+            title = "visual-demo.greeting"
             payload = {}
         case _:
             return _text(SECOND_REPLY, "final_answer")
@@ -98,7 +98,7 @@ def _artifact_step(step: int) -> ModelResponse:
             ToolCallPart(
                 "present_artifact",
                 {"type": "json", "content": {"title": title, "payload": payload}},
-                f"demo-artifact-{step}",
+                f"visual-demo-artifact-{step}",
             ),
         ]
     )

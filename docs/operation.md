@@ -22,7 +22,7 @@ Create `deployment/.env` from [.env.example](../deployment/.env.example); host-s
 | `KOCHWIKI_MCP_URL` | External Streamable HTTP MCP endpoint, including its path. |
 | `KOCHWIKI_OPENAI_REASONING_EFFORT` | Optional model reasoning effort; blank uses the model default. Support depends on the selected model. |
 
-The demo works without these agent settings. Invalid startup configuration leaves Kochwiki unavailable with `503 agent_unavailable`; restart after correcting it. MCP connects per turn, so an outage can recover on a later turn without restarting.
+The visual demo (`visual-demo`) works without these agent settings. Invalid startup configuration leaves Kochwiki unavailable with `503 agent_unavailable`; restart after correcting it. MCP connects per turn, so an outage can recover on a later turn without restarting.
 
 For a Kochwiki server on the Docker host, the example uses `http://host.docker.internal:8002/mcp/`; ensure that name resolves on your host. Container `localhost` refers to the container itself.
 
@@ -39,7 +39,7 @@ docker compose --env-file .env -f docker-compose-production.yml ps -a
 docker compose --env-file .env -f docker-compose-production.yml logs --tail=100 backend gateway
 ```
 
-Check the demo through the gateway by submitting messages and observing text, artifacts, and the intentional scripted failure. Test Kochwiki through a configured consumer if enabled. Container startup alone does not verify model or MCP connectivity.
+Check the visual demo through the gateway by submitting messages and observing text, artifacts, and the intentional scripted failure. Test Kochwiki through a configured consumer if enabled. Container startup alone does not verify model or MCP connectivity.
 
 ### Releases
 

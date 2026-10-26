@@ -16,7 +16,7 @@ from app.demos.visual_conversation_demo.lifecycle import visual_conversation_dem
 @asynccontextmanager
 async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
     configure_logging()
-    runners: dict[str, AgentTurnRunner | None] = {"kochwiki": None, "demo": None}
+    runners: dict[str, AgentTurnRunner | None] = {"kochwiki": None, "visual-demo": None}
     application.state.agent_runners = runners
     resources = AsyncExitStack()
     try:
@@ -27,11 +27,11 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         runners["kochwiki"] = await resources.enter_async_context(
             kochwiki_runner(provider_settings)
         )
-        runners["demo"] = await resources.enter_async_context(
+        runners["visual-demo"] = await resources.enter_async_context(
             visual_conversation_demo_runner()
         )
         yield
     finally:
         runners["kochwiki"] = None
-        runners["demo"] = None
+        runners["visual-demo"] = None
         await resources.aclose()

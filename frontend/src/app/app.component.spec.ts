@@ -20,7 +20,7 @@ const EMPTY_USAGE: PresentedSession['usage'] = {
 const EMPTY: PresentedSession = {
   error: null,
   usage: EMPTY_USAGE,
-  session_id: 'demo-1',
+  session_id: 'visual-demo-1',
   expires_at: '2026-10-21T12:00:00Z',
   history: [],
 };
@@ -31,7 +31,7 @@ const LIFECYCLE = {
   finished_at: '2026-10-21T10:00:01Z',
 };
 
-class DemoServer {
+class VisualDemoServer {
   private events!: ReadableStreamDefaultController<Uint8Array>;
   readonly fetch = vi.fn<typeof fetch>((input) => {
     const url = input instanceof Request ? input.url : input.toString();
@@ -64,12 +64,12 @@ class DemoServer {
   }
 }
 
-async function openDemo(): Promise<{
+async function openVisualDemo(): Promise<{
   fixture: ComponentFixture<App>;
   chat: ChatUiComponent;
-  server: DemoServer;
+  server: VisualDemoServer;
 }> {
-  const server = new DemoServer();
+  const server = new VisualDemoServer();
   vi.stubGlobal('fetch', server.fetch);
   TestBed.configureTestingModule({ imports: [App] });
   const fixture = TestBed.createComponent(App);
@@ -99,11 +99,11 @@ async function render(fixture: ComponentFixture<App>, condition: () => void): Pr
   });
 }
 
-describe('Native demo application', () => {
+describe('Visual demo application', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('passes conversation totals from new snapshots to the composer usage line', async () => {
-    const { fixture, chat, server } = await openDemo();
+    const { fixture, chat, server } = await openVisualDemo();
     expect(chat.usage()).toMatchObject({ totalTokens: 0, estimatedCostUsd: null });
     server.snapshot({
       ...EMPTY,
@@ -140,12 +140,12 @@ describe('Native demo application', () => {
 
   it.each<{ title: string; payload: Record<string, string | string[]>; text: string }>([
     {
-      title: 'demo.greeting',
+      title: 'visual-demo.greeting',
       payload: { message: 'Hello, World!' },
       text: '"message": "Hello, World!"',
     },
     {
-      title: 'demo.greetings',
+      title: 'visual-demo.greetings',
       payload: {
         messages: Array.from({ length: 30 }, (_, index) => `Hello, Visitor ${index + 1}!`),
       },
@@ -154,10 +154,10 @@ describe('Native demo application', () => {
   ])(
     'renders $title from native snapshots without inserting an optimistic prompt',
     async ({ title, payload, text }) => {
-      const { fixture, chat, server } = await openDemo();
+      const { fixture, chat, server } = await openVisualDemo();
       expect(server.fetch).toHaveBeenNthCalledWith(
         1,
-        '/api/v1/agents/demo/sessions',
+        '/api/v1/agents/visual-demo/sessions',
         expect.objectContaining({
           method: 'POST',
         }),
@@ -176,7 +176,7 @@ describe('Native demo application', () => {
       expect(chat.turns()).toEqual([]);
       expect(server.fetch).toHaveBeenNthCalledWith(
         3,
-        '/api/v1/agents/demo/sessions/demo-1/turns',
+        '/api/v1/agents/visual-demo/sessions/visual-demo-1/turns',
         expect.objectContaining({ body: JSON.stringify({ prompt: 'Any text' }) }),
       );
       server.snapshot({
@@ -244,7 +244,7 @@ describe('Native demo application', () => {
   );
 
   it('retains failed-turn commentary and offers the no-op action', async () => {
-    const { fixture, chat, server } = await openDemo();
+    const { fixture, chat, server } = await openVisualDemo();
     server.snapshot({
       ...EMPTY,
       history: [
@@ -259,7 +259,9 @@ describe('Native demo application', () => {
         },
       ],
     });
-    await render(fixture, () => expect(chat.conversationStatus()?.action?.id).toBe('demo-noop'));
+    await render(fixture, () =>
+      expect(chat.conversationStatus()?.action?.id).toBe('visual-demo-noop'),
+    );
     expect(element(fixture).querySelector('ai-chat-intermediate-message')?.textContent).toContain(
       'This update remains visible.',
     );
@@ -272,7 +274,7 @@ describe('Native demo application', () => {
   });
 
   it('simulates incompatibility only after three completed runs and retains the snapshot and draft', async () => {
-    const { fixture, chat, server } = await openDemo();
+    const { fixture, chat, server } = await openVisualDemo();
     const history: PresentedSession['history'] = Array.from({ length: 4 }, (_, index) => ({
       part_kind: 'turn',
       usage: EMPTY_USAGE,
