@@ -13,6 +13,6 @@
   flex: 1;
   min-height: 0;
   margin: 0 auto;
-  background: #130d0f;
-  box-shadow: 0 0 3rem rgb(0 0 0 / 35%);
+  background: var(--demo-page-background);
+  box-shadow: var(--demo-chat-shadow);
 }

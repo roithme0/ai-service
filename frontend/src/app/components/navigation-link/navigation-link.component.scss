@@ -1,7 +1,7 @@
 :host {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  color: #ff80cc;
-  font-size: 0.875rem;
+  gap: var(--demo-inline-gap);
+  color: var(--demo-link);
+  font-size: var(--demo-secondary-font-size);
 }
