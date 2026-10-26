@@ -1,11 +1,24 @@
-import { Component, DestroyRef, inject, input, output, signal } from '@angular/core';
+import {
+  afterNextRender,
+  Component,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
+  Injector,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { TextFieldModule } from '@angular/cdk/text-field';
 import type { ChatSubmission } from '../../models/chat-message';
 import { PreventPointerFocusDirective } from '../../directives/prevent-pointer-focus.directive';
 import { UsageLineComponent } from '../usage-line/usage-line.component';
-import type { ChatUsageSummary } from '../../models/chat-usage';
+import type { ChatUsage } from '../../models/chat-usage';
+import { UsagePanelComponent } from '../usage-panel/usage-panel.component';
 
 @Component({
   selector: 'ai-chat-composer',
@@ -15,6 +28,7 @@ import type { ChatUsageSummary } from '../../models/chat-usage';
     TextFieldModule,
     PreventPointerFocusDirective,
     UsageLineComponent,
+    UsagePanelComponent,
   ],
   templateUrl: './composer.component.html',
   styleUrl: './composer.component.scss',
@@ -24,15 +38,31 @@ export class ComposerComponent {
   readonly editingDisabled = input(false);
   readonly placeholder = input('Nachricht schreiben');
   readonly mascotSource = input.required<string>();
-  readonly usage = input<ChatUsageSummary | null>(null);
+  readonly usage = input<ChatUsage | null>(null);
   readonly messageSubmitted = output<ChatSubmission>();
   readonly focused = output<void>();
   readonly viewportResized = output<void>();
   protected readonly draft = signal('');
+  protected readonly usageExpanded = signal(false);
+  private readonly injector = inject(Injector);
+  private readonly usageToggle = viewChild<ElementRef<HTMLButtonElement>>('usageToggle');
+  private readonly usagePanel = viewChild(UsagePanelComponent);
   private stopViewportObservation: (() => void) | null = null;
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.stopObservingViewport());
+    effect(() => {
+      if (this.usage() === null) this.usageExpanded.set(false);
+    });
+  }
+
+  protected setUsageExpanded(expanded: boolean, event: MouseEvent | KeyboardEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.usageExpanded.set(expanded);
+    if (event.type === 'keydown' || event.detail === 0) {
+      this.focusUsageControlAfterRender();
+    }
   }
 
   protected onFocus(textarea: HTMLTextAreaElement): void {
@@ -81,6 +111,19 @@ export class ComposerComponent {
 
     event.preventDefault();
     this.emitDraft();
+  }
+
+  private focusUsageControlAfterRender(): void {
+    afterNextRender(
+      () => {
+        if (this.usageExpanded()) {
+          this.usagePanel()?.focusCollapseButton();
+        } else {
+          this.usageToggle()?.nativeElement.focus({ preventScroll: true });
+        }
+      },
+      { injector: this.injector },
+    );
   }
 
   private emitDraft(): void {

@@ -3,7 +3,7 @@ import {
   ChatUiComponent,
   JSON_ARTIFACT_CAPABILITY,
   type ChatSubmission,
-  type ChatUsageSummary,
+  type ChatUsage,
 } from '@roithme0/chat-ui/ui';
 import { SessionController, type SessionViewState } from '@roithme0/chat-ui/conversation';
 import { DemoTransport } from './demo-transport';
@@ -34,10 +34,20 @@ const INITIAL_STATE: SessionViewState = {
 })
 export class App implements OnInit, OnDestroy {
   protected readonly chat = signal<SessionViewState>(INITIAL_STATE);
-  protected readonly usage = computed<ChatUsageSummary | null>(() => {
+  protected readonly usage = computed<ChatUsage | null>(() => {
     const usage = this.chat().snapshot?.usage;
     return usage
-      ? { totalTokens: usage.total_tokens, estimatedCostUsd: usage.estimated_cost_usd }
+      ? {
+          totalTokens: usage.total_tokens,
+          estimatedCostUsd: usage.estimated_cost_usd,
+          inputTokens: usage.input_tokens,
+          outputTokens: usage.output_tokens,
+          reasoningTokens: usage.reasoning_tokens,
+          cacheReadTokens: usage.cache_read_tokens,
+          cacheWriteTokens: usage.cache_write_tokens,
+          requests: usage.requests,
+          toolCalls: usage.tool_calls,
+        }
       : null;
   });
   private compatibilityFailure = false;

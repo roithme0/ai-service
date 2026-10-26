@@ -23,12 +23,72 @@ textarea,
   pointer-events: auto;
 }
 
-ai-chat-usage-line {
+.usage-line {
   position: absolute;
   right: 1rem;
   left: 1rem;
   bottom: calc(max(1rem, env(safe-area-inset-bottom)) - 1rem);
   pointer-events: auto;
+  transition:
+    opacity 160ms ease,
+    visibility 160ms;
+}
+
+.usage-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  width: 100%;
+  height: 1rem;
+  padding: 0;
+  border: 0;
+  color: var(--ai-chat-muted-text, #c6b4bb);
+  background: transparent;
+  cursor: pointer;
+}
+
+.usage-toggle mat-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: 0 0 auto;
+}
+
+.usage-toggle:focus-visible {
+  outline: 0.15rem solid var(--ai-chat-focus, #ff9fc1);
+  outline-offset: 0.1rem;
+}
+
+.usage-panel {
+  position: absolute;
+  left: 2rem;
+  right: 2rem;
+  bottom: calc(100% - 3.5rem);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(0.375rem);
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    visibility 160ms,
+    transform 160ms ease;
+}
+
+.usage-panel.expanded {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+form {
+  position: relative;
+}
+
+.faded {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .surface {
@@ -50,6 +110,18 @@ ai-chat-usage-line {
   height: auto;
   pointer-events: none;
   user-select: none;
+  transition:
+    opacity 160ms ease,
+    visibility 160ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot,
+  .usage-line,
+  .usage-panel {
+    transition: none;
+    transform: none;
+  }
 }
 
 textarea {

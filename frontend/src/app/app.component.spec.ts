@@ -104,15 +104,37 @@ describe('Native demo application', () => {
 
   it('passes conversation totals from new snapshots to the composer usage line', async () => {
     const { fixture, chat, server } = await openDemo();
-    expect(chat.usage()).toEqual({ totalTokens: 0, estimatedCostUsd: null });
+    expect(chat.usage()).toMatchObject({ totalTokens: 0, estimatedCostUsd: null });
     server.snapshot({
       ...EMPTY,
-      usage: { ...EMPTY_USAGE, total_tokens: 12800, estimated_cost_usd: '0.024' },
+      usage: {
+        ...EMPTY_USAGE,
+        input_tokens: 9600,
+        output_tokens: 3200,
+        total_tokens: 12800,
+        reasoning_tokens: 1240,
+        cache_read_tokens: 6400,
+        cache_write_tokens: 800,
+        requests: 8,
+        tool_calls: 4,
+        estimated_cost_usd: '0.024',
+      },
     });
     await render(fixture, () => {
       const line = element(fixture).querySelector('ai-chat-composer ai-chat-usage-line');
       expect(line?.textContent).toContain('$0.024');
       expect(line?.textContent).toContain('12.8K Tokens');
+    });
+    expect(chat.usage()).toEqual({
+      inputTokens: 9600,
+      outputTokens: 3200,
+      totalTokens: 12800,
+      reasoningTokens: 1240,
+      cacheReadTokens: 6400,
+      cacheWriteTokens: 800,
+      requests: 8,
+      toolCalls: 4,
+      estimatedCostUsd: '0.024',
     });
   });
 

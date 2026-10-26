@@ -1,0 +1,31 @@
+<section aria-label="Chat-Verbrauch">
+  <button
+    #collapseButton
+    aiChatPreventPointerFocus
+    type="button"
+    class="collapse-button"
+    aria-label="Chat-Verbrauch einklappen"
+    aria-expanded="true"
+    (click)="collapsed.emit($event)"
+    (keydown.escape)="collapseFromKeyboard($event)"
+  >
+    <span>Chat-Verbrauch</span>
+    <mat-icon svgIcon="ai-chat:arrow-down" aria-hidden="true" />
+  </button>
+  <p
+    class="cost"
+    [title]="
+      usage().estimatedCostUsd === null ? 'Kosten unbekannt' : usage().estimatedCostUsd + ' USD'
+    "
+  >
+    <span>Geschätzte Kosten</span> <span class="value">{{ cost() }}</span>
+  </p>
+  <dl>
+    @for (metric of metrics(); track metric.label) {
+      <div>
+        <dt>{{ metric.label }}</dt>
+        <dd [title]="metric.exactValue">{{ metric.value }}</dd>
+      </div>
+    }
+  </dl>
+</section>

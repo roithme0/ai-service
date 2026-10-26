@@ -1,5 +1,5 @@
 export { ChatUiComponent } from './lib/components/chat-ui/chat-ui.component';
-export type { ChatUsageSummary } from './lib/models/chat-usage';
+export type { ChatUsage, ChatUsageSummary } from './lib/models/chat-usage';
 export type {
   ChatArtifact,
   ChatArtifactRenderContext,

@@ -1,15 +1,7 @@
 import { Component, computed, input } from '@angular/core';
 import type { ChatUsageSummary } from '../../models/chat-usage';
-
-const TOKEN_FORMAT = new Intl.NumberFormat('en-US', {
-  notation: 'compact',
-  maximumFractionDigits: 1,
-});
-const COST_FORMAT = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumSignificantDigits: 3,
-});
+import { formatUsageCost } from '../../formatting/usage-format';
+import { formatTokens } from '../../formatting/token-format';
 
 @Component({
   selector: 'ai-chat-usage-line',
@@ -18,10 +10,10 @@ const COST_FORMAT = new Intl.NumberFormat('en-US', {
 })
 export class UsageLineComponent {
   readonly usage = input.required<ChatUsageSummary>();
-  protected readonly tokens = computed(() => TOKEN_FORMAT.format(this.usage().totalTokens));
+  protected readonly tokens = computed(() => formatTokens(this.usage().totalTokens));
   protected readonly cost = computed(() => {
     const cost = this.usage().estimatedCostUsd;
-    return cost === null ? 'Kosten unbekannt' : `Geschätzt ${COST_FORMAT.format(Number(cost))}`;
+    return cost === null ? 'Kosten unbekannt' : `Geschätzt ${formatUsageCost(cost)}`;
   });
   protected readonly description = computed(() => {
     const usage = this.usage();

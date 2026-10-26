@@ -16,6 +16,19 @@ import { ArtifactCardComponent } from '../artifact-card/artifact-card.component'
 import { ChatUiComponent } from './chat-ui.component';
 import { presentSession } from '../../../../conversation/src/session-presentation';
 import type { PresentedSession, PresentedTurn } from '../../../../conversation/generated/types.gen';
+import type { ChatUsage } from '../../models/chat-usage';
+
+const EMPTY_CHAT_USAGE: ChatUsage = {
+  totalTokens: 0,
+  estimatedCostUsd: null,
+  inputTokens: 0,
+  outputTokens: 0,
+  reasoningTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  requests: 0,
+  toolCalls: 0,
+};
 
 const EMPTY_USAGE: PresentedSession['usage'] = {
   input_tokens: 0,
@@ -94,6 +107,7 @@ describe('ChatUiComponent', () => {
     expect(root.querySelector('ai-chat-usage-line')).toBeNull();
 
     fixture.componentRef.setInput('usage', {
+      ...EMPTY_CHAT_USAGE,
       totalTokens: 12800,
       estimatedCostUsd: '0.02400000000000000001',
     });
@@ -119,13 +133,129 @@ describe('ChatUiComponent', () => {
     { cost: '0.00000012', expected: 'Geschätzt $0.00000012' },
   ])('updates usage while preserving the meaning of cost $cost', ({ cost, expected }) => {
     const fixture = createFixture([]);
-    fixture.componentRef.setInput('usage', { totalTokens: 1, estimatedCostUsd: '1' });
+    fixture.componentRef.setInput('usage', {
+      ...EMPTY_CHAT_USAGE,
+      totalTokens: 1,
+      estimatedCostUsd: '1',
+    });
     fixture.detectChanges();
-    fixture.componentRef.setInput('usage', { totalTokens: 0, estimatedCostUsd: cost });
+    fixture.componentRef.setInput('usage', {
+      ...EMPTY_CHAT_USAGE,
+      totalTokens: 0,
+      estimatedCostUsd: cost,
+    });
     fixture.detectChanges();
     const line = fixtureElement(fixture).querySelector('ai-chat-usage-line')!;
     expect(line.textContent).toContain(expected);
     expect(line.textContent).toContain('0 Tokens');
+  });
+
+  it('toggles the usage panel without submitting, losing the draft, or moving pointer focus', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('usage', {
+      ...EMPTY_CHAT_USAGE,
+      inputTokens: 9600,
+      outputTokens: 3200,
+      totalTokens: 12800,
+      reasoningTokens: 1240,
+      cacheReadTokens: 6400,
+      cacheWriteTokens: 800,
+      toolCalls: 4,
+      requests: 8,
+      estimatedCostUsd: '0.024',
+    });
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.detectChanges();
+    const root = fixtureElement(fixture);
+    const textarea = root.querySelector('textarea')!;
+    textarea.value = 'Keep this draft';
+    textarea.dispatchEvent(new Event('input'));
+    textarea.focus();
+    const submitted = vi.fn();
+    fixture.componentInstance.messageSubmitted.subscribe(submitted);
+    const expand = root.querySelector<HTMLButtonElement>('.usage-toggle')!;
+    const panel = root.querySelector<HTMLElement>('.usage-panel')!;
+    const line = root.querySelector<HTMLElement>('.usage-line')!;
+    expect(panel.inert).toBe(true);
+    expand.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    fixture.detectChanges();
+    expect(panel.inert).toBe(false);
+    expect(panel.classList.contains('expanded')).toBe(true);
+    expect(line.inert).toBe(true);
+    expect(root.querySelector('.mascot')?.classList.contains('faded')).toBe(true);
+    expect(Array.from(panel.querySelectorAll('dd'), (item) => item.textContent?.trim())).toEqual([
+      '9.6K',
+      '3.2K',
+      '1.2K',
+      '12.8K',
+      '6.4K',
+      '800',
+      '4',
+      '8',
+    ]);
+    expect(panel.querySelectorAll('dd')[2].getAttribute('title')).toBe('1240');
+    expect(panel.querySelector('.cost')?.textContent).toContain('$0.024');
+    expect(document.activeElement).toBe(textarea);
+    expect(textarea.value).toBe('Keep this draft');
+    expect(submitted).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('usage', {
+      ...EMPTY_CHAT_USAGE,
+      totalTokens: 15000,
+      estimatedCostUsd: null,
+    });
+    fixture.detectChanges();
+    expect(panel.classList.contains('expanded')).toBe(true);
+    expect(panel.querySelector('.cost')?.textContent).toContain('Unbekannt');
+    expect(panel.querySelectorAll('dd')[3].textContent).toBe('15K');
+
+    panel
+      .querySelector('button')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    fixture.detectChanges();
+    expect(panel.inert).toBe(true);
+    expect(line.inert).toBe(false);
+    expect(root.querySelector('.mascot')?.classList.contains('faded')).toBe(false);
+    expect(document.activeElement).toBe(textarea);
+    expect(submitted).not.toHaveBeenCalled();
+  });
+
+  it('moves keyboard focus to the panel and returns it when Escape closes the panel', async () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('usage', EMPTY_CHAT_USAGE);
+    fixture.detectChanges();
+    const root = fixtureElement(fixture);
+    const expand = root.querySelector<HTMLButtonElement>('.usage-toggle')!;
+    expand.focus();
+    expand.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const collapse = root.querySelector<HTMLButtonElement>('.collapse-button')!;
+    expect(document.activeElement).toBe(collapse);
+    collapse.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(expand);
+    expect(expand.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('resets expansion when usage is removed and later supplied again', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('usage', EMPTY_CHAT_USAGE);
+    fixture.detectChanges();
+    const root = fixtureElement(fixture);
+    root.querySelector<HTMLButtonElement>('.usage-toggle')!.click();
+    fixture.detectChanges();
+    fixture.componentRef.setInput('usage', null);
+    fixture.detectChanges();
+    expect(root.querySelector('ai-chat-usage-panel')).toBeNull();
+    expect(root.querySelector('.mascot')?.classList.contains('faded')).toBe(false);
+    fixture.componentRef.setInput('usage', EMPTY_CHAT_USAGE);
+    fixture.detectChanges();
+    expect(root.querySelector<HTMLElement>('.usage-panel')!.inert).toBe(true);
+    expect(
+      root.querySelector<HTMLButtonElement>('.usage-toggle')!.getAttribute('aria-expanded'),
+    ).toBe('false');
   });
 
   it('keeps the mascot working through final text until the active turn finishes', () => {
