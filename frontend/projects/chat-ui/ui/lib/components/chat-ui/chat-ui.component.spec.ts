@@ -87,6 +87,47 @@ describe('ChatUiComponent', () => {
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
 
+  it('renders optional usage inside the composer and removes it without changing the mascot', () => {
+    const fixture = createFixture([]);
+    const root = fixtureElement(fixture);
+    const mascot = root.querySelector('.mascot');
+    expect(root.querySelector('ai-chat-usage-line')).toBeNull();
+
+    fixture.componentRef.setInput('usage', {
+      totalTokens: 12800,
+      estimatedCostUsd: '0.02400000000000000001',
+    });
+    fixture.detectChanges();
+    const line = root.querySelector('ai-chat-composer ai-chat-usage-line')!;
+    expect(line.textContent).toContain('Geschätzt $0.024');
+    expect(line.textContent).toContain('12.8K Tokens');
+    expect(line.querySelector('[title]')?.getAttribute('title')).toContain(
+      '0.02400000000000000001 USD; 12800 Tokens',
+    );
+    expect(line.querySelector('button')).toBeNull();
+    expect(root.querySelector('.mascot')).toBe(mascot);
+
+    fixture.componentRef.setInput('usage', null);
+    fixture.detectChanges();
+    expect(root.querySelector('ai-chat-usage-line')).toBeNull();
+    expect(root.querySelector('.mascot')).toBe(mascot);
+  });
+
+  it.each([
+    { cost: null, expected: 'Kosten unbekannt' },
+    { cost: '0', expected: 'Geschätzt $0' },
+    { cost: '0.00000012', expected: 'Geschätzt $0.00000012' },
+  ])('updates usage while preserving the meaning of cost $cost', ({ cost, expected }) => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('usage', { totalTokens: 1, estimatedCostUsd: '1' });
+    fixture.detectChanges();
+    fixture.componentRef.setInput('usage', { totalTokens: 0, estimatedCostUsd: cost });
+    fixture.detectChanges();
+    const line = fixtureElement(fixture).querySelector('ai-chat-usage-line')!;
+    expect(line.textContent).toContain(expected);
+    expect(line.textContent).toContain('0 Tokens');
+  });
+
   it('keeps the mascot working through final text until the active turn finishes', () => {
     const fixture = createFixture([]);
     const mascot = fixtureElement(fixture).querySelector<HTMLImageElement>('.mascot')!;

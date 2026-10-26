@@ -22,6 +22,7 @@ import { AssistantMessageComponent } from '../assistant-message/assistant-messag
 import { ComposerComponent } from '../composer/composer.component';
 import { ArtifactCardComponent } from '../artifact-card/artifact-card.component';
 import { StatusComponent } from '../status/status.component';
+import type { ChatUsageSummary } from '../../models/chat-usage';
 import type {
   ChatArtifactRendererMap,
   ChatContent,
@@ -59,6 +60,7 @@ export class ChatUiComponent {
   readonly turns = input.required<readonly ChatTurn[]>();
   readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
+  readonly usage = input<ChatUsageSummary | null>(null);
   readonly composerDisabled = input(false);
   readonly composerEditingDisabled = input(false);
   readonly composerPlaceholder = input('Nachricht schreiben');

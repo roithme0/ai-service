@@ -4,10 +4,18 @@ import { MatIconModule } from '@angular/material/icon';
 import { TextFieldModule } from '@angular/cdk/text-field';
 import type { ChatSubmission } from '../../models/chat-message';
 import { PreventPointerFocusDirective } from '../../directives/prevent-pointer-focus.directive';
+import { UsageLineComponent } from '../usage-line/usage-line.component';
+import type { ChatUsageSummary } from '../../models/chat-usage';
 
 @Component({
   selector: 'ai-chat-composer',
-  imports: [MatButtonModule, MatIconModule, TextFieldModule, PreventPointerFocusDirective],
+  imports: [
+    MatButtonModule,
+    MatIconModule,
+    TextFieldModule,
+    PreventPointerFocusDirective,
+    UsageLineComponent,
+  ],
   templateUrl: './composer.component.html',
   styleUrl: './composer.component.scss',
 })
@@ -16,6 +24,7 @@ export class ComposerComponent {
   readonly editingDisabled = input(false);
   readonly placeholder = input('Nachricht schreiben');
   readonly mascotSource = input.required<string>();
+  readonly usage = input<ChatUsageSummary | null>(null);
   readonly messageSubmitted = output<ChatSubmission>();
   readonly focused = output<void>();
   readonly viewportResized = output<void>();

@@ -102,6 +102,20 @@ async function render(fixture: ComponentFixture<App>, condition: () => void): Pr
 describe('Native demo application', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('passes conversation totals from new snapshots to the composer usage line', async () => {
+    const { fixture, chat, server } = await openDemo();
+    expect(chat.usage()).toEqual({ totalTokens: 0, estimatedCostUsd: null });
+    server.snapshot({
+      ...EMPTY,
+      usage: { ...EMPTY_USAGE, total_tokens: 12800, estimated_cost_usd: '0.024' },
+    });
+    await render(fixture, () => {
+      const line = element(fixture).querySelector('ai-chat-composer ai-chat-usage-line');
+      expect(line?.textContent).toContain('$0.024');
+      expect(line?.textContent).toContain('12.8K Tokens');
+    });
+  });
+
   it.each<{ title: string; payload: Record<string, string | string[]>; text: string }>([
     {
       title: 'demo.greeting',

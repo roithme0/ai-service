@@ -129,6 +129,8 @@ Rendering-only hosts import `ChatUiComponent` and supply their own state and han
 
 ### Content and identity
 
+Optional `usage: ChatUsageSummary | null` shows estimated USD cost and total tokens below the composer. Omit it to hide the line. Hosts map conversation totals to `estimatedCostUsd` (decimal string or `null`) and `totalTokens`; `null` cost means unavailable. Display values are rounded; the tooltip retains exact values.
+
 Content items have stable host-supplied `id` values and readonly fields. Optional item `turnId` does not determine ownership: the enclosing turn does.
 
 | Type                      | Fields beyond `id`                                                                                                                                           |

@@ -1,8 +1,9 @@
-import { Component, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, computed, signal } from '@angular/core';
 import {
   ChatUiComponent,
   JSON_ARTIFACT_CAPABILITY,
   type ChatSubmission,
+  type ChatUsageSummary,
 } from '@roithme0/chat-ui/ui';
 import { SessionController, type SessionViewState } from '@roithme0/chat-ui/conversation';
 import { DemoTransport } from './demo-transport';
@@ -33,6 +34,12 @@ const INITIAL_STATE: SessionViewState = {
 })
 export class App implements OnInit, OnDestroy {
   protected readonly chat = signal<SessionViewState>(INITIAL_STATE);
+  protected readonly usage = computed<ChatUsageSummary | null>(() => {
+    const usage = this.chat().snapshot?.usage;
+    return usage
+      ? { totalTokens: usage.total_tokens, estimatedCostUsd: usage.estimated_cost_usd }
+      : null;
+  });
   private compatibilityFailure = false;
   private readonly controller = new SessionController(new DemoTransport(), (state) =>
     this.publishDemoState(state),

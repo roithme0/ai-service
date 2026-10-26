@@ -23,6 +23,14 @@ textarea,
   pointer-events: auto;
 }
 
+ai-chat-usage-line {
+  position: absolute;
+  right: 1rem;
+  left: 1rem;
+  bottom: calc(max(1rem, env(safe-area-inset-bottom)) - 1rem);
+  pointer-events: auto;
+}
+
 .surface {
   position: relative;
   display: flex;

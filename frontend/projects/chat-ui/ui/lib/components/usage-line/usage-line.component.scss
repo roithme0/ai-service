@@ -1,0 +1,12 @@
+:host {
+  display: block;
+  min-width: 0;
+  color: var(--ai-chat-muted-text, #c6b4bb);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}

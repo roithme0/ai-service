@@ -31,3 +31,6 @@
     </div>
   </div>
 </form>
+@if (usage(); as usage) {
+  <ai-chat-usage-line [usage]="usage" />
+}
