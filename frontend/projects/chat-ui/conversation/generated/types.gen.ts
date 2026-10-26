@@ -164,6 +164,7 @@ export type PresentedSession = {
      * Session Id
      */
     session_id: string;
+    usage: PresentedUsage;
 };
 
 /**
@@ -179,6 +180,49 @@ export type PresentedTurn = {
      * Parts
      */
     parts: Array<PresentationPart>;
+    usage: PresentedUsage;
+};
+
+/**
+ * PresentedUsage
+ */
+export type PresentedUsage = {
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cache Write Tokens
+     */
+    cache_write_tokens: number;
+    /**
+     * Estimated Cost Usd
+     */
+    estimated_cost_usd: string | null;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
+    /**
+     * Reasoning Tokens
+     */
+    reasoning_tokens: number;
+    /**
+     * Requests
+     */
+    requests: number;
+    /**
+     * Tool Calls
+     */
+    tool_calls: number;
+    /**
+     * Total Tokens
+     */
+    total_tokens: number;
 };
 
 /**

@@ -8,6 +8,7 @@ export type {
   SessionCreationRequest,
   SessionCreated,
   PresentedSession,
+  PresentedUsage,
   SessionEvent,
   TurnAccepted,
 } from './generated/types.gen';

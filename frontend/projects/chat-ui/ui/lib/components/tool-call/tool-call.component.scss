@@ -1,7 +1,9 @@
+@use '../../styles/tokens';
+
 :host {
   align-self: stretch;
-  color: var(--ai-chat-assistant-text, var(--ai-chat-text, #f8eef1));
-  line-height: 1.6;
+  color: tokens.value('assistant-text');
+  line-height: tokens.value('message-line-height');
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
@@ -28,6 +30,6 @@ mat-icon {
 }
 
 .status {
-  color: var(--ai-chat-muted-text, #c6b4bb);
-  font-size: 0.75rem;
+  color: tokens.value('muted-text');
+  font-size: tokens.value('tool-status-font-size');
 }

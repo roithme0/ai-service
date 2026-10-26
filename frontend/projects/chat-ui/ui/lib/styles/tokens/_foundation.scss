@@ -1,0 +1,30 @@
+@use 'defaults';
+
+$values: (
+  'background': var(--ai-chat-background, #130d0f),
+  'text': var(--ai-chat-text, defaults.$primary-text),
+  'muted-text': var(--ai-chat-muted-text, defaults.$muted-text),
+  'accent': var(--ai-chat-accent, #e00067),
+  'link': var(--ai-chat-link, #ff7aad),
+  'focus': var(--ai-chat-focus, #ff9fc1),
+  'control-hover-background': var(--ai-chat-control-hover-background, defaults.$surface-background),
+  'control-active-background': var(
+      --ai-chat-control-active-background,
+      defaults.$surface-background
+    ),
+  'code-background': var(--ai-chat-code-background, #251a1e),
+  'message-line-height': var(--ai-chat-message-line-height, 1.6),
+  'heading-line-height': var(--ai-chat-heading-line-height, 1.35),
+  'heading-font-size': var(--ai-chat-heading-font-size, 1rem),
+  'secondary-font-size': var(--ai-chat-secondary-font-size, 0.875rem),
+  'code-font-family': var(
+      --ai-chat-code-font-family,
+      (ui-monospace, SFMono-Regular, Consolas, monospace)
+    ),
+  'surface-border-width': var(--ai-chat-surface-border-width, 1px),
+  'focus-width': var(--ai-chat-focus-width, 0.15rem),
+  'control-radius': var(--ai-chat-control-radius, 0.5rem),
+  'code-radius': var(--ai-chat-code-radius, 0.75rem),
+  'content-padding-inline': var(--ai-chat-content-padding-inline, defaults.$surface-padding),
+  'code-padding': var(--ai-chat-code-padding, 0.75rem),
+);

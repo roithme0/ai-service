@@ -1,0 +1,42 @@
+@use 'sass:map';
+@use 'tokens/foundation';
+@use 'tokens/history';
+@use 'tokens/messages';
+@use 'tokens/artifacts';
+@use 'tokens/composer';
+@use 'tokens/usage';
+@use 'tokens/status';
+
+@function -combine($groups...) {
+  $values: ();
+
+  @each $group in $groups {
+    @each $name, $value in $group {
+      @if map.has-key($values, $name) {
+        @error 'Duplicate chat UI token: #{$name}';
+      }
+
+      $values: map.set($values, $name, $value);
+    }
+  }
+
+  @return $values;
+}
+
+$-values: -combine(
+  foundation.$values,
+  history.$values,
+  messages.$values,
+  artifacts.$values,
+  composer.$values,
+  usage.$values,
+  status.$values
+);
+
+@function value($name) {
+  @if not map.has-key($-values, $name) {
+    @error 'Unknown chat UI token: #{$name}';
+  }
+
+  @return map.get($-values, $name);
+}

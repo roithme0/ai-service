@@ -9,6 +9,18 @@ import type { SessionTransport } from './session-transport';
 import { SessionHttpError, SessionTransportError } from './session-transport';
 import { SessionController } from './session-controller';
 
+const EMPTY_USAGE: PresentedSession['usage'] = {
+  input_tokens: 0,
+  output_tokens: 0,
+  total_tokens: 0,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  reasoning_tokens: 0,
+  requests: 0,
+  tool_calls: 0,
+  estimated_cost_usd: null,
+};
+
 const time = '2026-10-21T12:00:00Z';
 function snapshot(
   status?: 'running' | 'completed' | 'failed' | 'cancelled',
@@ -16,6 +28,7 @@ function snapshot(
 ): PresentedSession {
   return {
     error: null,
+    usage: EMPTY_USAGE,
     session_id: 'session',
     expires_at: time,
     history:
@@ -25,6 +38,7 @@ function snapshot(
             ...(prompt ? [{ part_kind: 'user-prompt' as const, content: 'same' }] : []),
             {
               part_kind: 'turn',
+              usage: EMPTY_USAGE,
               lifecycle: {
                 run_id: 'run',
                 started_at: time,
@@ -135,6 +149,24 @@ describe('SessionController', () => {
       controller.dispose();
     },
   );
+
+  it('retains session and turn usage in the consumer snapshot', async () => {
+    const { transport, controller } = await setup();
+    const update = snapshot('completed');
+    update.usage = {
+      ...EMPTY_USAGE,
+      input_tokens: 100,
+      requests: 1,
+      estimated_cost_usd: '0.01234567890123456789',
+    };
+    for (const item of update.history) {
+      if (item.part_kind === 'turn') item.usage = { ...update.usage };
+    }
+    transport.emit(update);
+    await flush();
+    expect(controller.state.snapshot).toEqual(update);
+    controller.dispose();
+  });
 
   it('shows a later compatibility failure instead of stale exhaustion', async () => {
     const transport = new Transport();

@@ -1,17 +1,19 @@
+@use '../../styles/tokens';
+
 :host {
   display: block;
   box-sizing: border-box;
   min-width: 0;
   align-self: flex-end;
-  max-width: min(82%, 34rem);
-  padding: 0.75rem 1rem;
-  border-radius: 1.125rem 1.125rem 0.25rem 1.125rem;
-  background: var(--ai-chat-user-background, #a9004f);
-  color: var(--ai-chat-user-text, #ffffff);
+  max-width: tokens.value('user-max-width');
+  padding: tokens.value('user-padding');
+  border-radius: tokens.value('user-radius');
+  background: tokens.value('user-background');
+  color: tokens.value('user-text');
   white-space: pre-wrap;
 }
 
 p {
   margin: 0;
-  line-height: 1.6;
+  line-height: tokens.value('message-line-height');
 }

@@ -1,3 +1,5 @@
+@use '../../styles/tokens';
+
 :host,
 :host *,
 :host *::before,
@@ -9,15 +11,15 @@
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  color: var(--ai-chat-muted-text, #c6b4bb);
+  color: tokens.value('muted-text');
 }
 
 :host(.error) {
-  padding: 0.875rem 1rem;
-  border: 1px solid var(--ai-chat-error-border, #814152);
-  border-radius: 0.875rem;
-  background: var(--ai-chat-error-background, #321b22);
-  color: var(--ai-chat-error-text, #ffd9e2);
+  padding: tokens.value('error-padding');
+  border: tokens.value('surface-border-width') solid tokens.value('error-border');
+  border-radius: tokens.value('error-radius');
+  background: tokens.value('error-background');
+  color: tokens.value('error-text');
 }
 
 :host(.delayed) {
@@ -31,7 +33,7 @@
 }
 
 .fade {
-  animation: fade-in 180ms ease-out;
+  animation: fade-in tokens.value('status-fade-duration') ease-out;
 }
 
 @keyframes fade-in {
@@ -54,5 +56,5 @@
 
 p {
   margin: 0;
-  line-height: 1.6;
+  line-height: tokens.value('message-line-height');
 }

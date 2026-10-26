@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import AsyncGenerator, Callable, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -10,7 +11,7 @@ from pydantic_ai import Agent, Conversation
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from app.capabilities.conversations.config import (
     DEFAULT_SESSION_LIFETIME,
@@ -71,6 +72,16 @@ class SessionSnapshot:
         if observation is not None and observation.run_id is not None:
             return tuple(observation.messages)
         return tuple(self.conversation.messages)
+
+    @property
+    def usage(self) -> RunUsage:
+        """Detached cumulative usage, including the active turn exactly once."""
+        observation = (
+            self.turn_executions[-1].observation if self.turn_executions else None
+        )
+        return deepcopy(
+            observation.usage if observation is not None else self.conversation.usage
+        )
 
 
 @dataclass(frozen=True)

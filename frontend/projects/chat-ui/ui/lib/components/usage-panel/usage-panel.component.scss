@@ -1,0 +1,76 @@
+@use '../../styles/tokens';
+
+:host {
+  display: block;
+  min-width: 0;
+  font-size: tokens.value('panel-font-size');
+  line-height: 1.4;
+  color: tokens.value('muted-text');
+  font-variant-numeric: tabular-nums;
+}
+
+section {
+  padding: tokens.value('panel-padding');
+  border: tokens.value('surface-border-width') solid tokens.value('panel-border');
+  border-radius: tokens.value('panel-radius') tokens.value('panel-radius') 0 0;
+  background: tokens.value('panel-background');
+}
+
+.collapse-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collapse-button:focus-visible {
+  outline: tokens.value('focus-width') solid tokens.value('focus');
+  outline-offset: 0.2rem;
+}
+
+mat-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.cost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  margin: 0.625rem 0;
+}
+
+.value,
+dd {
+  color: tokens.value('text');
+}
+
+dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem 0.625rem;
+  margin: 0;
+}
+
+dt {
+  overflow-wrap: anywhere;
+}
+
+dd {
+  margin: 0.125rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 340px) {
+  dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

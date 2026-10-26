@@ -34,4 +34,8 @@ A session connects one owner to one configured agent. The service manages execut
 - A missing admission response leaves submission uncertain and the draft retained. Observation recovery does not resolve that uncertainty or automatically retry submission.
 - Session state is held in memory and disappears on backend restart.
 
+## Usage accounting
+
+Session and turn usage follow [Pydantic AI's usage semantics](https://pydantic.dev/docs/ai/api/pydantic-ai/usage/). Repeated presentation groups for one turn carry the same full turn usage; use session usage for conversation totals. Estimated USD totals can omit unpriced requests; they are not billing records.
+
 Start with [session state](../../backend/app/capabilities/conversations/session_state.py), [registry](../../backend/app/capabilities/conversations/sessions.py), and the [frontend controller](../../frontend/projects/chat-ui/conversation/src/session-controller.ts).

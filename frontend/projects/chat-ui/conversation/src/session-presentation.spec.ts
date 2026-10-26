@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import type { PresentedSession, PresentedTurn, PresentationPart } from '../generated/types.gen';
 import { presentSession } from './session-presentation';
 
+const EMPTY_USAGE: PresentedSession['usage'] = {
+  input_tokens: 0,
+  output_tokens: 0,
+  total_tokens: 0,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  reasoning_tokens: 0,
+  requests: 0,
+  tool_calls: 0,
+  estimated_cost_usd: null,
+};
+
 const time = '2026-10-21T12:00:00Z';
 function run(
   status: PresentedTurn['lifecycle']['status'] = 'running',
@@ -10,6 +22,7 @@ function run(
 ): PresentedTurn {
   return {
     part_kind: 'turn',
+    usage: EMPTY_USAGE,
     lifecycle: {
       run_id: runId,
       status,
@@ -20,7 +33,7 @@ function run(
   };
 }
 function snapshot(history: PresentedSession['history'] = []): PresentedSession {
-  return { session_id: 'session', expires_at: time, history, error: null };
+  return { session_id: 'session', expires_at: time, history, error: null, usage: EMPTY_USAGE };
 }
 const tool: PresentationPart = {
   part_kind: 'tool-call',

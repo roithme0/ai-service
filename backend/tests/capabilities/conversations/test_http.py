@@ -3,6 +3,7 @@ import json
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
@@ -19,6 +20,7 @@ from pydantic_ai.messages import (
     ToolReturnPart,
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.usage import RequestUsage
 from starlette.types import Message
 from starlette.requests import ClientDisconnect
 
@@ -227,7 +229,12 @@ def test_http_admission_live_artifacts_failure_and_multiple_turns() -> None:
                             },
                             "artifact",
                         ),
-                    ]
+                    ],
+                    usage=RequestUsage(
+                        input_tokens=100,
+                        output_tokens=20,
+                        cost=Decimal("0.01234567890123456789"),
+                    ),
                 )
             continuing.set()
             await release.wait()
@@ -298,6 +305,14 @@ def test_http_admission_live_artifacts_failure_and_multiple_turns() -> None:
                     lambda snapshot: turns(snapshot)[-1].lifecycle.status == "failed"
                 )
                 assert "SECRET" not in final.model_dump_json()
+                assert final.usage.input_tokens == 100
+                assert final.usage.estimated_cost_usd == Decimal(
+                    "0.01234567890123456789"
+                )
+                assert turns(final)[-1].usage == final.usage
+                assert active.usage.estimated_cost_usd == final.usage.estimated_cost_usd
+                assert active.usage.tool_calls == 0
+                assert final.usage.tool_calls == 1
                 read = await client.get(path)
                 assert (
                     read.status_code == 200

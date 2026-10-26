@@ -1,0 +1,8 @@
+$values: (
+  'error-background': var(--ai-chat-error-background, #321b22),
+  'error-border': var(--ai-chat-error-border, #814152),
+  'error-text': var(--ai-chat-error-text, #ffd9e2),
+  'error-radius': var(--ai-chat-error-radius, 0.875rem),
+  'error-padding': var(--ai-chat-error-padding, 0.875rem 1rem),
+  'status-fade-duration': var(--ai-chat-status-fade-duration, 180ms),
+);

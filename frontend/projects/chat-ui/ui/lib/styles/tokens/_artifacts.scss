@@ -1,0 +1,15 @@
+@use 'defaults';
+
+$values: (
+  'artifact-background': var(--ai-chat-artifact-background, #21171b),
+  'artifact-border': var(--ai-chat-artifact-border, defaults.$surface-border),
+  'artifact-subtitle': var(--ai-chat-artifact-subtitle, #bda9b1),
+  'artifact-heading': var(--ai-chat-artifact-heading, defaults.$primary-text),
+  'artifact-text': var(--ai-chat-artifact-text, #eadde2),
+  'artifact-collapsed-height': var(--ai-chat-artifact-collapsed-height, 18rem),
+  'artifact-code-font-size': var(--ai-chat-artifact-code-font-size, 0.8rem),
+  'artifact-radius': var(--ai-chat-artifact-radius, defaults.$surface-radius),
+  'artifact-padding': var(--ai-chat-artifact-padding, defaults.$surface-padding),
+  'artifact-code-padding': var(--ai-chat-artifact-code-padding, 0.875rem),
+  'artifact-fade-height': var(--ai-chat-artifact-fade-height, 3rem),
+);

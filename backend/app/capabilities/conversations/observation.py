@@ -23,12 +23,22 @@ class TurnObservation:
     Both become detached copies when capture ends, including on failure or cancellation.
     """
 
+    usage_baseline: RunUsage = field(default_factory=RunUsage)
     messages: list[ModelMessage] = field(default_factory=list, init=False)
     started_tool_calls: tuple[ToolCallPart, ...] = field(default=(), init=False)
     usage: RunUsage = field(default_factory=RunUsage, init=False)
     run_id: str | None = field(default=None, init=False)
     conversation_id: str | None = field(default=None, init=False)
     _used: bool = field(default=False, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.usage_baseline = deepcopy(self.usage_baseline)
+        self.usage = deepcopy(self.usage_baseline)
+
+    @property
+    def turn_usage(self) -> RunUsage:
+        """Detached native delta, excluding usage from preceding turns."""
+        return deepcopy(self.usage) - self.usage_baseline
 
     @contextmanager
     def capture(
