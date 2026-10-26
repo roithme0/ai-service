@@ -52,5 +52,6 @@ The [contract generator](../frontend/scripts/conversation-contract.mjs) produces
 - Embeddings: [backend/tests/capabilities/embeddings/](../backend/tests/capabilities/embeddings/).
 - Application: [test_lifespan.py](../backend/tests/test_lifespan.py) covers startup and shutdown across capabilities and demos; [test_capability_integration.py](../backend/tests/test_capability_integration.py) covers capability independence. Application HTTP and shared infrastructure tests also live under [backend/tests/](../backend/tests/).
 - Demos: [backend/tests/demos/](../backend/tests/demos/), covering Visual Demo and Live Demo execution and lifecycle.
-- Frontend: `*.spec.ts` beside application and library code; tooling checks in [frontend/scripts/](../frontend/scripts/).
+- Frontend: `*.spec.ts` beside application and library code.
+- Validation tooling: `*.test.mts` in [.codex/validation/](../.codex/validation/).
 - Deployment: [deployment/tests/](../deployment/tests/), with backend and gateway test runners.

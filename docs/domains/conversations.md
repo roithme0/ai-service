@@ -6,7 +6,7 @@ A session connects one owner to one configured agent. The service manages execut
 
 | Term | Meaning |
 | --- | --- |
-| Agent configuration | A named application composition: `visual-demo` or `kochwiki`. |
+| Agent configuration | A named application composition that selects an agent and its dependencies. See the [code map](../navigation.md#code-map). |
 | Session | An expiring, owner-scoped container for conversation state, executions, and [artifacts](artifacts.md). Its ID is separate from native conversation and run IDs. |
 | Owner | The exact issuer/subject pair supplied through `X-Application-User`. Ownership checks do not authenticate the caller. |
 | Conversation | Native Pydantic AI continuation state: messages, usage, and conversation identity. |

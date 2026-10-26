@@ -22,9 +22,7 @@ Create `deployment/.env` from [.env.example](../deployment/.env.example); host-s
 | `KOCHWIKI_MCP_URL` | External Streamable HTTP MCP endpoint, including its path. |
 | `KOCHWIKI_OPENAI_REASONING_EFFORT` | Optional model reasoning effort; blank uses the model default. Support depends on the selected model. |
 
-The visual demo (`visual-demo`) works without these agent settings. Invalid startup configuration leaves Kochwiki unavailable with `503 agent_unavailable`; restart after correcting it. MCP connects per turn, so an outage can recover on a later turn without restarting.
-
-Live Demo (`live-demo`) requires only `OPENAI_API_KEY`. Missing credentials or initialization failure returns `503 agent_unavailable`; restart after correcting startup configuration.
+Visual Demo (`visual-demo`) needs no provider or Kochwiki settings. Live Demo (`live-demo`) requires only `OPENAI_API_KEY`; Kochwiki also requires its model and MCP URL. Missing required settings or initialization failure leaves the affected agent unavailable with `503 agent_unavailable`; restart after correcting startup configuration. Kochwiki connects MCP per turn, so an outage can recover on a later turn without restarting.
 
 For a Kochwiki server on the Docker host, the example uses `http://host.docker.internal:8002/mcp/`; ensure that name resolves on your host. Container `localhost` refers to the container itself.
 
@@ -66,7 +64,7 @@ Retain deployment configuration and protect backups of credentials. Application 
 
 | Symptom | Start here |
 | --- | --- |
-| Kochwiki returns 503 | Backend initialization logs and the required agent settings; restart after correcting startup configuration. |
+| An agent returns 503 | Backend initialization logs and the [required configuration](#configuration). |
 | A turn fails | Backend logs, model access, and MCP reachability from the backend. Interrupted external operations may already have taken effect. |
 | Embedding generation fails | `OPENAI_API_KEY`, provider reachability, and embedding logs. |
 | Session returns 404 | Agent configuration, owner header, fixed session expiry, or backend restart. See [session rules](domains/conversations.md#session-rules). |

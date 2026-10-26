@@ -40,10 +40,11 @@ Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have
 
 ## Validate changes
 
-Format changed backend Python files from the **repository root**:
+For backend edits, run from the **repository root**:
 
 ```powershell
 node .codex/validation/backend.mts --format
+node --test .codex/validation/shared.test.mts .codex/validation/backend.test.mts
 ```
 
 Then, from **backend/**, with its virtual environment active:
@@ -98,9 +99,9 @@ From **frontend/**, run `npm run build:chat-ui`, then `node scripts/check-chat-u
 
 With the [local servers](#run-locally) running, open `http://localhost:4204/demos/visual` at a portrait-phone viewport:
 
-- Submit arbitrary text through the introduction, two JSON artifacts (`visual-demo.greeting` and `visual-demo.greetings`, with 30 greetings), invalid publication, scripted failure, and completion guidance. The error's demo action is intentionally inert.
-- Expand/collapse the long artifact and run details; check retained content after failure and scroll position during toggles. Native final-answer anchoring still needs Chrome/Firefox verification.
-- Send one more message to trigger the frontend-only 405 compatibility error without retry. Refresh to restart; there is no restart button.
+- Submit arbitrary text through the introduction, two JSON greeting artifacts (one greeting and a list of 30), invalid publication, scripted failure, and completion guidance. The error's demo action is intentionally inert.
+- Expand/collapse the long artifact and run details; check retained content after failure and scroll position during toggles in Chrome and Firefox.
+- Send one more message to trigger the frontend-only compatibility error without a backend request or retry. Refresh to restart.
 - Check history/composer placement during viewport changes, no horizontal overflow, Enter/send submitting once, and Shift+Enter adding a line break.
 
 ## AI-assisted development
