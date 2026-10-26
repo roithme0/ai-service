@@ -2,6 +2,8 @@ import {
   Component,
   ElementRef,
   afterEveryRender,
+  afterNextRender,
+  DestroyRef,
   computed,
   effect,
   inject,
@@ -49,11 +51,19 @@ import type {
 export class ChatUiComponent {
   private readonly iconRegistry = inject(MatIconRegistry);
   private readonly sanitizer = inject(DomSanitizer);
-  private readonly history = viewChild<ElementRef<HTMLElement>>('history');
+  private readonly destroyRef = inject(DestroyRef);
 
-  private scrollHistoryToBottom = false;
+  private readonly historyViewport = viewChild<ElementRef<HTMLElement>>('historyViewport');
+  private readonly historyContent = viewChild.required<ElementRef<HTMLElement>>('historyContent');
+  private readonly composer = viewChild(ComposerComponent);
+
+  protected readonly panelScrollClearance = computed(() => this.composer()?.scrollClearance() ?? 0);
+
+  private historyScrollPending = false;
+  private followingHistory = true;
   protected readonly scrollAnchor = signal<string | null>(null);
   private readonly expandedRuns = signal<ReadonlySet<string>>(new Set());
+  private readonly initializedRuns = new Map<string, boolean>();
 
   readonly bannerTitle = input.required<string>();
   readonly bannerDescription = input.required<string>();
@@ -114,36 +124,68 @@ export class ChatUiComponent {
 
   constructor() {
     registerChatIcons(this.iconRegistry, this.sanitizer);
-    const initializedRuns = new Map<string, boolean>();
-    effect(() => {
-      this.turns();
-      this.conversationStatus();
-      untracked(() => {
-        this.requestHistoryScroll();
-        for (const [runKey, run] of this.detailRuns()) {
-          const wasCompleted = initializedRuns.get(runKey);
-          if (wasCompleted === true || wasCompleted === run.completed) continue;
-          initializedRuns.set(runKey, run.completed);
-          this.setDetailsExpanded(runKey, !run.completed);
-        }
-      });
-    });
-    afterEveryRender(() => {
-      if (!this.scrollHistoryToBottom) return;
-      this.scrollHistoryToBottom = false;
-      const history = this.history()?.nativeElement;
-      if (!history) return;
-      if (typeof history.scrollTo === 'function') {
-        history.scrollTo({ top: history.scrollHeight, behavior: 'smooth' });
-      } else {
-        history.scrollTop = history.scrollHeight;
+    effect(() => this.synchronizeConversationState());
+    afterEveryRender(() => this.flushPendingHistoryScroll());
+    afterNextRender(() => this.observeHistoryContentResize());
+  }
+
+  private synchronizeConversationState(): void {
+    this.turns();
+    this.conversationStatus();
+    untracked(() => {
+      this.requestHistoryScroll();
+      for (const [runKey, run] of this.detailRuns()) {
+        const wasCompleted = this.initializedRuns.get(runKey);
+        if (wasCompleted === true || wasCompleted === run.completed) continue;
+        this.initializedRuns.set(runKey, run.completed);
+        this.updateExpandedRuns(runKey, !run.completed);
       }
     });
   }
 
+  private flushPendingHistoryScroll(): void {
+    if (!this.historyScrollPending) return;
+    this.historyScrollPending = false;
+    this.alignHistoryWithComposer();
+  }
+
+  private observeHistoryContentResize(): void {
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (this.followingHistory) this.alignHistoryWithComposer();
+    });
+    observer.observe(this.historyContent().nativeElement);
+    this.destroyRef.onDestroy(() => observer.disconnect());
+  }
+
+  private alignHistoryWithComposer(): void {
+    const viewport = this.historyViewport()?.nativeElement;
+    const composer = this.composer();
+    if (!viewport || !composer) return;
+    const target = Math.max(
+      0,
+      viewport.scrollTop +
+        this.historyContent().nativeElement.getBoundingClientRect().bottom -
+        composer.messageBoundaryTop(),
+    );
+    if (typeof viewport.scrollTo === 'function') {
+      const reducedMotion = viewport.ownerDocument.defaultView?.matchMedia?.(
+        '(prefers-reduced-motion: reduce)',
+      ).matches;
+      viewport.scrollTo({ top: target, behavior: reducedMotion ? 'auto' : 'smooth' });
+    } else {
+      viewport.scrollTop = target;
+    }
+  }
+
+  protected stopFollowingHistory(): void {
+    this.followingHistory = false;
+  }
+
   protected requestHistoryScroll(): void {
     this.scrollAnchor.set(null);
-    this.scrollHistoryToBottom = true;
+    this.followingHistory = true;
+    this.historyScrollPending = true;
   }
 
   protected detailsExpanded(turn: ChatTurn): boolean {
@@ -169,7 +211,7 @@ export class ChatUiComponent {
 
   private selectScrollAnchor(anchor: string | null): boolean {
     const anchors =
-      this.history()?.nativeElement.querySelectorAll<HTMLElement>('[data-scroll-anchor]');
+      this.historyViewport()?.nativeElement.querySelectorAll<HTMLElement>('[data-scroll-anchor]');
     const hasAnchor =
       anchor !== null &&
       [...(anchors ?? [])].some((element) => element.getAttribute('data-scroll-anchor') === anchor);
@@ -178,17 +220,23 @@ export class ChatUiComponent {
   }
 
   protected anchorArtifact(anchor: string | null): void {
-    this.scrollHistoryToBottom = !this.selectScrollAnchor(anchor);
+    this.stopFollowingHistory();
+    this.historyScrollPending = !this.selectScrollAnchor(anchor);
   }
 
   protected setDetailsExpanded(runKey: string | null, expanded: boolean, messageId?: string): void {
+    this.stopFollowingHistory();
     if (runKey === null) return;
     const answerId = messageId ?? this.detailRuns().get(runKey)?.answerId;
     if (answerId === undefined) return;
     const anchor = JSON.stringify([runKey, answerId]);
     const hasAnchor = this.selectScrollAnchor(anchor);
-    if (!hasAnchor) this.scrollHistoryToBottom = true;
-    else if (this.expandedRuns().has(runKey) !== expanded) this.scrollHistoryToBottom = false;
+    if (!hasAnchor) this.historyScrollPending = true;
+    else if (this.expandedRuns().has(runKey) !== expanded) this.historyScrollPending = false;
+    this.updateExpandedRuns(runKey, expanded);
+  }
+
+  private updateExpandedRuns(runKey: string, expanded: boolean): void {
     this.expandedRuns.update((runs) => {
       if (runs.has(runKey) === expanded) return runs;
       const next = new Set(runs);

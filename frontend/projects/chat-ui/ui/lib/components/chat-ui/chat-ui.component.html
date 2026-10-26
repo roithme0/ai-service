@@ -1,11 +1,19 @@
 <section class="chat-ui" aria-label="Chat-Unterhaltung">
-  <div #history class="history" role="log" aria-live="polite">
+  <div
+    #historyViewport
+    class="history"
+    role="log"
+    aria-live="polite"
+    (wheel)="stopFollowingHistory()"
+    (pointerdown)="stopFollowingHistory()"
+    (keydown)="stopFollowingHistory()"
+  >
     <section class="banner">
       <h2>{{ bannerTitle() }}</h2>
       <p>{{ bannerDescription() }}</p>
     </section>
 
-    <div class="messages">
+    <div #historyContent class="messages">
       @for (section of sections(); track section.key; let lastTurn = $last) {
         @let turn = section.turn;
         @let run = turn.runKey === null ? null : detailRuns().get(turn.runKey);
@@ -77,6 +85,11 @@
         </div>
       }
     </div>
+    <div
+      class="history-scroll-buffer"
+      [style.--panel-scroll-clearance]="panelScrollClearance() + 'px'"
+      aria-hidden="true"
+    ></div>
   </div>
 
   <ai-chat-composer

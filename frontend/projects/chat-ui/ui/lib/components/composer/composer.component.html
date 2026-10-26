@@ -1,9 +1,14 @@
 @if (usage(); as usage) {
-  <div class="usage-panel" [class.expanded]="usageExpanded()" [inert]="!usageExpanded()">
+  <div
+    #panelContainer
+    class="usage-panel"
+    [class.expanded]="usageExpanded()"
+    [inert]="!usageExpanded()"
+  >
     <ai-chat-usage-panel [usage]="usage" (collapsed)="setUsageExpanded(false, $event)" />
   </div>
 }
-<form (submit)="submit($event)">
+<form #form (submit)="submit($event)">
   <div class="surface">
     <img
       class="mascot"

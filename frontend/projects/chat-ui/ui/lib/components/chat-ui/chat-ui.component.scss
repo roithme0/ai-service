@@ -32,8 +32,14 @@
   overflow-y: auto;
   overscroll-behavior-y: contain;
   overflow-anchor: none;
-  padding: 1rem 1rem 10rem;
+  padding: 1rem 1rem 0;
   scrollbar-gutter: stable;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+}
+
+.history-scroll-buffer {
+  height: calc(1rem + var(--panel-scroll-clearance, 0px));
+  overflow-anchor: none;
 }
 
 .banner {
@@ -88,6 +94,7 @@ p {
   display: flex;
   flex-direction: column;
   margin-top: 1.5rem;
+  padding-bottom: 2.5rem;
 }
 
 :host ::ng-deep .markdown > * {

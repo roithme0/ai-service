@@ -11,9 +11,7 @@
   font: inherit;
   position: relative;
   z-index: 1;
-  padding: 2.5rem 1rem max(1rem, env(safe-area-inset-bottom));
-  margin-top: -4rem;
-  background: linear-gradient(to bottom, transparent, var(--ai-chat-background, #130d0f) 2.5rem);
+  padding: 0 1rem max(1rem, env(safe-area-inset-bottom));
   pointer-events: none;
 }
 
@@ -63,7 +61,7 @@ textarea,
   position: absolute;
   left: 2rem;
   right: 2rem;
-  bottom: calc(100% - 3.5rem);
+  bottom: calc(100% - 1rem);
   opacity: 0;
   visibility: hidden;
   transform: translateY(0.375rem);
@@ -106,7 +104,7 @@ form {
   position: absolute;
   right: 1.25rem;
   bottom: calc(100% - 8px);
-  width: 5.5rem;
+  width: 3.85rem;
   height: auto;
   pointer-events: none;
   user-select: none;

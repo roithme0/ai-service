@@ -325,14 +325,14 @@ describe('ChatUiComponent', () => {
     expect(activeToggle.getAttribute('aria-expanded')).toBe('true');
     expect(element.querySelector('[data-scroll-anchor]')).toBe(answerRow);
     const anchor = answerRow!.getAttribute('data-scroll-anchor');
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
 
     scrollTo.mockClear();
     fixture.componentRef.setInput('turns', [{ ...turn, status: 'completed' }]);
     fixture.detectChanges();
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(answerRow!.getAttribute('data-scroll-anchor')).toBe(anchor);
-    expect(scrollTo).not.toHaveBeenCalled();
+    expect(scrollTo).toHaveBeenCalledOnce();
     expect(isCollapsed(detail)).toBe(true);
     expect(
       detail.closest('ai-chat-history-item')?.querySelector<HTMLElement>('.collapse')?.inert,
@@ -724,9 +724,7 @@ describe('ChatUiComponent', () => {
     const measurements = [...toggles].map((toggle) => vi.spyOn(toggle, 'getBoundingClientRect'));
     history.scrollTop = 300;
     scrollTo.mockClear();
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([
-      toggles[1].closest('.history-item'),
-    ]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
 
     for (const index of [0, 1, 1, 0]) {
       toggles[index].click();
@@ -833,16 +831,14 @@ describe('ChatUiComponent', () => {
     expect(element.querySelector('[data-scroll-anchor]')).toBe(
       element.querySelector('ai-chat-assistant-message')!.closest('.history-item'),
     );
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([
-      element.querySelector('[data-scroll-anchor]'),
-    ]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!)).toBe(
       true,
     );
     expect(scrollTo).toHaveBeenCalledOnce();
   });
 
-  it('uses the same shared run answer anchor before and after every section completes', () => {
+  it('follows a shared run through automatic collapse without selecting a manual answer anchor', () => {
     const fixture = createFixture([]);
     const first: ChatTurn = { runKey: 'shared', status: 'completed', content: DETAILS_CONTENT };
     const second: ChatTurn = {
@@ -855,7 +851,7 @@ describe('ChatUiComponent', () => {
     const element = fixtureElement(fixture);
     const answerRow = element.querySelector('ai-chat-assistant-message')!.closest('.history-item');
     expect(element.querySelector('[data-scroll-anchor]')).toBe(answerRow);
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
     expect(toggle.disabled).toBe(false);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
@@ -863,10 +859,10 @@ describe('ChatUiComponent', () => {
 
     fixture.componentRef.setInput('turns', [first, { ...second, status: 'completed' }]);
     fixture.detectChanges();
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(element.querySelector('.details-toggle')).toBe(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(scrollTo).not.toHaveBeenCalled();
+    expect(scrollTo).toHaveBeenCalledOnce();
   });
 
   it('reveals a replacement final answer instead of selecting the previous answer anchor', () => {
@@ -890,9 +886,7 @@ describe('ChatUiComponent', () => {
     ]);
     fixture.detectChanges();
     expect(element.querySelector('[data-scroll-anchor]')).not.toBe(previous);
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([
-      element.querySelector('[data-scroll-anchor]'),
-    ]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(scrollTo).toHaveBeenCalledOnce();
   });
 
@@ -1612,12 +1606,170 @@ describe('ChatUiComponent', () => {
     expect(messages[0].textContent).toContain('Replacement state');
   });
 
-  it('scrolls history to the bottom each time the textarea gains focus', () => {
+  it('smoothly aligns the padded message edge while leaving the manual buffer available', () => {
+    const fixture = createFixture(INITIAL_MESSAGES);
+    const root = fixtureElement(fixture);
+    const history = root.querySelector<HTMLElement>('.history')!;
+    const buffer = root.querySelector<HTMLElement>('.history-scroll-buffer')!;
+    const form = root.querySelector('form')!;
+    const messages = root.querySelector<HTMLElement>('.messages')!;
+    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(history, 'clientHeight', { configurable: true, value: 500 });
+    Object.defineProperty(buffer, 'offsetHeight', { configurable: true, value: 240 });
+    vi.spyOn(history, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 400, 500));
+    vi.spyOn(form, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 476, 400, 100));
+    const messageBounds = vi
+      .spyOn(messages, 'getBoundingClientRect')
+      .mockReturnValue(new DOMRect(0, 0, 400, 760));
+    scrollTo.mockClear();
+
+    root.querySelector('textarea')!.focus();
+    fixture.detectChanges();
+
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 284, behavior: 'smooth' });
+    expect(history.scrollHeight).toBe(1000);
+
+    root.querySelector('textarea')!.blur();
+    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 650 });
+    messageBounds.mockReturnValue(new DOMRect(0, 0, 400, 410));
+    scrollTo.mockClear();
+    root.querySelector('textarea')!.focus();
+    fixture.detectChanges();
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 0, behavior: 'smooth' });
+  });
+
+  it('uses immediate scrolling when reduced motion is preferred', () => {
+    const matchMedia = vi.fn().mockReturnValue({ matches: true });
+    vi.stubGlobal('matchMedia', matchMedia);
+    const fixture = createFixture(INITIAL_MESSAGES);
+    scrollTo.mockClear();
+    fixtureElement(fixture).querySelector('textarea')!.focus();
+    fixture.detectChanges();
+    expect(matchMedia).toHaveBeenCalledWith('(prefers-reduced-motion: reduce)');
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 0, behavior: 'auto' });
+  });
+
+  it('resizes the manual buffer with the panel without scrolling on resize or expansion', async () => {
+    const observers: {
+      readonly resize: () => void;
+      readonly disconnect: ReturnType<typeof vi.fn>;
+      target?: Element;
+    }[] = [];
+    class PanelObserver {
+      readonly disconnect = vi.fn();
+      private readonly observation;
+      constructor(callback: ResizeObserverCallback) {
+        this.observation = {
+          resize: () => callback([], this),
+          disconnect: this.disconnect,
+          target: undefined as Element | undefined,
+        };
+        observers.push(this.observation);
+      }
+      observe(target: Element): void {
+        this.observation.target = target;
+      }
+      unobserve(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', PanelObserver);
+    const fixture = createFixture(INITIAL_MESSAGES);
+    fixture.componentRef.setInput('usage', EMPTY_CHAT_USAGE);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const root = fixtureElement(fixture);
+    const panel = root.querySelector<HTMLElement>('.usage-panel')!;
+    const form = root.querySelector('form')!;
+    const buffer = root.querySelector<HTMLElement>('.history-scroll-buffer')!;
+    const panelObserver = observers.find((observer) => observer.target === panel)!;
+    Object.defineProperty(form, 'offsetTop', { configurable: true, value: 40 });
+    Object.defineProperty(panel, 'offsetTop', { configurable: true, value: -140 });
+    scrollTo.mockClear();
+
+    panelObserver.resize();
+    await fixture.whenStable();
+    expect(buffer.style.getPropertyValue('--panel-scroll-clearance')).toBe('180px');
+    root.querySelector<HTMLButtonElement>('.usage-toggle')!.click();
+    fixture.detectChanges();
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    Object.defineProperty(panel, 'offsetTop', { configurable: true, value: -240 });
+    panelObserver.resize();
+    await fixture.whenStable();
+    expect(buffer.style.getPropertyValue('--panel-scroll-clearance')).toBe('280px');
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('usage', null);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(buffer.style.getPropertyValue('--panel-scroll-clearance')).toBe('0px');
+    expect(panelObserver.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it.each(['wheel', 'pointerdown', 'keydown'])(
+    'follows changing content height until manual %s interaction and disconnects on destruction',
+    (interaction) => {
+      let resizeMessages: (() => void) | undefined;
+      const disconnect = vi.fn();
+      class HistoryObserver {
+        constructor(private readonly callback: ResizeObserverCallback) {}
+        observe(target: Element): void {
+          if (target.classList.contains('messages')) {
+            resizeMessages = () => this.callback([], this);
+          }
+        }
+        disconnect = disconnect;
+        unobserve(): void {}
+      }
+      vi.stubGlobal('ResizeObserver', HistoryObserver);
+      const fixture = createFixture(DETAILS_CONTENT);
+      const root = fixtureElement(fixture);
+      const history = root.querySelector<HTMLElement>('.history')!;
+      const bounds = vi.spyOn(
+        root.querySelector<HTMLElement>('.messages')!,
+        'getBoundingClientRect',
+      );
+      vi.spyOn(root.querySelector('form')!, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(0, 500, 400, 100),
+      );
+      history.scrollTop = 300;
+      bounds.mockReturnValue(new DOMRect(0, 0, 400, 650));
+      scrollTo.mockClear();
+      resizeMessages!();
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 450, behavior: 'smooth' });
+
+      bounds.mockReturnValue(new DOMRect(0, 0, 400, 550));
+      resizeMessages!();
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 350, behavior: 'smooth' });
+      history.dispatchEvent(new Event(interaction));
+      scrollTo.mockClear();
+      resizeMessages!();
+      expect(scrollTo).not.toHaveBeenCalled();
+
+      setContent(fixture, [...DETAILS_CONTENT]);
+      fixture.detectChanges();
+      scrollTo.mockClear();
+      resizeMessages!();
+      expect(scrollTo).toHaveBeenCalledOnce();
+
+      root.querySelector<HTMLButtonElement>('.details-toggle')!.click();
+      fixture.detectChanges();
+      scrollTo.mockClear();
+      resizeMessages!();
+      expect(scrollTo).not.toHaveBeenCalled();
+      fixture.destroy();
+      expect(disconnect).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('scrolls history to the composer each time the textarea gains focus', () => {
     const fixture = createFixture(INITIAL_MESSAGES);
     const element = fixtureElement(fixture);
     const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
     const history = element.querySelector('.history') as HTMLElement;
-    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+    vi.spyOn(
+      element.querySelector<HTMLElement>('.messages')!,
+      'getBoundingClientRect',
+    ).mockImplementation(() => new DOMRect(0, 0, 400, 1000 - history.scrollTop));
     scrollTo.mockClear();
 
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -1649,7 +1801,10 @@ describe('ChatUiComponent', () => {
     await fixture.whenStable();
     scrollTo.mockClear();
     for (const height of [1000, 1200]) {
-      Object.defineProperty(history, 'scrollHeight', { configurable: true, value: height });
+      vi.spyOn(
+        element.querySelector<HTMLElement>('.messages')!,
+        'getBoundingClientRect',
+      ).mockImplementation(() => new DOMRect(0, 0, 400, height - history.scrollTop));
       viewport.dispatchEvent(new Event('resize'));
       await fixture.whenStable();
       expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: height, behavior: 'smooth' });
@@ -1694,7 +1849,10 @@ describe('ChatUiComponent', () => {
     vi.useFakeTimers();
     const fixture = createFixture([]);
     const history = fixtureElement(fixture).querySelector('.history') as HTMLElement;
-    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+    vi.spyOn(
+      fixtureElement(fixture).querySelector<HTMLElement>('.messages')!,
+      'getBoundingClientRect',
+    ).mockImplementation(() => new DOMRect(0, 0, 400, 1000 - history.scrollTop));
     const scrollToBottom = (): void => {
       expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
       scrollTo.mockClear();
