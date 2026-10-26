@@ -1,0 +1,14 @@
+<app-demo-header label="Live Demo" tag="Live" />
+<main class="chat-shell">
+  <ai-chat-ui
+    bannerDescription="Stelle eine Frage oder starte ein Gespräch mit dem KI-Modell. Bitte um ein JSON-Artefakt, um die Tool-Nutzung auszuprobieren."
+    composerPlaceholder="Nachricht schreiben"
+    [turns]="chat().turns"
+    [usage]="usage()"
+    [composerDisabled]="chat().composerDisabled"
+    [composerEditingDisabled]="chat().composerEditingDisabled"
+    [conversationStatus]="chat().status"
+    (messageSubmitted)="handleMessage($event)"
+    (statusActionTriggered)="handleStatusAction($event)"
+  />
+</main>

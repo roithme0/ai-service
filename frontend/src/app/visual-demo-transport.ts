@@ -5,9 +5,9 @@ import {
   type TurnAccepted,
 } from '@roithme0/chat-ui/conversation';
 
-export class DemoTransport extends HttpSessionTransport {
+export class VisualDemoTransport extends HttpSessionTransport {
   constructor() {
-    super('/api/v1', 'demo', 'demo:default');
+    super('/api/v1', 'visual-demo', 'demo:default');
   }
 
   override async createSession(initialization?: SessionCreationRequest): Promise<SessionCreated> {

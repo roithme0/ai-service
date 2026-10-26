@@ -92,7 +92,7 @@ p {
   line-height: tokens.value('message-line-height');
 }
 
-.banner p {
+.banner h2 + p {
   margin-top: 0.75rem;
 }
 

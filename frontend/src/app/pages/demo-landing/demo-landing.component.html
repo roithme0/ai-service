@@ -1,0 +1,26 @@
+<main class="landing" aria-labelledby="demo-heading">
+  <div class="content">
+    <h1 id="demo-heading">Choose a demo</h1>
+    <p class="intro">Explore the chat interface or try the live service.</p>
+
+    <div class="cards">
+      <a class="card" routerLink="/demos/visual">
+        <div class="card-heading">
+          <h2>Visual Demo</h2>
+          <app-demo-tag label="Scripted" />
+        </div>
+        <p>Walk through chat, tool calls, artifacts, and simulated errors. No AI model involved.</p>
+        <app-navigation-link>Open visual demo</app-navigation-link>
+      </a>
+
+      <a class="card" routerLink="/demos/live">
+        <div class="card-heading">
+          <h2>Live Demo</h2>
+          <app-demo-tag label="Live" />
+        </div>
+        <p>Chat with the AI service using real model responses and tool execution.</p>
+        <app-navigation-link>Open live demo</app-navigation-link>
+      </a>
+    </div>
+  </div>
+</main>

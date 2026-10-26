@@ -24,7 +24,7 @@ from app import main
 from app.main import app
 from tests.capabilities.conversations.test_http import stream
 
-BASE = "/api/v1/agents/demo/sessions"
+BASE = "/api/v1/agents/visual-demo/sessions"
 CAPABILITIES = [
     {
         "type": "json",
@@ -54,7 +54,7 @@ def test_visual_conversation_demo_through_http_and_live_snapshots(
             monkeypatch.setitem(
                 app.dependency_overrides,
                 main.get_agent_registry,
-                lambda: {"demo": runner},
+                lambda: {"visual-demo": runner},
             )
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app),
@@ -128,15 +128,15 @@ def test_visual_conversation_demo_through_http_and_live_snapshots(
                     ]
                     assert [artifact.type for artifact in artifacts] == ["json", "json"]
                     assert [artifact.content.title for artifact in artifacts] == [
-                        "demo.greeting",
-                        "demo.greetings",
+                        "Begrüßung",
+                        "Begrüßungen",
                     ]
                     assert artifacts[0].content.payload == {
-                        "value": {"message": "Hello, World!"}
+                        "value": {"message": "Hallo, Welt!"}
                     }
                     assert artifacts[1].content.payload == {
                         "value": {
-                            "messages": [f"Hello, Visitor {i}!" for i in range(1, 31)]
+                            "messages": [f"Hallo, Besucher {i}!" for i in range(1, 31)]
                         }
                     }
                     assert final_turns[2].parts == (

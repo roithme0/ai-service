@@ -24,9 +24,9 @@ npm ci
 npm run start:app
 ```
 
-Open `http://localhost:4204`; API requests proxy to port 8004. The [Visual Conversation Demo](../backend/app/demos/visual_conversation_demo/) needs no model credentials or Kochwiki connection. Refresh to start a new session.
+Open `http://localhost:4204` for the demo selector: **Visual Demo** (`/demos/visual`) or **Live Demo** (`/demos/live`). API requests proxy to port 8004. Visual Demo needs no model credentials or Kochwiki connection; Live Demo requires the [provider key](operation.md#configuration). Refresh or re-enter a demo to start a new session.
 
-For the model-backed agent, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [Kochwiki settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
+For model-backed conversations, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [agent settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
 
 ### Container alternative
 
@@ -40,10 +40,11 @@ Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have
 
 ## Validate changes
 
-Format changed backend Python files from the **repository root**:
+For backend edits, run from the **repository root**:
 
 ```powershell
 node .codex/validation/backend.mts --format
+node --test .codex/validation/shared.test.mts .codex/validation/backend.test.mts
 ```
 
 Then, from **backend/**, with its virtual environment active:
@@ -96,11 +97,11 @@ See the [package README](../frontend/projects/chat-ui/README.md) for component i
 
 From **frontend/**, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This verifies built exports, runtime behavior, explicit application identity, and strict consumer declarations without workspace aliases.
 
-With the [local servers](#run-locally) running, open `http://localhost:4204` at a portrait-phone viewport:
+With the [local servers](#run-locally) running, open `http://localhost:4204/demos/visual` at a portrait-phone viewport:
 
-- Submit arbitrary text through the introduction, two JSON artifacts (`demo.greeting` and `demo.greetings`, with 30 greetings), invalid publication, scripted failure, and completion guidance. The error's demo action is intentionally inert.
-- Expand/collapse the long artifact and run details; check retained content after failure and scroll position during toggles. Native final-answer anchoring still needs Chrome/Firefox verification.
-- Send one more message to trigger the frontend-only 405 compatibility error without retry. Refresh to restart; there is no restart button.
+- Submit arbitrary text through the introduction, two JSON greeting artifacts (one greeting and a list of 30), invalid publication, scripted failure, and completion guidance. The error's demo action is intentionally inert.
+- Expand/collapse the long artifact and run details; check retained content after failure and scroll position during toggles in Chrome and Firefox.
+- Send one more message to trigger the frontend-only compatibility error without a backend request or retry. Refresh to restart.
 - Check history/composer placement during viewport changes, no horizontal overflow, Enter/send submitting once, and Shift+Enter adding a line break.
 
 ## AI-assisted development

@@ -99,7 +99,7 @@ def test_embedding_validation_uses_application_error_envelope(
         assert configured_embeddings == []
 
 
-def test_missing_provider_does_not_disable_demo(
+def test_missing_provider_does_not_disable_visual_demo(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -120,7 +120,7 @@ def test_missing_provider_does_not_disable_demo(
         assert response.json()["kind"] == "embedding_unavailable"
         assert (
             client.post(
-                "/api/v1/agents/demo/sessions",
+                "/api/v1/agents/visual-demo/sessions",
                 json={},
                 headers={
                     "X-Application-User": "test:user",
