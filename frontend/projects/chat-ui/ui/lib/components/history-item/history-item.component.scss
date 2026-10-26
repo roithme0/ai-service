@@ -1,3 +1,5 @@
+@use '../../styles/tokens';
+
 :host {
   display: block;
   min-width: 0;
@@ -6,7 +8,7 @@
 .collapse {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 200ms ease;
+  transition: grid-template-rows tokens.value('details-transition-duration') ease;
 }
 
 .collapsed {
@@ -22,7 +24,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding-top: var(--history-item-spacing, 1.25rem);
+  padding-top: var(--history-item-spacing, tokens.value('history-item-gap'));
 }
 
 @media (prefers-reduced-motion: reduce) {

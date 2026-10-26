@@ -1,0 +1,7 @@
+$values: (
+  'history-item-gap': var(--ai-chat-history-item-gap, 1.25rem),
+  'markdown-block-gap': var(--ai-chat-markdown-block-gap, 0.75rem),
+  'history-scroll-gap': var(--ai-chat-history-scroll-gap, 2.5rem),
+  'history-fade-height': var(--ai-chat-history-fade-height, 2.5rem),
+  'details-transition-duration': var(--ai-chat-details-transition-duration, 200ms),
+);

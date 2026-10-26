@@ -1,0 +1,13 @@
+@use 'defaults';
+
+$values: (
+  'composer-background': var(--ai-chat-composer-background, defaults.$surface-background),
+  'composer-border': var(--ai-chat-composer-border, defaults.$surface-border),
+  'composer-text': var(--ai-chat-composer-text, defaults.$primary-text),
+  'send-background': var(--ai-chat-send-background, #c00059),
+  'send-hover-background': var(--ai-chat-send-hover-background, #df0067),
+  'send-text': var(--ai-chat-send-text, defaults.$on-accent-text),
+  'composer-radius': var(--ai-chat-composer-radius, 1.25rem),
+  'composer-padding': var(--ai-chat-composer-padding, 0.75rem),
+  'mascot-width': var(--ai-chat-mascot-width, 3.85rem),
+);

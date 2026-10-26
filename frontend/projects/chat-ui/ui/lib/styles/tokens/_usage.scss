@@ -1,0 +1,11 @@
+@use 'defaults';
+
+$values: (
+  'panel-background': var(--ai-chat-panel-background, defaults.$surface-background),
+  'panel-border': var(--ai-chat-panel-border, defaults.$surface-border),
+  'usage-line-font-size': var(--ai-chat-usage-line-font-size, 0.6875rem),
+  'panel-font-size': var(--ai-chat-panel-font-size, defaults.$small-font-size),
+  'panel-radius': var(--ai-chat-panel-radius, 0.875rem),
+  'panel-padding': var(--ai-chat-panel-padding, 0.625rem 0.875rem 1.75rem),
+  'usage-transition-duration': var(--ai-chat-usage-transition-duration, 160ms),
+);

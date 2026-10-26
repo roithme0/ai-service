@@ -156,7 +156,7 @@ Content items have stable host-supplied `id` values and readonly fields. Optiona
 
 ## Artifact presentation
 
-The built-in `json` renderer displays escaped, formatted `payload.value`. Other types require explicit renderers; missing mappings show an unsupported-presentation message. Cards clip bodies at `--ai-chat-artifact-collapsed-height` (default `18rem`) with expand/collapse controls and no nested scrolling. Subtitles remain visible when collapsed.
+The built-in `json` renderer displays escaped, formatted `payload.value`. Other types require explicit renderers; missing mappings show an unsupported-presentation message. Cards clip tall bodies with expand/collapse controls and no nested scrolling. Subtitles remain visible when collapsed.
 
 | Capability field                          | Meaning                                                                                                                                              |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -186,31 +186,7 @@ Direct transport methods: `createSession(initialization?)`, `readSession(session
 
 Set CSS variables on an ancestor of `ai-chat-ui`; fallback defaults preserve inherited overrides. Material styles controls; library styles are bundled.
 
-| Property                          | Purpose                    | Default      |
-| --------------------------------- | -------------------------- | ------------ |
-| `--ai-chat-background`            | Container background       | `#130d0f`    |
-| `--ai-chat-text`                  | General text               | `#f8eef1`    |
-| `--ai-chat-banner-background`     | Banner background          | `#291c21`    |
-| `--ai-chat-banner-text`           | Banner text                | `#f8eef1`    |
-| `--ai-chat-user-background`       | User bubble                | `#a9004f`    |
-| `--ai-chat-user-text`             | User text                  | `#ffffff`    |
-| `--ai-chat-assistant-text`        | Assistant text             | General text |
-| `--ai-chat-muted-text`            | Secondary/placeholder text | `#c6b4bb`    |
-| `--ai-chat-accent`                | Focus/quote accent         | `#e00067`    |
-| `--ai-chat-link`                  | Links                      | `#ff7aad`    |
-| `--ai-chat-code-background`       | Code background            | `#251a1e`    |
-| `--ai-chat-artifact-background`   | Artifact background        | `#21171b`    |
-| `--ai-chat-artifact-border`       | Artifact border            | `#50363f`    |
-| `--ai-chat-artifact-subtitle`     | Artifact subtitle          | `#bda9b1`    |
-| `--ai-chat-artifact-heading`      | Artifact headline          | `#f8eef1`    |
-| `--ai-chat-artifact-text`         | JSON text                  | `#eadde2`    |
-| `--ai-chat-composer-background`   | Composer background        | `#291c21`    |
-| `--ai-chat-composer-border`       | Composer border            | `#50363f`    |
-| `--ai-chat-composer-text`         | Composer text              | `#f8eef1`    |
-| `--ai-chat-send-background`       | Send background            | `#c00059`    |
-| `--ai-chat-send-hover-background` | Send hover                 | `#df0067`    |
-| `--ai-chat-send-text`             | Send text                  | `#ffffff`    |
-| `--ai-chat-focus`                 | Keyboard focus ring        | `#ff9fc1`    |
+See the [token catalog](https://github.com/roithme0/ai-service/blob/production/frontend/projects/chat-ui/ui/lib/styles/_tokens.scss) and its imported semantic groups for configurable variables and defaults.
 
 ## Repository workflows
 

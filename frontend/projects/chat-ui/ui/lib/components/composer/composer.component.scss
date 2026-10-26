@@ -1,3 +1,5 @@
+@use '../../styles/tokens';
+
 :host,
 :host *,
 :host *::before,
@@ -11,7 +13,7 @@
   font: inherit;
   position: relative;
   z-index: 1;
-  padding: 0 1rem max(1rem, env(safe-area-inset-bottom));
+  padding: 0 tokens.value('content-padding-inline') max(1rem, env(safe-area-inset-bottom));
   pointer-events: none;
 }
 
@@ -23,13 +25,13 @@ textarea,
 
 .usage-line {
   position: absolute;
-  right: 1rem;
-  left: 1rem;
+  right: tokens.value('content-padding-inline');
+  left: tokens.value('content-padding-inline');
   bottom: calc(max(1rem, env(safe-area-inset-bottom)) - 1rem);
   pointer-events: auto;
   transition:
-    opacity 160ms ease,
-    visibility 160ms;
+    opacity tokens.value('usage-transition-duration') ease,
+    visibility tokens.value('usage-transition-duration');
 }
 
 .usage-toggle {
@@ -41,7 +43,7 @@ textarea,
   height: 1rem;
   padding: 0;
   border: 0;
-  color: var(--ai-chat-muted-text, #c6b4bb);
+  color: tokens.value('muted-text');
   background: transparent;
   cursor: pointer;
 }
@@ -53,23 +55,23 @@ textarea,
 }
 
 .usage-toggle:focus-visible {
-  outline: 0.15rem solid var(--ai-chat-focus, #ff9fc1);
+  outline: tokens.value('focus-width') solid tokens.value('focus');
   outline-offset: 0.1rem;
 }
 
 .usage-panel {
   position: absolute;
-  left: 2rem;
-  right: 2rem;
+  left: calc(tokens.value('content-padding-inline') + 1rem);
+  right: calc(tokens.value('content-padding-inline') + 1rem);
   bottom: calc(100% - 1rem);
   opacity: 0;
   visibility: hidden;
   transform: translateY(0.375rem);
   pointer-events: none;
   transition:
-    opacity 160ms ease,
-    visibility 160ms,
-    transform 160ms ease;
+    opacity tokens.value('usage-transition-duration') ease,
+    visibility tokens.value('usage-transition-duration'),
+    transform tokens.value('usage-transition-duration') ease;
 }
 
 .usage-panel.expanded {
@@ -94,23 +96,23 @@ form {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0.75rem;
-  border: 1px solid var(--ai-chat-composer-border, #50363f);
-  border-radius: 1.25rem;
-  background: var(--ai-chat-composer-background, #291c21);
+  padding: tokens.value('composer-padding');
+  border: tokens.value('surface-border-width') solid tokens.value('composer-border');
+  border-radius: tokens.value('composer-radius');
+  background: tokens.value('composer-background');
 }
 
 .mascot {
   position: absolute;
   right: 1.25rem;
   bottom: calc(100% - 8px);
-  width: 3.85rem;
+  width: tokens.value('mascot-width');
   height: auto;
   pointer-events: none;
   user-select: none;
   transition:
-    opacity 160ms ease,
-    visibility 160ms;
+    opacity tokens.value('usage-transition-duration') ease,
+    visibility tokens.value('usage-transition-duration');
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -133,7 +135,7 @@ textarea {
   resize: none;
   overflow-y: auto;
   background: transparent;
-  color: var(--ai-chat-composer-text, #f8eef1);
+  color: tokens.value('composer-text');
   font: inherit;
   line-height: 1.35;
 }
@@ -148,7 +150,7 @@ textarea {
 }
 
 textarea::placeholder {
-  color: var(--ai-chat-muted-text, #c6b4bb);
+  color: tokens.value('muted-text');
 }
 
 .send-button.mat-mdc-icon-button {
@@ -160,25 +162,25 @@ textarea::placeholder {
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--ai-chat-send-background, #c00059);
-  color: var(--ai-chat-send-text, #ffffff);
+  background: tokens.value('send-background');
+  color: tokens.value('send-text');
   font: inherit;
   cursor: pointer;
   pointer-events: auto;
 }
 
 .send-button:hover:not(:disabled) {
-  background: var(--ai-chat-send-hover-background, #df0067);
+  background: tokens.value('send-hover-background');
 }
 
 .send-button:focus-visible {
-  outline: 0.15rem solid var(--ai-chat-focus, #ff9fc1);
+  outline: tokens.value('focus-width') solid tokens.value('focus');
   outline-offset: 0.15rem;
 }
 
 .send-button:disabled {
   background: transparent;
-  color: var(--ai-chat-muted-text, #c6b4bb);
+  color: tokens.value('muted-text');
   cursor: default;
   opacity: 1;
 }

@@ -1,3 +1,5 @@
+@use '../../styles/tokens';
+
 :host {
   display: block;
   min-width: 0;
@@ -5,10 +7,10 @@
 
 .artifact {
   min-width: 0;
-  padding: 1rem;
-  border: 1px solid var(--ai-chat-artifact-border, #50363f);
-  border-radius: 1rem;
-  background: var(--ai-chat-artifact-background, #21171b);
+  padding: tokens.value('artifact-padding');
+  border: tokens.value('surface-border-width') solid tokens.value('artifact-border');
+  border-radius: tokens.value('artifact-radius');
+  background: tokens.value('artifact-background');
 }
 
 .artifact-header {
@@ -17,21 +19,21 @@
 
 h3 {
   margin: 0;
-  color: var(--ai-chat-artifact-heading, #f8eef1);
-  font-size: 1rem;
-  line-height: 1.35;
+  color: tokens.value('artifact-heading');
+  font-size: tokens.value('heading-font-size');
+  line-height: tokens.value('heading-line-height');
 }
 
 .artifact-subtitle {
   margin: 0.25rem 0 0;
-  color: var(--ai-chat-artifact-subtitle, #bda9b1);
-  font-size: 0.875rem;
+  color: tokens.value('artifact-subtitle');
+  font-size: tokens.value('secondary-font-size');
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
 .artifact-body {
-  max-height: var(--ai-chat-artifact-collapsed-height, 18rem);
+  max-height: tokens.value('artifact-collapsed-height');
   overflow: hidden;
 }
 
@@ -40,21 +42,21 @@ h3 {
 }
 
 .artifact-body--faded {
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent 100%);
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - tokens.value('artifact-fade-height')),
+    transparent 100%
+  );
 }
 
 .json-artifact {
   min-width: 0;
   margin: 0;
-  padding: 0.875rem;
-  border-radius: 0.75rem;
-  background: var(--ai-chat-code-background, #160f12);
-  color: var(--ai-chat-artifact-text, #eadde2);
-  font:
-    0.8rem/1.5 ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
+  padding: tokens.value('artifact-code-padding');
+  border-radius: tokens.value('code-radius');
+  background: tokens.value('code-background');
+  color: tokens.value('artifact-text');
+  font: tokens.value('artifact-code-font-size') / 1.5 tokens.value('code-font-family');
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -67,7 +69,7 @@ h3 {
   padding: 0.4rem 0;
   border: 0;
   background: none;
-  color: var(--ai-chat-link, #ff7aad);
+  color: tokens.value('link');
   font: inherit;
   cursor: pointer;
 }
@@ -78,6 +80,6 @@ h3 {
 }
 
 .artifact-toggle:focus-visible {
-  outline: 0.15rem solid var(--ai-chat-focus, #ff9fc1);
+  outline: tokens.value('focus-width') solid tokens.value('focus');
   outline-offset: 0.15rem;
 }

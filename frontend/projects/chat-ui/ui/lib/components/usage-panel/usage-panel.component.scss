@@ -1,17 +1,19 @@
+@use '../../styles/tokens';
+
 :host {
   display: block;
   min-width: 0;
-  font-size: 0.75rem;
+  font-size: tokens.value('panel-font-size');
   line-height: 1.4;
-  color: var(--ai-chat-muted-text, #c6b4bb);
+  color: tokens.value('muted-text');
   font-variant-numeric: tabular-nums;
 }
 
 section {
-  padding: 0.625rem 0.875rem 1.75rem;
-  border: 1px solid var(--ai-chat-composer-border, #50363f);
-  border-radius: 0.875rem 0.875rem 0 0;
-  background: var(--ai-chat-composer-background, #291c21);
+  padding: tokens.value('panel-padding');
+  border: tokens.value('surface-border-width') solid tokens.value('panel-border');
+  border-radius: tokens.value('panel-radius') tokens.value('panel-radius') 0 0;
+  background: tokens.value('panel-background');
 }
 
 .collapse-button {
@@ -29,7 +31,7 @@ section {
 }
 
 .collapse-button:focus-visible {
-  outline: 0.15rem solid var(--ai-chat-focus, #ff9fc1);
+  outline: tokens.value('focus-width') solid tokens.value('focus');
   outline-offset: 0.2rem;
 }
 
@@ -48,7 +50,7 @@ mat-icon {
 
 .value,
 dd {
-  color: var(--ai-chat-text, #f8eef1);
+  color: tokens.value('text');
 }
 
 dl {
