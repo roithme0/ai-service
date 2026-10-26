@@ -100,6 +100,23 @@ describe('ChatUiComponent', () => {
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
 
+  it('omits the optional banner heading and its spacing while retaining the description', () => {
+    const fixture = TestBed.createComponent(ChatUiComponent);
+    fixture.componentRef.setInput('turns', []);
+    fixture.componentRef.setInput('bannerDescription', 'Description');
+    fixture.detectChanges();
+    const banner = fixtureElement(fixture).querySelector('.banner')!;
+    expect(banner.querySelector('h2')).toBeNull();
+    const description = banner.querySelector('p')!;
+    expect(description.textContent).toBe('Description');
+    expect(getComputedStyle(description).marginTop).toBe('0px');
+
+    fixture.componentRef.setInput('bannerTitle', 'Welcome');
+    fixture.detectChanges();
+    expect(banner.querySelector('h2')?.textContent).toBe('Welcome');
+    expect(getComputedStyle(description).marginTop).toBe('0.75rem');
+  });
+
   it('renders optional usage inside the composer and removes it without changing the mascot', () => {
     const fixture = createFixture([]);
     const root = fixtureElement(fixture);

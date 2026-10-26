@@ -9,7 +9,9 @@
     (keydown)="stopFollowingHistory()"
   >
     <section class="banner">
-      <h2>{{ bannerTitle() }}</h2>
+      @if (bannerTitle()) {
+        <h2>{{ bannerTitle() }}</h2>
+      }
       <p>{{ bannerDescription() }}</p>
     </section>
 

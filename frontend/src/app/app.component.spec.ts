@@ -65,7 +65,8 @@ describe('Demo navigation', () => {
     expect(TestBed.inject(Router).url).toBe('/demos/visual');
     expect(signals[0].aborted).toBe(false);
     expect(fetch.mock.calls[0][0]).toBe('/api/v1/agents/visual-demo/sessions');
-    await harness.navigateByUrl('/', DemoLanding);
+    harness.routeNativeElement!.querySelector<HTMLAnchorElement>('app-demo-header a')!.click();
+    await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/'));
     expect(signals[0].aborted).toBe(true);
     await harness.navigateByUrl('/demos/visual', VisualDemo);
     await vi.waitFor(() => expect(signals).toHaveLength(2), { timeout: 2500 });

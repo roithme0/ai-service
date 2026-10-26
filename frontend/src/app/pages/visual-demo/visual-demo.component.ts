@@ -6,6 +6,7 @@ import {
   type ChatUsage,
 } from '@roithme0/chat-ui/ui';
 import { SessionController, type SessionViewState } from '@roithme0/chat-ui/conversation';
+import { DemoHeader } from '../../components/demo-header/demo-header.component';
 import { VisualDemoTransport } from '../../visual-demo-transport';
 
 const VISUAL_DEMO_ERROR_MESSAGE =
@@ -28,7 +29,7 @@ const INITIAL_STATE: SessionViewState = {
 
 @Component({
   selector: 'app-visual-demo',
-  imports: [ChatUiComponent],
+  imports: [ChatUiComponent, DemoHeader],
   templateUrl: './visual-demo.component.html',
   styleUrl: './visual-demo.component.scss',
 })

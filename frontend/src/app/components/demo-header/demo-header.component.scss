@@ -1,0 +1,42 @@
+:host {
+  display: block;
+  flex: none;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #59404a;
+  background: #271c21;
+  font-size: 0.875rem;
+}
+nav {
+  flex: none;
+  border-right: 1px solid #59404a;
+  padding-right: 1rem;
+}
+a {
+  text-decoration: none;
+}
+a:focus-visible {
+  outline: 2px solid #ff80cc;
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+a:hover {
+  text-decoration: underline;
+  text-decoration-color: #ff80cc;
+}
+.demo-label {
+  font-weight: 500;
+}
+@media (max-width: 22rem) {
+  header {
+    gap: 0.5rem;
+    padding-inline: 0.75rem;
+  }
+  nav {
+    padding-right: 0.5rem;
+  }
+}

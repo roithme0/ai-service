@@ -1,6 +1,5 @@
 <main class="landing" aria-labelledby="demo-heading">
   <div class="content">
-    <p class="eyebrow">AI Service / Demos</p>
     <h1 id="demo-heading">Choose a demo</h1>
     <p class="intro">Explore the chat interface or try the live service.</p>
 
@@ -8,21 +7,21 @@
       <a class="card" routerLink="/demos/visual">
         <div class="card-heading">
           <h2>Visual Demo</h2>
-          <span class="badge">Scripted</span>
+          <app-demo-tag label="Scripted" />
         </div>
         <p>Walk through chat, tool calls, artifacts, and simulated errors. No AI model involved.</p>
-        <span class="card-action">Open visual demo <span aria-hidden="true">→</span></span>
+        <app-navigation-link>Open visual demo</app-navigation-link>
       </a>
 
       <button class="card" type="button">
         <span class="card-heading">
           <span class="card-title">Live Demo</span>
-          <span class="badge">Live</span>
+          <app-demo-tag label="Live" />
         </span>
         <span class="card-description">
           Chat with the AI service using real model responses and tool execution.
         </span>
-        <span class="card-action">Open live demo <span aria-hidden="true">→</span></span>
+        <app-navigation-link>Open live demo</app-navigation-link>
       </button>
     </div>
   </div>

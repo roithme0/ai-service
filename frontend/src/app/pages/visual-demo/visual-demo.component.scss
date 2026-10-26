@@ -1,5 +1,6 @@
 :host {
-  display: block;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 30rem;
   margin: 0 auto;
@@ -8,7 +9,8 @@
 
 .chat-shell {
   box-sizing: border-box;
-  height: 100%;
+  width: 100%;
+  flex: 1;
   min-height: 0;
   margin: 0 auto;
   background: #130d0f;

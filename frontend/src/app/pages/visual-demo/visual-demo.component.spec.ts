@@ -1,5 +1,6 @@
 ﻿import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { provideRouter } from '@angular/router';
 import { ChatUiComponent, JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
 import type { PresentedSession, SessionEvent } from '@roithme0/chat-ui/conversation';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -71,7 +72,7 @@ async function openVisualDemo(): Promise<{
 }> {
   const server = new VisualDemoServer();
   vi.stubGlobal('fetch', server.fetch);
-  TestBed.configureTestingModule({ imports: [VisualDemo] });
+  TestBed.configureTestingModule({ imports: [VisualDemo], providers: [provideRouter([])] });
   const fixture = TestBed.createComponent(VisualDemo);
   fixture.detectChanges();
   const chat = fixture.debugElement.query(By.directive(ChatUiComponent))
