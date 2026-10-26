@@ -100,6 +100,19 @@ describe('ChatUiComponent', () => {
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
   });
 
+  it('omits the whole banner without content and supports a title-only banner', () => {
+    const fixture = TestBed.createComponent(ChatUiComponent);
+    fixture.componentRef.setInput('turns', []);
+    fixture.detectChanges();
+    expect(fixtureElement(fixture).querySelector('.banner')).toBeNull();
+
+    fixture.componentRef.setInput('bannerTitle', 'Welcome');
+    fixture.detectChanges();
+    const banner = fixtureElement(fixture).querySelector('.banner')!;
+    expect(banner.querySelector('h2')?.textContent).toBe('Welcome');
+    expect(banner.querySelector('p')).toBeNull();
+  });
+
   it('omits the optional banner heading and its spacing while retaining the description', () => {
     const fixture = TestBed.createComponent(ChatUiComponent);
     fixture.componentRef.setInput('turns', []);

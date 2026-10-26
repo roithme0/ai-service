@@ -8,12 +8,16 @@
     (pointerdown)="stopFollowingHistory()"
     (keydown)="stopFollowingHistory()"
   >
-    <section class="banner">
-      @if (bannerTitle()) {
-        <h2>{{ bannerTitle() }}</h2>
-      }
-      <p>{{ bannerDescription() }}</p>
-    </section>
+    @if (bannerTitle() || bannerDescription()) {
+      <section class="banner">
+        @if (bannerTitle()) {
+          <h2>{{ bannerTitle() }}</h2>
+        }
+        @if (bannerDescription()) {
+          <p>{{ bannerDescription() }}</p>
+        }
+      </section>
+    }
 
     <div #historyContent class="messages">
       @for (section of sections(); track section.key; let lastTurn = $last) {

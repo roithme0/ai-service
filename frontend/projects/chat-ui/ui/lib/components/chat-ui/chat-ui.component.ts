@@ -66,7 +66,7 @@ export class ChatUiComponent {
   private readonly initializedRuns = new Map<string, boolean>();
 
   readonly bannerTitle = input<string>();
-  readonly bannerDescription = input.required<string>();
+  readonly bannerDescription = input<string>();
   readonly turns = input.required<readonly ChatTurn[]>();
   readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);

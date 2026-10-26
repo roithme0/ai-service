@@ -59,15 +59,13 @@ h1 {
   gap: var(--demo-content-gap);
 }
 
-h2,
-.card-title {
+h2 {
   margin: 0;
   font-size: var(--demo-section-title-font-size);
   font-weight: var(--demo-emphasis-font-weight);
 }
 
-.card p,
-.card-description {
+.card p {
   display: block;
   margin: 0.875rem 0 1.25rem;
   line-height: var(--demo-body-line-height);

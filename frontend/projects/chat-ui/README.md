@@ -119,8 +119,8 @@ Rendering-only hosts import `ChatUiComponent` and supply their own state and han
 
 | Input/output                                   | Contract                                                                                                                                                      |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bannerDescription`, `turns`                   | Required inputs. Turns and content render in supplied order.                                                                                                  |
-| `bannerTitle`                                  | Optional heading. Omit it for a description-only banner with no title-to-description gap.                                                                     |
+| `turns`                                        | Required input. Turns and content render in supplied order.                                                                                                   |
+| `bannerTitle`, `bannerDescription`             | Optional banner content. Omitting both hides the banner; title-to-description spacing appears only when both are present.                                     |
 | `artifactRenderers`                            | Type-to-`artifactRenderer(template)` map. Templates receive payload as `$implicit`, full artifact through `let-artifact="artifact"`.                          |
 | `conversationStatus`                           | Loading/error with `message`, `placement: 'conversation' \| 'assistant'`, optional action `{ id, label }`, and optional loading `reveal: 'delayed'` (300 ms). |
 | `composerDisabled` / `composerEditingDisabled` | Block submissions / edits independently; both default to `false`. Editing lock preserves textarea focusability.                                               |

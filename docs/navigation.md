@@ -1,13 +1,13 @@
 # Repository navigation
 
-The conversation capability combines backend execution with a reusable Angular chat UI. The Visual Demo illustrates integration; the Kochwiki configuration connects execution to external domain tools.
+The conversation capability combines backend execution with a reusable Angular chat UI. Visual and Live Demos illustrate integration; the Kochwiki configuration connects execution to external domain tools.
 
 ## System overview
 
 ```mermaid
 flowchart LR
     Browser --> Gateway[NGINX gateway]
-    Gateway -->|pages| Frontend[Angular visual demo app]
+    Gateway -->|pages| Frontend[Angular demo app]
     Gateway -->|/api/ HTTP + SSE| Backend[FastAPI backend]
     Frontend --> ChatUI[Chat UI package]
     Consumer[External consumer frontend] --> ChatUI
@@ -20,7 +20,7 @@ flowchart LR
     Conversations -->|MCP| Kochwiki[External Kochwiki backend]
 ```
 
-The [gateway](../deployment/gateway/nginx.conf) serves the visual demo and API. The visual demo (`visual-demo`) uses a deterministic local model without external credentials; the Kochwiki agent uses OpenAI and external MCP tools. Sessions live in backend memory and do not survive restarts.
+The [gateway](../deployment/gateway/nginx.conf) serves the demos and API. Visual Demo (`visual-demo`) uses a deterministic local model without external credentials; Live Demo (`live-demo`) uses OpenAI, and the Kochwiki agent additionally connects external MCP tools. Sessions live in backend memory and do not survive restarts.
 
 ## Code map
 
@@ -35,7 +35,7 @@ The [gateway](../deployment/gateway/nginx.conf) serves the visual demo and API. 
 | [Chat UI package](../frontend/projects/chat-ui/) | `@roithme0/chat-ui/ui` renders host-supplied content; `@roithme0/chat-ui/conversation` supplies the [controller](../frontend/projects/chat-ui/conversation/src/session-controller.ts), HTTP/SSE transport, and snapshot mapping. |
 | [Demo styles](../frontend/src/app/styles/tokens.css) | Shared semantic tokens for the demo host, separate from the Chat UI package's tokens. |
 | [Visual Demo](../backend/app/demos/visual_conversation_demo/) | Scripted conversation with messages, artifacts, simulated delays, and error states. The [visual page](../frontend/src/app/pages/visual-demo/visual-demo.component.ts) hosts its chat UI at `/demos/visual`; the [landing page](../frontend/src/app/pages/demo-landing/demo-landing.component.ts) at `/` selects demos. |
-| [Live Demo agent](../backend/app/demos/live_conversation_demo/) | Model-backed demo conversations, registered as `live-demo`. |
+| [Live Demo](../backend/app/demos/live_conversation_demo/) | Model-backed conversations, registered as `live-demo`; the [live page](../frontend/src/app/pages/live-demo/live-demo.component.ts) hosts its chat UI at `/demos/live`. |
 | [Deployment](../deployment/) | Environment-specific Compose definitions and gateway routing. The [publishing workflow](../.github/workflows/publish-app.yml) builds and publishes application images and the chat UI package. |
 
 The [contract generator](../frontend/scripts/conversation-contract.mjs) produces [TypeScript types and Zod schemas](../frontend/projects/chat-ui/conversation/generated/) from the session router's OpenAPI document.
