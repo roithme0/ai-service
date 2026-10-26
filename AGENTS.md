@@ -11,7 +11,7 @@
 - If a user message is phrased as a question, answer it in chat first and ask for explicit confirmation before making code or file changes.
 - Confirm before touching build or tooling config.
 - Summarize changes and call out risks.
-- Treat backend API as an internal contract for this repo's frontend by default: ship backend/frontend contract changes together, and do not preserve legacy compatibility unless explicitly required for a feature or an external consumer.
+- Treat backend APIs and published UI packages as contracts for consuming applications. Ship contract changes with generated types and affected in-repo consumers; make breaking changes explicit. Preserve legacy compatibility only when explicitly required.
 - Write tests where they provide meaningful regression protection: critical user flows, branching logic, stateful behavior, contract boundaries, and bug-prone edge cases. Avoid low-signal tests that only restate implementation details. Do not remove existing tests unless they are redundant, obsolete, flaky, or block legitimate refactoring, and explain the reason when removing them.
 
 ## Temporary AI Artifacts
@@ -21,13 +21,22 @@
 - Keep artifacts available through implementation and final review. Leave cleanup to the human; do not delete them automatically.
 - Permanent documentation must never link to, cite, or depend on these temporary files. Document lasting behavior and contracts directly in maintained documentation, grounded in the implementation.
 
-## Frontend Validation
+## Validation
 
-- After frontend edits, run `npm run format:changed`, then `npm run lint`, `npm run test:tooling`, `npm run test:app`, and `npm run test:chat-ui` from `frontend`. On Windows, use `npm.cmd` if PowerShell blocks `npm.ps1`.
-- Formatting covers whole staged, unstaged, and untracked frontend files without updating the Git index. Check the worktree first and coordinate before formatting files containing unrelated user edits. Generated conversation contracts, lockfiles, dependencies, caches, and build output are excluded.
-- Lint covers the whole frontend, including the application, library, tests, handwritten scripts, and Angular templates. Both errors and warnings fail validation. Use `npm run lint:fix` only deliberately and review its diff; the hook and CI never apply ESLint fixes.
-- Codex hooks snapshot frontend content before each prompt, then format changed files, lint, run tooling tests, and run both Angular test suites when content changes. Review formatting changes before completion. Successful checks are reused only for identical content after every check passes. Review and trust the hook definitions in Codex before relying on them.
-- Address findings introduced by your work; broad existing-debt cleanup requires separate authorization. Report missing dependencies or failing checks as incomplete validation. Persistent hook failures request at most one continuation.
+After edits, run the applicable commands in order:
+
+| Scope | Working directory | Commands |
+| --- | --- | --- |
+| Frontend | `frontend` | `npm run format:changed`, `npm run lint`, `npm run test:tooling`, `npm run test:app`, `npm run test:chat-ui` |
+| Backend | Repository root | `node .codex/validation/backend.mts --format`, `node --test .codex/validation/shared.test.mts .codex/validation/backend.test.mts` |
+| Backend | `backend` | `.venv/Scripts/python.exe -m pytest` (`.venv/bin/python` on Unix) |
+
+Use `npm.cmd` if PowerShell blocks `npm.ps1`. See [development setup and contract validation](docs/development.md) for dependencies, editor configuration, and generated API contracts.
+
+- Format only changed staged, unstaged, and untracked files, respecting configured exclusions and leaving the Git index unchanged. Coordinate before formatting unrelated user edits and review the resulting diff. Full-backend formatting requires an explicit request.
+- Lint errors and warnings fail validation. Run `lint:fix` only deliberately and review its diff; hooks and CI never apply lint fixes.
+- Review and trust hooks before relying on them. They validate changed scopes automatically and reuse success only for identical content after all checks pass. Shared hook changes validate both scopes; persistent failures request at most one continuation.
+- Fix findings introduced by your work; broader cleanup requires authorization. Report missing dependencies or failed checks as incomplete validation. Hooks never install dependencies automatically.
 
 ## Communication Preferences
 

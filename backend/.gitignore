@@ -1,7 +1,8 @@
 __pycache__/
 *.py[cod]
-tests/.pytest_cache/
-tests/.pytest_tmp/
+tests/.pytest_cache*/
+tests/.pytest_tmp*/
 .venv/
 .env
 *.egg-info/
+.codex-validation/

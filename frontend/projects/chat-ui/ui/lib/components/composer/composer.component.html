@@ -1,6 +1,23 @@
-<form (submit)="submit($event)">
+@if (usage(); as usage) {
+  <div
+    #panelContainer
+    class="usage-panel"
+    [class.expanded]="usageExpanded()"
+    [inert]="!usageExpanded()"
+  >
+    <ai-chat-usage-panel [usage]="usage" (collapsed)="setUsageExpanded(false, $event)" />
+  </div>
+}
+<form #form (submit)="submit($event)">
   <div class="surface">
-    <img class="mascot" [src]="mascotSource()" alt="" aria-hidden="true" draggable="false" />
+    <img
+      class="mascot"
+      [class.faded]="usageExpanded()"
+      [src]="mascotSource()"
+      alt=""
+      aria-hidden="true"
+      draggable="false"
+    />
     <textarea
       #composer
       cdkTextareaAutosize
@@ -31,3 +48,19 @@
     </div>
   </div>
 </form>
+@if (usage(); as usage) {
+  <div class="usage-line" [class.faded]="usageExpanded()" [inert]="usageExpanded()">
+    <button
+      #usageToggle
+      aiChatPreventPointerFocus
+      class="usage-toggle"
+      type="button"
+      aria-label="Chat-Verbrauch anzeigen"
+      [attr.aria-expanded]="usageExpanded()"
+      (click)="setUsageExpanded(true, $event)"
+    >
+      <ai-chat-usage-line [usage]="usage" />
+      <mat-icon svgIcon="ai-chat:arrow-up" aria-hidden="true" />
+    </button>
+  </div>
+}

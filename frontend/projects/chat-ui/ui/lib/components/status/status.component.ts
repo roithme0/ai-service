@@ -1,4 +1,5 @@
 import { Component, computed, effect, input, output, signal } from '@angular/core';
+import type { EffectCleanupRegisterFn } from '@angular/core';
 import { LoadingDotsComponent } from '../loading-dots/loading-dots.component';
 import type { ChatConversationStatus } from '../../models/chat-message';
 
@@ -26,15 +27,17 @@ export class StatusComponent {
   });
 
   constructor() {
-    effect((onCleanup) => {
-      const status = this.status();
-      this.revealedStatus.set(null);
-      if (status.kind !== 'loading' || status.reveal !== 'delayed') return;
-      const timer = setTimeout(() => {
-        this.revealedStatus.set(status);
-        this.contentRevealed.emit();
-      }, 300);
-      onCleanup(() => clearTimeout(timer));
-    });
+    effect((onCleanup) => this.updateStatusVisibility(onCleanup));
+  }
+
+  private updateStatusVisibility(onCleanup: EffectCleanupRegisterFn): void {
+    const status = this.status();
+    this.revealedStatus.set(null);
+    if (status.kind !== 'loading' || status.reveal !== 'delayed') return;
+    const timer = setTimeout(() => {
+      this.revealedStatus.set(status);
+      this.contentRevealed.emit();
+    }, 300);
+    onCleanup(() => clearTimeout(timer));
   }
 }

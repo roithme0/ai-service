@@ -2,20 +2,42 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpSessionTransport, SessionHttpError, SessionTransportError } from './session-transport';
 import type { SessionEvent, PresentedSession } from '../generated/types.gen';
 
+const EMPTY_USAGE: PresentedSession['usage'] = {
+  input_tokens: 0,
+  output_tokens: 0,
+  total_tokens: 0,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  reasoning_tokens: 0,
+  requests: 0,
+  tool_calls: 0,
+  estimated_cost_usd: null,
+};
+
 const expires = '2026-10-21T12:00:00Z';
 const snapshot: PresentedSession = {
   error: null,
+  usage: {
+    ...EMPTY_USAGE,
+    input_tokens: 100,
+    output_tokens: 20,
+    total_tokens: 120,
+    requests: 1,
+    estimated_cost_usd: '0.01234567890123456789',
+  },
   session_id: 's/1',
   expires_at: expires,
   history: [
     { part_kind: 'user-prompt', content: ['First', 'Second'] },
     {
       part_kind: 'turn',
+      usage: EMPTY_USAGE,
       lifecycle: { run_id: null, status: 'running', started_at: expires, finished_at: null },
       parts: [],
     },
     {
       part_kind: 'turn',
+      usage: { ...EMPTY_USAGE, estimated_cost_usd: '0' },
       lifecycle: {
         run_id: 'run-1',
         status: 'completed',
@@ -82,7 +104,11 @@ async function collect(source: AsyncIterable<SessionEvent>): Promise<SessionEven
 describe('HttpSessionTransport', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('creates, reads, submits and observes using the new session contract and owner header', async () => {
+  it.each([
+    'test:alice',
+    `${encodeURIComponent('https://idp.example/realms/cooks')}:${encodeURIComponent("cook:ä !'()*%")}`,
+  ])('preserves owner assertion %s across create, read, submit and observe', async (identity) => {
+    const sessionTransport = new HttpSessionTransport('/ai/api/v1///', 'new/agent', identity);
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -98,15 +124,17 @@ describe('HttpSessionTransport', () => {
         { type: 'json', description: 'JSON', payloadSchema: { type: 'object' } },
       ],
     };
-    await expect(transport().createSession(initialization)).resolves.toEqual({
+    await expect(sessionTransport.createSession(initialization)).resolves.toEqual({
       session_id: 's/1',
       expires_at: expires,
     });
-    await expect(transport().readSession('s/1')).resolves.toEqual(snapshot);
-    await expect(transport().submitPrompt('s/1', '  Hello  ')).resolves.toEqual({
+    await expect(sessionTransport.readSession('s/1')).resolves.toEqual(snapshot);
+    await expect(sessionTransport.submitPrompt('s/1', '  Hello  ')).resolves.toEqual({
       kind: 'accepted',
     });
-    await expect(collect(events())).resolves.toEqual([snapshotEvent]);
+    await expect(
+      collect(sessionTransport.observeSession('s/1', new AbortController().signal)),
+    ).resolves.toEqual([snapshotEvent]);
     const base = '/ai/api/v1/agents/new%2Fagent/sessions';
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       base,
@@ -117,7 +145,7 @@ describe('HttpSessionTransport', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual(initialization);
     expect(fetchMock.mock.calls[2][1]?.body).toBe(JSON.stringify({ prompt: '  Hello  ' }));
     for (const [, options] of fetchMock.mock.calls) {
-      expect(new Headers(options?.headers).get('X-Application-User')).toBe('test:alice');
+      expect(new Headers(options?.headers).get('X-Application-User')).toBe(identity);
     }
   });
 
@@ -317,6 +345,11 @@ describe('session observation', () => {
   it.each([
     'data: {broken}\n\n',
     frame({ snapshot }),
+    frame({ kind: 'snapshot', snapshot: { ...snapshot, usage: undefined } }),
+    frame({
+      kind: 'snapshot',
+      snapshot: { ...snapshot, usage: { ...EMPTY_USAGE, estimated_cost_usd: 0.01 } },
+    }),
     frame({ kind: 'surprise' }),
     frame({ kind: 'error', reason: 'surprise' }),
     frame({ kind: 'snapshot', snapshot: { ...snapshot, history: [{ content: 'missing kind' }] } }),
@@ -327,6 +360,7 @@ describe('session observation', () => {
         history: [
           {
             part_kind: 'turn',
+            usage: EMPTY_USAGE,
             lifecycle: { run_id: null, status: 'running', started_at: expires, finished_at: null },
             parts: [
               { part_kind: 'tool-call', tool_name: 'x', tool_call_id: 'c', status: 'made_up' },

@@ -16,6 +16,31 @@ import { ArtifactCardComponent } from '../artifact-card/artifact-card.component'
 import { ChatUiComponent } from './chat-ui.component';
 import { presentSession } from '../../../../conversation/src/session-presentation';
 import type { PresentedSession, PresentedTurn } from '../../../../conversation/generated/types.gen';
+import type { ChatUsage } from '../../models/chat-usage';
+
+const EMPTY_CHAT_USAGE: ChatUsage = {
+  totalTokens: 0,
+  estimatedCostUsd: null,
+  inputTokens: 0,
+  outputTokens: 0,
+  reasoningTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  requests: 0,
+  toolCalls: 0,
+};
+
+const EMPTY_USAGE: PresentedSession['usage'] = {
+  input_tokens: 0,
+  output_tokens: 0,
+  total_tokens: 0,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  reasoning_tokens: 0,
+  requests: 0,
+  tool_calls: 0,
+  estimated_cost_usd: null,
+};
 
 const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
   {
@@ -73,6 +98,164 @@ describe('ChatUiComponent', () => {
     originalScrollTo = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTo');
     Object.defineProperty(Element.prototype, 'scrollTo', { configurable: true, value: scrollTo });
     TestBed.configureTestingModule({ imports: [ChatUiComponent] });
+  });
+
+  it('renders optional usage inside the composer and removes it without changing the mascot', () => {
+    const fixture = createFixture([]);
+    const root = fixtureElement(fixture);
+    const mascot = root.querySelector('.mascot');
+    expect(root.querySelector('ai-chat-usage-line')).toBeNull();
+
+    fixture.componentRef.setInput('usage', {
+      ...EMPTY_CHAT_USAGE,
+      totalTokens: 12800,
+      estimatedCostUsd: '0.02400000000000000001',
+    });
+    fixture.detectChanges();
+    const line = root.querySelector('ai-chat-composer ai-chat-usage-line')!;
+    expect(line.textContent).toContain('Geschätzt $0.024');
+    expect(line.textContent).toContain('12.8K Tokens');
+    expect(line.querySelector('[title]')?.getAttribute('title')).toContain(
+      '0.02400000000000000001 USD; 12800 Tokens',
+    );
+    expect(line.querySelector('button')).toBeNull();
+    expect(root.querySelector('.mascot')).toBe(mascot);
+
+    fixture.componentRef.setInput('usage', null);
+    fixture.detectChanges();
+    expect(root.querySelector('ai-chat-usage-line')).toBeNull();
+    expect(root.querySelector('.mascot')).toBe(mascot);
+  });
+
+  it.each([
+    { cost: null, expected: 'Kosten unbekannt' },
+    { cost: '0', expected: 'Geschätzt $0' },
+    { cost: '0.00000012', expected: 'Geschätzt $0.00000012' },
+  ])('updates usage while preserving the meaning of cost $cost', ({ cost, expected }) => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('usage', {
+      ...EMPTY_CHAT_USAGE,
+      totalTokens: 1,
+      estimatedCostUsd: '1',
+    });
+    fixture.detectChanges();
+    fixture.componentRef.setInput('usage', {
+      ...EMPTY_CHAT_USAGE,
+      totalTokens: 0,
+      estimatedCostUsd: cost,
+    });
+    fixture.detectChanges();
+    const line = fixtureElement(fixture).querySelector('ai-chat-usage-line')!;
+    expect(line.textContent).toContain(expected);
+    expect(line.textContent).toContain('0 Tokens');
+  });
+
+  it('toggles the usage panel without submitting, losing the draft, or moving pointer focus', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('usage', {
+      ...EMPTY_CHAT_USAGE,
+      inputTokens: 9600,
+      outputTokens: 3200,
+      totalTokens: 12800,
+      reasoningTokens: 1240,
+      cacheReadTokens: 6400,
+      cacheWriteTokens: 800,
+      toolCalls: 4,
+      requests: 8,
+      estimatedCostUsd: '0.024',
+    });
+    fixture.componentRef.setInput('composerDisabled', true);
+    fixture.detectChanges();
+    const root = fixtureElement(fixture);
+    const textarea = root.querySelector('textarea')!;
+    textarea.value = 'Keep this draft';
+    textarea.dispatchEvent(new Event('input'));
+    textarea.focus();
+    const submitted = vi.fn();
+    fixture.componentInstance.messageSubmitted.subscribe(submitted);
+    const expand = root.querySelector<HTMLButtonElement>('.usage-toggle')!;
+    const panel = root.querySelector<HTMLElement>('.usage-panel')!;
+    const line = root.querySelector<HTMLElement>('.usage-line')!;
+    expect(panel.inert).toBe(true);
+    expand.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    fixture.detectChanges();
+    expect(panel.inert).toBe(false);
+    expect(panel.classList.contains('expanded')).toBe(true);
+    expect(line.inert).toBe(true);
+    expect(root.querySelector('.mascot')?.classList.contains('faded')).toBe(true);
+    expect(Array.from(panel.querySelectorAll('dd'), (item) => item.textContent?.trim())).toEqual([
+      '9.6K',
+      '3.2K',
+      '1.2K',
+      '12.8K',
+      '6.4K',
+      '800',
+      '4',
+      '8',
+    ]);
+    expect(panel.querySelectorAll('dd')[2].getAttribute('title')).toBe('1240');
+    expect(panel.querySelector('.cost')?.textContent).toContain('$0.024');
+    expect(document.activeElement).toBe(textarea);
+    expect(textarea.value).toBe('Keep this draft');
+    expect(submitted).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('usage', {
+      ...EMPTY_CHAT_USAGE,
+      totalTokens: 15000,
+      estimatedCostUsd: null,
+    });
+    fixture.detectChanges();
+    expect(panel.classList.contains('expanded')).toBe(true);
+    expect(panel.querySelector('.cost')?.textContent).toContain('Unbekannt');
+    expect(panel.querySelectorAll('dd')[3].textContent).toBe('15K');
+
+    panel
+      .querySelector('button')!
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    fixture.detectChanges();
+    expect(panel.inert).toBe(true);
+    expect(line.inert).toBe(false);
+    expect(root.querySelector('.mascot')?.classList.contains('faded')).toBe(false);
+    expect(document.activeElement).toBe(textarea);
+    expect(submitted).not.toHaveBeenCalled();
+  });
+
+  it('moves keyboard focus to the panel and returns it when Escape closes the panel', async () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('usage', EMPTY_CHAT_USAGE);
+    fixture.detectChanges();
+    const root = fixtureElement(fixture);
+    const expand = root.querySelector<HTMLButtonElement>('.usage-toggle')!;
+    expand.focus();
+    expand.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const collapse = root.querySelector<HTMLButtonElement>('.collapse-button')!;
+    expect(document.activeElement).toBe(collapse);
+    collapse.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(expand);
+    expect(expand.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('resets expansion when usage is removed and later supplied again', () => {
+    const fixture = createFixture([]);
+    fixture.componentRef.setInput('usage', EMPTY_CHAT_USAGE);
+    fixture.detectChanges();
+    const root = fixtureElement(fixture);
+    root.querySelector<HTMLButtonElement>('.usage-toggle')!.click();
+    fixture.detectChanges();
+    fixture.componentRef.setInput('usage', null);
+    fixture.detectChanges();
+    expect(root.querySelector('ai-chat-usage-panel')).toBeNull();
+    expect(root.querySelector('.mascot')?.classList.contains('faded')).toBe(false);
+    fixture.componentRef.setInput('usage', EMPTY_CHAT_USAGE);
+    fixture.detectChanges();
+    expect(root.querySelector<HTMLElement>('.usage-panel')!.inert).toBe(true);
+    expect(
+      root.querySelector<HTMLButtonElement>('.usage-toggle')!.getAttribute('aria-expanded'),
+    ).toBe('false');
   });
 
   it('keeps the mascot working through final text until the active turn finishes', () => {
@@ -142,14 +325,14 @@ describe('ChatUiComponent', () => {
     expect(activeToggle.getAttribute('aria-expanded')).toBe('true');
     expect(element.querySelector('[data-scroll-anchor]')).toBe(answerRow);
     const anchor = answerRow!.getAttribute('data-scroll-anchor');
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
 
     scrollTo.mockClear();
     fixture.componentRef.setInput('turns', [{ ...turn, status: 'completed' }]);
     fixture.detectChanges();
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(answerRow!.getAttribute('data-scroll-anchor')).toBe(anchor);
-    expect(scrollTo).not.toHaveBeenCalled();
+    expect(scrollTo).toHaveBeenCalledOnce();
     expect(isCollapsed(detail)).toBe(true);
     expect(
       detail.closest('ai-chat-history-item')?.querySelector<HTMLElement>('.collapse')?.inert,
@@ -348,6 +531,7 @@ describe('ChatUiComponent', () => {
     const time = '2026-10-21T12:00:00Z';
     const turn: PresentedTurn = {
       part_kind: 'turn',
+      usage: EMPTY_USAGE,
       lifecycle: { run_id: 'run', status: 'running', started_at: time, finished_at: null },
       parts: [
         { part_kind: 'text', phase: 'commentary', content: 'Checking' },
@@ -365,6 +549,7 @@ describe('ChatUiComponent', () => {
           session_id: 'session',
           expires_at: time,
           error: null,
+          usage: EMPTY_USAGE,
           history: [
             {
               ...turn,
@@ -399,6 +584,7 @@ describe('ChatUiComponent', () => {
     };
     const first: PresentedTurn = {
       part_kind: 'turn',
+      usage: EMPTY_USAGE,
       lifecycle,
       parts: [
         { part_kind: 'tool-call', tool_call_id: 'call', tool_name: 'publish', status: 'running' },
@@ -416,6 +602,7 @@ describe('ChatUiComponent', () => {
     };
     const snapshot: PresentedSession = {
       error: null,
+      usage: EMPTY_USAGE,
       session_id: 's',
       expires_at: lifecycle.started_at,
       history: [first],
@@ -455,6 +642,7 @@ describe('ChatUiComponent', () => {
         { part_kind: 'user-prompt', content: ['same', 'same'] },
         {
           part_kind: 'turn',
+          usage: EMPTY_USAGE,
           lifecycle: completed,
           parts: [{ part_kind: 'text', phase: 'final_answer', content: 'Answer' }],
         },
@@ -536,9 +724,7 @@ describe('ChatUiComponent', () => {
     const measurements = [...toggles].map((toggle) => vi.spyOn(toggle, 'getBoundingClientRect'));
     history.scrollTop = 300;
     scrollTo.mockClear();
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([
-      toggles[1].closest('.history-item'),
-    ]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
 
     for (const index of [0, 1, 1, 0]) {
       toggles[index].click();
@@ -645,16 +831,14 @@ describe('ChatUiComponent', () => {
     expect(element.querySelector('[data-scroll-anchor]')).toBe(
       element.querySelector('ai-chat-assistant-message')!.closest('.history-item'),
     );
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([
-      element.querySelector('[data-scroll-anchor]'),
-    ]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(isCollapsed(element.querySelector<HTMLElement>('ai-chat-intermediate-message')!)).toBe(
       true,
     );
     expect(scrollTo).toHaveBeenCalledOnce();
   });
 
-  it('uses the same shared run answer anchor before and after every section completes', () => {
+  it('follows a shared run through automatic collapse without selecting a manual answer anchor', () => {
     const fixture = createFixture([]);
     const first: ChatTurn = { runKey: 'shared', status: 'completed', content: DETAILS_CONTENT };
     const second: ChatTurn = {
@@ -667,7 +851,7 @@ describe('ChatUiComponent', () => {
     const element = fixtureElement(fixture);
     const answerRow = element.querySelector('ai-chat-assistant-message')!.closest('.history-item');
     expect(element.querySelector('[data-scroll-anchor]')).toBe(answerRow);
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     const toggle = element.querySelector<HTMLButtonElement>('.details-toggle')!;
     expect(toggle.disabled).toBe(false);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
@@ -675,10 +859,10 @@ describe('ChatUiComponent', () => {
 
     fixture.componentRef.setInput('turns', [first, { ...second, status: 'completed' }]);
     fixture.detectChanges();
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([answerRow]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(element.querySelector('.details-toggle')).toBe(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(scrollTo).not.toHaveBeenCalled();
+    expect(scrollTo).toHaveBeenCalledOnce();
   });
 
   it('reveals a replacement final answer instead of selecting the previous answer anchor', () => {
@@ -702,9 +886,7 @@ describe('ChatUiComponent', () => {
     ]);
     fixture.detectChanges();
     expect(element.querySelector('[data-scroll-anchor]')).not.toBe(previous);
-    expect([...element.getElementsByClassName('history-scroll-anchor')]).toEqual([
-      element.querySelector('[data-scroll-anchor]'),
-    ]);
+    expect(element.querySelector('.history-scroll-anchor')).toBeNull();
     expect(scrollTo).toHaveBeenCalledOnce();
   });
 
@@ -1424,12 +1606,170 @@ describe('ChatUiComponent', () => {
     expect(messages[0].textContent).toContain('Replacement state');
   });
 
-  it('scrolls history to the bottom each time the textarea gains focus', () => {
+  it('smoothly aligns the padded message edge while leaving the manual buffer available', () => {
+    const fixture = createFixture(INITIAL_MESSAGES);
+    const root = fixtureElement(fixture);
+    const history = root.querySelector<HTMLElement>('.history')!;
+    const buffer = root.querySelector<HTMLElement>('.history-scroll-buffer')!;
+    const form = root.querySelector('form')!;
+    const messages = root.querySelector<HTMLElement>('.messages')!;
+    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+    Object.defineProperty(history, 'clientHeight', { configurable: true, value: 500 });
+    Object.defineProperty(buffer, 'offsetHeight', { configurable: true, value: 240 });
+    vi.spyOn(history, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 400, 500));
+    vi.spyOn(form, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 476, 400, 100));
+    const messageBounds = vi
+      .spyOn(messages, 'getBoundingClientRect')
+      .mockReturnValue(new DOMRect(0, 0, 400, 760));
+    scrollTo.mockClear();
+
+    root.querySelector('textarea')!.focus();
+    fixture.detectChanges();
+
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 284, behavior: 'smooth' });
+    expect(history.scrollHeight).toBe(1000);
+
+    root.querySelector('textarea')!.blur();
+    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 650 });
+    messageBounds.mockReturnValue(new DOMRect(0, 0, 400, 410));
+    scrollTo.mockClear();
+    root.querySelector('textarea')!.focus();
+    fixture.detectChanges();
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 0, behavior: 'smooth' });
+  });
+
+  it('uses immediate scrolling when reduced motion is preferred', () => {
+    const matchMedia = vi.fn().mockReturnValue({ matches: true });
+    vi.stubGlobal('matchMedia', matchMedia);
+    const fixture = createFixture(INITIAL_MESSAGES);
+    scrollTo.mockClear();
+    fixtureElement(fixture).querySelector('textarea')!.focus();
+    fixture.detectChanges();
+    expect(matchMedia).toHaveBeenCalledWith('(prefers-reduced-motion: reduce)');
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: 0, behavior: 'auto' });
+  });
+
+  it('resizes the manual buffer with the panel without scrolling on resize or expansion', async () => {
+    const observers: {
+      readonly resize: () => void;
+      readonly disconnect: ReturnType<typeof vi.fn>;
+      target?: Element;
+    }[] = [];
+    class PanelObserver {
+      readonly disconnect = vi.fn();
+      private readonly observation;
+      constructor(callback: ResizeObserverCallback) {
+        this.observation = {
+          resize: () => callback([], this),
+          disconnect: this.disconnect,
+          target: undefined as Element | undefined,
+        };
+        observers.push(this.observation);
+      }
+      observe(target: Element): void {
+        this.observation.target = target;
+      }
+      unobserve(): void {}
+    }
+    vi.stubGlobal('ResizeObserver', PanelObserver);
+    const fixture = createFixture(INITIAL_MESSAGES);
+    fixture.componentRef.setInput('usage', EMPTY_CHAT_USAGE);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const root = fixtureElement(fixture);
+    const panel = root.querySelector<HTMLElement>('.usage-panel')!;
+    const form = root.querySelector('form')!;
+    const buffer = root.querySelector<HTMLElement>('.history-scroll-buffer')!;
+    const panelObserver = observers.find((observer) => observer.target === panel)!;
+    Object.defineProperty(form, 'offsetTop', { configurable: true, value: 40 });
+    Object.defineProperty(panel, 'offsetTop', { configurable: true, value: -140 });
+    scrollTo.mockClear();
+
+    panelObserver.resize();
+    await fixture.whenStable();
+    expect(buffer.style.getPropertyValue('--panel-scroll-clearance')).toBe('180px');
+    root.querySelector<HTMLButtonElement>('.usage-toggle')!.click();
+    fixture.detectChanges();
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    Object.defineProperty(panel, 'offsetTop', { configurable: true, value: -240 });
+    panelObserver.resize();
+    await fixture.whenStable();
+    expect(buffer.style.getPropertyValue('--panel-scroll-clearance')).toBe('280px');
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    fixture.componentRef.setInput('usage', null);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(buffer.style.getPropertyValue('--panel-scroll-clearance')).toBe('0px');
+    expect(panelObserver.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it.each(['wheel', 'pointerdown', 'keydown'])(
+    'follows changing content height until manual %s interaction and disconnects on destruction',
+    (interaction) => {
+      let resizeMessages: (() => void) | undefined;
+      const disconnect = vi.fn();
+      class HistoryObserver {
+        constructor(private readonly callback: ResizeObserverCallback) {}
+        observe(target: Element): void {
+          if (target.classList.contains('messages')) {
+            resizeMessages = () => this.callback([], this);
+          }
+        }
+        disconnect = disconnect;
+        unobserve(): void {}
+      }
+      vi.stubGlobal('ResizeObserver', HistoryObserver);
+      const fixture = createFixture(DETAILS_CONTENT);
+      const root = fixtureElement(fixture);
+      const history = root.querySelector<HTMLElement>('.history')!;
+      const bounds = vi.spyOn(
+        root.querySelector<HTMLElement>('.messages')!,
+        'getBoundingClientRect',
+      );
+      vi.spyOn(root.querySelector('form')!, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(0, 500, 400, 100),
+      );
+      history.scrollTop = 300;
+      bounds.mockReturnValue(new DOMRect(0, 0, 400, 650));
+      scrollTo.mockClear();
+      resizeMessages!();
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 450, behavior: 'smooth' });
+
+      bounds.mockReturnValue(new DOMRect(0, 0, 400, 550));
+      resizeMessages!();
+      expect(scrollTo).toHaveBeenLastCalledWith({ top: 350, behavior: 'smooth' });
+      history.dispatchEvent(new Event(interaction));
+      scrollTo.mockClear();
+      resizeMessages!();
+      expect(scrollTo).not.toHaveBeenCalled();
+
+      setContent(fixture, [...DETAILS_CONTENT]);
+      fixture.detectChanges();
+      scrollTo.mockClear();
+      resizeMessages!();
+      expect(scrollTo).toHaveBeenCalledOnce();
+
+      root.querySelector<HTMLButtonElement>('.details-toggle')!.click();
+      fixture.detectChanges();
+      scrollTo.mockClear();
+      resizeMessages!();
+      expect(scrollTo).not.toHaveBeenCalled();
+      fixture.destroy();
+      expect(disconnect).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('scrolls history to the composer each time the textarea gains focus', () => {
     const fixture = createFixture(INITIAL_MESSAGES);
     const element = fixtureElement(fixture);
     const textarea = element.querySelector('textarea') as HTMLTextAreaElement;
     const history = element.querySelector('.history') as HTMLElement;
-    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+    vi.spyOn(
+      element.querySelector<HTMLElement>('.messages')!,
+      'getBoundingClientRect',
+    ).mockImplementation(() => new DOMRect(0, 0, 400, 1000 - history.scrollTop));
     scrollTo.mockClear();
 
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -1461,7 +1801,10 @@ describe('ChatUiComponent', () => {
     await fixture.whenStable();
     scrollTo.mockClear();
     for (const height of [1000, 1200]) {
-      Object.defineProperty(history, 'scrollHeight', { configurable: true, value: height });
+      vi.spyOn(
+        element.querySelector<HTMLElement>('.messages')!,
+        'getBoundingClientRect',
+      ).mockImplementation(() => new DOMRect(0, 0, 400, height - history.scrollTop));
       viewport.dispatchEvent(new Event('resize'));
       await fixture.whenStable();
       expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ top: height, behavior: 'smooth' });
@@ -1506,7 +1849,10 @@ describe('ChatUiComponent', () => {
     vi.useFakeTimers();
     const fixture = createFixture([]);
     const history = fixtureElement(fixture).querySelector('.history') as HTMLElement;
-    Object.defineProperty(history, 'scrollHeight', { configurable: true, value: 1000 });
+    vi.spyOn(
+      fixtureElement(fixture).querySelector<HTMLElement>('.messages')!,
+      'getBoundingClientRect',
+    ).mockImplementation(() => new DOMRect(0, 0, 400, 1000 - history.scrollTop));
     const scrollToBottom = (): void => {
       expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'smooth' });
       scrollTo.mockClear();

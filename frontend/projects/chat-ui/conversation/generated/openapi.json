@@ -365,10 +365,14 @@
           "session_id": {
             "title": "Session Id",
             "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/PresentedUsage"
           }
         },
         "required": [
           "session_id",
+          "usage",
           "expires_at",
           "history",
           "error"
@@ -393,14 +397,80 @@
             },
             "title": "Parts",
             "type": "array"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/PresentedUsage"
           }
         },
         "required": [
           "part_kind",
           "lifecycle",
+          "usage",
           "parts"
         ],
         "title": "PresentedTurn",
+        "type": "object"
+      },
+      "PresentedUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cache_write_tokens": {
+            "title": "Cache Write Tokens",
+            "type": "integer"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "reasoning_tokens": {
+            "title": "Reasoning Tokens",
+            "type": "integer"
+          },
+          "requests": {
+            "title": "Requests",
+            "type": "integer"
+          },
+          "tool_calls": {
+            "title": "Tool Calls",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "total_tokens",
+          "cache_read_tokens",
+          "cache_write_tokens",
+          "reasoning_tokens",
+          "requests",
+          "tool_calls",
+          "estimated_cost_usd"
+        ],
+        "title": "PresentedUsage",
         "type": "object"
       },
       "PromptSubmissionRequest": {
@@ -741,11 +811,13 @@
             }
           },
           {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
             "in": "header",
             "name": "X-Application-User",
             "required": true,
             "schema": {
-              "pattern": "^[^\\s:]+:[^\\s:]+$",
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
               "title": "X-Application-User",
               "type": "string"
             }
@@ -815,7 +887,7 @@
         },
         "summary": "Create Session",
         "tags": [
-          "agentic"
+          "conversations"
         ]
       }
     },
@@ -842,11 +914,13 @@
             }
           },
           {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
             "in": "header",
             "name": "X-Application-User",
             "required": true,
             "schema": {
-              "pattern": "^[^\\s:]+:[^\\s:]+$",
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
               "title": "X-Application-User",
               "type": "string"
             }
@@ -896,7 +970,7 @@
         },
         "summary": "Read Session",
         "tags": [
-          "agentic"
+          "conversations"
         ]
       }
     },
@@ -923,11 +997,13 @@
             }
           },
           {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
             "in": "header",
             "name": "X-Application-User",
             "required": true,
             "schema": {
-              "pattern": "^[^\\s:]+:[^\\s:]+$",
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
               "title": "X-Application-User",
               "type": "string"
             }
@@ -988,7 +1064,7 @@
         },
         "summary": "Observe Session",
         "tags": [
-          "agentic"
+          "conversations"
         ]
       }
     },
@@ -1015,11 +1091,13 @@
             }
           },
           {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
             "in": "header",
             "name": "X-Application-User",
             "required": true,
             "schema": {
-              "pattern": "^[^\\s:]+:[^\\s:]+$",
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
               "title": "X-Application-User",
               "type": "string"
             }
@@ -1089,7 +1167,7 @@
         },
         "summary": "Submit Prompt",
         "tags": [
-          "agentic"
+          "conversations"
         ]
       }
     }

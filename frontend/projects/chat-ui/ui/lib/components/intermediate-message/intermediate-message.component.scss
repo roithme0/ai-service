@@ -1,8 +1,10 @@
+@use '../../styles/tokens';
+
 :host {
   display: block;
   min-width: 0;
   max-width: 100%;
   align-self: stretch;
-  color: var(--ai-chat-assistant-text, var(--ai-chat-text, #f8eef1));
-  line-height: 1.6;
+  color: tokens.value('assistant-text');
+  line-height: tokens.value('message-line-height');
 }

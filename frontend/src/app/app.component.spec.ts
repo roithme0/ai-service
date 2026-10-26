@@ -5,8 +5,21 @@ import type { PresentedSession, SessionEvent } from '@roithme0/chat-ui/conversat
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app.component';
 
+const EMPTY_USAGE: PresentedSession['usage'] = {
+  input_tokens: 0,
+  output_tokens: 0,
+  total_tokens: 0,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  reasoning_tokens: 0,
+  requests: 0,
+  tool_calls: 0,
+  estimated_cost_usd: null,
+};
+
 const EMPTY: PresentedSession = {
   error: null,
+  usage: EMPTY_USAGE,
   session_id: 'demo-1',
   expires_at: '2026-10-21T12:00:00Z',
   history: [],
@@ -89,6 +102,42 @@ async function render(fixture: ComponentFixture<App>, condition: () => void): Pr
 describe('Native demo application', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('passes conversation totals from new snapshots to the composer usage line', async () => {
+    const { fixture, chat, server } = await openDemo();
+    expect(chat.usage()).toMatchObject({ totalTokens: 0, estimatedCostUsd: null });
+    server.snapshot({
+      ...EMPTY,
+      usage: {
+        ...EMPTY_USAGE,
+        input_tokens: 9600,
+        output_tokens: 3200,
+        total_tokens: 12800,
+        reasoning_tokens: 1240,
+        cache_read_tokens: 6400,
+        cache_write_tokens: 800,
+        requests: 8,
+        tool_calls: 4,
+        estimated_cost_usd: '0.024',
+      },
+    });
+    await render(fixture, () => {
+      const line = element(fixture).querySelector('ai-chat-composer ai-chat-usage-line');
+      expect(line?.textContent).toContain('$0.024');
+      expect(line?.textContent).toContain('12.8K Tokens');
+    });
+    expect(chat.usage()).toEqual({
+      inputTokens: 9600,
+      outputTokens: 3200,
+      totalTokens: 12800,
+      reasoningTokens: 1240,
+      cacheReadTokens: 6400,
+      cacheWriteTokens: 800,
+      requests: 8,
+      toolCalls: 4,
+      estimatedCostUsd: '0.024',
+    });
+  });
+
   it.each<{ title: string; payload: Record<string, string | string[]>; text: string }>([
     {
       title: 'demo.greeting',
@@ -136,6 +185,7 @@ describe('Native demo application', () => {
           { part_kind: 'user-prompt', content: 'Any text' },
           {
             part_kind: 'turn',
+            usage: EMPTY_USAGE,
             lifecycle: LIFECYCLE,
             parts: [
               { part_kind: 'text', content: 'Creating a greeting.', phase: 'commentary' },
@@ -201,6 +251,7 @@ describe('Native demo application', () => {
         { part_kind: 'user-prompt', content: 'Show error' },
         {
           part_kind: 'turn',
+          usage: EMPTY_USAGE,
           lifecycle: { ...LIFECYCLE, status: 'failed' },
           parts: [
             { part_kind: 'text', content: 'This update remains visible.', phase: 'commentary' },
@@ -224,6 +275,7 @@ describe('Native demo application', () => {
     const { fixture, chat, server } = await openDemo();
     const history: PresentedSession['history'] = Array.from({ length: 4 }, (_, index) => ({
       part_kind: 'turn',
+      usage: EMPTY_USAGE,
       lifecycle: {
         ...LIFECYCLE,
         run_id: `run-${index}`,

@@ -13,7 +13,7 @@ From **backend/**:
 ```powershell
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test]"
+python -m pip install -e ".[test,dev]"
 python -m uvicorn app.main:app --reload --port 8004
 ```
 
@@ -24,7 +24,7 @@ npm ci
 npm run start:app
 ```
 
-Open `http://localhost:4204`; API requests proxy to port 8004. The scripted demo needs no model credentials or Kochwiki connection. Refresh to start a new session.
+Open `http://localhost:4204`; API requests proxy to port 8004. The [Visual Conversation Demo](../backend/app/demos/visual_conversation_demo/) needs no model credentials or Kochwiki connection. Refresh to start a new session.
 
 For the model-backed agent, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [Kochwiki settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
 
@@ -40,11 +40,19 @@ Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have
 
 ## Validate changes
 
-From **backend/**, with its virtual environment active:
+Format changed backend Python files from the **repository root**:
+
+```powershell
+node .codex/validation/backend.mts --format
+```
+
+Then, from **backend/**, with its virtual environment active:
 
 ```powershell
 python -m pytest
 ```
+
+Use the backend virtual environment's Black in your editor to match the version and settings in `backend/pyproject.toml`. Formatting includes staged, unstaged, and untracked changed files; review unrelated edits first.
 
 Container alternative, from the **repository root**:
 
@@ -95,15 +103,15 @@ With the [local servers](#run-locally) running, open `http://localhost:4204` at 
 - Send one more message to trigger the frontend-only 405 compatibility error without retry. Refresh to restart; there is no restart button.
 - Check history/composer placement during viewport changes, no horizontal overflow, Enter/send submitting once, and Shift+Enter adding a line break.
 
-## Agentic coding
+## AI-assisted development
 
 | Resource | Purpose |
 | --- | --- |
 | [AGENTS.md](../AGENTS.md) | Coding rules, approval boundaries, and required validation. |
 | [Skills](../.agents/skills/) | Reusable workflows, including concept, spec, delivery, review, and Pydantic AI guidance. Read the relevant `SKILL.md` before use. |
-| [Hooks](../.codex/hooks.json) | Snapshot frontend content before prompts; format, lint, and test changed content on stop. |
+| [Hooks](../.codex/hooks.json) | Snapshot frontend and backend content before prompts; validate affected scopes on stop. |
 | [Project configuration](../.codex/config.toml) | Angular CLI and OpenAI documentation MCP connections. |
 
-Review and trust hooks before relying on them. Their commands use PowerShell and absolute checkout paths; run validation manually if unavailable. Reports live under `frontend/.codex-validation/`. Review formatting changes before completion.
+Review and trust hooks before relying on them. Their commands use PowerShell and absolute checkout paths; run validation manually if unavailable. Reports live under `frontend/.codex-validation/` and `backend/.codex-validation/`. Review formatting changes before completion.
 
 Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.
