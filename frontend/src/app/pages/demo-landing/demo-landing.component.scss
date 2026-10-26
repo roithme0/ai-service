@@ -1,0 +1,109 @@
+:host {
+  display: block;
+  height: 100%;
+  overflow: auto;
+  background: #130d0f;
+}
+
+.landing {
+  box-sizing: border-box;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 3.5rem 2rem;
+}
+
+.eyebrow,
+.badge {
+  font-family: ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.eyebrow {
+  margin: 0 0 1.5rem;
+  font-size: 0.7rem;
+}
+
+h1 {
+  margin: 0 0 0.7rem;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.intro {
+  margin: 0 0 2rem;
+}
+
+.cards {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.card {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 1.5rem;
+  border: 1px solid #59404a;
+  border-radius: 0.75rem;
+  background: #271c21;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.card:hover {
+  background: #302229;
+  border-color: #916779;
+}
+
+.card:focus-visible {
+  outline: 2px solid #ff80cc;
+  outline-offset: 4px;
+}
+
+.card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+h2,
+.card-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+.badge {
+  padding: 0.25rem 0.4rem;
+  border-radius: 0.25rem;
+  background: #392a32;
+  font-size: 0.625rem;
+}
+
+.card p,
+.card-description {
+  display: block;
+  margin: 0.875rem 0 1.25rem;
+  line-height: 1.5;
+}
+
+.card-action {
+  display: block;
+  color: #ff80cc;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 30rem) {
+  .landing {
+    padding: 2rem 1rem;
+  }
+
+  .card {
+    padding: 1.25rem;
+  }
+}
