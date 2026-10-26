@@ -128,15 +128,15 @@ def test_visual_conversation_demo_through_http_and_live_snapshots(
                     ]
                     assert [artifact.type for artifact in artifacts] == ["json", "json"]
                     assert [artifact.content.title for artifact in artifacts] == [
-                        "visual-demo.greeting",
-                        "visual-demo.greetings",
+                        "Begrüßung",
+                        "Begrüßungen",
                     ]
                     assert artifacts[0].content.payload == {
-                        "value": {"message": "Hello, World!"}
+                        "value": {"message": "Hallo, Welt!"}
                     }
                     assert artifacts[1].content.payload == {
                         "value": {
-                            "messages": [f"Hello, Visitor {i}!" for i in range(1, 31)]
+                            "messages": [f"Hallo, Besucher {i}!" for i in range(1, 31)]
                         }
                     }
                     assert final_turns[2].parts == (

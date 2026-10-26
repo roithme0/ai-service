@@ -16,10 +16,12 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from app.capabilities.conversations.turns import create_turn_agent
 
 TURN_DELAY_SECONDS = 1.5
-FIRST_REPLY = "Hello! This is a scripted visual demo. Send another message to see two tools create artifacts."
-SECOND_REPLY = "This scripted demo created two greetings artifacts. Expand the longer list to see them all. An additional artifact call deliberately omitted the required JSON value and failed validation, so it created no artifact. Send another message to see an error state."
-FAILED_GENERATION_UPDATE = "I'll start another response. This demo will deliberately stop generation after this update, leaving it visible without a final answer."
-COMPLETE_REPLY = "This scripted demo is complete. Refresh the page to restart it."
+FIRST_REPLY = "Hallo! Diese visuelle Demo folgt einem festen Skript. Sende noch eine Nachricht, um zu sehen, wie zwei Tool-Aufrufe Artefakte erstellen."
+SECOND_REPLY = "Diese Demo hat zwei Artefakte mit Begrüßungen erstellt. Klappe die längere Liste auf, um alle zu sehen. Bei einem zusätzlichen Artefakt-Aufruf wurde absichtlich der erforderliche JSON-Wert weggelassen. Dadurch ist die Validierung fehlgeschlagen und es wurde kein Artefakt erstellt. Sende noch eine Nachricht, um einen Fehlerzustand zu sehen."
+FAILED_GENERATION_UPDATE = "Ich beginne mit einer weiteren Antwort. Diese Demo bricht die Generierung nach dieser Zwischenantwort absichtlich ab. Sie bleibt ohne abschließende Antwort sichtbar."
+COMPLETE_REPLY = (
+    "Diese Demo ist abgeschlossen. Lade die Seite neu, um von vorn zu beginnen."
+)
 
 
 def create_visual_conversation_demo_agent(
@@ -75,20 +77,20 @@ def _artifact_step(step: int) -> ModelResponse:
     payload: dict[str, JsonValue]
     match step:
         case 0:
-            commentary = "I'll create a single greeting first."
-            title = "visual-demo.greeting"
-            payload = {"value": {"message": "Hello, World!"}}
+            commentary = "Ich erstelle zunächst eine einzelne Begrüßung."
+            title = "Begrüßung"
+            payload = {"value": {"message": "Hallo, Welt!"}}
         case 1:
-            commentary = "The single greeting is ready. Next I'll create a list of 30 greetings to demonstrate expanding a larger artifact."
-            title = "visual-demo.greetings"
+            commentary = "Die einzelne Begrüßung ist fertig. Als Nächstes erstelle ich eine Liste mit 30 Begrüßungen, um das Aufklappen eines größeren Artefakts zu zeigen."
+            title = "Begrüßungen"
             payload = {
                 "value": {
-                    "messages": [f"Hello, Visitor {index}!" for index in range(1, 31)]
+                    "messages": [f"Hallo, Besucher {index}!" for index in range(1, 31)]
                 }
             }
         case 2:
-            commentary = "Both artifacts are ready. I'll now deliberately omit the required JSON value to show how a failed tool call appears."
-            title = "visual-demo.greeting"
+            commentary = "Beide Artefakte sind fertig. Ich lasse jetzt absichtlich den erforderlichen JSON-Wert weg, um zu zeigen, wie ein fehlgeschlagener Tool-Aufruf dargestellt wird."
+            title = "Begrüßung"
             payload = {}
         case _:
             return _text(SECOND_REPLY, "final_answer")

@@ -141,16 +141,16 @@ describe('Visual demo application', () => {
 
   it.each<{ title: string; payload: Record<string, string | string[]>; text: string }>([
     {
-      title: 'visual-demo.greeting',
-      payload: { message: 'Hello, World!' },
-      text: '"message": "Hello, World!"',
+      title: 'Begrüßung',
+      payload: { message: 'Hallo, Welt!' },
+      text: '"message": "Hallo, Welt!"',
     },
     {
-      title: 'visual-demo.greetings',
+      title: 'Begrüßungen',
       payload: {
-        messages: Array.from({ length: 30 }, (_, index) => `Hello, Visitor ${index + 1}!`),
+        messages: Array.from({ length: 30 }, (_, index) => `Hallo, Besucher ${index + 1}!`),
       },
-      text: 'Hello, Visitor 30!',
+      text: 'Hallo, Besucher 30!',
     },
   ])(
     'renders $title from native snapshots without inserting an optimistic prompt',
