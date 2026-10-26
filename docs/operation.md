@@ -17,12 +17,14 @@ Create `deployment/.env` from [.env.example](../deployment/.env.example); host-s
 | Variable | Purpose |
 | --- | --- |
 | `GATEWAY_PORT` | Published gateway port for Compose. The example selects 8004. |
-| `OPENAI_API_KEY` | Provider credentials for embeddings and the Kochwiki conversation model. |
+| `OPENAI_API_KEY` | Provider credentials for embeddings, Kochwiki, and Live Demo. |
 | `KOCHWIKI_OPENAI_MODEL` | Model used by the Kochwiki agent. |
 | `KOCHWIKI_MCP_URL` | External Streamable HTTP MCP endpoint, including its path. |
 | `KOCHWIKI_OPENAI_REASONING_EFFORT` | Optional model reasoning effort; blank uses the model default. Support depends on the selected model. |
 
 The visual demo (`visual-demo`) works without these agent settings. Invalid startup configuration leaves Kochwiki unavailable with `503 agent_unavailable`; restart after correcting it. MCP connects per turn, so an outage can recover on a later turn without restarting.
+
+Live Demo (`live-demo`) requires only `OPENAI_API_KEY`. Missing credentials or initialization failure returns `503 agent_unavailable`; restart after correcting startup configuration.
 
 For a Kochwiki server on the Docker host, the example uses `http://host.docker.internal:8002/mcp/`; ensure that name resolves on your host. Container `localhost` refers to the container itself.
 
