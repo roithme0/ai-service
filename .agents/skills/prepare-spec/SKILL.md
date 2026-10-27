@@ -21,15 +21,15 @@ Turn an intended software change into an approved direction without prescribing 
 
 - Do not turn missing information into a settled requirement. Distinguish user-confirmed decisions, facts established by repository evidence, and proposed choices.
 - Use the codebase to establish current behavior, contracts, and conventions; cite the relevant evidence when relying on it. Current behavior does not establish the user's intended change.
-- Material product, scope, UX, behavioral, architectural, compatibility, and migration choices require user confirmation or explicit delegation. Recommendations remain proposals until confirmed. Silence is not confirmation.
-- Routine implementation mechanics may follow established conventions without additional confirmation. Record the scope of delegated choices and any material decisions made within it.
+- Material product, scope, UX, behavioral, architectural, compatibility, and migration choices require user confirmation or explicit user authorization to decide. Recommendations remain proposals until confirmed. Silence is not confirmation.
+- Routine implementation mechanics may follow established conventions without additional confirmation. Record the scope of user-authorized decision-making and any material decisions made within it.
 
 ## Readiness Criteria
 
 A spec is ready for delivery when:
 
 - The outcome and meaningful scope boundaries are clear.
-- Material decisions are user-confirmed or explicitly delegated, and choices made within that delegation are recorded.
+- Material decisions are user-confirmed or made within explicit user authorization to decide, and those choices are recorded.
 - Acceptance criteria describe observable, verifiable outcomes.
 - No open question would require the implementer to invent a product, architecture, compatibility, or migration decision.
 - For UI-affecting work, the intended experience, interaction model, important states, and visual direction are clear enough that implementation does not require inventing product decisions.
@@ -45,7 +45,7 @@ A spec is ready for delivery when:
 
 ## Spec Maintenance
 
-- Store specs in the repository's established spec location and follow its naming conventions. If none exist, use `docs/specs/YYYY-MM-DD-<short-kebab-title>.md`.
-- Link a related concept when the spec realizes part of a broader accepted direction.
+- Store specs in `.agents/specs/` relative to the target repository root. Follow existing filename conventions there; otherwise use `YYYY-MM-DD-<short-kebab-title>.md`.
+- Use relative Markdown links to related concepts and specs, including across artifact folders.
 - Remove resolved questions and empty optional sections instead of preserving placeholders.
 - Do not silently change an approved decision. Return to sparring and make the change visible.

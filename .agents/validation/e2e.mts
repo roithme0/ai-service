@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -35,44 +35,84 @@ export async function waitForGateway(baseURL: string, timeout = 60_000): Promise
   throw new Error(`Docker gateway at ${baseURL} did not become ready: ${failure}`);
 }
 
-export async function testE2E(root: string, cache: string): Promise<void> {
+export async function testE2E(
+  root: string,
+  cache: string,
+  run: typeof runCheck = runCheck,
+): Promise<void> {
   await mkdir(cache, { recursive: true });
   const env = { ...process.env, GATEWAY_PORT: process.env['GATEWAY_PORT'] || '8004' };
   const compose = ['compose', '-f', 'deployment/docker-compose-local.yml'];
-  await runCheck(
-    root,
-    'Docker build and startup',
-    [...compose, 'up', '-d', '--build', '--wait', '--wait-timeout', '60'],
-    join(cache, 'docker.log'),
-    600_000,
-    'docker',
-    undefined,
-    env,
-  );
-  // Nginx must resolve upstream addresses again after container replacement.
-  await runCheck(
-    root,
-    'Gateway restart',
-    [...compose, 'restart', 'gateway'],
-    join(cache, 'gateway.log'),
-    60_000,
-    'docker',
-    undefined,
-    env,
-  );
-  const baseURL = `http://localhost:${env.GATEWAY_PORT}`;
-  await waitForGateway(baseURL);
   const frontend = join(root, 'frontend');
-  await runCheck(
-    frontend,
-    'Playwright',
-    [join(frontend, 'node_modules/@playwright/test/cli.js'), 'test'],
-    join(cache, 'playwright.log'),
-    180_000,
-    process.execPath,
-    undefined,
-    { ...env, PLAYWRIGHT_BASE_URL: baseURL },
-  );
+  const cli = join(frontend, 'node_modules/@playwright/test/cli.js');
+  await access(cli).catch(() => {
+    throw new Error(
+      'Incomplete E2E validation: missing installed Playwright dependency (run npm ci in frontend).',
+    );
+  });
+  try {
+    await run(
+      root,
+      'Docker availability',
+      ['info', '--format', '{{.ServerVersion}}'],
+      join(cache, 'docker-info.log'),
+      30_000,
+      'docker',
+      undefined,
+      env,
+    );
+    await run(
+      root,
+      'Docker build and startup',
+      [...compose, 'up', '-d', '--build', '--wait', '--wait-timeout', '60'],
+      join(cache, 'docker.log'),
+      600_000,
+      'docker',
+      undefined,
+      env,
+    );
+    // Nginx must resolve upstream addresses again after container replacement.
+    await run(
+      root,
+      'Gateway restart',
+      [...compose, 'restart', 'gateway'],
+      join(cache, 'gateway.log'),
+      60_000,
+      'docker',
+      undefined,
+      env,
+    );
+    const baseURL = `http://localhost:${env.GATEWAY_PORT}`;
+    await waitForGateway(baseURL);
+    await run(
+      frontend,
+      'Playwright',
+      [cli, 'test'],
+      join(cache, 'playwright.log'),
+      180_000,
+      process.execPath,
+      undefined,
+      { ...env, PLAYWRIGHT_BASE_URL: baseURL },
+    );
+  } catch (error: unknown) {
+    for (const [command, name] of [['ps', 'services'], ['logs', 'services-logs']]) {
+      try {
+        await run(
+          root,
+          'E2E failure diagnostics',
+          [...compose, command, ...(command === 'logs' ? ['--no-color', '--tail', '2000'] : ['--all'])],
+          join(cache, `${name}.log`),
+          30_000,
+          'docker',
+          undefined,
+          env,
+        );
+      } catch (diagnosticError: unknown) {
+        await writeFile(join(cache, `${name}-error.log`), String(diagnosticError)).catch(() => {});
+      }
+    }
+    throw error;
+  }
 }
 
 export function e2eProfile(root: string): ValidationProfile {

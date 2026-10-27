@@ -47,6 +47,28 @@ jobs:
       - name: Lint frontend
         run: npm run lint
 
+  frontend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend tooling tests
+        run: npm run test:tooling
+
       - name: Run frontend app tests
         run: npm run test:app
 
@@ -96,7 +118,7 @@ jobs:
           retention-days: 7
 
   build-app:
-    needs: validate
+    needs: [validate, frontend-tests]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -211,7 +233,7 @@ jobs:
           regctl image copy "$APP_IMAGE:$RELEASE_VERSION" "$APP_IMAGE:$RELEASE_CHANNEL"
 
   build-chat-ui:
-    needs: validate
+    needs: [validate, frontend-tests]
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release.outputs.version }}
