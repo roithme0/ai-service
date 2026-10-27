@@ -24,9 +24,9 @@ npm ci
 npm run start:app
 ```
 
-Open `http://localhost:4204`; API requests proxy to port 8004. The [Visual Conversation Demo](../backend/app/demos/visual_conversation_demo/) needs no model credentials or Kochwiki connection. Refresh to start a new session.
+Open `http://localhost:4204` for the demo selector: **Visual Demo** (`/demos/visual`) or **Live Demo** (`/demos/live`). API requests proxy to port 8004. Visual Demo needs no model credentials or Kochwiki connection; Live Demo requires the [provider key](operation.md#configuration). Refresh or re-enter a demo to start a new session.
 
-For the model-backed agent, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [Kochwiki settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
+For model-backed conversations, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [agent settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
 
 ### Container alternative
 
@@ -40,10 +40,11 @@ Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have
 
 ## Validate changes
 
-Format changed backend Python files from the **repository root**:
+For backend edits, run from the **repository root**:
 
 ```powershell
-node .codex/validation/backend.mts --format
+node .agents/validation/backend.mts --format
+node --test .agents/validation/shared.test.mts .agents/validation/backend.test.mts
 ```
 
 Then, from **backend/**, with its virtual environment active:
@@ -74,6 +75,28 @@ For build verification, run `npm run build:app` and `npm run build:chat-ui`. Tes
 
 The [gateway regression harness](../deployment/tests/gateway/) currently mounts `deployment/nginx.conf`, while the configuration lives at `deployment/gateway/nginx.conf`. Correct that mount before relying on this check.
 
+### End-to-end browser tests
+
+[Playwright](../frontend/playwright.config.ts) tests live in [frontend/e2e/](../frontend/e2e/). Start the [Docker stack](#container-alternative) separately; the default target is `http://localhost:8004`. From **frontend/**, after `npm ci`:
+
+```powershell
+npx playwright install chromium
+npx playwright test
+npx playwright codegen http://localhost:8004
+```
+
+Install Chromium on first setup and after Playwright upgrades. Codegen records tests interactively; save reviewed tests as `e2e/<name>.spec.ts` and use `page.goto('/')` for the configured target. Add `--headed` to test runs to watch the browser.
+
+For an already-running dev server (or a custom gateway URL):
+
+```powershell
+$env:PLAYWRIGHT_BASE_URL = 'http://localhost:4204'
+npx playwright test --headed
+Remove-Item Env:PLAYWRIGHT_BASE_URL
+```
+
+Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Hooks update the local Docker stack using Docker's build cache, then run Playwright after frontend, backend, or local deployment changes. Manual equivalent from the repository root: `node .agents/validation/e2e.mts`. The stack stays running; logs are in `.agents/.codex-validation/e2e/`. CI runs the same Docker-based check on pull requests and release tags, gates publication on success, and uploads failure logs and traces as `e2e-diagnostics`.
+
 ## Update the conversation contract
 
 Install backend and frontend dependencies first. From **frontend/**:
@@ -96,11 +119,11 @@ See the [package README](../frontend/projects/chat-ui/README.md) for component i
 
 From **frontend/**, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This verifies built exports, runtime behavior, explicit application identity, and strict consumer declarations without workspace aliases.
 
-With the [local servers](#run-locally) running, open `http://localhost:4204` at a portrait-phone viewport:
+With the [local servers](#run-locally) running, open `http://localhost:4204/demos/visual` at a portrait-phone viewport:
 
-- Submit arbitrary text through the introduction, two JSON artifacts (`demo.greeting` and `demo.greetings`, with 30 greetings), invalid publication, scripted failure, and completion guidance. The error's demo action is intentionally inert.
-- Expand/collapse the long artifact and run details; check retained content after failure and scroll position during toggles. Native final-answer anchoring still needs Chrome/Firefox verification.
-- Send one more message to trigger the frontend-only 405 compatibility error without retry. Refresh to restart; there is no restart button.
+- Submit arbitrary text through the introduction, two JSON greeting artifacts (one greeting and a list of 30), invalid publication, scripted failure, and completion guidance. The error's demo action is intentionally inert.
+- Expand/collapse the long artifact and run details; check retained content after failure and scroll position during toggles in Chrome and Firefox.
+- Send one more message to trigger the frontend-only compatibility error without a backend request or retry. Refresh to restart.
 - Check history/composer placement during viewport changes, no horizontal overflow, Enter/send submitting once, and Shift+Enter adding a line break.
 
 ## AI-assisted development
@@ -109,9 +132,10 @@ With the [local servers](#run-locally) running, open `http://localhost:4204` at 
 | --- | --- |
 | [AGENTS.md](../AGENTS.md) | Coding rules, approval boundaries, and required validation. |
 | [Skills](../.agents/skills/) | Reusable workflows, including concept, spec, delivery, review, and Pydantic AI guidance. Read the relevant `SKILL.md` before use. |
-| [Hooks](../.codex/hooks.json) | Snapshot frontend and backend content before prompts; validate affected scopes on stop. |
+| [Validation](../.agents/validation/) | Shared checks used by manual commands, CI, and agent hooks. |
+| [Hooks](../.codex/hooks.json) | Codex adapter snapshots content before prompts and validates affected scopes on stop. |
 | [Project configuration](../.codex/config.toml) | Angular CLI and OpenAI documentation MCP connections. |
 
-Review and trust hooks before relying on them. Their commands use PowerShell and absolute checkout paths; run validation manually if unavailable. Reports live under `frontend/.codex-validation/` and `backend/.codex-validation/`. Review formatting changes before completion.
+Review and trust hooks before relying on them. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/{frontend,backend,e2e}/`. Review formatting changes before completion.
 
 Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.

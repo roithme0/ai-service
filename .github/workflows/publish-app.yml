@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  check-conversation-contract:
+  validate:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -47,8 +47,56 @@ jobs:
       - name: Lint frontend
         run: npm run lint
 
+      - name: Run frontend app tests
+        run: npm run test:app
+
+      - name: Run chat UI tests
+        run: npm run test:chat-ui
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Docker-based end-to-end tests
+        run: node .agents/validation/e2e.mts
+
+      - name: Collect container logs
+        if: failure()
+        run: |
+          mkdir -p .agents/.codex-validation/e2e/manual
+          docker compose -f deployment/docker-compose-local.yml logs --no-color > .agents/.codex-validation/e2e/manual/containers.log 2>&1
+
+      - name: Upload end-to-end diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-diagnostics
+          path: |
+            .agents/.codex-validation/e2e/manual/*.log
+            frontend/e2e/test-results/
+          include-hidden-files: true
+          retention-days: 7
+
   build-app:
-    needs: check-conversation-contract
+    needs: validate
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -123,7 +171,7 @@ jobs:
           if-no-files-found: error
 
   publish-app:
-    needs: [build-app, build-chat-ui]
+    needs: [build-app, build-chat-ui, e2e]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     strategy:
@@ -163,7 +211,7 @@ jobs:
           regctl image copy "$APP_IMAGE:$RELEASE_VERSION" "$APP_IMAGE:$RELEASE_CHANNEL"
 
   build-chat-ui:
-    needs: check-conversation-contract
+    needs: validate
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release.outputs.version }}
@@ -223,7 +271,7 @@ jobs:
           if-no-files-found: error
 
   publish-chat-ui:
-    needs: [build-app, build-chat-ui]
+    needs: [build-app, build-chat-ui, e2e]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     env:

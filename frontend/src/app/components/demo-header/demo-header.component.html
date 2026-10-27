@@ -1,0 +1,7 @@
+<header>
+  <nav aria-label="Demo navigation">
+    <a routerLink="/"><app-navigation-link direction="back">Demos</app-navigation-link></a>
+  </nav>
+  <span class="demo-label">{{ label() }}</span>
+  <app-demo-tag [label]="tag()" />
+</header>

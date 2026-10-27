@@ -1,0 +1,82 @@
+:host {
+  display: block;
+  height: 100%;
+  overflow: auto;
+  background: var(--demo-page-background);
+}
+
+.landing {
+  box-sizing: border-box;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 3.5rem var(--demo-section-gap);
+}
+
+h1 {
+  margin: 0 0 0.7rem;
+  font-size: var(--demo-page-title-font-size);
+  font-weight: var(--demo-title-font-weight);
+}
+
+.intro {
+  margin: 0 0 var(--demo-section-gap);
+}
+
+.cards {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.card {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--demo-surface-padding);
+  border: var(--demo-border-width) solid var(--demo-border);
+  border-radius: var(--demo-surface-radius);
+  background: var(--demo-surface-background);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.card:hover {
+  background: var(--demo-surface-hover-background);
+  border-color: var(--demo-hover-border);
+}
+
+.card:focus-visible {
+  outline: var(--demo-focus-width) solid var(--demo-focus);
+  outline-offset: var(--demo-focus-offset);
+}
+
+.card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--demo-content-gap);
+}
+
+h2 {
+  margin: 0;
+  font-size: var(--demo-section-title-font-size);
+  font-weight: var(--demo-emphasis-font-weight);
+}
+
+.card p {
+  display: block;
+  margin: 0.875rem 0 1.25rem;
+  line-height: var(--demo-body-line-height);
+}
+
+@media (max-width: 30rem) {
+  .landing {
+    padding: var(--demo-section-gap) var(--demo-content-gap);
+  }
+
+  .card {
+    padding: var(--demo-compact-surface-padding);
+  }
+}

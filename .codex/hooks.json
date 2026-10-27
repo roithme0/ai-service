@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:/Code/ai-service/.codex/validate.ps1 -Mode start",
+            "command": "node C:/Code/ai-service/.codex/validate.mts --start",
             "timeout": 30,
             "statusMessage": "Recording frontend and backend content before this turn"
           }
@@ -17,9 +17,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:/Code/ai-service/.codex/validate.ps1 -Mode stop",
-            "timeout": 1500,
-            "statusMessage": "Formatting changed files and validating affected frontend and backend code"
+            "command": "node C:/Code/ai-service/.codex/validate.mts --stop",
+            "timeout": 2400,
+            "statusMessage": "Validating changed code and running Playwright against an updated Docker stack"
           }
         ]
       }

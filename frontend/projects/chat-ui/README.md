@@ -43,11 +43,11 @@ Add to the application's build `assets` array in `angular.json`:
 }
 ```
 
-Set `mascotAssetPath="assets/chat-ui/images"`; the default is `images`, relative to the application base URL. The package supplies `mascot-idle.png` and `maskot-working.png` (spelling intentional). Any `active` turn selects the working mascot, even after final text arrives. The idle image can also serve as a favicon.
+Set `mascotAssetPath="assets/chat-ui/images"`; the default is `images`, relative to the application base URL. The package supplies `mascot-idle.png` and `maskot-working.png` (spelling intentional). Any `active` turn selects the working mascot, even after final text arrives.
 
 ## AI Service integration
 
-A standalone host using the scripted `demo` configuration:
+A standalone host using the scripted `visual-demo` configuration:
 
 ```typescript
 import { Component, OnInit, OnDestroy, signal } from '@angular/core';
@@ -66,7 +66,7 @@ import {
   selector: 'app-chat',
   imports: [ChatUiComponent],
   template: `<ai-chat-ui
-    bannerTitle="Chat demo"
+    bannerTitle="Visual Demo"
     bannerDescription="Any text advances the scripted sequence."
     mascotAssetPath="assets/chat-ui/images"
     [turns]="chat().turns"
@@ -88,7 +88,7 @@ export class ChatHost implements OnInit, OnDestroy {
     status: null,
   });
   private readonly controller = new SessionController(
-    new HttpSessionTransport('/api/v1', 'demo', 'demo:default'),
+    new HttpSessionTransport('/api/v1', 'visual-demo', 'demo:default'),
     (state) => this.chat.set(state),
   );
 
@@ -107,7 +107,7 @@ export class ChatHost implements OnInit, OnDestroy {
 }
 ```
 
-- The transport takes the URL prefix before `/agents`, configuration key, and identity string `${encodeURIComponent(issuer)}:${encodeURIComponent(subject)}` sent as `X-Application-User` on every request. Both components must be nonempty; ownership compares the decoded issuer/subject pair. The demo uses issuer `demo` and subject `default`. This temporary assertion does not authenticate the caller. The backend forwards the session owner's assertion to Kochwiki MCP separately for each turn.
+- The transport takes the URL prefix before `/agents`, configuration key, and identity string `${encodeURIComponent(issuer)}:${encodeURIComponent(subject)}` sent as `X-Application-User` on every request. Both components must be nonempty. This assertion does not authenticate the caller; see the [session rules](https://github.com/roithme0/ai-service/blob/production/docs/domains/conversations.md#session-rules).
 - `start(initialization?)` accepts `initial_context` and `artifact_capabilities`; replacement sessions reuse them. Server validation is authoritative.
 - Bind `turns`, both composer flags, and `status`. `snapshot` exposes the backend contract, including session and turn usage; `admission` and `observation` describe request/connection outcomes separately from execution.
 - The optional third controller argument, `SessionArtifactMapper`, maps a published artifact to `ChatArtifact` or `null`. The default preserves identity/type and maps title, subtitle, payload, and metadata.
@@ -119,7 +119,8 @@ Rendering-only hosts import `ChatUiComponent` and supply their own state and han
 
 | Input/output                                   | Contract                                                                                                                                                      |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bannerTitle`, `bannerDescription`, `turns`    | Required inputs. Turns and content render in supplied order.                                                                                                  |
+| `turns`                                        | Required input. Turns and content render in supplied order.                                                                                                   |
+| `bannerTitle`, `bannerDescription`             | Optional banner content. Omitting both hides the banner; title-to-description spacing appears only when both are present.                                     |
 | `artifactRenderers`                            | Type-to-`artifactRenderer(template)` map. Templates receive payload as `$implicit`, full artifact through `let-artifact="artifact"`.                          |
 | `conversationStatus`                           | Loading/error with `message`, `placement: 'conversation' \| 'assistant'`, optional action `{ id, label }`, and optional loading `reveal: 'delayed'` (300 ms). |
 | `composerDisabled` / `composerEditingDisabled` | Block submissions / edits independently; both default to `false`. Editing lock preserves textarea focusability.                                               |
@@ -129,7 +130,7 @@ Rendering-only hosts import `ChatUiComponent` and supply their own state and han
 
 ### Content and identity
 
-Optional `usage: ChatUsage | null` shows conversation totals below the composer, with a toggle for detailed counters. The expanded panel fades the line and mascot away; Escape closes it. Omit usage to hide both views. Hosts supply all counters and `estimatedCostUsd` (decimal string or `null`, meaning unavailable). Costs and compact totals are rounded for display; tooltips retain exact values.
+Optional `usage: ChatUsage | null` shows conversation totals below the composer, with expandable detailed counters. Omit usage to hide both views. Hosts supply all counters and `estimatedCostUsd` (decimal string or `null`, meaning unavailable). Costs and compact totals are rounded for display; tooltips retain exact values.
 
 Content items have stable host-supplied `id` values and readonly fields. Optional item `turnId` does not determine ownership: the enclosing turn does.
 
@@ -151,7 +152,7 @@ Content items have stable host-supplied `id` values and readonly fields. Optiona
 - Enter submits; Shift+Enter inserts a line break. Drafts remain until acknowledgement. Pointer controls preserve focus; initialization/acknowledgement never move it. Mobile keyboard behavior depends on the browser.
 - Loading uses conversation text or assistant dots; errors appear immediately. Rendering-only hosts clear assistant loading when response content appears. The controller shows no sending indicator and starts loading once the accepted prompt is visible.
 - Completed runs with an explicit final answer collapse intermediate messages/tool calls once. Other runs start expanded. Final-answer bars share a details toggle; later manual choices persist for the component lifetime. Ordinary text, artifacts, and failures stay visible; artifact state survives toggles.
-- New content/status normally scrolls to the bottom, even after scrolling up. Detail/artifact toggles use native anchors; positioning depends on browser scroll range. Chrome/Firefox anchoring verification is pending. Collapsed details stay mounted but inert; focus inside them is not transferred automatically.
+- New content/status normally scrolls to the bottom, even after scrolling up. Detail/artifact toggles use native anchors; positioning depends on browser scroll range. Collapsed details stay mounted but inert; focus inside them is not transferred automatically.
 - Detail transitions respect reduced motion; loading animations do not. Some controls/status labels are German.
 
 ## Artifact presentation
@@ -164,7 +165,7 @@ The built-in `json` renderer displays escaped, formatted `payload.value`. Other 
 | `titleDescription`, `subtitleDescription` | Optional header guidance, not payload-field validation. Descriptions must be nonblank and at most 2,000 characters.                                  |
 | `metadataSchema`                          | Optional self-contained JSON Schema draft 2020-12. Metadata is validated separately; omission is checked as `{}`; unadvertised metadata is rejected. |
 
-Advertise capabilities at creation; renderer registration alone does not advertise them. Capabilities cannot change mid-session. Without them, model-backed sessions are text-only. Agents supply complete data; renderers do not fetch missing details. Metadata has no built-in rendering/actions. Publication does not save domain data.
+Advertise capabilities at session creation; renderer registration alone does not advertise them. Renderers receive complete data and do not fetch missing details. Metadata has no built-in rendering/actions. See the [artifact publication rules](https://github.com/roithme0/ai-service/blob/production/docs/domains/artifacts.md#publication-rules) for backend validation and retention.
 
 ## Transport and recovery
 

@@ -105,13 +105,20 @@ def test_kochwiki_initialization_failure_does_not_block_application(
         assert unavailable_response.json() == {"kind": "agent_unavailable"}
         assert (
             client.post(
-                "/api/v1/agents/demo/sessions", json={}, headers=headers
+                "/api/v1/agents/visual-demo/sessions", json={}, headers=headers
             ).status_code
             == 201
         )
+        old_configuration = client.post(
+            "/api/v1/agents/demo/sessions", json={}, headers=headers
+        )
+        assert old_configuration.status_code == 404
+        assert old_configuration.json() == {"kind": "unknown_configuration"}
         assert (
             client.post(
-                "/api/native/api/v1/agents/demo/sessions", json={}, headers=headers
+                "/api/native/api/v1/agents/visual-demo/sessions",
+                json={},
+                headers=headers,
             ).status_code
             == 404
         )

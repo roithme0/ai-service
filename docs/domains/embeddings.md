@@ -1,6 +1,6 @@
 # Embeddings
 
-After [configuring the provider](../operation.md#embedding-capability), send `POST /api/v1/embeddings` with:
+After [configuring the provider](../operation.md#configuration), send `POST /api/v1/embeddings` with:
 
 ```json
 {"profile": "semantic-text-v1", "input": "Tomato soup"}

@@ -1,0 +1,7 @@
+@if (direction() === 'back') {
+  <span aria-hidden="true">←</span>
+}
+<ng-content />
+@if (direction() === 'forward') {
+  <span aria-hidden="true">→</span>
+}

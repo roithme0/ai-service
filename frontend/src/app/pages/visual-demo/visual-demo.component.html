@@ -1,0 +1,14 @@
+<app-demo-header label="Visual Demo" tag="Scripted" />
+<main class="chat-shell">
+  <ai-chat-ui
+    bannerDescription="Diese Demo folgt einem festen Skript ohne KI-Modell. Sende nach der Abschlussantwort noch eine Nachricht, um einen simulierten API-Fehler zu sehen. Lade die Seite neu, um von vorn zu beginnen."
+    composerPlaceholder="Nachricht schreiben"
+    [turns]="chat().turns"
+    [usage]="usage()"
+    [composerDisabled]="chat().composerDisabled"
+    [composerEditingDisabled]="chat().composerEditingDisabled"
+    [conversationStatus]="chat().status"
+    (messageSubmitted)="handleMessage($event)"
+    (statusActionTriggered)="handleStatusAction($event)"
+  />
+</main>

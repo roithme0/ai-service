@@ -1,0 +1,13 @@
+:host {
+  display: inline-flex;
+}
+.tag {
+  padding: 0.25rem 0.4rem;
+  border-radius: var(--demo-tag-radius);
+  background: var(--demo-tag-background);
+  font-family: var(--demo-label-font-family);
+  text-transform: uppercase;
+  letter-spacing: var(--demo-label-letter-spacing);
+  font-size: var(--demo-label-font-size);
+  line-height: var(--demo-label-line-height);
+}

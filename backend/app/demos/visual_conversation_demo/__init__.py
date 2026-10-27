@@ -1,1 +1,1 @@
-"""Visual Conversation Demo with deterministic messages, artifacts, and failures."""
+"""Visual Demo with deterministic messages, artifacts, and failures."""
