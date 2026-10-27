@@ -7,11 +7,62 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { fingerprint, formatFrontend, frontendProfile, frontendRequire } from './frontend.mts';
-import { e2eProfile, waitForGateway } from './e2e.mts';
+import { e2eProfile, testE2E, waitForGateway } from './e2e.mts';
+import type { runCheck } from './shared.mts';
 import { backendProfile } from './backend.mts';
 
 const { ESLint } = frontendRequire('eslint') as typeof import('eslint');
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../frontend');
+
+void test('missing Playwright fails before any Docker command', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-prerequisites-'));
+  const run: typeof runCheck = () => {
+    assert.fail('Docker must not run without Playwright installed');
+  };
+  await assert.rejects(
+    testE2E(root, join(root, 'cache'), run),
+    /Incomplete E2E validation: missing installed Playwright dependency/,
+  );
+});
+
+void test('E2E collects diagnostics for preparation failures and preserves the original error', async () => {
+  for (const failure of ['Docker availability', 'Docker build and startup', 'Gateway restart']) {
+    for (const diagnosticsFail of [false, true]) {
+      const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-diagnostics-'));
+      const cli = join(root, 'frontend/node_modules/@playwright/test/cli.js');
+      await mkdir(dirname(cli), { recursive: true });
+      await writeFile(cli, '');
+      const cache = join(root, 'cache');
+      const original = new Error(failure);
+      const calls: Parameters<typeof runCheck>[] = [];
+      const run: typeof runCheck = async (...args) => {
+        calls.push(args);
+        if (args[1] === failure) throw original;
+        if (args[1] === 'E2E failure diagnostics') {
+          if (diagnosticsFail) throw new Error('diagnostic command failed');
+          await writeFile(args[3], 'diagnostic output');
+        }
+        return '';
+      };
+      await assert.rejects(testE2E(root, cache, run), (error: unknown) => error === original);
+      assert.equal(calls[0][1], 'Docker availability');
+      assert.deepEqual(calls[0][2], ['info', '--format', '{{.ServerVersion}}']);
+      const diagnostics = calls.filter((args) => args[1] === 'E2E failure diagnostics');
+      assert.deepEqual(diagnostics.map((args) => args[2]), [
+        ['compose', '-f', 'deployment/docker-compose-local.yml', 'ps', '--all'],
+        ['compose', '-f', 'deployment/docker-compose-local.yml', 'logs', '--no-color', '--tail', '2000'],
+      ]);
+      for (const args of diagnostics) {
+        assert.equal(args[5], 'docker');
+        assert.equal(args[7]?.GATEWAY_PORT, calls[0][7]?.GATEWAY_PORT);
+      }
+      for (const name of ['services', 'services-logs']) {
+        const report = await readFile(join(cache, `${name}${diagnosticsFail ? '-error' : ''}.log`), 'utf8');
+        assert.match(report, diagnosticsFail ? /diagnostic command failed/ : /diagnostic output/);
+      }
+    }
+  }
+});
 
 void test('shared validation and Codex adapter changes invalidate every validation scope', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ai-service-validation-scopes-'));
