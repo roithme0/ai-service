@@ -14,6 +14,18 @@ import { backendProfile } from './backend.mts';
 const { ESLint } = frontendRequire('eslint') as typeof import('eslint');
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../frontend');
 
+function textLinter(cwd: string): InstanceType<typeof ESLint> {
+  return new ESLint({
+    cwd,
+    overrideConfig: {
+      languageOptions: {
+        // CI single-run programs read disk; these tests lint replacement source text.
+        parserOptions: { disallowAutomaticSingleRunInference: true },
+      },
+    },
+  });
+}
+
 void test('missing Playwright fails before any Docker command', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-prerequisites-'));
   const run: typeof runCheck = () => {
@@ -177,7 +189,7 @@ void test('fingerprints include new, changed, renamed, and deleted inputs but ex
 
 void test('configuration checks typed code, external and inline templates, and scripts', async () => {
   const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../frontend');
-  const eslint = new ESLint({ cwd: frontend });
+  const eslint = textLinter(frontend);
   const [typescript] = await eslint.lintText('Promise.resolve(1);', {
     filePath: join(frontend, 'src/main.ts'),
   });
@@ -221,7 +233,7 @@ void test('configuration checks typed code, external and inline templates, and s
 
 void test('validation TypeScript receives strict lint rules from its own configuration', async () => {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-  const eslint = new ESLint({ cwd: join(root, '.agents/validation') });
+  const eslint = textLinter(join(root, '.agents/validation'));
   const [result] = await eslint.lintText('Promise.resolve(1);', {
     filePath: join(root, '.agents/validation/shared.mts'),
   });
