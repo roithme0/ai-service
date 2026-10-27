@@ -1,6 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
@@ -31,10 +30,14 @@ export interface ValidationDependencies {
   test: () => Promise<void>;
 }
 
-export interface HookOutput {
-  decision?: 'block';
-  reason?: string;
-  systemMessage?: string;
+export interface ValidationFeedback {
+  message?: string;
+}
+
+export interface ValidationRequest {
+  sessionId: string;
+  start: boolean;
+  continued: boolean;
 }
 
 export interface ValidationPolicy {
@@ -159,16 +162,12 @@ export async function runCheck(
   return result.stdout;
 }
 
-function feedback(reason: string, continued: boolean): HookOutput {
-  return continued ? { systemMessage: reason } : { decision: 'block', reason };
-}
-
 export async function validateStop(
   state: ValidationState,
   continued: boolean,
   dependencies: ValidationDependencies,
   policy: ValidationPolicy,
-): Promise<HookOutput> {
+): Promise<ValidationFeedback> {
   let formattedFiles: string[] = [];
   try {
     const before = await dependencies.fingerprint();
@@ -195,19 +194,17 @@ export async function validateStop(
       state.pendingValidation = false;
       return {};
     }
-    return feedback(
-      `${policy.formatter} formatted: ${formattedFiles.join(', ')}. Review the diff before completing. Do not undo formatting. ${policy.success}`,
-      continued,
-    );
+    return {
+      message: `${policy.formatter} formatted: ${formattedFiles.join(', ')}. Review the diff before completing. Do not undo formatting. ${policy.success}`,
+    };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     const notice = formattedFiles.length
       ? `${policy.formatter} formatted: ${formattedFiles.join(', ')}. Review the diff; do not undo formatting.\n`
       : '';
-    return feedback(
-      `${notice}${message}\nFix findings in your changes and rerun ${policy.retry}. Do not perform a broad existing-debt cleanup without authorization. If blocked by existing debt or dependencies, report validation as incomplete and explain why; do not claim it passed.`,
-      continued,
-    );
+    return {
+      message: `${notice}${message}\nFix findings in your changes and rerun ${policy.retry}. Do not perform a broad existing-debt cleanup without authorization. If blocked by existing debt or dependencies, report validation as incomplete and explain why; do not claim it passed.`,
+    };
   }
 }
 
@@ -236,63 +233,39 @@ async function readState(path: string): Promise<ValidationState> {
   }
 }
 
-export async function runHook(
+export async function runValidation(
   root: string,
   profiles: ValidationProfile[],
-  start: boolean,
+  { sessionId, start, continued }: ValidationRequest,
   checkShared?: (cache: string) => Promise<void>,
-): Promise<void> {
-  let continued = false;
-  try {
-    const input: unknown = JSON.parse(readFileSync(0, 'utf8'));
-    if (
-      typeof input !== 'object' ||
-      input === null ||
-      !('session_id' in input) ||
-      typeof input.session_id !== 'string' ||
-      (!start && (!('stop_hook_active' in input) || typeof input.stop_hook_active !== 'boolean'))
-    ) {
-      throw new Error('Expected Codex session_id and, for Stop, boolean stop_hook_active.');
+): Promise<ValidationFeedback> {
+  const session = createHash('sha256').update(sessionId).digest('hex');
+  const outputs: ValidationFeedback[] = [];
+  let sharedTests: Promise<void> | undefined;
+  for (const profile of profiles) {
+    try {
+      const cache = join(root, '.agents/.codex-validation', profile.scope, session);
+      await mkdir(cache, { recursive: true });
+      const statePath = join(cache, 'state.json');
+      const state = await readState(statePath);
+      const dependencies = profile.dependencies(cache);
+      const testScope = dependencies.test;
+      dependencies.test = async () => {
+        if (checkShared) {
+          sharedTests ??= checkShared(cache);
+          await sharedTests;
+        }
+        await testScope();
+      };
+      if (start) state.promptFingerprint = await dependencies.fingerprint();
+      else outputs.push(await validateStop(state, continued, dependencies, profile.policy));
+      await writeFile(statePath, JSON.stringify(state));
+    } catch (error: unknown) {
+      const reason = `${profile.policy.label} validation hook failed: ${error instanceof Error ? error.message : String(error)}. Report validation as incomplete.`;
+      if (start) throw new Error(reason, { cause: error });
+      outputs.push({ message: reason });
     }
-    continued = 'stop_hook_active' in input && input.stop_hook_active === true;
-    const session = createHash('sha256').update(input.session_id).digest('hex');
-    const outputs: HookOutput[] = [];
-    let sharedTests: Promise<void> | undefined;
-    for (const profile of profiles) {
-      try {
-        const cache = join(root, '.agents/.codex-validation', profile.scope, session);
-        await mkdir(cache, { recursive: true });
-        const statePath = join(cache, 'state.json');
-        const state = await readState(statePath);
-        const dependencies = profile.dependencies(cache);
-        const testScope = dependencies.test;
-        dependencies.test = async () => {
-          if (checkShared) {
-            sharedTests ??= checkShared(cache);
-            await sharedTests;
-          }
-          await testScope();
-        };
-        if (start) state.promptFingerprint = await dependencies.fingerprint();
-        else outputs.push(await validateStop(state, continued, dependencies, profile.policy));
-        await writeFile(statePath, JSON.stringify(state));
-      } catch (error: unknown) {
-        const reason = `${profile.policy.label} validation hook failed: ${error instanceof Error ? error.message : String(error)}. Report validation as incomplete.`;
-        if (start) throw new Error(reason, { cause: error });
-        outputs.push(feedback(reason, continued));
-      }
-    }
-    const reasons = outputs.flatMap((output) =>
-      output.reason ? [output.reason] : output.systemMessage ? [output.systemMessage] : [],
-    );
-    process.stdout.write(
-      JSON.stringify(reasons.length ? feedback(reasons.join('\n\n'), continued) : {}),
-    );
-  } catch (error: unknown) {
-    const reason = `Validation hook failed: ${error instanceof Error ? error.message : String(error)}. Report validation as incomplete.`;
-    if (start) {
-      process.stderr.write(reason);
-      process.exitCode = 1;
-    } else process.stdout.write(JSON.stringify(feedback(reason, continued)));
   }
+  const reasons = outputs.flatMap((output) => (output.message ? [output.message] : []));
+  return reasons.length ? { message: reasons.join('\n\n') } : {};
 }

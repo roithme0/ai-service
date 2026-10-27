@@ -9,14 +9,14 @@ import {
   validateStop as sharedValidateStop,
   type ValidationDependencies,
   type ValidationState,
-  type HookOutput,
+  type ValidationFeedback,
 } from './shared.mts';
 
 function validateStop(
   state: ValidationState,
   continued: boolean,
   dependencies: ValidationDependencies,
-): Promise<HookOutput> {
+): Promise<ValidationFeedback> {
   return sharedValidateStop(state, continued, dependencies, {
     label: 'Fixture',
     formatter: 'Formatter',
@@ -75,7 +75,7 @@ void test('formats before lint and tests and invalidates successful validation o
     return Promise.resolve({ checked: ['a.ts'], formatted: ['a.ts'] });
   };
   const first = await validateStop(state, false, dependencies);
-  assert.equal(first.decision, 'block');
+  assert.ok(first.message);
   assert.deepEqual(calls, ['format', 'lint', 'test']);
   assert.equal(state.successfulFingerprint, 'formatted');
   dependencies.format = () => Promise.resolve({ checked: [], formatted: [] });
@@ -88,18 +88,18 @@ void test('formats before lint and tests and invalidates successful validation o
   assert.equal(state.successfulFingerprint, 'edited again');
 });
 
-void test('failures never become successes and continuation feedback is bounded', async () => {
+void test('failures remain visible on retries and never become successes', async () => {
   const { dependencies, calls } = fixture();
   const state: ValidationState = { promptFingerprint: 'old' };
   dependencies.lint = () => Promise.reject(new Error('existing lint debt'));
   const first = await validateStop(state, false, dependencies);
-  assert.equal(first.decision, 'block');
-  assert.match(first.reason ?? '', /existing lint debt/);
+  assert.ok(first.message);
+  assert.match(first.message ?? '', /existing lint debt/);
   assert.equal(state.successfulFingerprint, undefined);
   assert.deepEqual(calls, ['format']);
   const next = await validateStop(state, true, dependencies);
-  assert.equal(next.decision, undefined);
-  assert.match(next.systemMessage ?? '', /validation as incomplete/);
+  assert.ok(next.message);
+  assert.match(next.message ?? '', /validation as incomplete/);
   assert.equal(state.successfulFingerprint, undefined);
 });
 
@@ -108,12 +108,12 @@ void test('test failures are not cached and a successful retry runs the full val
   const state: ValidationState = { promptFingerprint: 'old' };
   dependencies.test = () => Promise.reject(new Error('test failed'));
   const first = await validateStop(state, false, dependencies);
-  assert.equal(first.decision, 'block');
-  assert.match(first.reason ?? '', /test failed/);
+  assert.ok(first.message);
+  assert.match(first.message ?? '', /test failed/);
   assert.equal(state.successfulFingerprint, undefined);
   const next = await validateStop(state, true, dependencies);
-  assert.equal(next.decision, undefined);
-  assert.match(next.systemMessage ?? '', /test failed/);
+  assert.ok(next.message);
+  assert.match(next.message ?? '', /test failed/);
   dependencies.test = () => {
     calls.push('test');
     return Promise.resolve();
@@ -131,7 +131,7 @@ void test('concurrent edits invalidate an otherwise successful test run', async 
     content.value = 'concurrent edit';
     return Promise.resolve();
   };
-  assert.equal((await validateStop(state, false, dependencies)).decision, 'block');
+  assert.ok((await validateStop(state, false, dependencies)).message);
   assert.equal(state.successfulFingerprint, undefined);
 });
 
@@ -150,14 +150,17 @@ void test('environment checks rerun cached content on changed turns but skip dis
   assert.deepEqual(calls, []);
   state.promptFingerprint = 'old';
   dependencies.test = () => Promise.reject(new Error('Docker unavailable'));
-  assert.match((await validateStop(state, false, dependencies)).reason ?? '', /Docker unavailable/);
+  assert.match(
+    (await validateStop(state, false, dependencies)).message ?? '',
+    /Docker unavailable/,
+  );
 });
 
 void test('formatter failures prevent linting and remain visible', async () => {
   const { dependencies, calls } = fixture();
   dependencies.format = () => Promise.reject(new Error('cannot parse changed file'));
   const output = await validateStop({ promptFingerprint: 'old' }, false, dependencies);
-  assert.match(output.reason ?? '', /cannot parse changed file/);
+  assert.match(output.message ?? '', /cannot parse changed file/);
   assert.deepEqual(calls, []);
 });
 
@@ -240,7 +243,7 @@ void test('shared change discovery refuses unresolved merge conflicts', async ()
   assert.throws(() => changedFiles(root, 'backend/'), /merge conflicts/);
 });
 
-void test('combined hook validates affected scopes independently and reports both failures with one continuation', async () => {
+void test('validation sessions isolate state, check affected scopes, and aggregate failures across retries', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ai-service-hook-scopes-'));
   const driver = join(root, 'driver.mts');
   const engine = new URL('./shared.mts', import.meta.url).href;
@@ -249,7 +252,7 @@ void test('combined hook validates affected scopes independently and reports bot
     `
     import { readFile, appendFile } from 'node:fs/promises';
     import { join } from 'node:path';
-    import { runHook, type ValidationProfile } from ${JSON.stringify(engine)};
+    import { runValidation, type ValidationProfile } from ${JSON.stringify(engine)};
     const root = ${JSON.stringify(root)};
     const profiles: ValidationProfile[] = ['frontend', 'backend'].map((scope) => ({
       scope,
@@ -265,23 +268,20 @@ void test('combined hook validates affected scopes independently and reports bot
         },
       }),
     }));
-    await runHook(root, profiles, process.argv[2] === 'start', async () => {
+    const output = await runValidation(root, profiles, { sessionId: 'fixture', start: process.argv[2] === 'start', continued: process.argv[3] === 'true' }, async () => {
       await appendFile(join(root, 'shared.txt'), 'shared\\n');
     });
+    process.stdout.write(JSON.stringify(output));
   `,
   );
-  function invoke(mode: string, continued = false): HookOutput {
-    const result = spawnSync(process.execPath, [driver, mode], {
+  function invoke(mode: string, continued = false): ValidationFeedback {
+    const result = spawnSync(process.execPath, [driver, mode, String(continued)], {
       cwd: root,
       encoding: 'utf8',
       windowsHide: true,
-      input: JSON.stringify({
-        session_id: 'fixture',
-        stop_hook_active: continued,
-      }),
     });
     assert.equal(result.status, 0, result.stderr);
-    return JSON.parse(result.stdout) as HookOutput;
+    return JSON.parse(result.stdout) as ValidationFeedback;
   }
   for (const scope of ['frontend', 'backend'])
     await writeFile(join(root, `${scope}.txt`), 'before');
@@ -307,12 +307,12 @@ void test('combined hook validates affected scopes independently and reports bot
   assert.equal(await readFile(join(root, 'calls.txt'), 'utf8'), 'backend\n');
   for (const scope of ['frontend', 'backend']) await writeFile(join(root, `${scope}.txt`), 'fail');
   const failure = invoke('stop');
-  assert.equal(failure.decision, 'block');
-  assert.match(failure.reason ?? '', /frontend failed/);
-  assert.match(failure.reason ?? '', /backend failed/);
+  assert.ok(failure.message);
+  assert.match(failure.message ?? '', /frontend failed/);
+  assert.match(failure.message ?? '', /backend failed/);
   const retry = invoke('stop', true);
   assert.equal(await readFile(join(root, 'shared.txt'), 'utf8'), 'shared\nshared\nshared\n');
-  assert.equal(retry.decision, undefined);
-  assert.match(retry.systemMessage ?? '', /frontend failed/);
-  assert.match(retry.systemMessage ?? '', /backend failed/);
+  assert.ok(retry.message);
+  assert.match(retry.message ?? '', /frontend failed/);
+  assert.match(retry.message ?? '', /backend failed/);
 });

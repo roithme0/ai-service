@@ -17,5 +17,5 @@
       "eslint": ["../../frontend/node_modules/eslint/lib/types/index.d.ts"]
     }
   },
-  "include": ["**/*.mts"]
+  "include": ["**/*.mts", "../../.codex/*.mts"]
 }

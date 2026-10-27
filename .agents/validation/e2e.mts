@@ -11,6 +11,7 @@ const inputs = [
   'deployment/gateway/',
   '.editorconfig',
   '.codex/',
+  '.agents/validation/',
 ];
 
 export async function waitForGateway(baseURL: string, timeout = 60_000): Promise<void> {
@@ -81,7 +82,7 @@ export function e2eProfile(root: string): ValidationProfile {
       label: 'End-to-end',
       formatter: 'Formatter',
       success: 'Docker preparation and Playwright passed.',
-      retry: 'end-to-end validation: node .codex/validation/e2e.mts from the repository root',
+      retry: 'end-to-end validation: node .agents/validation/e2e.mts from the repository root',
     },
     dependencies: (cache) => ({
       reuseSuccess: false,
@@ -94,7 +95,7 @@ export function e2eProfile(root: string): ValidationProfile {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.length !== 2) throw new Error('Usage: node .codex/validation/e2e.mts');
+  if (process.argv.length !== 2) throw new Error('Usage: node .agents/validation/e2e.mts');
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
   await testE2E(root, join(root, '.agents/.codex-validation/e2e/manual'));
   process.stdout.write('Docker preparation and Playwright passed.\n');

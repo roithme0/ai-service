@@ -1,16 +1,38 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, rename, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
-import { fingerprint, formatFrontend, frontendRequire } from './frontend.mts';
+import { fingerprint, formatFrontend, frontendProfile, frontendRequire } from './frontend.mts';
 import { e2eProfile, waitForGateway } from './e2e.mts';
+import { backendProfile } from './backend.mts';
 
 const { ESLint } = frontendRequire('eslint') as typeof import('eslint');
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../frontend');
+
+void test('shared validation and Codex adapter changes invalidate every validation scope', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ai-service-validation-scopes-'));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  const profiles = [
+    frontendProfile(root).dependencies(root),
+    backendProfile(root).dependencies(root),
+    e2eProfile(root).dependencies(root),
+  ];
+  let previous = await Promise.all(profiles.map((profile) => profile.fingerprint()));
+  for (const name of ['.agents/validation/shared.mts', '.codex/validate.mts']) {
+    await mkdir(dirname(join(root, name)), { recursive: true });
+    await writeFile(join(root, name), 'changed');
+    const current = await Promise.all(profiles.map((profile) => profile.fingerprint()));
+    for (let index = 0; index < profiles.length; index++) {
+      assert.notEqual(current[index], previous[index]);
+      assert.equal(profiles[index].hasChanges(), true);
+    }
+    previous = current;
+  }
+});
 
 void test('end-to-end scope includes backend and gateway edits without expanding frontend unit scope', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-'));
@@ -102,43 +124,6 @@ void test('fingerprints include new, changed, renamed, and deleted inputs but ex
   assert.notEqual(await fingerprint(root), added);
 });
 
-void test(
-  'PowerShell wrapper dispatches start and stop without linting an unchanged turn',
-  {
-    skip: process.platform !== 'win32',
-  },
-  () => {
-    const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-    const session = `lint-wrapper-test-${process.pid}`;
-    for (const mode of ['start', 'stop']) {
-      const result = spawnSync(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-NonInteractive',
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          join(root, '.codex/validate.ps1'),
-          '-Mode',
-          mode,
-        ],
-        {
-          cwd: root,
-          encoding: 'utf8',
-          windowsHide: true,
-          input: JSON.stringify({
-            session_id: session,
-            stop_hook_active: false,
-          }),
-        },
-      );
-      assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, '{}');
-    }
-  },
-);
-
 void test('configuration checks typed code, external and inline templates, and scripts', async () => {
   const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../frontend');
   const eslint = new ESLint({ cwd: frontend });
@@ -185,9 +170,9 @@ void test('configuration checks typed code, external and inline templates, and s
 
 void test('validation TypeScript receives strict lint rules from its own configuration', async () => {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-  const eslint = new ESLint({ cwd: join(root, '.codex/validation') });
+  const eslint = new ESLint({ cwd: join(root, '.agents/validation') });
   const [result] = await eslint.lintText('Promise.resolve(1);', {
-    filePath: join(root, '.codex/validation/shared.mts'),
+    filePath: join(root, '.agents/validation/shared.mts'),
   });
   assert.ok(
     result.messages.some((message) => message.ruleId === '@typescript-eslint/no-floating-promises'),

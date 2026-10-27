@@ -43,8 +43,8 @@ Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have
 For backend edits, run from the **repository root**:
 
 ```powershell
-node .codex/validation/backend.mts --format
-node --test .codex/validation/shared.test.mts .codex/validation/backend.test.mts
+node .agents/validation/backend.mts --format
+node --test .agents/validation/shared.test.mts .agents/validation/backend.test.mts
 ```
 
 Then, from **backend/**, with its virtual environment active:
@@ -95,7 +95,7 @@ npx playwright test --headed
 Remove-Item Env:PLAYWRIGHT_BASE_URL
 ```
 
-Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Hooks update the local Docker stack using Docker's build cache, then run Playwright after frontend, backend, or local deployment changes. Manual equivalent from the repository root: `node .codex/validation/e2e.mts`. The stack stays running; logs are in `.agents/.codex-validation/e2e/`. CI runs the same Docker-based check on pull requests and release tags, gates publication on success, and uploads failure logs and traces as `e2e-diagnostics`.
+Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Hooks update the local Docker stack using Docker's build cache, then run Playwright after frontend, backend, or local deployment changes. Manual equivalent from the repository root: `node .agents/validation/e2e.mts`. The stack stays running; logs are in `.agents/.codex-validation/e2e/`. CI runs the same Docker-based check on pull requests and release tags, gates publication on success, and uploads failure logs and traces as `e2e-diagnostics`.
 
 ## Update the conversation contract
 
@@ -132,9 +132,10 @@ With the [local servers](#run-locally) running, open `http://localhost:4204/demo
 | --- | --- |
 | [AGENTS.md](../AGENTS.md) | Coding rules, approval boundaries, and required validation. |
 | [Skills](../.agents/skills/) | Reusable workflows, including concept, spec, delivery, review, and Pydantic AI guidance. Read the relevant `SKILL.md` before use. |
-| [Hooks](../.codex/hooks.json) | Snapshot frontend and backend content before prompts; validate affected scopes on stop. |
+| [Validation](../.agents/validation/) | Shared checks used by manual commands, CI, and agent hooks. |
+| [Hooks](../.codex/hooks.json) | Codex adapter snapshots content before prompts and validates affected scopes on stop. |
 | [Project configuration](../.codex/config.toml) | Angular CLI and OpenAI documentation MCP connections. |
 
-Review and trust hooks before relying on them. Their commands use PowerShell and absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/{frontend,backend,e2e}/`. Review formatting changes before completion.
+Review and trust hooks before relying on them. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/{frontend,backend,e2e}/`. Review formatting changes before completion.
 
 Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.

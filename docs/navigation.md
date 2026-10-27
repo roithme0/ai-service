@@ -54,5 +54,5 @@ The [contract generator](../frontend/scripts/conversation-contract.mjs) produces
 - Demos: [backend/tests/demos/](../backend/tests/demos/), covering Visual Demo and Live Demo execution and lifecycle.
 - Frontend: `*.spec.ts` beside application and library code.
 - End-to-end browser tests: [frontend/e2e/](../frontend/e2e/), using Playwright; see [setup and commands](development.md#end-to-end-browser-tests).
-- Validation tooling: `*.test.mts` in [.codex/validation/](../.codex/validation/).
+- Validation tooling: `*.test.mts` in [.agents/validation/](../.agents/validation/).
 - Deployment: [deployment/tests/](../deployment/tests/), with backend and gateway test runners.

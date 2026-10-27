@@ -76,7 +76,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Docker-based end-to-end tests
-        run: node .codex/validation/e2e.mts
+        run: node .agents/validation/e2e.mts
 
       - name: Collect container logs
         if: failure()

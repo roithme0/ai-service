@@ -134,8 +134,8 @@ void test('backend fingerprints track shared tooling and environment metadata wh
   await mkdir(join(root, 'backend/tests/.pytest_cache_old'), { recursive: true });
   await writeFile(join(root, 'backend/tests/.pytest_cache_old/log'), 'output');
   assert.equal(await backendFingerprint(root), before);
-  await mkdir(join(root, '.codex/validation'), { recursive: true });
-  await writeFile(join(root, '.codex/validation/shared.mts'), 'export {};');
+  await mkdir(join(root, '.agents/validation'), { recursive: true });
+  await writeFile(join(root, '.agents/validation/shared.mts'), 'export {};');
   const tooling = await backendFingerprint(root);
   assert.notEqual(tooling, before);
   const metadata =
