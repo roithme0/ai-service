@@ -75,6 +75,28 @@ For build verification, run `npm run build:app` and `npm run build:chat-ui`. Tes
 
 The [gateway regression harness](../deployment/tests/gateway/) currently mounts `deployment/nginx.conf`, while the configuration lives at `deployment/gateway/nginx.conf`. Correct that mount before relying on this check.
 
+### End-to-end browser tests
+
+[Playwright](../frontend/playwright.config.ts) tests live in [frontend/e2e/](../frontend/e2e/). Start the [Docker stack](#container-alternative) separately; the default target is `http://localhost:8004`. From **frontend/**, after `npm ci`:
+
+```powershell
+npx playwright install chromium
+npx playwright test
+npx playwright codegen http://localhost:8004
+```
+
+Install Chromium on first setup and after Playwright upgrades. Codegen records tests interactively; save reviewed tests as `e2e/<name>.spec.ts` and use `page.goto('/')` for the configured target. Add `--headed` to test runs to watch the browser.
+
+For an already-running dev server (or a custom gateway URL):
+
+```powershell
+$env:PLAYWRIGHT_BASE_URL = 'http://localhost:4204'
+npx playwright test --headed
+Remove-Item Env:PLAYWRIGHT_BASE_URL
+```
+
+Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links; execution is manual, outside hooks and CI.
+
 ## Update the conversation contract
 
 Install backend and frontend dependencies first. From **frontend/**:
