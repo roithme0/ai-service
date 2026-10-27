@@ -1,7 +1,7 @@
 # <Change Title> Delivery Plan
 
 Date: YYYY-MM-DD
-Spec: <spec filename>
+Spec: <relative Markdown link to the spec in ../specs/>
 
 ## Delivery Goal
 

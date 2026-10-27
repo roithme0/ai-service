@@ -10,9 +10,9 @@ Convert an approved direction into a verified implementation without stopping at
 ## Before Delivery
 
 1. Read the repository guidance, target spec, related concepts or specs, and relevant code.
-2. Treat an explicit request to run `$deliver-spec` as approval to implement the named draft unless the user asks for planning only. Mark the spec `approved` when its format supports status.
+2. Treat an explicit request to run `$deliver-spec` as approval to implement the named draft unless the user asks for planning only. Reuse explicit implementation approval already given for the same spec and scope. Mark the spec `approved` when its format supports status.
 3. Confirm that no open question or codebase conflict requires a product, architecture, contract, compatibility, or migration decision. If one does, pause and present the smallest useful decision to the user.
-4. Create an outcome-oriented plan from [assets/delivery-plan-template.md](assets/delivery-plan-template.md) in the repository's established plan location. If none exists, use `docs/plans/YYYY-MM-DD-<short-kebab-title>-plan.md`.
+4. Create an outcome-oriented plan from [assets/delivery-plan-template.md](assets/delivery-plan-template.md) in `.agents/plans/` relative to the target repository root. Follow existing filename conventions there; otherwise use `YYYY-MM-DD-<short-kebab-title>-plan.md`. Link the spec using a relative Markdown link.
 
 ## Delivery
 
@@ -22,6 +22,7 @@ Convert an approved direction into a verified implementation without stopping at
 - Make decisions that preserve the approved outcome and established codebase conventions. Record noteworthy deviations, risks, and follow-up opportunities briefly in the plan.
 - Validate each workstream proportionally and run the relevant integrated checks before handoff.
 - Mark the spec `implemented` after the approved scope is implemented and validation is complete. Do not mark it implemented when material work remains.
+- Update maintained documentation for lasting behavior and contract changes. Never link to, cite, or create dependencies on temporary artifacts in permanent documentation.
 
 ## Pause Conditions
 

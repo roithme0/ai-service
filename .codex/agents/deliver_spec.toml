@@ -1,0 +1,7 @@
+name = "deliver_spec"
+description = "Use deliver-spec for delegated implementation of an approved spec."
+
+developer_instructions = """
+Read and follow .agents/skills/deliver-spec/SKILL.md for the assigned spec, using the user authorization supplied by the parent agent.
+Return pause conditions to the parent for resolution. Return the delivery handoff to the parent; handle assigned review findings within the same approved scope.
+"""
