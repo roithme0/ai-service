@@ -13,6 +13,7 @@
 - Summarize changes and call out risks.
 - Treat backend APIs and published UI packages as contracts for consuming applications. Ship contract changes with generated types and affected in-repo consumers; make breaking changes explicit. Preserve legacy compatibility only when explicitly required.
 - Write tests where they provide meaningful regression protection: critical user flows, branching logic, stateful behavior, contract boundaries, and bug-prone edge cases. Avoid low-signal tests that only restate implementation details. Do not remove existing tests unless they are redundant, obsolete, flaky, or block legitimate refactoring, and explain the reason when removing them.
+- Create new end-to-end tests only as an explicitly requested, intentional step. Adjust and repair existing end-to-end tests as needed during routine changes, preserving their regression coverage.
 
 ## Temporary AI Artifacts
 
