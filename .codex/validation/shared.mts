@@ -23,6 +23,7 @@ export interface ValidationState {
 }
 
 export interface ValidationDependencies {
+  reuseSuccess?: boolean;
   fingerprint: () => Promise<string>;
   hasChanges: () => boolean;
   format: () => Promise<FormatResult>;
@@ -50,7 +51,11 @@ export interface ValidationProfile {
 }
 
 export function git(root: string, args: string[]): string[] {
-  return execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true })
+  return execFileSync('git', args, {
+    cwd: root,
+    encoding: 'utf8',
+    windowsHide: true,
+  })
     .split('\0')
     .filter(Boolean);
 }
@@ -135,6 +140,7 @@ export async function runCheck(
   timeout: number,
   executable: string = process.execPath,
   input?: string,
+  env?: NodeJS.ProcessEnv,
 ): Promise<string> {
   const result = spawnSync(executable, args, {
     cwd,
@@ -143,6 +149,7 @@ export async function runCheck(
     maxBuffer: 8 * 1024 * 1024,
     windowsHide: true,
     input,
+    env,
   });
   const output = [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n');
   await writeFile(logPath, output);
@@ -174,7 +181,7 @@ export async function validateStop(
     const formatting = await dependencies.format();
     formattedFiles = formatting.formatted;
     const current = await dependencies.fingerprint();
-    if (current !== state.successfulFingerprint) {
+    if (dependencies.reuseSuccess === false || current !== state.successfulFingerprint) {
       await dependencies.lint?.();
       await dependencies.test();
       if ((await dependencies.fingerprint()) !== current) {

@@ -18,8 +18,8 @@
           {
             "type": "command",
             "command": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File C:/Code/ai-service/.codex/validate.ps1 -Mode stop",
-            "timeout": 1500,
-            "statusMessage": "Formatting changed files and validating affected frontend and backend code"
+            "timeout": 2400,
+            "statusMessage": "Validating changed code and running Playwright against an updated Docker stack"
           }
         ]
       }

@@ -5,10 +5,68 @@ import { mkdtemp, mkdir, rename, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:http';
 import { fingerprint, formatFrontend, frontendRequire } from './frontend.mts';
+import { e2eProfile, waitForGateway } from './e2e.mts';
 
 const { ESLint } = frontendRequire('eslint') as typeof import('eslint');
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../frontend');
+
+void test('end-to-end scope includes backend and gateway edits without expanding frontend unit scope', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-'));
+  execFileSync('git', ['init', '-q'], { cwd: root });
+  const dependencies = e2eProfile(root).dependencies(root);
+  const unitFingerprint = await fingerprint(root);
+  let previous = await dependencies.fingerprint();
+  assert.equal(dependencies.hasChanges(), false);
+  for (const name of [
+    'backend/app/main.py',
+    'deployment/gateway/nginx.conf',
+    'frontend/e2e/test.spec.ts',
+  ]) {
+    await mkdir(dirname(join(root, name)), { recursive: true });
+    await writeFile(join(root, name), 'changed');
+    assert.equal(dependencies.hasChanges(), true);
+    const current = await dependencies.fingerprint();
+    assert.notEqual(current, previous);
+    previous = current;
+    if (!name.startsWith('frontend/')) assert.equal(await fingerprint(root), unitFingerprint);
+  }
+  await mkdir(join(root, 'docs'));
+  await writeFile(join(root, 'docs/notes.md'), 'documentation');
+  assert.equal(await dependencies.fingerprint(), previous);
+  assert.equal(dependencies.reuseSuccess, false);
+});
+
+void test('gateway readiness retries startup errors and requires both frontend and backend', async () => {
+  const paths: string[] = [];
+  let backendRequests = 0;
+  let unavailable = false;
+  const server = createServer((request, response) => {
+    paths.push(request.url ?? '');
+    if (request.url === '/api/openapi.json') backendRequests++;
+    response.statusCode = unavailable
+      ? 503
+      : request.url === '/api/openapi.json' && backendRequests < 2
+        ? 502
+        : 200;
+    response.end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const baseURL = `http://127.0.0.1:${address.port}`;
+    await waitForGateway(baseURL, 5_000);
+    assert.deepEqual(paths, ['/', '/api/openapi.json', '/', '/api/openapi.json']);
+    unavailable = true;
+    await assert.rejects(waitForGateway(baseURL, 0), /did not become ready.*HTTP 503/);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
 
 void test('fingerprints include new, changed, renamed, and deleted inputs but exclude caches', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ai-service-lint-'));

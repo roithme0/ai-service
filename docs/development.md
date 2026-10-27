@@ -95,7 +95,7 @@ npx playwright test --headed
 Remove-Item Env:PLAYWRIGHT_BASE_URL
 ```
 
-Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links; execution is manual, outside hooks and CI.
+Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Hooks update the local Docker stack using Docker's build cache, then run Playwright after frontend, backend, or local deployment changes. Manual equivalent from the repository root: `node .codex/validation/e2e.mts`. The stack stays running; logs are in `frontend/e2e/.codex-validation/`. CI does not run Playwright yet.
 
 ## Update the conversation contract
 

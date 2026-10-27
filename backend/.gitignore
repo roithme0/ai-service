@@ -1,8 +1,13 @@
+# Python bytecode and package metadata
 __pycache__/
 *.py[cod]
+*.egg-info/
+
+# Test and validation output
 tests/.pytest_cache*/
 tests/.pytest_tmp*/
+.codex-validation/
+
+# Local environment
 .venv/
 .env
-*.egg-info/
-.codex-validation/

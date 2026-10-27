@@ -135,6 +135,24 @@ void test('concurrent edits invalidate an otherwise successful test run', async 
   assert.equal(state.successfulFingerprint, undefined);
 });
 
+void test('environment checks rerun cached content on changed turns but skip discussion', async () => {
+  const { dependencies, calls } = fixture();
+  dependencies.reuseSuccess = false;
+  const state: ValidationState = {
+    promptFingerprint: 'old',
+    successfulFingerprint: 'before',
+  };
+  assert.deepEqual(await validateStop(state, false, dependencies), {});
+  assert.deepEqual(calls, ['format', 'lint', 'test']);
+  calls.length = 0;
+  state.promptFingerprint = 'before';
+  assert.deepEqual(await validateStop(state, false, dependencies), {});
+  assert.deepEqual(calls, []);
+  state.promptFingerprint = 'old';
+  dependencies.test = () => Promise.reject(new Error('Docker unavailable'));
+  assert.match((await validateStop(state, false, dependencies)).reason ?? '', /Docker unavailable/);
+});
+
 void test('formatter failures prevent linting and remain visible', async () => {
   const { dependencies, calls } = fixture();
   dependencies.format = () => Promise.reject(new Error('cannot parse changed file'));
@@ -171,7 +189,11 @@ void test('change discovery includes staged edits even when the worktree matches
   const path = join(root, 'backend/source.py');
   const original = 'value=  1\n';
   function git(args: string[]): string {
-    return execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true });
+    return execFileSync('git', args, {
+      cwd: root,
+      encoding: 'utf8',
+      windowsHide: true,
+    });
   }
   git(['init', '-q']);
   git(['config', 'core.autocrlf', 'false']);
@@ -253,7 +275,10 @@ void test('combined hook validates affected scopes independently and reports bot
       cwd: root,
       encoding: 'utf8',
       windowsHide: true,
-      input: JSON.stringify({ session_id: 'fixture', stop_hook_active: continued }),
+      input: JSON.stringify({
+        session_id: 'fixture',
+        stop_hook_active: continued,
+      }),
     });
     assert.equal(result.status, 0, result.stderr);
     return JSON.parse(result.stdout) as HookOutput;
@@ -262,7 +287,9 @@ void test('combined hook validates affected scopes independently and reports bot
     await writeFile(join(root, `${scope}.txt`), 'before');
   assert.deepEqual(invoke('start'), {});
   assert.deepEqual(invoke('stop'), {});
-  await assert.rejects(readFile(join(root, 'shared.txt'), 'utf8'), { code: 'ENOENT' });
+  await assert.rejects(readFile(join(root, 'shared.txt'), 'utf8'), {
+    code: 'ENOENT',
+  });
   await writeFile(join(root, 'backend.txt'), 'edited');
   assert.deepEqual(invoke('stop'), {});
   assert.equal(await readFile(join(root, 'calls.txt'), 'utf8'), 'backend\n');
