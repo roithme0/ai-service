@@ -46,3 +46,8 @@ Thumbs.db
 
 # Codex frontend validation state and logs
 /.codex-validation/
+
+# Playwright output
+/e2e/test-results/
+/playwright-report/
+/blob-report/
