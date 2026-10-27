@@ -95,7 +95,7 @@ npx playwright test --headed
 Remove-Item Env:PLAYWRIGHT_BASE_URL
 ```
 
-Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Hooks update the local Docker stack using Docker's build cache, then run Playwright after frontend, backend, or local deployment changes. Manual equivalent from the repository root: `node .codex/validation/e2e.mts`. The stack stays running; logs are in `frontend/e2e/.codex-validation/`. CI does not run Playwright yet.
+Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Hooks update the local Docker stack using Docker's build cache, then run Playwright after frontend, backend, or local deployment changes. Manual equivalent from the repository root: `node .codex/validation/e2e.mts`. The stack stays running; logs are in `.agents/.codex-validation/e2e/`. CI does not run Playwright yet.
 
 ## Update the conversation contract
 
@@ -135,6 +135,6 @@ With the [local servers](#run-locally) running, open `http://localhost:4204/demo
 | [Hooks](../.codex/hooks.json) | Snapshot frontend and backend content before prompts; validate affected scopes on stop. |
 | [Project configuration](../.codex/config.toml) | Angular CLI and OpenAI documentation MCP connections. |
 
-Review and trust hooks before relying on them. Their commands use PowerShell and absolute checkout paths; run validation manually if unavailable. Reports live under `frontend/.codex-validation/` and `backend/.codex-validation/`. Review formatting changes before completion.
+Review and trust hooks before relying on them. Their commands use PowerShell and absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/{frontend,backend,e2e}/`. Review formatting changes before completion.
 
 Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.

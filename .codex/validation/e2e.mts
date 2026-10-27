@@ -76,7 +76,7 @@ export async function testE2E(root: string, cache: string): Promise<void> {
 
 export function e2eProfile(root: string): ValidationProfile {
   return {
-    scope: 'frontend/e2e',
+    scope: 'e2e',
     policy: {
       label: 'End-to-end',
       formatter: 'Formatter',
@@ -96,6 +96,6 @@ export function e2eProfile(root: string): ValidationProfile {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.argv.length !== 2) throw new Error('Usage: node .codex/validation/e2e.mts');
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-  await testE2E(root, join(root, 'frontend/e2e/.codex-validation/manual'));
+  await testE2E(root, join(root, '.agents/.codex-validation/e2e/manual'));
   process.stdout.write('Docker preparation and Playwright passed.\n');
 }

@@ -80,6 +80,17 @@ void test('fingerprints include new, changed, renamed, and deleted inputs but ex
   const initial = await fingerprint(root);
   await writeFile(join(frontend, '.angular/cache/state.json'), '{}');
   await writeFile(join(frontend, '.codex-validation/state.json'), '{}');
+  await mkdir(join(root, '.agents/.codex-validation'), { recursive: true });
+  await writeFile(
+    join(root, '.agents/.gitignore'),
+    await readFile(new URL('../../.agents/.gitignore', import.meta.url)),
+  );
+  for (const scope of ['frontend', 'backend', 'e2e']) {
+    const path = `.agents/.codex-validation/${scope}/state.json`;
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), '{}');
+    assert.equal(git(root, ['check-ignore', path]).trim(), path);
+  }
   assert.equal(await fingerprint(root), initial);
   await writeFile(join(frontend, 'source.ts'), 'export const value = 2;');
   const edited = await fingerprint(root);

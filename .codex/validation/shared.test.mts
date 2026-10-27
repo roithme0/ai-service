@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -286,6 +286,16 @@ void test('combined hook validates affected scopes independently and reports bot
   for (const scope of ['frontend', 'backend'])
     await writeFile(join(root, `${scope}.txt`), 'before');
   assert.deepEqual(invoke('start'), {});
+  for (const scope of ['frontend', 'backend']) {
+    const directory = join(root, '.agents/.codex-validation', scope);
+    const sessions = await readdir(directory);
+    assert.equal(sessions.length, 1);
+    const state = JSON.parse(
+      await readFile(join(directory, sessions[0], 'state.json'), 'utf8'),
+    ) as ValidationState;
+    assert.equal(state.promptFingerprint, 'before');
+    await assert.rejects(readdir(join(root, scope, '.codex-validation')), { code: 'ENOENT' });
+  }
   assert.deepEqual(invoke('stop'), {});
   await assert.rejects(readFile(join(root, 'shared.txt'), 'utf8'), {
     code: 'ENOENT',

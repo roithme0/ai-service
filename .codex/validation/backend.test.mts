@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, readdir, rename, symlink, stat, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  symlink,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -36,7 +45,7 @@ async function fixture(): Promise<string> {
 }
 
 function format(root: string): ReturnType<typeof formatBackend> {
-  return formatBackend(root, join(root, 'backend/.codex-validation/manual'), python);
+  return formatBackend(root, join(root, '.agents/.codex-validation/backend/manual'), python);
 }
 
 void test('Black formats staged, unstaged, renamed and untracked Python files without changing the index', async () => {
@@ -109,7 +118,7 @@ void test('missing Python reports a formatting failure without changing files', 
   await assert.rejects(
     formatBackend(
       root,
-      join(root, 'backend/.codex-validation/manual'),
+      join(root, '.agents/.codex-validation/backend/manual'),
       join(root, 'missing-python'),
     ),
     /Backend Black formatting failed/,
@@ -120,8 +129,8 @@ void test('missing Python reports a formatting failure without changing files', 
 void test('backend fingerprints track shared tooling and environment metadata while ignoring test output', async () => {
   const root = await fixture();
   const before = await backendFingerprint(root);
-  await mkdir(join(root, 'backend/.codex-validation/manual'), { recursive: true });
-  await writeFile(join(root, 'backend/.codex-validation/manual/log'), 'output');
+  await mkdir(join(root, '.agents/.codex-validation/backend/manual'), { recursive: true });
+  await writeFile(join(root, '.agents/.codex-validation/backend/manual/log'), 'output');
   await mkdir(join(root, 'backend/tests/.pytest_cache_old'), { recursive: true });
   await writeFile(join(root, 'backend/tests/.pytest_cache_old/log'), 'output');
   assert.equal(await backendFingerprint(root), before);
@@ -171,10 +180,10 @@ def test_paths(tmp_path: Path, pytestconfig: Config) -> None:
     assert temporary.name == "tmp"
     assert cache.name == "cache"
     assert temporary.parent == cache.parent
-    assert temporary.parent.parent == pytestconfig.rootpath / ".codex-validation" / "checks"
+    assert temporary.parent.parent == pytestconfig.rootpath.parent / ".agents" / ".codex-validation" / "backend" / "checks"
 `,
   );
-  const cache = join(root, 'backend/.codex-validation/checks');
+  const cache = join(root, '.agents/.codex-validation/backend/checks');
   await runBackendPytest(root, cache, python);
   await runBackendPytest(root, cache, python);
   const runs = (await readdir(cache)).filter((name) => name.startsWith('pytest-'));

@@ -260,7 +260,7 @@ export async function runHook(
     let sharedTests: Promise<void> | undefined;
     for (const profile of profiles) {
       try {
-        const cache = join(root, profile.scope, '.codex-validation', session);
+        const cache = join(root, '.agents/.codex-validation', profile.scope, session);
         await mkdir(cache, { recursive: true });
         const statePath = join(cache, 'state.json');
         const state = await readState(statePath);
