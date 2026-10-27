@@ -4,6 +4,11 @@ command = "npx"
 cwd = "frontend"
 enabled = true
 
+[mcp_servers.playwright-test]
+command = "node"
+args = ["frontend/node_modules/playwright/cli.js", "run-test-mcp-server", "--config", "frontend/playwright.config.ts"]
+enabled = true
+
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
 enabled = true

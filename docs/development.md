@@ -43,8 +43,8 @@ Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have
 For backend edits, run from the **repository root**:
 
 ```powershell
-node .codex/validation/backend.mts --format
-node --test .codex/validation/shared.test.mts .codex/validation/backend.test.mts
+node .agents/validation/backend.mts --format
+node --test .agents/validation/shared.test.mts .agents/validation/backend.test.mts
 ```
 
 Then, from **backend/**, with its virtual environment active:
@@ -74,6 +74,28 @@ npm run test:chat-ui
 For build verification, run `npm run build:app` and `npm run build:chat-ui`. Test locations are listed in [navigation](navigation.md#find-related-tests).
 
 The [gateway regression harness](../deployment/tests/gateway/) currently mounts `deployment/nginx.conf`, while the configuration lives at `deployment/gateway/nginx.conf`. Correct that mount before relying on this check.
+
+### End-to-end browser tests
+
+[Playwright](../frontend/playwright.config.ts) tests live in [frontend/e2e/](../frontend/e2e/). Start the [Docker stack](#container-alternative) separately; the default target is `http://localhost:8004`. From **frontend/**, after `npm ci`:
+
+```powershell
+npx playwright install chromium
+npx playwright test
+npx playwright codegen http://localhost:8004
+```
+
+Install Chromium on first setup and after Playwright upgrades. Codegen records tests interactively; save reviewed tests as `e2e/<name>.spec.ts` and use `page.goto('/')` for the configured target. Add `--headed` to test runs to watch the browser.
+
+For an already-running dev server (or a custom gateway URL):
+
+```powershell
+$env:PLAYWRIGHT_BASE_URL = 'http://localhost:4204'
+npx playwright test --headed
+Remove-Item Env:PLAYWRIGHT_BASE_URL
+```
+
+Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Hooks update the local Docker stack using Docker's build cache, then run Playwright after frontend, backend, or local deployment changes. Manual equivalent from the repository root: `node .agents/validation/e2e.mts`. The stack stays running; logs are in `.agents/.codex-validation/e2e/`. CI runs the same Docker-based check on pull requests and release tags, gates publication on success, and uploads failure logs and traces as `e2e-diagnostics`.
 
 ## Update the conversation contract
 
@@ -110,9 +132,10 @@ With the [local servers](#run-locally) running, open `http://localhost:4204/demo
 | --- | --- |
 | [AGENTS.md](../AGENTS.md) | Coding rules, approval boundaries, and required validation. |
 | [Skills](../.agents/skills/) | Reusable workflows, including concept, spec, delivery, review, and Pydantic AI guidance. Read the relevant `SKILL.md` before use. |
-| [Hooks](../.codex/hooks.json) | Snapshot frontend and backend content before prompts; validate affected scopes on stop. |
+| [Validation](../.agents/validation/) | Shared checks used by manual commands, CI, and agent hooks. |
+| [Hooks](../.codex/hooks.json) | Codex adapter snapshots content before prompts and validates affected scopes on stop. |
 | [Project configuration](../.codex/config.toml) | Angular CLI and OpenAI documentation MCP connections. |
 
-Review and trust hooks before relying on them. Their commands use PowerShell and absolute checkout paths; run validation manually if unavailable. Reports live under `frontend/.codex-validation/` and `backend/.codex-validation/`. Review formatting changes before completion.
+Review and trust hooks before relying on them. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/{frontend,backend,e2e}/`. Review formatting changes before completion.
 
 Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.

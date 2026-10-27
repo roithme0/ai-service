@@ -1,5 +1,39 @@
+# Dependencies, build output, and caches
 .angular
-.git
-.vscode
+.codex-validation
 dist
 node_modules
+out-tsc
+.npm-cache
+
+# Test reports and artifacts
+coverage
+test-results
+playwright-report
+blob-report
+
+# Tests and test configuration
+e2e
+tests
+**/*.spec.ts
+**/tsconfig.spec.json
+**/vitest*.config.ts
+playwright.config.ts
+
+# Development tooling
+scripts
+eslint.config.mjs
+tsconfig.eslint.json
+proxy.conf.json
+.prettierignore
+.prettierrc
+
+# Repository metadata and documentation
+.git
+.gitignore
+.vscode
+**/*.md
+
+# Local environment and logs
+.env*
+npm-debug.log*

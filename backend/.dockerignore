@@ -1,7 +1,27 @@
-.git
-tests/.pytest_cache
-tests/.pytest_tmp
+# Dependencies and build output
 .venv
-__pycache__
-*.egg-info
-*.pyc
+**/__pycache__
+**/*.egg-info
+**/*.py[cod]
+build
+dist
+
+# Validation caches and test reports (tests are needed by Dockerfile.test)
+.codex-validation
+**/.pytest_cache*
+**/.pytest_tmp*
+.coverage*
+htmlcov
+coverage.xml
+
+# Development tooling, repository metadata, and documentation
+scripts
+.git
+.gitignore
+.vscode
+.idea
+**/*.md
+
+# Local environment and logs
+.env*
+*.log
