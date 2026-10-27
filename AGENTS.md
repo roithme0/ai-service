@@ -18,7 +18,7 @@
 ## Temporary AI Artifacts
 
 - Store implementation-specific concepts, plans, and specs in `.agents/concepts/`, `.agents/plans/`, and `.agents/specs/`, respectively, relative to the target repository root. Use these locations even when older artifacts live elsewhere.
-- Generated files in these folders are temporary and gitignored. Never commit or force-add them.
+- Generated files in these folders are temporary and gitignored. Never commit or force-add them. Keep the folder scaffolding and reusable skill resources tracked.
 - Keep artifacts available through implementation and final review. Leave cleanup to the human; do not delete them automatically.
 - Permanent documentation must never link to, cite, or depend on these temporary files. Document lasting behavior and contracts directly in maintained documentation, grounded in the implementation.
 
