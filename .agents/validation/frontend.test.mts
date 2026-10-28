@@ -56,11 +56,11 @@ void test('E2E runs isolate artifacts from other runs and the shared Playwright 
       outputs.push(output);
       await mkdir(output, { recursive: true });
       await writeFile(join(output, 'trace.zip'), output);
-      const report = env?.PLAYWRIGHT_HTML_OUTPUT_DIR;
+      const report = env?.['PLAYWRIGHT_HTML_OUTPUT_DIR'];
       assert.ok(report);
       assert.equal(dirname(report), dirname(output));
       assert.notEqual(report, output);
-      assert.equal(env?.PLAYWRIGHT_HTML_OPEN, 'never');
+      assert.equal(env?.['PLAYWRIGHT_HTML_OPEN'], 'never');
       reports.push(report);
       await mkdir(report, { recursive: true });
       await writeFile(join(report, 'index.html'), report);
@@ -83,8 +83,14 @@ void test('E2E runs isolate artifacts from other runs and the shared Playwright 
   assert.equal(await readFile(join(shared, 'trace.zip'), 'utf8'), 'shared trace');
 });
 
-void test('E2E collects diagnostics for preparation failures and preserves the original error', async () => {
-  for (const failure of ['Docker availability', 'Docker build and startup', 'Gateway restart']) {
+void test('E2E collects diagnostics for Docker and Playwright failures and preserves the original error', async (t) => {
+  t.mock.method(globalThis, 'fetch', () => Promise.resolve(new Response('ready')));
+  for (const failure of [
+    'Docker availability',
+    'Docker build and startup',
+    'Gateway restart',
+    'Playwright',
+  ]) {
     for (const diagnosticsFail of [false, true]) {
       const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-diagnostics-'));
       const cli = join(root, 'frontend/node_modules/@playwright/test/cli.js');
@@ -123,7 +129,7 @@ void test('E2E collects diagnostics for preparation failures and preserves the o
       );
       for (const args of diagnostics) {
         assert.equal(args[5], 'docker');
-        assert.equal(args[7]?.GATEWAY_PORT, calls[0][7]?.GATEWAY_PORT);
+        assert.equal(args[7]?.['GATEWAY_PORT'], calls[0][7]?.['GATEWAY_PORT']);
       }
       for (const name of ['services', 'services-logs']) {
         const report = await readFile(

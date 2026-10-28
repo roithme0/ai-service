@@ -16,7 +16,7 @@
     "format:changed": "node ../.agents/validation/frontend.mts --format",
     "lint": "eslint . ../.agents/validation ../.codex --max-warnings=0",
     "lint:fix": "eslint . ../.agents/validation ../.codex --max-warnings=0 --fix",
-    "test:tooling": "node --test ../.agents/validation/shared.test.mts ../.agents/validation/frontend.test.mts ../.codex/validate.test.mts"
+    "test:tooling": "node --test ../.agents/validation/shared.test.mts ../.agents/validation/run.test.mts ../.agents/validation/frontend.test.mts ../.codex/validate.test.mts"
   },
   "private": true,
   "packageManager": "npm@10.7.0",

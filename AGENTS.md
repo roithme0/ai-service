@@ -28,15 +28,15 @@ After edits, run the applicable commands in order:
 
 | Scope | Working directory | Commands |
 | --- | --- | --- |
-| Frontend | `frontend` | `npm run format:changed`, `npm run lint`, `npm run test:tooling`, `npm run test:app`, `npm run test:chat-ui`, `npx playwright test` |
-| Backend | Repository root | `node .agents/validation/backend.mts --format`, `node --test .agents/validation/shared.test.mts .agents/validation/backend.test.mts` |
+| Frontend | `frontend` | `npm run format:changed`, `npm run lint`, `npm run test:tooling`, `npm run test:app`, `npm run test:chat-ui` |
+| Backend | Repository root | `node .agents/validation/backend.mts --format`, `node --test .agents/validation/shared.test.mts .agents/validation/run.test.mts .agents/validation/backend.test.mts` |
 | Backend | `backend` | `.venv/Scripts/python.exe -m pytest` (`.venv/bin/python` on Unix) |
 
 Use `npm.cmd` if PowerShell blocks `npm.ps1`. See [development setup and contract validation](docs/development.md) for dependencies, editor configuration, and generated API contracts.
 
 - Format only changed staged, unstaged, and untracked files, respecting configured exclusions and leaving the Git index unchanged. Coordinate before formatting unrelated user edits and review the resulting diff. Full-backend formatting requires an explicit request.
 - Lint errors and warnings fail validation. Run `lint:fix` only deliberately and review its diff; hooks and CI never apply lint fixes.
-- Hooks update the local Docker stack using Docker's build cache, then run Playwright for frontend, backend, or local deployment changes. Manual equivalent: `node .agents/validation/e2e.mts`. Docker and Playwright Chromium must be available; report missing prerequisites as incomplete validation.
+- Run `node .agents/validation/e2e.mts` for browser flow, frontend/backend integration, or local deployment changes. It updates Docker and runs Playwright; report missing prerequisites as incomplete validation. Hooks exclude E2E.
 - Review and trust hooks before relying on them. They validate changed scopes automatically and reuse success only for identical content after all checks pass. Shared hook changes validate both scopes; persistent failures request at most one continuation.
 - Fix findings introduced by your work; broader cleanup requires authorization. Report missing dependencies or failed checks as incomplete validation. Hooks never install dependencies automatically.
 

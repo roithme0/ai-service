@@ -32,13 +32,29 @@ export interface ValidationDependencies {
 
 export interface ValidationFeedback {
   message?: string;
+  failed?: boolean;
 }
 
 export interface ValidationRequest {
   sessionId: string;
   start: boolean;
   continued: boolean;
+  force?: boolean;
 }
+
+export interface ValidationChecks {
+  appTests: boolean;
+  toolingTests: boolean;
+  sharedToolingTests: boolean;
+  e2e: boolean;
+}
+
+export const defaultChecks: Readonly<ValidationChecks> = {
+  appTests: true,
+  toolingTests: true,
+  sharedToolingTests: true,
+  e2e: false,
+};
 
 export interface ValidationPolicy {
   label: string;
@@ -167,20 +183,20 @@ export async function validateStop(
   continued: boolean,
   dependencies: ValidationDependencies,
   policy: ValidationPolicy,
+  force = false,
 ): Promise<ValidationFeedback> {
   let formattedFiles: string[] = [];
   try {
     const before = await dependencies.fingerprint();
-    if (
-      (state.promptFingerprint === before && (!continued || !state.pendingValidation)) ||
-      (!state.promptFingerprint && !dependencies.hasChanges())
-    )
-      return {};
+    const unchangedSincePrompt = state.promptFingerprint === before;
+    const needsRetry = continued && state.pendingValidation;
+    if (!force && unchangedSincePrompt && !needsRetry) return {};
+    if (!force && !state.promptFingerprint && !dependencies.hasChanges()) return {};
     state.pendingValidation = true;
     const formatting = await dependencies.format();
     formattedFiles = formatting.formatted;
     const current = await dependencies.fingerprint();
-    if (dependencies.reuseSuccess === false || current !== state.successfulFingerprint) {
+    if (force || dependencies.reuseSuccess === false || current !== state.successfulFingerprint) {
       await dependencies.lint?.();
       await dependencies.test();
       if ((await dependencies.fingerprint()) !== current) {
@@ -203,6 +219,7 @@ export async function validateStop(
       ? `${policy.formatter} formatted: ${formattedFiles.join(', ')}. Review the diff; do not undo formatting.\n`
       : '';
     return {
+      failed: true,
       message: `${notice}${message}\nFix findings in your changes and rerun ${policy.retry}. Do not perform a broad existing-debt cleanup without authorization. If blocked by existing debt or dependencies, report validation as incomplete and explain why; do not claim it passed.`,
     };
   }
@@ -233,39 +250,85 @@ async function readState(path: string): Promise<ValidationState> {
   }
 }
 
+async function runProfile(
+  root: string,
+  session: string,
+  profile: ValidationProfile,
+  { start, continued, force }: ValidationRequest,
+  checkShared: (cache: string) => Promise<void>,
+): Promise<ValidationFeedback> {
+  const cache = join(root, '.agents/.codex-validation', profile.scope, session);
+  await mkdir(cache, { recursive: true });
+  const statePath = join(cache, 'state.json');
+  const state = await readState(statePath);
+  const dependencies = profile.dependencies(cache);
+  let feedback: ValidationFeedback = {};
+
+  if (start) {
+    state.promptFingerprint = await dependencies.fingerprint();
+  } else {
+    feedback = await validateStop(
+      state,
+      continued,
+      {
+        ...dependencies,
+        test: async () => {
+          await checkShared(cache);
+          await dependencies.test();
+        },
+      },
+      profile.policy,
+      force,
+    );
+  }
+
+  await writeFile(statePath, JSON.stringify(state));
+  return feedback;
+}
+
+export interface RunValidationOptions {
+  checkShared?: (cache: string) => Promise<void>;
+  checks?: Readonly<ValidationChecks>;
+}
+
 export async function runValidation(
   root: string,
   profiles: ValidationProfile[],
-  { sessionId, start, continued }: ValidationRequest,
-  checkShared?: (cache: string) => Promise<void>,
+  request: ValidationRequest,
+  { checkShared, checks = defaultChecks }: RunValidationOptions = {},
 ): Promise<ValidationFeedback> {
-  const session = createHash('sha256').update(sessionId).digest('hex');
+  const session = createHash('sha256')
+    .update(
+      JSON.stringify([
+        request.sessionId,
+        checks.appTests,
+        checks.toolingTests,
+        checks.sharedToolingTests,
+        checks.e2e,
+      ]),
+    )
+    .digest('hex');
   const outputs: ValidationFeedback[] = [];
   let sharedTests: Promise<void> | undefined;
+  const checkSharedOnce = async (cache: string): Promise<void> => {
+    if (!checkShared) return;
+    sharedTests ??= checkShared(cache);
+    await sharedTests;
+  };
+
   for (const profile of profiles) {
     try {
-      const cache = join(root, '.agents/.codex-validation', profile.scope, session);
-      await mkdir(cache, { recursive: true });
-      const statePath = join(cache, 'state.json');
-      const state = await readState(statePath);
-      const dependencies = profile.dependencies(cache);
-      const testScope = dependencies.test;
-      dependencies.test = async () => {
-        if (checkShared) {
-          sharedTests ??= checkShared(cache);
-          await sharedTests;
-        }
-        await testScope();
-      };
-      if (start) state.promptFingerprint = await dependencies.fingerprint();
-      else outputs.push(await validateStop(state, continued, dependencies, profile.policy));
-      await writeFile(statePath, JSON.stringify(state));
+      outputs.push(await runProfile(root, session, profile, request, checkSharedOnce));
     } catch (error: unknown) {
       const reason = `${profile.policy.label} validation hook failed: ${error instanceof Error ? error.message : String(error)}. Report validation as incomplete.`;
-      if (start) throw new Error(reason, { cause: error });
-      outputs.push({ message: reason });
+      if (request.start) throw new Error(reason, { cause: error });
+      outputs.push({ message: reason, failed: true });
     }
   }
   const reasons = outputs.flatMap((output) => (output.message ? [output.message] : []));
-  return reasons.length ? { message: reasons.join('\n\n') } : {};
+  if (reasons.length === 0) return {};
+  return {
+    message: reasons.join('\n\n'),
+    ...(outputs.some((output) => output.failed) ? { failed: true } : {}),
+  };
 }
