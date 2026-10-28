@@ -15,7 +15,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from app.capabilities.conversations.turns import create_turn_agent
 
-TURN_DELAY_SECONDS = 1.5
+TURN_DELAY_SECONDS = 0.5
 FIRST_REPLY = "Hallo! Diese visuelle Demo folgt einem festen Skript. Sende noch eine Nachricht, um zu sehen, wie zwei Tool-Aufrufe Artefakte erstellen."
 SECOND_REPLY = "Diese Demo hat zwei Artefakte mit Begrüßungen erstellt. Klappe die längere Liste auf, um alle zu sehen. Bei einem zusätzlichen Artefakt-Aufruf wurde absichtlich der erforderliche JSON-Wert weggelassen. Dadurch ist die Validierung fehlgeschlagen und es wurde kein Artefakt erstellt. Sende noch eine Nachricht, um einen Fehlerzustand zu sehen."
 FAILED_GENERATION_UPDATE = "Ich beginne mit einer weiteren Antwort. Diese Demo bricht die Generierung nach dieser Zwischenantwort absichtlich ab. Sie bleibt ohne abschließende Antwort sichtbar."

@@ -45,6 +45,9 @@ interface ToolCallExpectation {
 }
 
 export class ScriptedDemo {
+  readonly title: Locator;
+  readonly scriptedBadge: Locator;
+  readonly landingPageLink: Locator;
   readonly composer: Locator;
   readonly send: Locator;
   readonly history: Locator;
@@ -65,6 +68,12 @@ export class ScriptedDemo {
   readonly retry: Locator;
 
   constructor(page: Page) {
+    const header = page.getByRole('banner');
+    this.title = header.getByText('Visual Demo', { exact: true });
+    this.scriptedBadge = header.getByText('Scripted', { exact: true });
+    this.landingPageLink = header
+      .getByRole('navigation', { name: 'Demo navigation' })
+      .getByRole('link', { name: 'Demos', exact: true });
     this.composer = page.getByRole('textbox', { name: 'Nachricht', exact: true });
     this.send = page.getByRole('button', { name: 'Nachricht senden', exact: true });
     this.history = page.getByRole('log');
@@ -113,6 +122,10 @@ export class ScriptedDemo {
       exact: true,
     });
     this.retry = page.getByRole('button', { name: /erneut|wiederholen|retry/i });
+  }
+
+  async returnToLandingPage(): Promise<void> {
+    await this.landingPageLink.click();
   }
 
   async prepareMessage(message: string): Promise<void> {

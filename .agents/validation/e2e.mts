@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +41,10 @@ export async function testE2E(
   run: typeof runCheck = runCheck,
 ): Promise<void> {
   await mkdir(cache, { recursive: true });
-  const env = { ...process.env, GATEWAY_PORT: process.env['GATEWAY_PORT'] || '8004' };
+  const env = {
+    ...process.env,
+    GATEWAY_PORT: process.env['GATEWAY_PORT'] || '8004',
+  };
   const compose = ['compose', '-f', 'deployment/docker-compose-local.yml'];
   const frontend = join(root, 'frontend');
   const cli = join(frontend, 'node_modules/@playwright/test/cli.js');
@@ -84,23 +87,36 @@ export async function testE2E(
     );
     const baseURL = `http://localhost:${env.GATEWAY_PORT}`;
     await waitForGateway(baseURL);
+    const artifacts = await mkdtemp(join(cache, 'playwright-'));
     await run(
       frontend,
       'Playwright',
-      [cli, 'test'],
+      [cli, 'test', '--output', join(artifacts, 'test-results')],
       join(cache, 'playwright.log'),
       180_000,
       process.execPath,
       undefined,
-      { ...env, PLAYWRIGHT_BASE_URL: baseURL },
+      {
+        ...env,
+        PLAYWRIGHT_BASE_URL: baseURL,
+        PLAYWRIGHT_HTML_OUTPUT_DIR: join(artifacts, 'html-report'),
+        PLAYWRIGHT_HTML_OPEN: 'never',
+      },
     );
   } catch (error: unknown) {
-    for (const [command, name] of [['ps', 'services'], ['logs', 'services-logs']]) {
+    for (const [command, name] of [
+      ['ps', 'services'],
+      ['logs', 'services-logs'],
+    ]) {
       try {
         await run(
           root,
           'E2E failure diagnostics',
-          [...compose, command, ...(command === 'logs' ? ['--no-color', '--tail', '2000'] : ['--all'])],
+          [
+            ...compose,
+            command,
+            ...(command === 'logs' ? ['--no-color', '--tail', '2000'] : ['--all']),
+          ],
           join(cache, `${name}.log`),
           30_000,
           'docker',
