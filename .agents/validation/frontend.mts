@@ -28,7 +28,7 @@ const policy: ValidationPolicy = {
   formatter: 'Prettier',
   success: 'Selected frontend checks passed.',
   retry:
-    'frontend validation: npm run lint, npm run test:tooling, npm run test:app, and npm run test:chat-ui from frontend',
+    'frontend validation: npm run lint, npm run test:tooling, npm run test:app, npm run test:chat-ui, and npm run test:chat-ui:browser from frontend',
 };
 
 export function fingerprint(root: string): Promise<string> {
@@ -108,6 +108,20 @@ async function testFrontendProjects(
       300_000,
     );
   }
+  await run(
+    frontend,
+    'Frontend browser component tests (chat-ui)',
+    [
+      join(frontend, 'node_modules/@angular/cli/bin/ng.js'),
+      'test',
+      'chat-ui',
+      '--configuration',
+      'browser',
+      '--watch=false',
+    ],
+    join(cache, 'tests-chat-ui-browser.log'),
+    300_000,
+  );
 }
 
 async function prepareFormatting(

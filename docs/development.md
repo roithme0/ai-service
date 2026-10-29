@@ -77,6 +77,10 @@ For build verification, run `npm run build:app` and `npm run build:chat-ui`. Tes
 
 The [gateway regression harness](../deployment/tests/gateway/) currently mounts `deployment/nginx.conf`, while the configuration lives at `deployment/gateway/nginx.conf`. Correct that mount before relying on this check.
 
+### Component browser tests
+
+From **frontend/**, run `npm run test:chat-ui:browser` after installing Playwright Chromium. It uses Vitest Browser Mode with Playwright and Angular TestBed for `*.browser.spec.ts` tests; the default jsdom run excludes these files. No backend or Docker is needed.
+
 ### End-to-end browser tests
 
 [Playwright](../frontend/playwright.config.ts) tests live in [frontend/e2e/](../frontend/e2e/). Start the [Docker stack](#container-alternative) separately; the default target is `http://localhost:8004`. From **frontend/**, after `npm ci`:

@@ -146,8 +146,17 @@ void test('app and scope tooling tests execute exactly the selected commands', a
     for (const appTests of [false, true]) {
       for (const toolingTests of [false, true]) {
         const calls: string[] = [];
-        const run: typeof runCheck = (_cwd, label) => {
+        const run: typeof runCheck = (_cwd, label, args) => {
           calls.push(label);
+          if (label === 'Frontend browser component tests (chat-ui)') {
+            assert.deepEqual(args.slice(1), [
+              'test',
+              'chat-ui',
+              '--configuration',
+              'browser',
+              '--watch=false',
+            ]);
+          }
           return Promise.resolve('');
         };
         const profile = createProfile(root, { ...defaultChecks, appTests, toolingTests }, run);
@@ -157,7 +166,11 @@ void test('app and scope tooling tests execute exactly the selected commands', a
         if (appTests)
           expected.push(
             ...(profile.scope === 'frontend'
-              ? ['Frontend tests (ai-service-frontend)', 'Frontend tests (chat-ui)']
+              ? [
+                  'Frontend tests (ai-service-frontend)',
+                  'Frontend tests (chat-ui)',
+                  'Frontend browser component tests (chat-ui)',
+                ]
               : ['Backend pytest']),
           );
         assert.deepEqual(calls, expected);

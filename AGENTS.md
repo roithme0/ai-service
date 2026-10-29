@@ -12,8 +12,12 @@
 - Confirm before touching build or tooling config.
 - Summarize changes and call out risks.
 - Treat backend APIs and published UI packages as contracts for consuming applications. Ship contract changes with generated types and affected in-repo consumers; make breaking changes explicit. Preserve legacy compatibility only when explicitly required.
-- Write tests where they provide meaningful regression protection: critical user flows, branching logic, stateful behavior, contract boundaries, and bug-prone edge cases. Avoid low-signal tests that only restate implementation details. Do not remove existing tests unless they are redundant, obsolete, flaky, or block legitimate refactoring, and explain the reason when removing them.
-- Create new end-to-end tests only as an explicitly requested, intentional step. Adjust and repair existing end-to-end tests as needed during routine changes, preserving their regression coverage.
+
+### Testing
+
+- Add unit, component, integration, or contract tests where they provide meaningful regression protection. Choose the smallest scope that verifies the behavior. Use a real browser when the behavior depends on layout or native browser interactions. Avoid tests that merely restate implementation details.
+- Create new end-to-end tests only when explicitly requested. Maintain and repair existing end-to-end tests as needed, preserving their regression coverage.
+- Remove existing tests only when redundant, obsolete, flaky, or blocking legitimate refactoring; explain the reason.
 
 ## Temporary AI Artifacts
 
@@ -28,7 +32,7 @@ After edits, run the applicable commands in order:
 
 | Scope | Working directory | Commands |
 | --- | --- | --- |
-| Frontend | `frontend` | `npm run format:changed`, `npm run lint`, `npm run test:tooling`, `npm run test:app`, `npm run test:chat-ui` |
+| Frontend | `frontend` | `npm run format:changed`, `npm run lint`, `npm run test:tooling`, `npm run test:app`, `npm run test:chat-ui`, `npm run test:chat-ui:browser` |
 | Backend | Repository root | `node .agents/validation/backend.mts --format`, `node --test .agents/validation/shared.test.mts .agents/validation/run.test.mts .agents/validation/backend.test.mts` |
 | Backend | `backend` | `.venv/Scripts/python.exe -m pytest` (`.venv/bin/python` on Unix) |
 
