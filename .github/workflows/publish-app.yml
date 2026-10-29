@@ -113,6 +113,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Docker-based end-to-end tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node .agents/validation/e2e.mts
 
       - name: Collect container logs
