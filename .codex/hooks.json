@@ -19,7 +19,7 @@
             "type": "command",
             "command": "node C:/Code/ai-service/.codex/validate.mts --stop",
             "timeout": 2400,
-            "statusMessage": "Validating changed code and running Playwright against an updated Docker stack"
+            "statusMessage": "Formatting and validating changed code with app and tooling tests"
           }
         ]
       }

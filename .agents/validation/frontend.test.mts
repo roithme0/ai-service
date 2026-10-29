@@ -37,8 +37,60 @@ void test('missing Playwright fails before any Docker command', async () => {
   );
 });
 
-void test('E2E collects diagnostics for preparation failures and preserves the original error', async () => {
-  for (const failure of ['Docker availability', 'Docker build and startup', 'Gateway restart']) {
+void test('E2E runs isolate artifacts from other runs and the shared Playwright output', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-artifacts-'));
+  const cli = join(root, 'frontend/node_modules/@playwright/test/cli.js');
+  await mkdir(dirname(cli), { recursive: true });
+  await writeFile(cli, '');
+  const shared = join(root, 'frontend/e2e/test-results');
+  await mkdir(shared, { recursive: true });
+  await writeFile(join(shared, 'trace.zip'), 'shared trace');
+  t.mock.method(globalThis, 'fetch', () => Promise.resolve(new Response('ready')));
+  const outputs: string[] = [];
+  const reports: string[] = [];
+  const run: typeof runCheck = async (_cwd, label, args, _log, _timeout, _command, _input, env) => {
+    if (label === 'Playwright') {
+      assert.deepEqual(args.slice(0, 3), [cli, 'test', '--output']);
+      const output = args[3];
+      assert.ok(output);
+      outputs.push(output);
+      await mkdir(output, { recursive: true });
+      await writeFile(join(output, 'trace.zip'), output);
+      const report = env?.['PLAYWRIGHT_HTML_OUTPUT_DIR'];
+      assert.ok(report);
+      assert.equal(dirname(report), dirname(output));
+      assert.notEqual(report, output);
+      assert.equal(env?.['PLAYWRIGHT_HTML_OPEN'], 'never');
+      reports.push(report);
+      await mkdir(report, { recursive: true });
+      await writeFile(join(report, 'index.html'), report);
+    }
+    return '';
+  };
+  const cache = join(root, 'cache');
+  await Promise.all([testE2E(root, cache, run), testE2E(root, cache, run)]);
+  assert.equal(outputs.length, 2);
+  assert.notEqual(outputs[0], outputs[1]);
+  for (const output of outputs) {
+    assert.equal(dirname(dirname(output)), cache);
+    assert.equal(await readFile(join(output, 'trace.zip'), 'utf8'), output);
+  }
+  assert.equal(reports.length, 2);
+  assert.notEqual(reports[0], reports[1]);
+  for (const report of reports) {
+    assert.equal(await readFile(join(report, 'index.html'), 'utf8'), report);
+  }
+  assert.equal(await readFile(join(shared, 'trace.zip'), 'utf8'), 'shared trace');
+});
+
+void test('E2E collects diagnostics for Docker and Playwright failures and preserves the original error', async (t) => {
+  t.mock.method(globalThis, 'fetch', () => Promise.resolve(new Response('ready')));
+  for (const failure of [
+    'Docker availability',
+    'Docker build and startup',
+    'Gateway restart',
+    'Playwright',
+  ]) {
     for (const diagnosticsFail of [false, true]) {
       const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-diagnostics-'));
       const cli = join(root, 'frontend/node_modules/@playwright/test/cli.js');
@@ -60,16 +112,30 @@ void test('E2E collects diagnostics for preparation failures and preserves the o
       assert.equal(calls[0][1], 'Docker availability');
       assert.deepEqual(calls[0][2], ['info', '--format', '{{.ServerVersion}}']);
       const diagnostics = calls.filter((args) => args[1] === 'E2E failure diagnostics');
-      assert.deepEqual(diagnostics.map((args) => args[2]), [
-        ['compose', '-f', 'deployment/docker-compose-local.yml', 'ps', '--all'],
-        ['compose', '-f', 'deployment/docker-compose-local.yml', 'logs', '--no-color', '--tail', '2000'],
-      ]);
+      assert.deepEqual(
+        diagnostics.map((args) => args[2]),
+        [
+          ['compose', '-f', 'deployment/docker-compose-local.yml', 'ps', '--all'],
+          [
+            'compose',
+            '-f',
+            'deployment/docker-compose-local.yml',
+            'logs',
+            '--no-color',
+            '--tail',
+            '2000',
+          ],
+        ],
+      );
       for (const args of diagnostics) {
         assert.equal(args[5], 'docker');
-        assert.equal(args[7]?.GATEWAY_PORT, calls[0][7]?.GATEWAY_PORT);
+        assert.equal(args[7]?.['GATEWAY_PORT'], calls[0][7]?.['GATEWAY_PORT']);
       }
       for (const name of ['services', 'services-logs']) {
-        const report = await readFile(join(cache, `${name}${diagnosticsFail ? '-error' : ''}.log`), 'utf8');
+        const report = await readFile(
+          join(cache, `${name}${diagnosticsFail ? '-error' : ''}.log`),
+          'utf8',
+        );
         assert.match(report, diagnosticsFail ? /diagnostic command failed/ : /diagnostic output/);
       }
     }

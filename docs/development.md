@@ -40,11 +40,13 @@ Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have
 
 ## Validate changes
 
+After installing the backend and frontend dependencies described in [Run locally](#run-locally), run `node .agents/validation/run.mts` from the **repository root** to format changed files, lint the frontend, and run app and tooling tests. Review the formatting diff. Use `--scope frontend|backend` to limit scope, `--e2e` to include [browser tests](#end-to-end-browser-tests), or `--app-tests=false`, `--tooling-tests=false`, and `--shared-tooling-tests=false` to skip test groups.
+
 For backend edits, run from the **repository root**:
 
 ```powershell
 node .agents/validation/backend.mts --format
-node --test .agents/validation/shared.test.mts .agents/validation/backend.test.mts
+node --test .agents/validation/shared.test.mts .agents/validation/run.test.mts .agents/validation/backend.test.mts
 ```
 
 Then, from **backend/**, with its virtual environment active:
@@ -75,6 +77,10 @@ For build verification, run `npm run build:app` and `npm run build:chat-ui`. Tes
 
 The [gateway regression harness](../deployment/tests/gateway/) currently mounts `deployment/nginx.conf`, while the configuration lives at `deployment/gateway/nginx.conf`. Correct that mount before relying on this check.
 
+### Component browser tests
+
+From **frontend/**, run `npm run test:chat-ui:browser` after installing Playwright Chromium. It uses Vitest Browser Mode with Playwright and Angular TestBed for `*.browser.spec.ts` tests; the default jsdom run excludes these files. No backend or Docker is needed.
+
 ### End-to-end browser tests
 
 [Playwright](../frontend/playwright.config.ts) tests live in [frontend/e2e/](../frontend/e2e/). Start the [Docker stack](#container-alternative) separately; the default target is `http://localhost:8004`. From **frontend/**, after `npm ci`:
@@ -95,7 +101,7 @@ npx playwright test --headed
 Remove-Item Env:PLAYWRIGHT_BASE_URL
 ```
 
-Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Hooks update the local Docker stack using Docker's build cache, then run Playwright after frontend, backend, or local deployment changes. Manual equivalent from the repository root: `node .agents/validation/e2e.mts`. The stack stays running; logs are in `.agents/.codex-validation/e2e/`. CI runs the same Docker-based check on pull requests and release tags, gates publication on success, and uploads failure logs and traces as `e2e-diagnostics`.
+Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Run `node .agents/validation/e2e.mts` from the repository root for browser flow, frontend/backend integration, or local deployment changes. It updates Docker using the build cache and runs Playwright. The stack stays running; logs are in `.agents/.codex-validation/e2e/`. CI runs the same Docker-based check on pull requests and release tags, gates publication on success, and uploads failure logs and traces as `e2e-diagnostics`.
 
 ## Update the conversation contract
 
@@ -136,6 +142,6 @@ With the [local servers](#run-locally) running, open `http://localhost:4204/demo
 | [Hooks](../.codex/hooks.json) | Codex adapter snapshots content before prompts and validates affected scopes on stop. |
 | [Project configuration](../.codex/config.toml) | Angular CLI and OpenAI documentation MCP connections. |
 
-Review and trust hooks before relying on them. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/{frontend,backend,e2e}/`. Review formatting changes before completion.
+Review and trust hooks before relying on them. Hooks enable app, scope tooling, and shared tooling tests; they exclude E2E. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/{frontend,backend,e2e}/`. Review formatting changes before completion.
 
 Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.

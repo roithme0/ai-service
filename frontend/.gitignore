@@ -37,6 +37,7 @@ yarn-error.log
 testem.log
 /typings
 __screenshots__/
+/projects/chat-ui/test-results/
 
 # System files
 .DS_Store

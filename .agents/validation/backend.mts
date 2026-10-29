@@ -10,8 +10,21 @@ import {
   writeFormatting,
   type FormatResult,
   type PendingFormatting,
+  type ValidationPolicy,
   type ValidationProfile,
+  type ValidationChecks,
+  defaultChecks,
 } from './shared.mts';
+
+const changeInputs = ['backend/', '.codex/', '.agents/validation/'];
+
+const policy: ValidationPolicy = {
+  label: 'Backend',
+  formatter: 'Black',
+  success: 'Selected backend checks passed.',
+  retry:
+    'backend validation: node .agents/validation/backend.mts --format, node --test .agents/validation/shared.test.mts .agents/validation/run.test.mts .agents/validation/backend.test.mts from the repository root, then .venv/Scripts/python.exe -m pytest from backend (use .venv/bin/python on Unix)',
+};
 
 export function backendPython(root: string): string {
   return join(
@@ -22,25 +35,27 @@ export function backendPython(root: string): string {
 }
 
 export async function backendFingerprint(root: string): Promise<string> {
-  const backend = 'backend/';
-  const libraries =
+  return fingerprint(root, changeInputs, await backendEnvironmentPaths(root));
+}
+
+async function backendEnvironmentPaths(root: string): Promise<string[]> {
+  const library =
     process.platform === 'win32'
-      ? ['backend/.venv/Lib/site-packages']
-      : ['backend/.venv/lib/python3.13/site-packages'];
+      ? 'backend/.venv/Lib/site-packages'
+      : 'backend/.venv/lib/python3.13/site-packages';
   const environment = ['backend/.venv/pyvenv.cfg', relative(root, backendPython(root))];
-  for (const library of libraries) {
-    const entries = await readdir(join(root, library), { withFileTypes: true }).catch(
-      (error: unknown) => {
-        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return [];
-        throw error;
-      },
-    );
-    for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.endsWith('.dist-info'))
-        environment.push(join(library, entry.name, 'METADATA'));
+  const entries = await readdir(join(root, library), { withFileTypes: true }).catch(
+    (error: unknown) => {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return [];
+      throw error;
+    },
+  );
+  for (const entry of entries) {
+    if (entry.isDirectory() && entry.name.endsWith('.dist-info')) {
+      environment.push(join(library, entry.name, 'METADATA'));
     }
   }
-  return fingerprint(root, [backend, '.codex/', '.agents/validation/'], environment);
+  return environment;
 }
 
 export async function formatBackend(
@@ -94,54 +109,59 @@ export async function runBackendPytest(
   root: string,
   cache: string,
   python: string = backendPython(root),
+  run: typeof runCheck = runCheck,
 ): Promise<void> {
   await mkdir(cache, { recursive: true });
-  const run = await mkdtemp(join(cache, 'pytest-'));
-  await runCheck(
+  const artifacts = await mkdtemp(join(cache, 'pytest-'));
+  await run(
     join(root, 'backend'),
     'Backend pytest',
-    ['-m', 'pytest', `--basetemp=${join(run, 'tmp')}`, '-o', `cache_dir=${join(run, 'cache')}`],
+    [
+      '-m',
+      'pytest',
+      `--basetemp=${join(artifacts, 'tmp')}`,
+      '-o',
+      `cache_dir=${join(artifacts, 'cache')}`,
+    ],
     join(cache, 'pytest.log'),
     300_000,
     python,
   );
 }
 
-export function backendProfile(root: string): ValidationProfile {
+export function backendProfile(
+  root: string,
+  checks: Readonly<ValidationChecks> = defaultChecks,
+  run: typeof runCheck = runCheck,
+): ValidationProfile {
   return {
     scope: 'backend',
-    policy: {
-      label: 'Backend',
-      formatter: 'Black',
-      success: 'Shared hook tests and the full backend pytest suite passed.',
-      retry:
-        'backend validation: node .agents/validation/backend.mts --format, node --test .agents/validation/shared.test.mts .agents/validation/backend.test.mts from the repository root, then .venv/Scripts/python.exe -m pytest from backend (use .venv/bin/python on Unix)',
-    },
+    policy,
     dependencies: (cache) => ({
       fingerprint: () => backendFingerprint(root),
       hasChanges: () =>
-        git(root, [
-          'status',
-          '--porcelain',
-          '-z',
-          '--',
-          'backend/',
-          '.codex/',
-          '.agents/validation/',
-        ]).length > 0,
+        git(root, ['status', '--porcelain', '-z', '--', ...changeInputs]).length > 0,
       format: () => formatBackend(root, cache),
       test: async () => {
-        await runCheck(
-          root,
-          'Backend tooling tests',
-          ['--test', '.agents/validation/backend.test.mts'],
-          join(cache, 'tooling-tests.log'),
-          120_000,
-        );
-        await runBackendPytest(root, cache);
+        if (checks.toolingTests) await testBackendTooling(root, cache, run);
+        if (checks.appTests) await runBackendPytest(root, cache, backendPython(root), run);
       },
     }),
   };
+}
+
+async function testBackendTooling(
+  root: string,
+  cache: string,
+  run: typeof runCheck,
+): Promise<void> {
+  await run(
+    root,
+    'Backend tooling tests',
+    ['--test', '.agents/validation/backend.test.mts'],
+    join(cache, 'tooling-tests.log'),
+    120_000,
+  );
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

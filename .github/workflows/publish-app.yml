@@ -75,6 +75,21 @@ jobs:
       - name: Run chat UI tests
         run: npm run test:chat-ui
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run chat UI browser component tests
+        run: npm run test:chat-ui:browser
+
+      - name: Upload browser component diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: chat-ui-browser-diagnostics
+          path: frontend/projects/chat-ui/test-results/
+          include-hidden-files: true
+          retention-days: 7
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -98,6 +113,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Docker-based end-to-end tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node .agents/validation/e2e.mts
 
       - name: Collect container logs
