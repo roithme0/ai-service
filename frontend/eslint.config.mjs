@@ -14,6 +14,8 @@ export default defineConfig(
     'dist/**',
     'out-tsc/**',
     'coverage/**',
+    'e2e/test-results/**',
+    'playwright-report/**',
     'projects/chat-ui/conversation/generated/**',
   ]),
   {

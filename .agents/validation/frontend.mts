@@ -3,53 +3,60 @@ import { readFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  changedFiles,
   fingerprint as contentFingerprint,
   git,
   runCheck,
-  type ValidationProfile,
-  type ValidationPolicy,
-  changedFiles,
   sourcePath,
   writeFormatting,
   type FormatResult,
   type PendingFormatting,
+  type ValidationPolicy,
+  type ValidationProfile,
+  type ValidationChecks,
+  defaultChecks,
 } from './shared.mts';
+
+const changeInputs = ['frontend/', '.codex/', '.agents/validation/'];
+
+export const frontendRequire = createRequire(
+  new URL('../../frontend/package.json', import.meta.url),
+);
 
 const policy: ValidationPolicy = {
   label: 'Frontend',
   formatter: 'Prettier',
-  success: 'Frontend lint and the full frontend test suite passed.',
+  success: 'Selected frontend checks passed.',
   retry:
-    'frontend validation: npm run lint, npm run test:tooling, npm run test:app, and npm run test:chat-ui from frontend',
+    'frontend validation: npm run lint, npm run test:tooling, npm run test:app, npm run test:chat-ui, and npm run test:chat-ui:browser from frontend',
 };
 
 export function fingerprint(root: string): Promise<string> {
   return contentFingerprint(
     root,
-    ['frontend/', '.editorconfig', '.codex/', '.agents/validation/'],
+    [...changeInputs, '.editorconfig'],
     ['frontend/node_modules/.package-lock.json'],
   );
 }
 
-export function frontendProfile(root: string): ValidationProfile {
+export function frontendProfile(
+  root: string,
+  checks: Readonly<ValidationChecks> = defaultChecks,
+  run: typeof runCheck = runCheck,
+): ValidationProfile {
   return {
     scope: 'frontend',
     policy,
     dependencies: (cache) => ({
       fingerprint: () => fingerprint(root),
       hasChanges: () =>
-        git(root, [
-          'status',
-          '--porcelain',
-          '-z',
-          '--',
-          'frontend/',
-          '.codex/',
-          '.agents/validation/',
-        ]).length > 0,
+        git(root, ['status', '--porcelain', '-z', '--', ...changeInputs]).length > 0,
       format: () => formatFrontend(root),
       lint: () => lintFrontend(root, join(cache, 'lint.log')),
-      test: () => testFrontend(root, cache),
+      test: async () => {
+        if (checks.toolingTests) await testFrontendTooling(root, cache, run);
+        if (checks.appTests) await testFrontendProjects(root, cache, run);
+      },
     }),
   };
 }
@@ -71,17 +78,29 @@ async function lintFrontend(root: string, logPath: string): Promise<void> {
   );
 }
 
-async function testFrontend(root: string, cache: string): Promise<void> {
+async function testFrontendTooling(
+  root: string,
+  cache: string,
+  run: typeof runCheck,
+): Promise<void> {
   const frontend = join(root, 'frontend');
-  await runCheck(
+  await run(
     frontend,
     'Frontend tooling tests',
     ['--test', '../.agents/validation/frontend.test.mts', '../.codex/validate.test.mts'],
     join(cache, 'tooling-tests.log'),
     120_000,
   );
+}
+
+async function testFrontendProjects(
+  root: string,
+  cache: string,
+  run: typeof runCheck,
+): Promise<void> {
+  const frontend = join(root, 'frontend');
   for (const project of ['ai-service-frontend', 'chat-ui']) {
-    await runCheck(
+    await run(
       frontend,
       `Frontend tests (${project})`,
       [join(frontend, 'node_modules/@angular/cli/bin/ng.js'), 'test', project, '--watch=false'],
@@ -89,11 +108,21 @@ async function testFrontend(root: string, cache: string): Promise<void> {
       300_000,
     );
   }
+  await run(
+    frontend,
+    'Frontend browser component tests (chat-ui)',
+    [
+      join(frontend, 'node_modules/@angular/cli/bin/ng.js'),
+      'test',
+      'chat-ui',
+      '--configuration',
+      'browser',
+      '--watch=false',
+    ],
+    join(cache, 'tests-chat-ui-browser.log'),
+    300_000,
+  );
 }
-
-export const frontendRequire = createRequire(
-  new URL('../../frontend/package.json', import.meta.url),
-);
 
 async function prepareFormatting(
   root: string,

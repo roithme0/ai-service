@@ -30,7 +30,18 @@
           "options": {
             "buildTarget": "chat-ui:build:production",
             "tsConfig": "projects/chat-ui/tsconfig.spec.json",
-            "runnerConfig": "projects/chat-ui/vitest.config.ts"
+            "runnerConfig": "projects/chat-ui/vitest.config.ts",
+            "exclude": ["**/*.browser.spec.ts"]
+          },
+          "configurations": {
+            "browser": {
+              "buildTarget": "ai-service-frontend:build:development",
+              "runnerConfig": "projects/chat-ui/vitest.browser.config.ts",
+              "include": ["ui/**/*.browser.spec.ts"],
+              "exclude": [],
+              "browsers": ["chromiumHeadless"],
+              "browserViewport": "390x844"
+            }
           }
         },
         "lint": {

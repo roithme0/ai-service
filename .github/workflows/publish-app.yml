@@ -47,11 +47,48 @@ jobs:
       - name: Lint frontend
         run: npm run lint
 
+  frontend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend tooling tests
+        run: npm run test:tooling
+
       - name: Run frontend app tests
         run: npm run test:app
 
       - name: Run chat UI tests
         run: npm run test:chat-ui
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run chat UI browser component tests
+        run: npm run test:chat-ui:browser
+
+      - name: Upload browser component diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: chat-ui-browser-diagnostics
+          path: frontend/projects/chat-ui/test-results/
+          include-hidden-files: true
+          retention-days: 7
 
   e2e:
     runs-on: ubuntu-latest
@@ -76,6 +113,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Docker-based end-to-end tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: node .agents/validation/e2e.mts
 
       - name: Collect container logs
@@ -96,7 +135,7 @@ jobs:
           retention-days: 7
 
   build-app:
-    needs: validate
+    needs: [validate, frontend-tests]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -211,7 +250,7 @@ jobs:
           regctl image copy "$APP_IMAGE:$RELEASE_VERSION" "$APP_IMAGE:$RELEASE_CHANNEL"
 
   build-chat-ui:
-    needs: validate
+    needs: [validate, frontend-tests]
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release.outputs.version }}

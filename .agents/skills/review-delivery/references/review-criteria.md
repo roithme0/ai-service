@@ -32,6 +32,7 @@ Apply the lanes relevant to the delivered change and scale depth with risk.
 - Responsibilities and dependencies sit in appropriate modules.
 - Naming, typing, error handling, and structure match established conventions.
 - The change does not introduce avoidable architectural or folder-structure drift.
+- Permanent documentation is self-contained and never links to, cites, or depends on gitignored concepts, plans, or specs.
 
 ## Operational Risk
 

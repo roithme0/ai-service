@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,15 @@ const inputs = [
   '.codex/',
   '.agents/validation/',
 ];
+
+const compose = ['compose', '-f', 'deployment/docker-compose-local.yml'];
+
+interface E2EContext {
+  root: string;
+  cache: string;
+  env: NodeJS.ProcessEnv;
+  run: typeof runCheck;
+}
 
 export async function waitForGateway(baseURL: string, timeout = 60_000): Promise<void> {
   const deadline = Date.now() + timeout;
@@ -35,11 +44,47 @@ export async function waitForGateway(baseURL: string, timeout = 60_000): Promise
   throw new Error(`Docker gateway at ${baseURL} did not become ready: ${failure}`);
 }
 
-export async function testE2E(root: string, cache: string): Promise<void> {
+export async function testE2E(
+  root: string,
+  cache: string,
+  run: typeof runCheck = runCheck,
+): Promise<void> {
   await mkdir(cache, { recursive: true });
-  const env = { ...process.env, GATEWAY_PORT: process.env['GATEWAY_PORT'] || '8004' };
-  const compose = ['compose', '-f', 'deployment/docker-compose-local.yml'];
-  await runCheck(
+  const env = {
+    ...process.env,
+    GATEWAY_PORT: process.env['GATEWAY_PORT'] || '8004',
+  };
+  const frontend = join(root, 'frontend');
+  const cli = join(frontend, 'node_modules/@playwright/test/cli.js');
+  await access(cli).catch(() => {
+    throw new Error(
+      'Incomplete E2E validation: missing installed Playwright dependency (run npm ci in frontend).',
+    );
+  });
+  const context: E2EContext = { root, cache, env, run };
+  try {
+    await prepareDocker(context);
+    const baseURL = `http://localhost:${env.GATEWAY_PORT}`;
+    await waitForGateway(baseURL);
+    await runPlaywright(context, cli, baseURL);
+  } catch (error: unknown) {
+    await collectDiagnostics(context);
+    throw error;
+  }
+}
+
+async function prepareDocker({ root, cache, env, run }: E2EContext): Promise<void> {
+  await run(
+    root,
+    'Docker availability',
+    ['info', '--format', '{{.ServerVersion}}'],
+    join(cache, 'docker-info.log'),
+    30_000,
+    'docker',
+    undefined,
+    env,
+  );
+  await run(
     root,
     'Docker build and startup',
     [...compose, 'up', '-d', '--build', '--wait', '--wait-timeout', '60'],
@@ -50,7 +95,7 @@ export async function testE2E(root: string, cache: string): Promise<void> {
     env,
   );
   // Nginx must resolve upstream addresses again after container replacement.
-  await runCheck(
+  await run(
     root,
     'Gateway restart',
     [...compose, 'restart', 'gateway'],
@@ -60,19 +105,55 @@ export async function testE2E(root: string, cache: string): Promise<void> {
     undefined,
     env,
   );
-  const baseURL = `http://localhost:${env.GATEWAY_PORT}`;
-  await waitForGateway(baseURL);
-  const frontend = join(root, 'frontend');
-  await runCheck(
-    frontend,
+}
+
+async function runPlaywright(
+  { root, cache, env, run }: E2EContext,
+  cli: string,
+  baseURL: string,
+): Promise<void> {
+  const artifacts = await mkdtemp(join(cache, 'playwright-'));
+  await run(
+    join(root, 'frontend'),
     'Playwright',
-    [join(frontend, 'node_modules/@playwright/test/cli.js'), 'test'],
+    [cli, 'test', '--output', join(artifacts, 'test-results')],
     join(cache, 'playwright.log'),
     180_000,
     process.execPath,
     undefined,
-    { ...env, PLAYWRIGHT_BASE_URL: baseURL },
+    {
+      ...env,
+      PLAYWRIGHT_BASE_URL: baseURL,
+      PLAYWRIGHT_HTML_OUTPUT_DIR: join(artifacts, 'html-report'),
+      PLAYWRIGHT_HTML_OPEN: 'never',
+    },
   );
+}
+
+async function collectDiagnostics({ root, cache, env, run }: E2EContext): Promise<void> {
+  for (const [command, name] of [
+    ['ps', 'services'],
+    ['logs', 'services-logs'],
+  ]) {
+    try {
+      await run(
+        root,
+        'E2E failure diagnostics',
+        [
+          ...compose,
+          command,
+          ...(command === 'logs' ? ['--no-color', '--tail', '2000'] : ['--all']),
+        ],
+        join(cache, `${name}.log`),
+        30_000,
+        'docker',
+        undefined,
+        env,
+      );
+    } catch (diagnosticError: unknown) {
+      await writeFile(join(cache, `${name}-error.log`), String(diagnosticError)).catch(() => {});
+    }
+  }
 }
 
 export function e2eProfile(root: string): ValidationProfile {

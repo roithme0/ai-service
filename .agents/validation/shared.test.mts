@@ -6,11 +6,42 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   changedFiles,
+  runValidation,
   validateStop as sharedValidateStop,
   type ValidationDependencies,
   type ValidationState,
   type ValidationFeedback,
+  type ValidationProfile,
+  defaultChecks,
 } from './shared.mts';
+
+void test('partial validation cannot satisfy broader checks and shared-only runs still execute', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ai-service-check-cache-'));
+  const { dependencies, calls } = fixture();
+  const profile: ValidationProfile = {
+    scope: 'fixture',
+    dependencies: () => dependencies,
+    policy: { label: 'Fixture', formatter: 'Formatter', success: 'Passed.', retry: 'fixture' },
+  };
+  const request = { sessionId: 'fixture', start: false, continued: false };
+  let sharedCalls = 0;
+  const shared = (): Promise<void> => {
+    sharedCalls += 1;
+    return Promise.resolve();
+  };
+  const partial = { ...defaultChecks, appTests: false, toolingTests: false };
+  await runValidation(root, [profile], request, { checkShared: shared, checks: partial });
+  await runValidation(root, [profile], request, { checkShared: shared, checks: partial });
+  assert.equal(sharedCalls, 1);
+  await runValidation(root, [profile], request, { checkShared: shared, checks: defaultChecks });
+  assert.equal(sharedCalls, 2);
+  await runValidation(root, [profile], request, {
+    checkShared: shared,
+    checks: { ...defaultChecks, e2e: true },
+  });
+  assert.equal(sharedCalls, 3);
+  assert.equal(calls.filter((call) => call === 'test').length, 3);
+});
 
 function validateStop(
   state: ValidationState,
@@ -60,6 +91,71 @@ void test('discussion turns skip validation even with uncommitted frontend files
   assert.deepEqual(calls, []);
 });
 
+void test('forced validation bypasses unchanged snapshots, clean worktrees, and cached success', async () => {
+  for (const snapshot of [false, true]) {
+    const root = await mkdtemp(join(tmpdir(), 'ai-service-forced-validation-'));
+    const { dependencies, calls } = fixture();
+    dependencies.hasChanges = () => false;
+    const profiles: ValidationProfile[] = [
+      {
+        scope: 'fixture',
+        dependencies: () => dependencies,
+        policy: { label: 'Fixture', formatter: 'Formatter', success: 'Passed.', retry: 'fixture' },
+      },
+    ];
+    const request = { sessionId: 'fixture', start: false, continued: false };
+    if (snapshot) await runValidation(root, profiles, { ...request, start: true });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      assert.deepEqual(await runValidation(root, profiles, { ...request, force: true }), {});
+    }
+    assert.deepEqual(calls, ['format', 'lint', 'test', 'format', 'lint', 'test']);
+  }
+});
+
+void test('shared test failures run once, block every affected profile, and retry next run', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ai-service-hook-shared-failure-'));
+  const fixtures = [fixture(), fixture()];
+  const profiles: ValidationProfile[] = fixtures.map(({ dependencies }, index) => ({
+    scope: `scope-${index}`,
+    policy: {
+      label: `Scope ${index}`,
+      formatter: 'Formatter',
+      success: 'Passed.',
+      retry: 'fixture validation',
+    },
+    dependencies: () => dependencies,
+  }));
+  const request = { sessionId: 'fixture', start: false, continued: false };
+  let sharedCalls = 0;
+  const failShared = (): Promise<void> => {
+    sharedCalls += 1;
+    return Promise.reject(new Error('Shared tests failed'));
+  };
+
+  const failure = await runValidation(root, profiles, request, { checkShared: failShared });
+  assert.equal(failure.failed, true);
+  assert.equal(sharedCalls, 1);
+  assert.equal(failure.message?.match(/Shared tests failed/g)?.length, 2);
+  for (const { calls } of fixtures) assert.deepEqual(calls, ['format', 'lint']);
+
+  const retry = await runValidation(
+    root,
+    profiles,
+    { ...request, continued: true },
+    {
+      checkShared: () => {
+        sharedCalls += 1;
+        return Promise.resolve();
+      },
+    },
+  );
+  assert.deepEqual(retry, {});
+  assert.equal(sharedCalls, 2);
+  for (const { calls } of fixtures) {
+    assert.deepEqual(calls, ['format', 'lint', 'format', 'lint', 'test']);
+  }
+});
+
 void test('continuations skip unchanged scopes without pending validation', async () => {
   const { dependencies, calls } = fixture();
   assert.deepEqual(await validateStop({ promptFingerprint: 'before' }, true, dependencies), {});
@@ -76,6 +172,7 @@ void test('formats before lint and tests and invalidates successful validation o
   };
   const first = await validateStop(state, false, dependencies);
   assert.ok(first.message);
+  assert.equal(first.failed, undefined);
   assert.deepEqual(calls, ['format', 'lint', 'test']);
   assert.equal(state.successfulFingerprint, 'formatted');
   dependencies.format = () => Promise.resolve({ checked: [], formatted: [] });
@@ -95,6 +192,7 @@ void test('failures remain visible on retries and never become successes', async
   const first = await validateStop(state, false, dependencies);
   assert.ok(first.message);
   assert.match(first.message ?? '', /existing lint debt/);
+  assert.equal(first.failed, true);
   assert.equal(state.successfulFingerprint, undefined);
   assert.deepEqual(calls, ['format']);
   const next = await validateStop(state, true, dependencies);
@@ -268,9 +366,9 @@ void test('validation sessions isolate state, check affected scopes, and aggrega
         },
       }),
     }));
-    const output = await runValidation(root, profiles, { sessionId: 'fixture', start: process.argv[2] === 'start', continued: process.argv[3] === 'true' }, async () => {
+    const output = await runValidation(root, profiles, { sessionId: 'fixture', start: process.argv[2] === 'start', continued: process.argv[3] === 'true' }, { checkShared: async () => {
       await appendFile(join(root, 'shared.txt'), 'shared\\n');
-    });
+    } });
     process.stdout.write(JSON.stringify(output));
   `,
   );

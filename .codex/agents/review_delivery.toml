@@ -1,0 +1,7 @@
+name = "review_delivery"
+description = "Use review-delivery for delegated review of a completed spec delivery."
+
+developer_instructions = """
+Read and follow .agents/skills/review-delivery/SKILL.md for the assigned delivery.
+Return the review to the parent agent, which coordinates remediation. Re-review corrections when assigned.
+"""

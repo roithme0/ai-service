@@ -152,8 +152,8 @@ export class HttpSessionTransport implements SessionTransport {
 async function* readSseData(body: ReadableStream<Uint8Array>): AsyncIterable<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder('utf-8', { fatal: true });
-  let buffer = '';
-  let scanFrom = 0;
+  const frameParts: string[] = [];
+  let pendingNewline = false;
   let pendingCarriageReturn = false;
   try {
     while (true) {
@@ -165,13 +165,16 @@ async function* readSseData(body: ReadableStream<Uint8Array>): AsyncIterable<str
         const endsWithCarriageReturn = decoded.endsWith('\r');
         if (pendingCarriageReturn && decoded.startsWith('\n')) decoded = decoded.slice(1);
         pendingCarriageReturn = endsWithCarriageReturn;
-        buffer += decoded.replace(/\r\n?/g, '\n');
+        decoded = decoded.replace(/\r\n?/g, '\n');
       }
+      const text: string = pendingNewline ? `\n${decoded}` : decoded;
+      let start = 0;
       let end: number;
-      while ((end = buffer.indexOf('\n\n', scanFrom)) !== -1) {
-        const frame = buffer.slice(0, end);
-        buffer = buffer.slice(end + 2);
-        scanFrom = 0;
+      while ((end = text.indexOf('\n\n', start)) !== -1) {
+        frameParts.push(text.slice(start, end));
+        const frame = frameParts.join('');
+        frameParts.length = 0;
+        start = end + 2;
         const data = frame
           .split('\n')
           .filter((line) => line.startsWith('data:'))
@@ -179,9 +182,11 @@ async function* readSseData(body: ReadableStream<Uint8Array>): AsyncIterable<str
           .join('\n');
         if (data !== '') yield data;
       }
-      scanFrom = Math.max(0, buffer.length - 1);
+      pendingNewline = start < text.length && text.endsWith('\n');
+      const remainder = text.slice(start, pendingNewline ? -1 : undefined);
+      if (remainder !== '') frameParts.push(remainder);
       if (chunk.done) {
-        if (buffer.trim() !== '') throw new SessionTransportError('invalid_response');
+        if (frameParts.join('').trim() !== '') throw new SessionTransportError('invalid_response');
         return;
       }
     }

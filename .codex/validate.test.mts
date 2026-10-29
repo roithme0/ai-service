@@ -3,7 +3,37 @@ import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { hookOutput, hookRequest } from './validate.mts';
+import { hookChecks, hookOutput, hookRequest, parseHookArguments } from './validate.mts';
+
+void test('hooks explicitly select app and tooling tests without Docker-backed E2E', () => {
+  assert.deepEqual(hookChecks, {
+    appTests: true,
+    toolingTests: true,
+    sharedToolingTests: true,
+    e2e: false,
+  });
+});
+
+void test('Codex adapter accepts hook modes and optional validation scopes', () => {
+  for (const mode of ['--start', '--stop']) {
+    const start = mode === '--start';
+    assert.deepEqual(parseHookArguments([mode]), { start, scope: 'all' });
+    for (const scope of ['all', 'frontend', 'backend']) {
+      assert.deepEqual(parseHookArguments([mode, `--${scope}`]), { start, scope });
+    }
+  }
+});
+
+void test('Codex adapter rejects missing, unknown, and extra arguments', () => {
+  for (const args of [
+    [],
+    ['--unknown'],
+    ['--stop', '--unknown'],
+    ['--stop', '--all', '--frontend'],
+  ]) {
+    assert.throws(() => parseHookArguments(args), /Usage:/);
+  }
+});
 
 void test('Codex adapter normalizes requests and bounds continuation feedback', () => {
   assert.deepEqual(hookRequest({ session_id: 'fixture' }, true), {
@@ -23,6 +53,10 @@ void test('Codex adapter normalizes requests and bounds continuation feedback', 
     reason: 'failed',
   });
   assert.deepEqual(hookOutput({ message: 'failed' }, true), { systemMessage: 'failed' });
+  assert.deepEqual(hookOutput({ message: 'Formatted source.ts. Review the diff.' }, false), {
+    decision: 'block',
+    reason: 'Formatted source.ts. Review the diff.',
+  });
 });
 
 function invoke(mode: string, input: unknown): SpawnSyncReturns<string> {

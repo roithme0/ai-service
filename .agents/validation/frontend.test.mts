@@ -7,11 +7,140 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { fingerprint, formatFrontend, frontendProfile, frontendRequire } from './frontend.mts';
-import { e2eProfile, waitForGateway } from './e2e.mts';
+import { e2eProfile, testE2E, waitForGateway } from './e2e.mts';
+import type { runCheck } from './shared.mts';
 import { backendProfile } from './backend.mts';
 
 const { ESLint } = frontendRequire('eslint') as typeof import('eslint');
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../frontend');
+
+function textLinter(cwd: string): InstanceType<typeof ESLint> {
+  return new ESLint({
+    cwd,
+    overrideConfig: {
+      languageOptions: {
+        // CI single-run programs read disk; these tests lint replacement source text.
+        parserOptions: { disallowAutomaticSingleRunInference: true },
+      },
+    },
+  });
+}
+
+void test('missing Playwright fails before any Docker command', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-prerequisites-'));
+  const run: typeof runCheck = () => {
+    assert.fail('Docker must not run without Playwright installed');
+  };
+  await assert.rejects(
+    testE2E(root, join(root, 'cache'), run),
+    /Incomplete E2E validation: missing installed Playwright dependency/,
+  );
+});
+
+void test('E2E runs isolate artifacts from other runs and the shared Playwright output', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-artifacts-'));
+  const cli = join(root, 'frontend/node_modules/@playwright/test/cli.js');
+  await mkdir(dirname(cli), { recursive: true });
+  await writeFile(cli, '');
+  const shared = join(root, 'frontend/e2e/test-results');
+  await mkdir(shared, { recursive: true });
+  await writeFile(join(shared, 'trace.zip'), 'shared trace');
+  t.mock.method(globalThis, 'fetch', () => Promise.resolve(new Response('ready')));
+  const outputs: string[] = [];
+  const reports: string[] = [];
+  const run: typeof runCheck = async (_cwd, label, args, _log, _timeout, _command, _input, env) => {
+    if (label === 'Playwright') {
+      assert.deepEqual(args.slice(0, 3), [cli, 'test', '--output']);
+      const output = args[3];
+      assert.ok(output);
+      outputs.push(output);
+      await mkdir(output, { recursive: true });
+      await writeFile(join(output, 'trace.zip'), output);
+      const report = env?.['PLAYWRIGHT_HTML_OUTPUT_DIR'];
+      assert.ok(report);
+      assert.equal(dirname(report), dirname(output));
+      assert.notEqual(report, output);
+      assert.equal(env?.['PLAYWRIGHT_HTML_OPEN'], 'never');
+      reports.push(report);
+      await mkdir(report, { recursive: true });
+      await writeFile(join(report, 'index.html'), report);
+    }
+    return '';
+  };
+  const cache = join(root, 'cache');
+  await Promise.all([testE2E(root, cache, run), testE2E(root, cache, run)]);
+  assert.equal(outputs.length, 2);
+  assert.notEqual(outputs[0], outputs[1]);
+  for (const output of outputs) {
+    assert.equal(dirname(dirname(output)), cache);
+    assert.equal(await readFile(join(output, 'trace.zip'), 'utf8'), output);
+  }
+  assert.equal(reports.length, 2);
+  assert.notEqual(reports[0], reports[1]);
+  for (const report of reports) {
+    assert.equal(await readFile(join(report, 'index.html'), 'utf8'), report);
+  }
+  assert.equal(await readFile(join(shared, 'trace.zip'), 'utf8'), 'shared trace');
+});
+
+void test('E2E collects diagnostics for Docker and Playwright failures and preserves the original error', async (t) => {
+  t.mock.method(globalThis, 'fetch', () => Promise.resolve(new Response('ready')));
+  for (const failure of [
+    'Docker availability',
+    'Docker build and startup',
+    'Gateway restart',
+    'Playwright',
+  ]) {
+    for (const diagnosticsFail of [false, true]) {
+      const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-diagnostics-'));
+      const cli = join(root, 'frontend/node_modules/@playwright/test/cli.js');
+      await mkdir(dirname(cli), { recursive: true });
+      await writeFile(cli, '');
+      const cache = join(root, 'cache');
+      const original = new Error(failure);
+      const calls: Parameters<typeof runCheck>[] = [];
+      const run: typeof runCheck = async (...args) => {
+        calls.push(args);
+        if (args[1] === failure) throw original;
+        if (args[1] === 'E2E failure diagnostics') {
+          if (diagnosticsFail) throw new Error('diagnostic command failed');
+          await writeFile(args[3], 'diagnostic output');
+        }
+        return '';
+      };
+      await assert.rejects(testE2E(root, cache, run), (error: unknown) => error === original);
+      assert.equal(calls[0][1], 'Docker availability');
+      assert.deepEqual(calls[0][2], ['info', '--format', '{{.ServerVersion}}']);
+      const diagnostics = calls.filter((args) => args[1] === 'E2E failure diagnostics');
+      assert.deepEqual(
+        diagnostics.map((args) => args[2]),
+        [
+          ['compose', '-f', 'deployment/docker-compose-local.yml', 'ps', '--all'],
+          [
+            'compose',
+            '-f',
+            'deployment/docker-compose-local.yml',
+            'logs',
+            '--no-color',
+            '--tail',
+            '2000',
+          ],
+        ],
+      );
+      for (const args of diagnostics) {
+        assert.equal(args[5], 'docker');
+        assert.equal(args[7]?.['GATEWAY_PORT'], calls[0][7]?.['GATEWAY_PORT']);
+      }
+      for (const name of ['services', 'services-logs']) {
+        const report = await readFile(
+          join(cache, `${name}${diagnosticsFail ? '-error' : ''}.log`),
+          'utf8',
+        );
+        assert.match(report, diagnosticsFail ? /diagnostic command failed/ : /diagnostic output/);
+      }
+    }
+  }
+});
 
 void test('shared validation and Codex adapter changes invalidate every validation scope', async () => {
   const root = await mkdtemp(join(tmpdir(), 'ai-service-validation-scopes-'));
@@ -126,7 +255,7 @@ void test('fingerprints include new, changed, renamed, and deleted inputs but ex
 
 void test('configuration checks typed code, external and inline templates, and scripts', async () => {
   const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../frontend');
-  const eslint = new ESLint({ cwd: frontend });
+  const eslint = textLinter(frontend);
   const [typescript] = await eslint.lintText('Promise.resolve(1);', {
     filePath: join(frontend, 'src/main.ts'),
   });
@@ -170,7 +299,7 @@ void test('configuration checks typed code, external and inline templates, and s
 
 void test('validation TypeScript receives strict lint rules from its own configuration', async () => {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-  const eslint = new ESLint({ cwd: join(root, '.agents/validation') });
+  const eslint = textLinter(join(root, '.agents/validation'));
   const [result] = await eslint.lintText('Promise.resolve(1);', {
     filePath: join(root, '.agents/validation/shared.mts'),
   });
