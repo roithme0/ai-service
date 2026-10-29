@@ -375,14 +375,25 @@ describe('session observation', () => {
     await expect(collect(events())).rejects.toMatchObject({ reason: 'invalid_response' });
   });
 
-  it('handles multiline data and bare carriage-return frame separators', async () => {
-    const data = JSON.stringify(snapshotEvent, null, 2)
-      .split('\n')
-      .map((line) => `data: ${line}`)
-      .join('\r');
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(stream(`${data}\r\r`)));
-    await expect(collect(events())).resolves.toEqual([snapshotEvent]);
-  });
+  it.each(['\n', '\r', '\r\n'])(
+    'handles multiline data with byte-split %j line endings',
+    async (separator) => {
+      const data = JSON.stringify(snapshotEvent, null, 2)
+        .split('\n')
+        .map((line) => `data: ${line}`)
+        .join(separator);
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const byte of new TextEncoder().encode(`${data}${separator}${separator}`)) {
+            controller.enqueue(new Uint8Array([byte]));
+          }
+          controller.close();
+        },
+      });
+      vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(stream(body)));
+      await expect(collect(events())).resolves.toEqual([snapshotEvent]);
+    },
+  );
 
   it('reports pre-header capacity failure as HTTP error', async () => {
     vi.stubGlobal(
