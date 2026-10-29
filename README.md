@@ -2,7 +2,11 @@
 
 AI Service provides reusable AI capabilities to consuming applications, including conversations and a shared chat UI. This repository does not deliver a self-contained end-user product; included demos illustrate integration.
 
-<img src="docs/assets/screenshots/ui-demo.jpg" alt="AI Service Visual Demo with messages, a JSON artifact, and the message composer" width="320">
+<p>
+  <img src="docs/assets/screenshots/landing%20page.jpg" alt="Demo selection page with links to the visual and live demos" width="280">
+  <img src="docs/assets/screenshots/visual%20demo.jpg" alt="Visual demo with scripted messages, a JSON artifact, and the message composer" width="280">
+  <img src="docs/assets/screenshots/live%20demo.jpg" alt="Live demo with a conversation, token usage, estimated cost, and the message composer" width="280">
+</p>
 
 ## Features
 
