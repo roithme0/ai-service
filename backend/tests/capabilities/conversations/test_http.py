@@ -170,6 +170,8 @@ class Stream:
 
     async def event(self) -> SnapshotEvent | ObservationErrorEvent:
         message = await self.next_message()
+        while message.get("body") == b": heartbeat\n\n":
+            message = await self.next_message()
         assert message["type"] == "http.response.body"
         body = message["body"]
         assert (
@@ -454,6 +456,9 @@ def test_stream_disconnect_releases_capacity_without_cancelling_execution(
         monkeypatch.setattr(
             "app.capabilities.conversations.sessions.MAX_OBSERVERS_PER_SESSION", 1
         )
+        monkeypatch.setattr(
+            "app.capabilities.conversations.http._HEARTBEAT_INTERVAL_SECONDS", 0.01
+        )
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
         app = application(runner)
@@ -470,6 +475,11 @@ def test_stream_disconnect_releases_capacity_without_cancelling_execution(
             path = f"{BASE}/{created.json()['session_id']}"
             async with stream(app, f"{path}/events") as first:
                 await first.event()
+                assert (await first.next_message())["body"] == b": heartbeat\n\n"
+                monkeypatch.setattr(
+                    "app.capabilities.conversations.http._HEARTBEAT_INTERVAL_SECONDS",
+                    15.0,
+                )
                 excess = await client.get(f"{path}/events")
                 assert excess.status_code == 429 and excess.json() == {
                     "kind": "observation_limit"
@@ -492,6 +502,69 @@ def test_stream_disconnect_releases_capacity_without_cancelling_execution(
                 assert turns(final)[-1].parts[-1].part_kind == "text"
                 await runner.close()
                 assert (await replacement.next_message())["more_body"] is False
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("cancel_pending_read", [False, True])
+def test_idle_heartbeats_preserve_updates_and_close_pending_observation(
+    monkeypatch: pytest.MonkeyPatch, cancel_pending_read: bool
+) -> None:
+    from app.capabilities.conversations.http import _events
+
+    monkeypatch.setattr(
+        "app.capabilities.conversations.http._HEARTBEAT_INTERVAL_SECONDS", 0.01
+    )
+
+    async def exercise() -> None:
+        queued: asyncio.Queue[PresentedSession] = asyncio.Queue()
+        started, closed = asyncio.Event(), asyncio.Event()
+        reads = 0
+
+        async def respond(
+            messages: list[ModelMessage], info: AgentInfo
+        ) -> ModelResponse:
+            raise AssertionError("Heartbeats must not execute the agent")
+
+        agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
+        runner = AgentTurnRunner(agent)
+        owner = ApplicationIdentity("test", "alice")
+        created = runner.create_session(owner=owner)
+        first = runner.read_session(created.session_id, owner=owner)
+
+        async def updates() -> AsyncGenerator[PresentedSession, None]:
+            nonlocal reads
+            try:
+                while True:
+                    reads += 1
+                    started.set()
+                    yield await queued.get()
+            finally:
+                closed.set()
+
+        events = _events(first, updates())
+        assert await anext(events) == (
+            f"data: {SnapshotEvent(snapshot=first).model_dump_json()}\n\n"
+        )
+        assert await anext(events) == ": heartbeat\n\n"
+        assert await anext(events) == ": heartbeat\n\n"
+        assert reads == 1 and not closed.is_set()
+        updated = first.model_copy(update={"error": "conversation_limit_reached"})
+        queued.put_nowait(updated)
+        assert await anext(events) == (
+            f"data: {SnapshotEvent(snapshot=updated).model_dump_json()}\n\n"
+        )
+        started.clear()
+        if cancel_pending_read:
+            pending = asyncio.create_task(anext(events))
+            await started.wait()
+            pending.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+        else:
+            assert await anext(events) == ": heartbeat\n\n"
+        await events.aclose()
+        assert closed.is_set() and reads == 2
 
     asyncio.run(exercise())
 
@@ -657,7 +730,8 @@ def test_invalid_initialization_rejects_context_and_duplicate_capabilities() -> 
 
 
 @pytest.mark.parametrize(
-    "failed_message", ["http.response.start", "http.response.body"]
+    "failed_message",
+    ["http.response.start", "http.response.body", "heartbeat"],
 )
 def test_failed_socket_send_releases_preacquired_subscription(
     failed_message: str,
@@ -666,7 +740,10 @@ def test_failed_socket_send_releases_preacquired_subscription(
     async def exercise() -> None:
         class BrokenStream(Stream):
             async def send(self, message: Message) -> None:
-                if message["type"] == failed_message:
+                if message["type"] == failed_message or (
+                    failed_message == "heartbeat"
+                    and message.get("body") == b": heartbeat\n\n"
+                ):
                     raise OSError("Connection closed")
                 await super().send(message)
 
@@ -677,6 +754,9 @@ def test_failed_socket_send_releases_preacquired_subscription(
 
         monkeypatch.setattr(
             "app.capabilities.conversations.sessions.MAX_OBSERVERS_PER_SESSION", 1
+        )
+        monkeypatch.setattr(
+            "app.capabilities.conversations.http._HEARTBEAT_INTERVAL_SECONDS", 0.01
         )
         agent = create_turn_agent(FunctionModel(respond), instructions="Help.")
         runner = AgentTurnRunner(agent)
