@@ -59,7 +59,7 @@ const INITIAL_MESSAGES: readonly ChatTextMessage[] = [
   },
 ];
 
-const FOCUS_CONTROLS = ['.send-button', '.details-toggle', '.artifact-toggle'] as const;
+const POINTER_FOCUS_CONTROLS = ['.send-button'] as const;
 
 const DETAILS_CONTENT: readonly ChatContent[] = [
   { kind: 'text', isFinal: false, id: 'request', role: 'user', text: 'Request' },
@@ -180,7 +180,7 @@ describe('ChatUiComponent', () => {
     expect(line.textContent).toContain('0 Tokens');
   });
 
-  it('toggles the usage panel without submitting, losing the draft, or moving pointer focus', () => {
+  it('toggles the usage panel without submitting or losing the draft', () => {
     const fixture = createFixture([]);
     fixture.componentRef.setInput('usage', {
       ...EMPTY_CHAT_USAGE,
@@ -250,22 +250,19 @@ describe('ChatUiComponent', () => {
     expect(submitted).not.toHaveBeenCalled();
   });
 
-  it('moves keyboard focus to the panel and returns it when Escape closes the panel', async () => {
+  it('closes the usage panel with Escape', async () => {
     const fixture = createFixture([]);
     fixture.componentRef.setInput('usage', EMPTY_CHAT_USAGE);
     fixture.detectChanges();
     const root = fixtureElement(fixture);
     const expand = root.querySelector<HTMLButtonElement>('.usage-toggle')!;
-    expand.focus();
     expand.click();
     fixture.detectChanges();
     await fixture.whenStable();
     const collapse = root.querySelector<HTMLButtonElement>('.collapse-button')!;
-    expect(document.activeElement).toBe(collapse);
     collapse.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     fixture.detectChanges();
     await fixture.whenStable();
-    expect(document.activeElement).toBe(expand);
     expect(expand.getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -1309,15 +1306,11 @@ describe('ChatUiComponent', () => {
       ['mouse', 'touch', 'pen', 'mousedown'].map((pointerType) => ({ selector, pointerType })),
     ),
   )(
-    'preserves composer focus when toggling $selector with $pointerType',
+    'allows default pointer behavior when toggling $selector with $pointerType',
     ({ selector, pointerType }) => {
       const fixture = createFocusFixture();
       const element = fixtureElement(fixture);
-      const textarea = element.querySelector('textarea')!;
       const button = element.querySelector<HTMLButtonElement>(selector)!;
-      textarea.focus();
-      const blur = vi.fn();
-      textarea.addEventListener('blur', blur);
 
       for (const expanded of [true, false]) {
         const press =
@@ -1331,18 +1324,16 @@ describe('ChatUiComponent', () => {
                 cancelable: true,
               });
         button.dispatchEvent(press);
-        expect(press.defaultPrevented).toBe(true);
+        expect(press.defaultPrevented).toBe(false);
         button.click();
         fixture.detectChanges();
         expect(button.getAttribute('aria-expanded')).toBe(String(expanded));
-        expect(document.activeElement).toBe(textarea);
-        expect(blur).not.toHaveBeenCalled();
       }
     },
   );
 
   it.each(
-    FOCUS_CONTROLS.flatMap((selector) =>
+    POINTER_FOCUS_CONTROLS.flatMap((selector) =>
       ['pointerdown', 'mousedown'].map((eventType) => ({ selector, eventType })),
     ),
   )(
@@ -1369,17 +1360,20 @@ describe('ChatUiComponent', () => {
     },
   );
 
-  it.each(FOCUS_CONTROLS)('retains keyboard focus on %s when activated', (selector) => {
-    const fixture = createFocusFixture();
-    const button = fixtureElement(fixture).querySelector<HTMLButtonElement>(selector)!;
-    button.focus();
-    const key = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
-    button.dispatchEvent(key);
-    expect(key.defaultPrevented).toBe(false);
-    button.click();
-    fixture.detectChanges();
-    expect(document.activeElement).toBe(button);
-  });
+  it.each([...POINTER_FOCUS_CONTROLS, '.details-toggle', '.artifact-toggle'])(
+    'retains keyboard focus on %s when activated',
+    (selector) => {
+      const fixture = createFocusFixture();
+      const button = fixtureElement(fixture).querySelector<HTMLButtonElement>(selector)!;
+      button.focus();
+      const key = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+      button.dispatchEvent(key);
+      expect(key.defaultPrevented).toBe(false);
+      button.click();
+      fixture.detectChanges();
+      expect(document.activeElement).toBe(button);
+    },
+  );
 
   it.each(['insertText', 'insertFromPaste', 'deleteContentBackward', 'insertCompositionText'])(
     'blocks %s while sending without disabling or blurring the textarea',

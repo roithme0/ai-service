@@ -2,11 +2,10 @@ import { Component, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { renderAssistantMarkdown } from '../../formatting/assistant-markdown';
 import type { ChatTextMessage } from '../../models/chat-message';
-import { PreventPointerFocusDirective } from '../../directives/prevent-pointer-focus.directive';
 
 @Component({
   selector: 'ai-chat-assistant-message',
-  imports: [MatIconModule, PreventPointerFocusDirective],
+  imports: [MatIconModule],
   templateUrl: './assistant-message.component.html',
   styleUrl: './assistant-message.component.scss',
 })
