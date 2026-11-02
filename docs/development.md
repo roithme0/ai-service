@@ -75,7 +75,11 @@ npm run test:chat-ui
 
 For build verification, run `npm run build:app` and `npm run build:chat-ui`. Test locations are listed in [navigation](navigation.md#find-related-tests).
 
-The [gateway regression harness](../deployment/tests/gateway/) currently mounts `deployment/nginx.conf`, while the configuration lives at `deployment/gateway/nginx.conf`. Correct that mount before relying on this check.
+With Docker running, run the [gateway regression tests](../deployment/tests/gateway/test_timeout.py) from the **repository root**:
+
+```powershell
+docker compose -f deployment/tests/gateway/compose.yml up --abort-on-container-exit --exit-code-from gateway-tests
+```
 
 ### Component browser tests
 
