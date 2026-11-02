@@ -1,6 +1,5 @@
-import { Component, computed, ElementRef, input, output, viewChild } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
-import { PreventPointerFocusDirective } from '../../directives/prevent-pointer-focus.directive';
 import type { ChatUsage } from '../../models/chat-usage';
 import { formatUsageCost } from '../../formatting/usage-format';
 import { formatTokens } from '../../formatting/token-format';
@@ -9,15 +8,13 @@ const COUNT_FORMAT = new Intl.NumberFormat('en-US');
 
 @Component({
   selector: 'ai-chat-usage-panel',
-  imports: [MatIconModule, PreventPointerFocusDirective],
+  imports: [MatIconModule],
   templateUrl: './usage-panel.component.html',
   styleUrl: './usage-panel.component.scss',
 })
 export class UsagePanelComponent {
   readonly usage = input.required<ChatUsage>();
   readonly collapsed = output<MouseEvent | KeyboardEvent>();
-  private readonly collapseButton =
-    viewChild.required<ElementRef<HTMLButtonElement>>('collapseButton');
   protected readonly cost = computed(() => {
     const cost = this.usage().estimatedCostUsd;
     return cost === null ? 'Unbekannt' : formatUsageCost(cost);
@@ -50,10 +47,6 @@ export class UsagePanelComponent {
       },
     ];
   });
-
-  focusCollapseButton(): void {
-    this.collapseButton().nativeElement.focus({ preventScroll: true });
-  }
 
   protected collapseFromKeyboard(event: Event): void {
     if (event instanceof KeyboardEvent) this.collapsed.emit(event);
