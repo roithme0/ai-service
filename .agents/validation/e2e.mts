@@ -8,6 +8,7 @@ const inputs = [
   'frontend/',
   'backend/',
   'deployment/docker-compose-local.yml',
+  'deployment/docker-compose-e2e.override.yml',
   'deployment/gateway/',
   '.editorconfig',
   '.codex/',
@@ -21,6 +22,8 @@ interface E2EContext {
   cache: string;
   env: NodeJS.ProcessEnv;
   run: typeof runCheck;
+  compose: readonly string[];
+  prebuiltImages: boolean;
 }
 
 export async function waitForGateway(baseURL: string, timeout = 60_000): Promise<void> {
@@ -48,6 +51,7 @@ export async function testE2E(
   root: string,
   cache: string,
   run: typeof runCheck = runCheck,
+  prebuiltImages = false,
 ): Promise<void> {
   await mkdir(cache, { recursive: true });
   const env = {
@@ -61,7 +65,14 @@ export async function testE2E(
       'Incomplete E2E validation: missing installed Playwright dependency (run npm ci in frontend).',
     );
   });
-  const context: E2EContext = { root, cache, env, run };
+  const context: E2EContext = {
+    root,
+    cache,
+    env,
+    run,
+    compose: prebuiltImages ? [...compose, '-f', 'deployment/docker-compose-e2e.override.yml'] : compose,
+    prebuiltImages,
+  };
   try {
     await prepareDocker(context);
     const baseURL = `http://localhost:${env.GATEWAY_PORT}`;
@@ -73,7 +84,14 @@ export async function testE2E(
   }
 }
 
-async function prepareDocker({ root, cache, env, run }: E2EContext): Promise<void> {
+async function prepareDocker({
+  root,
+  cache,
+  env,
+  run,
+  compose,
+  prebuiltImages,
+}: E2EContext): Promise<void> {
   await run(
     root,
     'Docker availability',
@@ -84,10 +102,30 @@ async function prepareDocker({ root, cache, env, run }: E2EContext): Promise<voi
     undefined,
     env,
   );
+  if (prebuiltImages) {
+    await run(
+      root,
+      'Gateway image pull',
+      [...compose, 'pull', 'gateway'],
+      join(cache, 'gateway-pull.log'),
+      120_000,
+      'docker',
+      undefined,
+      env,
+    );
+  }
   await run(
     root,
     'Docker build and startup',
-    [...compose, 'up', '-d', '--build', '--wait', '--wait-timeout', '60'],
+    [
+      ...compose,
+      'up',
+      '-d',
+      ...(prebuiltImages ? ['--no-build', '--pull', 'never'] : ['--build']),
+      '--wait',
+      '--wait-timeout',
+      '60',
+    ],
     join(cache, 'docker.log'),
     600_000,
     'docker',
@@ -130,7 +168,7 @@ async function runPlaywright(
   );
 }
 
-async function collectDiagnostics({ root, cache, env, run }: E2EContext): Promise<void> {
+async function collectDiagnostics({ root, cache, env, run, compose }: E2EContext): Promise<void> {
   for (const [command, name] of [
     ['ps', 'services'],
     ['logs', 'services-logs'],
@@ -176,8 +214,16 @@ export function e2eProfile(root: string): ValidationProfile {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.length !== 2) throw new Error('Usage: node .agents/validation/e2e.mts');
+  const args = process.argv.slice(2);
+  if (args.length > 1 || (args.length === 1 && args[0] !== '--prebuilt-images')) {
+    throw new Error('Usage: node .agents/validation/e2e.mts [--prebuilt-images]');
+  }
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-  await testE2E(root, join(root, '.agents/.codex-validation/e2e/manual'));
+  await testE2E(
+    root,
+    join(root, '.agents/.codex-validation/e2e/manual'),
+    runCheck,
+    args[0] === '--prebuilt-images',
+  );
   process.stdout.write('Docker preparation and Playwright passed.\n');
 }

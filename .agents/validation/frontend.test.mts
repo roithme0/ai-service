@@ -10,9 +10,61 @@ import { fingerprint, formatFrontend, frontendProfile, frontendRequire } from '.
 import { e2eProfile, testE2E, waitForGateway } from './e2e.mts';
 import type { runCheck } from './shared.mts';
 import { backendProfile } from './backend.mts';
+import {
+  e2eDependencies,
+  type PackageLock,
+} from '../../frontend/scripts/prepare-e2e-dependencies.mts';
 
 const { ESLint } = frontendRequire('eslint') as typeof import('eslint');
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '../../frontend');
+
+void test('minimal E2E installation retains locked runtime dependencies and integrity metadata', async () => {
+  const source = JSON.parse(
+    await readFile(join(frontend, 'package-lock.json'), 'utf8'),
+  ) as PackageLock;
+  const original = JSON.stringify(source);
+  const { manifest, lock } = e2eDependencies(source);
+  assert.equal(
+    manifest.dependencies['@playwright/test'],
+    source.packages['node_modules/@playwright/test'].version,
+  );
+  assert.equal(manifest.dependencies.zod, source.packages['node_modules/zod'].version);
+  assert.equal(
+    lock.packages['node_modules/playwright-core'].version,
+    source.packages['node_modules/playwright-core'].version,
+  );
+  assert.equal(lock.packages['node_modules/@angular/core'], undefined);
+  for (const [name, entry] of Object.entries(lock.packages)) {
+    if (!name) continue;
+    assert.equal(entry.dev, false);
+    assert.equal(entry.devOptional, false);
+    assert.equal(entry['integrity'], source.packages[name]['integrity']);
+    assert.equal(entry['resolved'], source.packages[name]['resolved']);
+  }
+  assert.equal(JSON.stringify(source), original);
+});
+
+void test('minimal E2E installation rejects missing or nested dependencies instead of resolving new versions', () => {
+  assert.throws(() => e2eDependencies({ lockfileVersion: 2, packages: {} }), /version 3/);
+  assert.throws(
+    () => e2eDependencies({ lockfileVersion: 3, packages: {} }),
+    /Missing locked E2E dependency/,
+  );
+  assert.throws(
+    () =>
+      e2eDependencies({
+        lockfileVersion: 3,
+        packages: {
+          'node_modules/@playwright/test': {
+            version: '1.0.0',
+            dependencies: { playwright: '1.0.0' },
+          },
+          'node_modules/@playwright/test/node_modules/playwright': { version: '1.0.0' },
+        },
+      }),
+    /Nested E2E dependency/,
+  );
+});
 
 function textLinter(cwd: string): InstanceType<typeof ESLint> {
   return new ESLint({
@@ -139,6 +191,48 @@ void test('E2E collects diagnostics for Docker and Playwright failures and prese
         assert.match(report, diagnosticsFail ? /diagnostic command failed/ : /diagnostic output/);
       }
     }
+  }
+});
+
+void test('prebuilt E2E uses loaded images without building or pulling app images', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'ai-service-e2e-prebuilt-'));
+  const cli = join(root, 'frontend/node_modules/@playwright/test/cli.js');
+  await mkdir(dirname(cli), { recursive: true });
+  await writeFile(cli, '');
+  t.mock.method(globalThis, 'fetch', () => Promise.resolve(new Response('ready')));
+  const compose = [
+    'compose',
+    '-f',
+    'deployment/docker-compose-local.yml',
+    '-f',
+    'deployment/docker-compose-e2e.override.yml',
+  ];
+  for (const fail of [false, true]) {
+    const calls: Parameters<typeof runCheck>[] = [];
+    const original = new Error('startup failed');
+    const run: typeof runCheck = (...args) => {
+      calls.push(args);
+      if (fail && args[1] === 'Docker build and startup') throw original;
+      return Promise.resolve('');
+    };
+    const result = testE2E(root, join(root, 'cache'), run, true);
+    if (fail) await assert.rejects(result, (error: unknown) => error === original);
+    else await result;
+    const commands = calls.filter((args) => args[2][0] === 'compose').map((args) => args[2]);
+    assert.deepEqual(commands, [
+      [...compose, 'pull', 'gateway'],
+      [...compose, 'up', '-d', '--no-build', '--pull', 'never', '--wait', '--wait-timeout', '60'],
+      ...(fail
+        ? [
+            [...compose, 'ps', '--all'],
+            [...compose, 'logs', '--no-color', '--tail', '2000'],
+          ]
+        : [[...compose, 'restart', 'gateway']]),
+    ]);
+    assert.equal(
+      calls.some((args) => args[1] === 'Playwright'),
+      !fail,
+    );
   }
 });
 
