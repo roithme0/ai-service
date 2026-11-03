@@ -190,7 +190,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Download built images
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: app-image-*
           path: ${{ runner.temp }}/app-images
@@ -199,10 +199,13 @@ jobs:
         env:
           IMAGE_DIRECTORY: ${{ runner.temp }}/app-images
         run: |
+          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y skopeo
+          sudo apt-get install -y skopeo jq
           for name in backend frontend; do
-            skopeo copy "oci-archive:$IMAGE_DIRECTORY/app-image-$name/app-image.tar" "docker-daemon:ai-service-$name:e2e"
+            archive="$IMAGE_DIRECTORY/app-image-$name/app-image.tar"
+            reference=$(tar -xOf "$archive" index.json | jq -er '.manifests[0].annotations["org.opencontainers.image.ref.name"]')
+            skopeo copy "oci-archive:$archive:$reference" "docker-daemon:ai-service-$name:e2e"
           done
 
       - name: Run Docker-based end-to-end tests
@@ -244,7 +247,7 @@ jobs:
       RELEASE_CHANNEL: ${{ needs.build-chat-ui.outputs.channel }}
     steps:
       - name: Download built image
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: app-image-${{ matrix.name }}
           path: ${{ runner.temp }}
@@ -349,7 +352,7 @@ jobs:
           scope: '@roithme0'
 
       - name: Download built library
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: chat-ui-package
           path: frontend/dist/chat-ui/
