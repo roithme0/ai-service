@@ -1,9 +1,12 @@
 """Injectable native conversation HTTP boundary with caller-owned composition."""
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator, Callable, Mapping
+from contextlib import suppress
 from typing import Annotated, Literal
 
+from anyio import CancelScope
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
@@ -27,6 +30,7 @@ from app.capabilities.conversations.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
 
 _logger = logging.getLogger(__name__)
+_HEARTBEAT_INTERVAL_SECONDS = 15.0
 
 
 class SessionCreationRequest(BaseModel):
@@ -108,10 +112,23 @@ async def _events(
     first: PresentedSession,
     updates: AsyncGenerator[PresentedSession, None],
 ) -> AsyncGenerator[str, None]:
-    yield f"data: {SnapshotEvent(snapshot=first).model_dump_json()}\n\n"
+    pending: asyncio.Task[PresentedSession] | None = None
     try:
-        async for snapshot in updates:
+        yield f"data: {SnapshotEvent(snapshot=first).model_dump_json()}\n\n"
+        while True:
+            if pending is None:
+                pending = asyncio.create_task(anext(updates))
+            done, _ = await asyncio.wait(
+                (pending,), timeout=_HEARTBEAT_INTERVAL_SECONDS
+            )
+            if not done:
+                yield ": heartbeat\n\n"
+                continue
+            snapshot = pending.result()
+            pending = None
             yield f"data: {SnapshotEvent(snapshot=snapshot).model_dump_json()}\n\n"
+    except StopAsyncIteration:
+        return
     except SessionNotFoundError:
         yield f"data: {ObservationErrorEvent(reason='unknown').model_dump_json()}\n\n"
     except ObservationOverflowError:
@@ -119,6 +136,13 @@ async def _events(
     except Exception as error:
         _logger.error("Session observation failed (%s).", type(error).__name__)
         yield f"data: {ObservationErrorEvent(reason='internal_error').model_dump_json()}\n\n"
+    finally:
+        with CancelScope(shield=True):
+            if pending is not None:
+                pending.cancel()
+                with suppress(asyncio.CancelledError, Exception):
+                    await pending
+            await updates.aclose()
 
 
 class EventStreamResponse(StreamingResponse):
@@ -144,8 +168,9 @@ class _SessionEventResponse(EventStreamResponse):
         try:
             await super().__call__(scope, receive, send)
         finally:
-            await self._events.aclose()
-            await self._updates.aclose()
+            with CancelScope(shield=True):
+                await self._events.aclose()
+                await self._updates.aclose()
 
 
 def create_session_router(

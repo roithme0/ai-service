@@ -90,50 +90,6 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
-  e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Install Playwright Chromium
-        working-directory: frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: Run Docker-based end-to-end tests
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: node .agents/validation/e2e.mts
-
-      - name: Collect container logs
-        if: failure()
-        run: |
-          mkdir -p .agents/.codex-validation/e2e/manual
-          docker compose -f deployment/docker-compose-local.yml logs --no-color > .agents/.codex-validation/e2e/manual/containers.log 2>&1
-
-      - name: Upload end-to-end diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: e2e-diagnostics
-          path: |
-            .agents/.codex-validation/e2e/manual/*.log
-            frontend/e2e/test-results/
-          include-hidden-files: true
-          retention-days: 7
-
   build-app:
     needs: [validate, frontend-tests]
     runs-on: ubuntu-latest
@@ -191,6 +147,7 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64
           build-args: ${{ matrix.build_args }}
           outputs: type=oci,dest=${{ runner.temp }}/app-image.tar
           tags: ${{ steps.meta.outputs.tags }}
@@ -201,13 +158,74 @@ jobs:
           sbom: true
 
       - name: Upload built image
-        if: github.event_name == 'push'
         uses: actions/upload-artifact@v7
         with:
           name: app-image-${{ matrix.name }}
           path: ${{ runner.temp }}/app-image.tar
           compression-level: 0
           if-no-files-found: error
+          retention-days: 7
+
+  e2e:
+    needs: build-app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Download built images
+        uses: actions/download-artifact@v4
+        with:
+          pattern: app-image-*
+          path: ${{ runner.temp }}/app-images
+
+      - name: Load built images into Docker
+        env:
+          IMAGE_DIRECTORY: ${{ runner.temp }}/app-images
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+          for name in backend frontend; do
+            skopeo copy "oci-archive:$IMAGE_DIRECTORY/app-image-$name/app-image.tar" "docker-daemon:ai-service-$name:e2e"
+          done
+
+      - name: Run Docker-based end-to-end tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node .agents/validation/e2e.mts --prebuilt-images
+
+      - name: Collect container logs
+        if: failure()
+        run: |
+          mkdir -p .agents/.codex-validation/e2e/manual
+          docker compose -f deployment/docker-compose-local.yml -f deployment/docker-compose-e2e.override.yml logs --no-color > .agents/.codex-validation/e2e/manual/containers.log 2>&1
+
+      - name: Upload end-to-end diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-diagnostics
+          path: |
+            .agents/.codex-validation/e2e/manual/*.log
+            frontend/e2e/test-results/
+          include-hidden-files: true
+          retention-days: 7
 
   publish-app:
     needs: [build-app, build-chat-ui, e2e]
@@ -250,7 +268,7 @@ jobs:
           regctl image copy "$APP_IMAGE:$RELEASE_VERSION" "$APP_IMAGE:$RELEASE_CHANNEL"
 
   build-chat-ui:
-    needs: [validate, frontend-tests]
+    needs: e2e
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release.outputs.version }}

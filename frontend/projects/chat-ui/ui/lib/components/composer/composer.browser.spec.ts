@@ -5,10 +5,23 @@ import { beforeEach, expect, it } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { registerChatIcons } from '../../chat-icons';
 import type { ChatSubmission } from '../../models/chat-message';
+import type { ChatUsage } from '../../models/chat-usage';
 import { ComposerComponent } from './composer.component';
 
 let fixture: ComponentFixture<ComposerComponent>;
 let textarea: HTMLTextAreaElement;
+
+const USAGE: ChatUsage = {
+  totalTokens: 0,
+  estimatedCostUsd: null,
+  inputTokens: 0,
+  outputTokens: 0,
+  reasoningTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+  requests: 0,
+  toolCalls: 0,
+};
 
 beforeEach(async () => {
   TestBed.configureTestingModule({ imports: [ComposerComponent] });
@@ -22,6 +35,50 @@ beforeEach(async () => {
   const element = host.querySelector('textarea');
   if (!element) throw new Error('Composer textarea is missing.');
   textarea = element;
+});
+
+it.each(['mouse', 'keyboard'] as const)(
+  'uses native focus behavior when toggling stats with %s',
+  async (interaction) => {
+    const host = fixture.nativeElement as HTMLElement;
+    host.style.marginTop = '400px';
+    fixture.componentRef.setInput('usage', USAGE);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const draft = page.getByRole('textbox', { name: 'Nachricht', exact: true });
+    await draft.fill('Keep this draft');
+    for (const label of ['Chat-Verbrauch anzeigen', 'Chat-Verbrauch einklappen']) {
+      const toggle = page.getByRole('button', { name: label, exact: true });
+      await expect.element(toggle).toBeVisible();
+      if (interaction === 'mouse') {
+        await draft.click();
+        await toggle.click();
+      } else {
+        toggle.element().focus();
+        await userEvent.keyboard('{Enter}');
+      }
+      await expect.poll(() => document.activeElement).toBe(document.body);
+      await expect.element(draft).toHaveValue('Keep this draft');
+    }
+    await expect
+      .element(page.getByRole('button', { name: 'Chat-Verbrauch anzeigen', exact: true }))
+      .toHaveAttribute('aria-expanded', 'false');
+  },
+);
+
+it('preserves composer focus when clicking Send', async () => {
+  const submissions: ChatSubmission[] = [];
+  fixture.componentInstance.messageSubmitted.subscribe((submission) =>
+    submissions.push(submission),
+  );
+  const draft = page.getByRole('textbox', { name: 'Nachricht', exact: true });
+  await draft.fill('Send this');
+  await page.getByRole('button', { name: 'Nachricht senden', exact: true }).click();
+  expect(submissions).toHaveLength(1);
+  expect(document.activeElement).toBe(textarea);
+  submissions[0].acknowledge();
+  await expect.element(draft).toHaveValue('');
+  expect(document.activeElement).toBe(textarea);
 });
 
 it('preserves multiline input until acknowledgement and blocks repeated Enter while pending', async () => {

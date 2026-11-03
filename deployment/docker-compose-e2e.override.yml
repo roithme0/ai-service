@@ -1,0 +1,6 @@
+services:
+  backend:
+    image: ai-service-backend:e2e
+
+  frontend:
+    image: ai-service-frontend:e2e
