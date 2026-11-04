@@ -575,7 +575,7 @@ describe('ChatUiComponent', () => {
         presentSession({
           session_id: 'session',
           expires_at: time,
-          error: null,
+
           usage: EMPTY_USAGE,
           history: [
             {
@@ -628,7 +628,6 @@ describe('ChatUiComponent', () => {
       ],
     };
     const snapshot: PresentedSession = {
-      error: null,
       usage: EMPTY_USAGE,
       session_id: 's',
       expires_at: lifecycle.started_at,

@@ -107,7 +107,6 @@ class PresentedSession(ResponseModel):
     usage: PresentedUsage
     expires_at: datetime
     history: tuple[HistoryItem, ...]
-    error: Literal["conversation_limit_reached"] | None
 
 
 @dataclass
@@ -327,7 +326,6 @@ def present_session(snapshot: SessionSnapshot) -> PresentedSession:
         session_id=snapshot.session_id,
         usage=_present_usage(snapshot.usage),
         expires_at=snapshot.expires_at,
-        error="conversation_limit_reached" if snapshot.limit_reached else None,
         history=_present_history(
             history_sections,
             snapshot.turn_executions,
