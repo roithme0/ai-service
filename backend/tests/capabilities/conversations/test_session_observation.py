@@ -175,7 +175,6 @@ def test_observer_sees_presented_progress_and_complete_snapshots_without_interna
                 "usage",
                 "expires_at",
                 "history",
-                "error",
             }
             release.set()
             await asyncio.wait_for(continuing.wait(), 5)

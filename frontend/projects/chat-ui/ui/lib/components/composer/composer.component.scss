@@ -95,6 +95,7 @@ form {
   position: relative;
   display: flex;
   flex-direction: column;
+  gap: 0.5rem;
   min-width: 0;
   padding: tokens.value('composer-padding');
   border: tokens.value('surface-border-width') solid tokens.value('composer-border');
@@ -144,9 +145,6 @@ textarea {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  min-height: 2.75rem;
-  margin-top: auto;
-  padding-top: 0.5rem;
 }
 
 textarea::placeholder {
@@ -157,8 +155,8 @@ textarea::placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
   padding: 0;
   border: 0;
   border-radius: 50%;

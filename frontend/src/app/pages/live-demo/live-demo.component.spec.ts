@@ -18,7 +18,6 @@ const EMPTY_USAGE: PresentedSession['usage'] = {
   estimated_cost_usd: null,
 };
 const EMPTY: PresentedSession = {
-  error: null,
   usage: EMPTY_USAGE,
   session_id: 'live-session',
   expires_at: '2026-10-27T12:00:00Z',

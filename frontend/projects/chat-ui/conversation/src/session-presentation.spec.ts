@@ -33,7 +33,7 @@ function run(
   };
 }
 function snapshot(history: PresentedSession['history'] = []): PresentedSession {
-  return { session_id: 'session', expires_at: time, history, error: null, usage: EMPTY_USAGE };
+  return { session_id: 'session', expires_at: time, history, usage: EMPTY_USAGE };
 }
 const tool: PresentationPart = {
   part_kind: 'tool-call',

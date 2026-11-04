@@ -16,7 +16,6 @@ const EMPTY_USAGE: PresentedSession['usage'] = {
 
 const expires = '2026-10-21T12:00:00Z';
 const snapshot: PresentedSession = {
-  error: null,
   usage: {
     ...EMPTY_USAGE,
     input_tokens: 100,

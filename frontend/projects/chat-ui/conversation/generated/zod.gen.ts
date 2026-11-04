@@ -21,8 +21,7 @@ export const zBoundaryError = z.object({
         'busy',
         'agent_unavailable',
         'invalid_input',
-        'observation_limit',
-        'conversation_limit_reached'
+        'observation_limit'
     ])
 });
 
@@ -217,7 +216,6 @@ export const zHistoryItem = z.discriminatedUnion('part_kind', [
  * PresentedSession
  */
 export const zPresentedSession = z.object({
-    error: z.literal('conversation_limit_reached').nullable(),
     expires_at: z.iso.datetime(),
     history: z.array(zHistoryItem),
     session_id: z.string(),

@@ -25,7 +25,7 @@ A session connects one owner to one configured agent. The service manages execut
 - Only one turn may run per session. An overlapping submission is rejected without creating another execution.
 - An admitted turn may finish after expiry, but expiry still prevents further reads and submissions.
 - Failure or cancellation retains captured history and accepted artifacts. It does not establish whether interrupted external actions occurred.
-- Conversation budget exhaustion blocks further submissions; reads and observation remain available until expiry. [Execution limits](../../backend/app/capabilities/conversations/config.py) are separate from session lifetime.
+- Model-request and tool-call budgets reset for each turn; there are no cumulative conversation request or tool-call caps. [Execution limits](../../backend/app/capabilities/conversations/config.py) are separate from session lifetime.
 
 ## Observation and recovery
 
@@ -36,6 +36,6 @@ A session connects one owner to one configured agent. The service manages execut
 
 ## Usage accounting
 
-Session and turn usage follow [Pydantic AI's usage semantics](https://pydantic.dev/docs/ai/api/pydantic-ai/usage/). Repeated presentation groups for one turn carry the same full turn usage; use session usage for conversation totals. Estimated USD totals can omit unpriced requests; they are not billing records.
+Session and turn usage follow [Pydantic AI's usage semantics](https://pydantic.dev/docs/ai/api/pydantic-ai/usage/). Session usage remains cumulative across turns. Repeated presentation groups for one turn carry the same full turn usage; use session usage for conversation totals. Estimated USD totals can omit unpriced requests; they are not billing records.
 
 Start with [session state](../../backend/app/capabilities/conversations/session_state.py), [registry](../../backend/app/capabilities/conversations/sessions.py), and the [frontend controller](../../frontend/projects/chat-ui/conversation/src/session-controller.ts).

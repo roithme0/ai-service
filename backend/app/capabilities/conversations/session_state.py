@@ -30,10 +30,6 @@ from app.capabilities.conversations.config import (
     MAX_INITIAL_CONTEXT_CHARACTERS,
 )
 from app.capabilities.conversations.observation import TurnObservation
-from app.capabilities.conversations.limits import (
-    ConversationLimitReached,
-    conversation_limit_reached,
-)
 from app.capabilities.conversations.turns import execute_turn
 from app.core.json import FiniteJsonValue
 
@@ -128,7 +124,6 @@ class SessionState:
             raise ValueError("Artifact capability types must be unique.")
         seed = _initial_context_message(initial_context)
         self._conversation = Conversation(messages=[seed] if seed is not None else [])
-        self._limit_reached = False
         self._artifact_capabilities = capabilities
         self._max_artifacts = max_artifacts
         self._artifacts: tuple[SessionArtifact, ...] = ()
@@ -172,12 +167,6 @@ class SessionState:
     @property
     def messages(self) -> tuple[ModelMessage, ...]:
         return tuple(deepcopy(self._conversation.messages))
-
-    @property
-    def limit_reached(self) -> bool:
-        return self._limit_reached or conversation_limit_reached(
-            self._conversation.usage
-        )
 
     @property
     def artifacts(self) -> tuple[SessionArtifact, ...]:
@@ -234,9 +223,6 @@ class SessionState:
                 on_change=self._notify,
                 toolsets=[*toolsets, artifact_toolset],
             )
-        except ConversationLimitReached:
-            self._limit_reached = True
-            raise
         except CancelledError:
             status = "cancelled"
             raise
@@ -250,9 +236,6 @@ class SessionState:
     def _admit_execution(self) -> TurnExecution:
         if not self._execution_lock.acquire(blocking=False):
             raise SessionBusyError("The session already has a running turn.")
-        if self.limit_reached:
-            self._execution_lock.release()
-            raise ConversationLimitReached("Conversation limit reached")
         observation = TurnObservation(usage_baseline=self._conversation.usage)
         execution = TurnExecution(
             lifecycle=TurnLifecycle(
