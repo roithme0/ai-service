@@ -192,7 +192,8 @@ jobs:
           name: e2e-diagnostics
           path: |
             .agents/.codex-validation/e2e/manual/*.log
-            frontend/e2e/test-results/
+            .agents/.codex-validation/e2e/manual/playwright-*/test-results/**
+            .agents/.codex-validation/e2e/manual/playwright-*/html-report/**
           include-hidden-files: true
           retention-days: 7
 

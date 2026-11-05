@@ -94,7 +94,7 @@ Remove-Item Env:PLAYWRIGHT_BASE_URL
 
 Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Run `node .agents/validation/e2e.mts` from the repository root for browser flow, frontend/backend integration, or local deployment changes. It updates Docker using the build cache and runs Playwright. The stack stays running; logs are in `.agents/.codex-validation/e2e/`.
 
-The [CI workflow](../.github/workflows/publish-app.yml) defines validation, image testing, and publication dependencies. Download the `e2e-diagnostics` artifact from a failed run for available diagnostics.
+The [CI workflow](../.github/workflows/publish-app.yml) defines validation, image testing, and publication dependencies. The isolated runner writes browser results and HTML reports under separate `.agents/.codex-validation/e2e/manual/playwright-*/` directories. On failure, the `e2e-diagnostics` artifact contains available results and reports with their run directories preserved, along with top-level manual logs.
 
 ## Update generated contracts
 

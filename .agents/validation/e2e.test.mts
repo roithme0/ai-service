@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   copyFile,
@@ -9,7 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -282,4 +282,106 @@ void test("gateway readiness retries startup errors and requires both frontend a
       server.close((error) => (error ? reject(error) : resolve())),
     );
   }
+});
+
+void test("CI E2E diagnostics collect isolated trees and logs only", async () => {
+  const fs = await import("node:fs");
+  const workflow = await readFile(
+    new URL("../../.github/workflows/publish-app.yml", import.meta.url),
+    "utf8",
+  );
+  const step = workflow.match(
+    / {6}- name: Upload end-to-end diagnostics\r?\n([\s\S]*?)(?=\r?\n {2}[\w-]+:)/,
+  )?.[1];
+  assert.ok(step);
+  assert.match(step, /if: failure\(\)/);
+  assert.match(step, /name: e2e-diagnostics/);
+  assert.match(step, /include-hidden-files: true/);
+  assert.match(step, /retention-days: 7/);
+  assert.doesNotMatch(step, /if-no-files-found:\s*error/);
+  const paths = step.match(/ {10}path: \|\r?\n((?: {12}[^\r\n]+\r?\n)+)/)?.[1];
+  assert.ok(paths);
+  const patterns = paths
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.trim());
+  const root = await mkdtemp(join(tmpdir(), "ci-e2e-artifact-"));
+  const fixtures = [
+    ".agents/.codex-validation/e2e/manual/containers.log",
+    ".agents/.codex-validation/e2e/manual/services.log",
+    ".agents/.codex-validation/e2e/manual/playwright-a/test-results/case/trace.zip",
+    ".agents/.codex-validation/e2e/manual/playwright-a/test-results/case/screenshot.png",
+    ".agents/.codex-validation/e2e/manual/playwright-a/html-report/index.html",
+    ".agents/.codex-validation/e2e/manual/playwright-a/html-report/data/nested/attachment.png",
+    ".agents/.codex-validation/e2e/manual/playwright-b/test-results/case/trace.zip",
+    ".agents/.codex-validation/e2e/manual/playwright-b/html-report/data/attachment.zip",
+    ".agents/.codex-validation/e2e/manual/playwright-b/other/private.txt",
+    ".agents/.codex-validation/e2e/manual/nested/unrelated.log",
+    ".agents/.codex-validation/e2e/session/private.txt",
+    "frontend/e2e/test-results/stale.zip",
+  ];
+  for (const fixture of fixtures) {
+    await mkdir(dirname(join(root, fixture)), { recursive: true });
+    await writeFile(join(root, fixture), fixture);
+  }
+  // The artifact action uses the common ancestor of glob search roots.
+  const roots = patterns.map((pattern) => {
+    const wildcard = pattern.search(/[*?[\]{}!]/);
+    const prefix = pattern.slice(0, wildcard);
+    return resolve(
+      root,
+      wildcard === -1
+        ? dirname(pattern)
+        : prefix.endsWith("/")
+          ? prefix
+          : dirname(prefix),
+    );
+  });
+  let archiveRoot = roots[0];
+  assert.ok(archiveRoot);
+  for (const searchRoot of roots.slice(1)) {
+    while (
+      relative(archiveRoot, searchRoot).startsWith(`..${sep}`) ||
+      relative(archiveRoot, searchRoot) === ".."
+    ) {
+      const parent = dirname(archiveRoot);
+      assert.notEqual(parent, archiveRoot);
+      archiveRoot = parent;
+    }
+  }
+  const selected = (cwd: string, base: string): string[] =>
+    [
+      ...new Set(
+        patterns.flatMap((pattern) =>
+          fs
+            .globSync(pattern, { cwd, withFileTypes: true })
+            .filter((entry) => entry.isFile())
+            .map((entry) =>
+              relative(base, join(entry.parentPath, entry.name))
+                .split(sep)
+                .join("/"),
+            ),
+        ),
+      ),
+    ].sort();
+  assert.deepEqual(selected(root, archiveRoot), [
+    "containers.log",
+    "playwright-a/html-report/data/nested/attachment.png",
+    "playwright-a/html-report/index.html",
+    "playwright-a/test-results/case/screenshot.png",
+    "playwright-a/test-results/case/trace.zip",
+    "playwright-b/html-report/data/attachment.zip",
+    "playwright-b/test-results/case/trace.zip",
+    "services.log",
+  ]);
+  const earlyRoot = await mkdtemp(join(tmpdir(), "ci-e2e-early-"));
+  const earlyLog = join(
+    earlyRoot,
+    ".agents/.codex-validation/e2e/manual/containers.log",
+  );
+  await mkdir(dirname(earlyLog), { recursive: true });
+  await writeFile(earlyLog, "early failure");
+  assert.deepEqual(selected(earlyRoot, earlyRoot), [
+    ".agents/.codex-validation/e2e/manual/containers.log",
+  ]);
 });
