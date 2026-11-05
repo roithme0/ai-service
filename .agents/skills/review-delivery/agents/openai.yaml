@@ -1,7 +1,7 @@
 interface:
   display_name: "Review Delivery"
   short_description: "Review spec conformance and codebase quality"
-  default_prompt: "Use $review-delivery to review this completed delivery against its spec and the broader codebase."
+  default_prompt: "Use $review-delivery to review this milestone or integrated delivery, including its tests, against the approved spec."
 
 policy:
   allow_implicit_invocation: false

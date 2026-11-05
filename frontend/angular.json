@@ -37,7 +37,7 @@
             "browser": {
               "buildTarget": "ai-service-frontend:build:development",
               "runnerConfig": "projects/chat-ui/vitest.browser.config.ts",
-              "include": ["ui/**/*.browser.spec.ts"],
+              "include": ["ui/**/*.browser.spec.ts", "recording/**/*.browser.spec.ts"],
               "exclude": [],
               "browsers": ["chromiumHeadless"],
               "browserViewport": "390x844"

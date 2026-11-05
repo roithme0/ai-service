@@ -1,5 +1,5 @@
-export { ChatUiComponent } from './lib/components/chat-ui/chat-ui.component';
-export type { ChatUsage, ChatUsageSummary } from './lib/models/chat-usage';
+export { ChatUiComponent } from './src/components/chat-ui/chat-ui.component';
+export type { ChatUsage, ChatUsageSummary } from './src/models/chat-usage';
 export type {
   ChatArtifact,
   ChatArtifactRenderContext,
@@ -20,7 +20,7 @@ export type {
   ChatTurnStatus,
   JsonPrimitive,
   JsonValue,
-} from './lib/models/chat-message';
-export { artifactRenderer } from './lib/models/chat-message';
-export { JSON_ARTIFACT_CAPABILITY } from './lib/artifact-capabilities';
-export type { ChatArtifactCapability } from './lib/artifact-capabilities';
+} from './src/models/chat-message';
+export { artifactRenderer } from './src/models/chat-message';
+export { JSON_ARTIFACT_CAPABILITY } from './src/artifact-capabilities';
+export type { ChatArtifactCapability } from './src/artifact-capabilities';

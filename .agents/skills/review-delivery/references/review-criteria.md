@@ -25,6 +25,8 @@ Apply the lanes relevant to the delivered change and scale depth with risk.
 - Tests protect meaningful behavior, branching logic, state transitions, and contract boundaries.
 - Relevant automated checks pass, and untested areas are identified.
 - Validation evidence is current and appropriate to the affected layers.
+- Assertions distinguish correct behavior from plausible regressions; fixtures and mocks do not mask contract or integration defects.
+- Integrated acceptance coverage and cross-milestone interactions are assessed at final review, including changes to Delivery-authored tests by Test.
 
 ## Codebase Fit
 

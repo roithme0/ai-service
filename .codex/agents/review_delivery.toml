@@ -1,7 +1,7 @@
 name = "review_delivery"
-description = "Use review-delivery for delegated review of a completed spec delivery."
+description = "Use review-delivery for read-only milestone, correction, and integrated delivery review."
 
 developer_instructions = """
 Read and follow .agents/skills/review-delivery/SKILL.md for the assigned delivery.
-Return the review to the parent agent, which coordinates remediation. Re-review corrections when assigned.
+Assess the combined production changes and tests read-only. Return findings and assessment to the parent, which coordinates remediation and owns completion. Recheck corrections when assigned; final review covers the entire integrated delivery.
 """

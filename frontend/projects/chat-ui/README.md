@@ -1,4 +1,4 @@
-﻿# Chat UI
+# Chat UI
 
 `@roithme0/chat-ui` provides an Angular 22 conversation UI with optional AI Service integration. It has no Kochwiki dependency.
 
@@ -6,8 +6,23 @@
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `@roithme0/chat-ui/ui`           | `ChatUiComponent`, content/status types, artifact renderers, and capabilities. Renders host state without backend requests. |
 | `@roithme0/chat-ui/conversation` | `SessionController`, `HttpSessionTransport`, snapshot mapping, and generated session types.                                 |
+| `@roithme0/chat-ui/recording`    | `BrowserAudioRecorder` and typed recording outcomes. Framework-independent microphone capture without transcription or UI.  |
 
-The root entry point exports no API. Both entry points share one version.
+The root entry point exports no API. All entry points share one version.
+
+## Browser audio recording
+
+Import `BrowserAudioRecorder` from `@roithme0/chat-ui/recording` for microphone capture without Angular, conversation, or backend dependencies. It provides no recording UI or transcription. Importing and constructing a recorder are safe outside a browser; `start()` requires HTTPS or localhost, `getUserMedia`, `MediaRecorder`, and microphone permission.
+
+`start()` resolves when recording finishes, with `kind: 'recorded'`, `'cancelled'`, or `'failed'`. Successful results contain `recording.blob`, `mimeType`, `durationMs`, and `stopReason`; failures contain a typed `error`. A second start while busy fails without disturbing the active recording. See the [recording types](https://github.com/roithme0/ai-service/blob/production/frontend/projects/chat-ui/recording/src/recording-types.ts) for outcomes and states.
+
+- Use the `state` getter or optional constructor callback to reflect recording progress and block conflicting submissions while requesting access, recording, or finalizing.
+- Call `stop()` to finalize audio. During a pending permission request, it cancels instead. Call `cancel()` to discard audio, including pending finalization, and reuse the recorder. Cancellation settles immediately; any stream granted afterward is released.
+- Cancel on conversation changes and call `dispose()` when the owning component is destroyed. Disposal cancels pending work and permanently prevents recording.
+
+Recording stops automatically after five minutes of capture, excluding the permission wait, with `stopReason: 'duration-limit'`; manual stop reports `'manual'`. Browser throttling or suspension can delay the limit. `durationMs` measures elapsed capture time through the stop request, rather than encoded-media duration.
+
+The browser chooses the encoding; consumers must check whether their transcription service accepts the returned MIME type. Capture interruption discards partial audio. Hosts own error presentation, page-backgrounding policy, and storage or object URLs for returned audio; the recorder does not persist it.
 
 ## Host setup
 
@@ -187,7 +202,7 @@ Direct transport methods: `createSession(initialization?)`, `readSession(session
 
 Set CSS variables on an ancestor of `ai-chat-ui`; fallback defaults preserve inherited overrides. Material styles controls; library styles are bundled.
 
-See the [token catalog](https://github.com/roithme0/ai-service/blob/production/frontend/projects/chat-ui/ui/lib/styles/_tokens.scss) and its imported semantic groups for configurable variables and defaults.
+See the [token catalog](https://github.com/roithme0/ai-service/blob/production/frontend/projects/chat-ui/ui/src/styles/_tokens.scss) and its imported semantic groups for configurable variables and defaults.
 
 ## Repository workflows
 
