@@ -1,4 +1,12 @@
-import { Component, OnDestroy, OnInit, computed, signal } from '@angular/core';
+import {
+  ChangeDetectorRef,
+  Component,
+  OnDestroy,
+  OnInit,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
 import {
   HttpSessionTransport,
   SessionController,
@@ -9,6 +17,10 @@ import {
   JSON_ARTIFACT_CAPABILITY,
   type ChatSubmission,
 } from '@roithme0/chat-ui/ui';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { BrowserAudioRecorder } from '@roithme0/chat-ui/recording';
+import { HttpTranscriber } from '@roithme0/chat-ui/transcription';
+import type { DictationConfig, DictationError } from '@roithme0/chat-ui/ui';
 import { chatUsage } from '../../chat-usage';
 import { DemoHeader } from '../../components/demo-header/demo-header.component';
 
@@ -33,6 +45,16 @@ const INITIAL_STATE: SessionViewState = {
   styleUrl: './live-demo.component.scss',
 })
 export class LiveDemo implements OnInit, OnDestroy {
+  private readonly snackBar = inject(MatSnackBar);
+  private readonly changeDetector = inject(ChangeDetectorRef);
+
+  private readonly transcriber = new HttpTranscriber('/api/v1');
+  protected readonly dictationContextKey = signal('0');
+  protected readonly dictation: DictationConfig = {
+    createRecorder: (publish) => new BrowserAudioRecorder(publish),
+    transcribe: (recording, signal) => this.transcriber.transcribe(recording, signal),
+    onError: (error) => this.showDictationError(error),
+  };
   protected readonly chat = signal<SessionViewState>(INITIAL_STATE);
   protected readonly usage = computed(() => chatUsage(this.chat().snapshot?.usage));
   private readonly controller = new SessionController(
@@ -54,6 +76,23 @@ export class LiveDemo implements OnInit, OnDestroy {
   }
 
   protected handleStatusAction(actionId: string): void {
+    if (actionId === 'new-session') {
+      this.dictationContextKey.update((key) => String(Number(key) + 1));
+      this.changeDetector.detectChanges();
+    }
     void this.controller.performAction(actionId);
+  }
+
+  private showDictationError(error: DictationError): void {
+    let message: string;
+    if (error.kind !== 'recording') {
+      message = 'Die Aufnahme konnte nicht transkribiert werden.';
+    } else if (error.reason === 'permission-denied') {
+      message = 'Der Zugriff auf das Mikrofon wurde verweigert.';
+    } else {
+      message = 'Die Aufnahme konnte nicht abgeschlossen werden.';
+    }
+
+    this.snackBar.open(message, 'OK', { duration: 6000, politeness: 'assertive' });
   }
 }

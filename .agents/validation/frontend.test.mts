@@ -333,7 +333,13 @@ void test('configuration checks typed code, external and inline templates, and s
   assert.ok(script.messages.some((message) => message.ruleId === 'no-undef'));
   assert.equal(
     await eslint.isPathIgnored(
-      join(frontend, 'projects/chat-ui/conversation/generated/types.gen.ts'),
+      join(frontend, 'projects/chat-ui/conversation/src/generated/types.gen.ts'),
+    ),
+    true,
+  );
+  assert.equal(
+    await eslint.isPathIgnored(
+      join(frontend, 'projects/chat-ui/transcription/src/generated/types.gen.ts'),
     ),
     true,
   );
@@ -352,7 +358,7 @@ void test('validation TypeScript receives strict lint rules from its own configu
 
 async function fixture(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'ai-service-format-'));
-  await mkdir(join(root, 'frontend/projects/chat-ui/conversation/generated'), {
+  await mkdir(join(root, 'frontend/projects/chat-ui/conversation/src/generated'), {
     recursive: true,
   });
   await mkdir(join(root, 'backend'));
@@ -406,7 +412,8 @@ void test('skips generated, ignored, unsupported and backend files; handles miss
   commit(root);
   git(root, ['mv', 'frontend/tracked.ts', 'backend/moved.ts']);
   const ignored = [
-    'frontend/projects/chat-ui/conversation/generated/types.gen.ts',
+    'frontend/projects/chat-ui/conversation/src/generated/types.gen.ts',
+    'frontend/projects/chat-ui/transcription/src/generated/types.gen.ts',
     'frontend/package-lock.json',
     'frontend/node_modules/local.ts',
     'frontend/dist/output.ts',

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test Delivery"
+  short_description: "Assess spec coverage and improve regression tests"
+  default_prompt: "Use $test-delivery to independently assess this spec delivery and improve its tests."

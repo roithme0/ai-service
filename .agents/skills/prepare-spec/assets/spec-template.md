@@ -35,8 +35,8 @@ Related specs: <relative Markdown links to spec files, or "None">
 
 ## Acceptance Criteria
 
-1. <Observable, verifiable outcome>
-2. <Observable, verifiable outcome>
+1. <Observable outcome with the relevant condition and expected result, independently verifiable by Test and Review.>
+2. <Observable outcome, including material failure or boundary behavior where relevant.>
 
 ## Risks
 

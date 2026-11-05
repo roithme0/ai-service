@@ -1,5 +1,6 @@
 import {
   afterRenderEffect,
+  computed,
   Component,
   DestroyRef,
   effect,
@@ -13,11 +14,16 @@ import {
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { TextFieldModule } from '@angular/cdk/text-field';
+import type { DictationConfig } from '../../dictation';
 import type { ChatSubmission } from '../../models/chat-message';
 import { PreventPointerFocusDirective } from '../../directives/prevent-pointer-focus.directive';
 import { UsageLineComponent } from '../usage-line/usage-line.component';
 import type { ChatUsage } from '../../models/chat-usage';
 import { UsagePanelComponent } from '../usage-panel/usage-panel.component';
+import {
+  DictationButtonComponent,
+  type DictationEnvironment,
+} from '../dictation-button/dictation-button.component';
 
 @Component({
   selector: 'ai-chat-composer',
@@ -28,11 +34,14 @@ import { UsagePanelComponent } from '../usage-panel/usage-panel.component';
     PreventPointerFocusDirective,
     UsageLineComponent,
     UsagePanelComponent,
+    DictationButtonComponent,
   ],
   templateUrl: './composer.component.html',
   styleUrl: './composer.component.scss',
 })
 export class ComposerComponent {
+  readonly dictation = input<DictationConfig | null>(null);
+  readonly dictationContextKey = input<string | null>(null);
   readonly disabled = input(false);
   readonly editingDisabled = input(false);
   readonly placeholder = input('Nachricht schreiben');
@@ -44,6 +53,14 @@ export class ComposerComponent {
   readonly viewportResized = output<void>();
 
   protected readonly draft = signal('');
+  protected readonly dictationEnvironment = computed<DictationEnvironment>(() => ({
+    config: this.dictation(),
+    contextKey: this.dictationContextKey(),
+    disabled: this.disabled(),
+    editingDisabled: this.editingDisabled(),
+  }));
+  private readonly dictationButton = viewChild(DictationButtonComponent);
+  protected readonly dictationBusy = computed(() => this.dictationButton()?.busy() ?? false);
   protected readonly usageExpanded = signal(false);
 
   private readonly panelContainer = viewChild<ElementRef<HTMLElement>>('panelContainer');
@@ -131,8 +148,12 @@ export class ComposerComponent {
     this.emitDraft();
   }
 
+  protected appendTranscript(text: string): void {
+    this.draft.update((draft) => draft + (draft !== '' && !/\s$/.test(draft) ? ' ' : '') + text);
+  }
+
   private emitDraft(): void {
-    if (this.disabled() || this.editingDisabled()) {
+    if (this.disabled() || this.editingDisabled() || this.dictationBusy()) {
       return;
     }
     const normalizedText = this.draft().trim();

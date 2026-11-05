@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from app.capabilities.conversations.http import create_session_router
 from app.capabilities.conversations.runner import AgentTurnRunner
 from app.capabilities.embeddings.http import router as embedding_router
+from app.capabilities.transcriptions.http import router as transcription_router
 from app.core.http import register_error_handlers
 from app.core.models import HttpErrorResponse
 from app.lifespan import application_lifespan
@@ -28,4 +29,5 @@ app.include_router(
     },
 )
 app.include_router(embedding_router)
+app.include_router(transcription_router)
 register_error_handlers(app)

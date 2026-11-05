@@ -1,8 +1,13 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import type { PresentedSession, SessionEvent } from '@roithme0/chat-ui/conversation';
-import { ChatUiComponent, JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
+import {
+  ChatUiComponent,
+  JSON_ARTIFACT_CAPABILITY,
+  type DictationConfig,
+} from '@roithme0/chat-ui/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LiveDemo } from './live-demo.component';
 
@@ -213,6 +218,80 @@ describe('Live demo application', () => {
       '/api/v1/agents/live-demo/sessions/live-session/turns',
       expect.objectContaining({ body: JSON.stringify({ prompt: 'Weiter bitte.' }) }),
     );
+  });
+
+  it('keeps dictation identity stable across backend session assignment and resets it before recovery', async () => {
+    const server = new LiveDemoServer();
+    server.fetch.mockResolvedValueOnce(
+      Response.json({ kind: 'agent_unavailable' }, { status: 503 }),
+    );
+    vi.stubGlobal('fetch', server.fetch);
+    const { fixture, chat } = createPage();
+    const config = chat.dictation();
+    const initialKey = chat.dictationContextKey();
+    expect(config).not.toBeNull();
+    await render(fixture, () => expect(chat.conversationStatus()?.action?.id).toBe('new-session'));
+    expect(chat.dictation()).toBe(config);
+    expect(chat.dictationContextKey()).toBe(initialKey);
+    const snackbar = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+    config!.onError({ kind: 'recording', reason: 'permission-denied' });
+    expect(snackbar).toHaveBeenCalledWith(
+      expect.any(String),
+      'OK',
+      expect.objectContaining({ politeness: 'assertive' }),
+    );
+    chat.statusActionTriggered.emit('new-session');
+    fixture.detectChanges();
+    expect(chat.dictationContextKey()).not.toBe(initialKey);
+    const newKey = chat.dictationContextKey();
+    await render(fixture, () => expect(chat.composerDisabled()).toBe(false));
+    expect(chat.dictationContextKey()).toBe(newKey);
+    expect(chat.dictation()).toBe(config);
+  });
+  it('invalidates a pending transcript synchronously when recovery starts', async () => {
+    const server = new LiveDemoServer();
+    vi.stubGlobal('fetch', server.fetch);
+    vi.stubGlobal('MediaRecorder', class {});
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn() } });
+    TestBed.configureTestingModule({ imports: [LiveDemo], providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(LiveDemo);
+    let resolve!: (text: string) => void;
+    const pending = new Promise<string>((complete) => {
+      resolve = complete;
+    });
+    const config: DictationConfig = {
+      createRecorder: () => ({
+        start: () =>
+          Promise.resolve({
+            kind: 'recorded',
+            recording: {
+              blob: new Blob(['audio']),
+              mimeType: 'audio/webm',
+              durationMs: 10,
+              stopReason: 'manual',
+            },
+          }),
+        stop: () => {},
+        cancel: () => {},
+        dispose: () => {},
+      }),
+      transcribe: () => pending,
+      onError: vi.fn(),
+    };
+    Object.assign(fixture.componentInstance, { dictation: config });
+    fixture.detectChanges();
+    const chat = fixture.debugElement.query(By.directive(ChatUiComponent))
+      .componentInstance as ChatUiComponent;
+    await render(fixture, () => expect(chat.composerDisabled()).toBe(false));
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector<HTMLButtonElement>('.microphone-button')!.click();
+    await Promise.resolve();
+    chat.statusActionTriggered.emit('new-session');
+    resolve('obsolete');
+    await Promise.resolve();
+    fixture.detectChanges();
+    expect(root.querySelector('textarea')!.value).toBe('');
+    expect(config.onError).not.toHaveBeenCalled();
   });
 
   it('uses the normal retry action when the live agent is unavailable', async () => {

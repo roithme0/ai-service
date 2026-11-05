@@ -1,7 +1,7 @@
 interface:
   display_name: "Deliver Spec"
-  short_description: "Plan and autonomously implement a spec"
-  default_prompt: "Use $deliver-spec to plan and implement this approved spec through integrated validation."
+  short_description: "Coordinate implementation, testing, and review"
+  default_prompt: "Use $deliver-spec to coordinate this approved spec through implementation, independent testing, and final review."
 
 policy:
   allow_implicit_invocation: false

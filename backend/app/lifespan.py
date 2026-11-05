@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from app.capabilities.conversations.lifecycle import kochwiki_runner
 from app.capabilities.conversations.runner import AgentTurnRunner
 from app.capabilities.embeddings.lifecycle import embedding_service
+from app.capabilities.transcriptions.lifecycle import transcription_service
 from app.core.config import get_provider_settings
 from app.core.logging import configure_logging
 from app.demos.live_conversation_demo.lifecycle import live_conversation_demo_runner
@@ -28,6 +29,9 @@ async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
         provider_settings = get_provider_settings()
         application.state.embedding_service = await resources.enter_async_context(
             embedding_service(provider_settings),
+        )
+        application.state.transcription_service = await resources.enter_async_context(
+            transcription_service(provider_settings),
         )
         runners["kochwiki"] = await resources.enter_async_context(
             kochwiki_runner(provider_settings)

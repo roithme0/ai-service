@@ -13,68 +13,52 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { DomSanitizer } from '@angular/platform-browser';
-import { MatIconRegistry } from '@angular/material/icon';
-import { registerChatIcons } from '../../chat-icons';
 import { HistoryItemComponent } from '../history-item/history-item.component';
 import { ToolCallComponent } from '../tool-call/tool-call.component';
 import { IntermediateMessageComponent } from '../intermediate-message/intermediate-message.component';
 import { UserMessageComponent } from '../user-message/user-message.component';
 import { AssistantMessageComponent } from '../assistant-message/assistant-message.component';
-import { ComposerComponent } from '../composer/composer.component';
 import { ArtifactCardComponent } from '../artifact-card/artifact-card.component';
 import { StatusComponent } from '../status/status.component';
-import type { ChatUsage } from '../../models/chat-usage';
 import type {
   ChatArtifactRendererMap,
   ChatContent,
   ChatConversationStatus,
-  ChatSubmission,
   ChatTurn,
 } from '../../models/chat-message';
 
 @Component({
-  selector: 'ai-chat-ui',
+  selector: 'ai-chat-history',
   imports: [
     HistoryItemComponent,
     ArtifactCardComponent,
     StatusComponent,
     AssistantMessageComponent,
-    ComposerComponent,
     ToolCallComponent,
     IntermediateMessageComponent,
     UserMessageComponent,
   ],
-  templateUrl: './chat-ui.component.html',
-  styleUrl: './chat-ui.component.scss',
+  templateUrl: './history.component.html',
+  styleUrl: './history.component.scss',
 })
-export class ChatUiComponent {
-  private readonly iconRegistry = inject(MatIconRegistry);
-  private readonly sanitizer = inject(DomSanitizer);
-  private readonly destroyRef = inject(DestroyRef);
-
-  private readonly historyViewport = viewChild<ElementRef<HTMLElement>>('historyViewport');
-  private readonly historyContent = viewChild.required<ElementRef<HTMLElement>>('historyContent');
-  private readonly composer = viewChild(ComposerComponent);
-
-  protected readonly panelScrollClearance = computed(() => this.composer()?.scrollClearance() ?? 0);
-
-  private historyScrollPending = false;
-  private followingHistory = true;
-  protected readonly scrollAnchor = signal<string | null>(null);
-  private readonly expandedRuns = signal<ReadonlySet<string>>(new Set());
-  private readonly initializedRuns = new Map<string, boolean>();
-
+export class HistoryComponent {
   readonly bannerTitle = input<string>();
   readonly bannerDescription = input<string>();
   readonly turns = input.required<readonly ChatTurn[]>();
   readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
-  readonly usage = input<ChatUsage | null>(null);
-  readonly composerDisabled = input(false);
-  readonly composerEditingDisabled = input(false);
-  readonly composerPlaceholder = input('Nachricht schreiben');
-  readonly mascotAssetPath = input('images');
+  readonly panelScrollClearance = input(0);
+  readonly messageBoundaryTop = input<(() => number) | null>(null);
+  readonly statusActionTriggered = output<string>();
+
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly historyViewport = viewChild<ElementRef<HTMLElement>>('historyViewport');
+  private readonly historyContent = viewChild.required<ElementRef<HTMLElement>>('historyContent');
+  private historyScrollPending = false;
+  private followingHistory = true;
+  protected readonly scrollAnchor = signal<string | null>(null);
+  private readonly expandedRuns = signal<ReadonlySet<string>>(new Set());
+  private readonly initializedRuns = new Map<string, boolean>();
 
   protected readonly sections = computed(() => {
     const occurrences = new Map<string | null, number>();
@@ -84,16 +68,6 @@ export class ChatUiComponent {
       return { turn, key: JSON.stringify([turn.runKey, occurrence]) };
     });
   });
-
-  protected readonly mascotSource = computed(() => {
-    const filename = this.turns().some((turn) => turn.status === 'active')
-      ? 'maskot-working.png'
-      : 'mascot-idle.png';
-    return `${this.mascotAssetPath().replace(/\/$/, '')}/${filename}`;
-  });
-
-  readonly messageSubmitted = output<ChatSubmission>();
-  readonly statusActionTriggered = output<string>();
 
   protected readonly detailRuns = computed(() => {
     const answers = new Map<string, { readonly answerId: string; readonly completed: boolean }>();
@@ -118,15 +92,14 @@ export class ChatUiComponent {
     }
     return answers;
   });
-  protected rendererFor(type: string) {
-    return this.artifactRenderers()[type] ?? null;
-  }
-
   constructor() {
-    registerChatIcons(this.iconRegistry, this.sanitizer);
     effect(() => this.synchronizeConversationState());
     afterEveryRender(() => this.flushPendingHistoryScroll());
     afterNextRender(() => this.observeHistoryContentResize());
+  }
+
+  protected rendererFor(type: string) {
+    return this.artifactRenderers()[type] ?? null;
   }
 
   private synchronizeConversationState(): void {
@@ -160,13 +133,13 @@ export class ChatUiComponent {
 
   private alignHistoryWithComposer(): void {
     const viewport = this.historyViewport()?.nativeElement;
-    const composer = this.composer();
-    if (!viewport || !composer) return;
+    const boundary = this.messageBoundaryTop();
+    if (!viewport || boundary === null) return;
     const target = Math.max(
       0,
       viewport.scrollTop +
         this.historyContent().nativeElement.getBoundingClientRect().bottom -
-        composer.messageBoundaryTop(),
+        boundary(),
     );
     if (typeof viewport.scrollTo === 'function') {
       const reducedMotion = viewport.ownerDocument.defaultView?.matchMedia?.(
@@ -182,7 +155,7 @@ export class ChatUiComponent {
     this.followingHistory = false;
   }
 
-  protected requestHistoryScroll(): void {
+  requestHistoryScroll(): void {
     this.scrollAnchor.set(null);
     this.followingHistory = true;
     this.historyScrollPending = true;

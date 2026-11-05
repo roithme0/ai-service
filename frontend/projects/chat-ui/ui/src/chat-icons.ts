@@ -3,6 +3,10 @@ import { MatIconRegistry } from '@angular/material/icon';
 
 const CHAT_ICONS = [
   {
+    name: 'microphone',
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"/></svg>',
+  },
+  {
     name: 'list-tree',
     svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12h-8M21 6H8M21 18h-8M3 6v8a4 4 0 0 0 4 4h1"/><path d="M3 10a2 2 0 0 0 2 2h3"/></svg>',
   },

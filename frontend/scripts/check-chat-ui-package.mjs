@@ -8,12 +8,30 @@ import ts from 'typescript';
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageRoot = resolve(frontend, 'dist/chat-ui');
 const manifest = JSON.parse(await readFile(resolve(packageRoot, 'package.json'), 'utf8'));
-for (const entry of ['.', './ui', './conversation']) {
+for (const entry of ['.', './ui', './conversation', './recording', './transcription']) {
   assert.ok(manifest.exports[entry]?.types, `Missing declarations for ${entry}`);
   assert.ok(manifest.exports[entry]?.default, `Missing JavaScript for ${entry}`);
 }
 const root = await import(pathToFileURL(resolve(packageRoot, manifest.exports['.'].default)).href);
 assert.deepEqual(Object.keys(root), [], 'Root must export no API');
+const recording = await import(
+  pathToFileURL(resolve(packageRoot, manifest.exports['./recording'].default)).href
+);
+assert.deepEqual(Object.keys(recording).sort(), [
+  'BrowserAudioRecorder',
+  'MAX_RECORDING_DURATION_MS',
+  'isBrowserRecordingSupported',
+]);
+assert.equal(recording.MAX_RECORDING_DURATION_MS, 300_000);
+const recorder = new recording.BrowserAudioRecorder();
+assert.equal(recorder.state, 'ready');
+assert.deepEqual(await recorder.start(), { kind: 'failed', error: 'unsupported' });
+recorder.dispose();
+assert.equal(recorder.state, 'disposed');
+const transcription = await import(
+  pathToFileURL(resolve(packageRoot, manifest.exports['./transcription'].default)).href
+);
+assert.equal(typeof new transcription.HttpTranscriber('/api/v1').transcribe, 'function');
 const conversation = await import(
   pathToFileURL(resolve(packageRoot, manifest.exports['./conversation'].default)).href
 );
@@ -38,6 +56,17 @@ globalThis.fetch = async (url, options) => {
                 session_id: 'built-session',
                 expires_at: '2026-09-26T12:00:00Z',
                 history: [],
+                usage: {
+                  input_tokens: 0,
+                  output_tokens: 0,
+                  total_tokens: 0,
+                  cache_read_tokens: 0,
+                  cache_write_tokens: 0,
+                  reasoning_tokens: 0,
+                  requests: 0,
+                  tool_calls: 0,
+                  estimated_cost_usd: null,
+                },
               },
             })}\n\n`,
           ),
@@ -88,12 +117,49 @@ const source = resolve(consumer, 'consumer.mts');
 await writeFile(
   source,
   `
-import { ChatUiComponent, artifactRenderer, type ChatSubmission, type ChatTurn } from '@roithme0/chat-ui/ui';
+import { ChatUiComponent, artifactRenderer, type ChatSubmission, type ChatTurn, type DictationConfig, type DictationRecorder } from '@roithme0/chat-ui/ui';
 import { SessionController, HttpSessionTransport, presentSessionArtifact,
   SessionHttpError, SessionTransportError,
   type SessionArtifactMapper, type SessionViewState, type SessionTransport
 } from '@roithme0/chat-ui/conversation';
 import * as Root from '@roithme0/chat-ui';
+import { HttpTranscriber, TranscriptionError } from '@roithme0/chat-ui/transcription';
+import { BrowserAudioRecorder, MAX_RECORDING_DURATION_MS,
+  type AudioRecording, type RecordingErrorKind, type RecordingOutcome,
+  type RecordingState, type RecordingStopReason
+} from '@roithme0/chat-ui/recording';
+const recorder = new BrowserAudioRecorder((state: RecordingState): void => {});
+const transcriber = new HttpTranscriber('/api/v1');
+const defaults: DictationConfig = {
+  createRecorder: (publish): DictationRecorder => new BrowserAudioRecorder(publish),
+  transcribe: (audio, signal): Promise<string> => transcriber.transcribe(audio, signal),
+  onError: (error): void => { const kind: string = error.reason; },
+};
+const custom: DictationConfig = {
+  createRecorder: (publish): DictationRecorder => ({
+    start: async (): Promise<RecordingOutcome> => ({ kind: 'cancelled' }),
+    stop: (): void => {}, cancel: (): void => {}, dispose: (): void => {},
+  }),
+  transcribe: async (audio, signal): Promise<string> => { throw new TranscriptionError('network'); },
+  onError: (error): void => {},
+};
+void defaults; void custom;
+const maximum: number = MAX_RECORDING_DURATION_MS;
+const capture: Promise<RecordingOutcome> = recorder.start();
+void capture.then((outcome): void => {
+  if (outcome.kind === 'recorded') {
+    const audio: AudioRecording = outcome.recording;
+    const blob: Blob = audio.blob;
+    const reason: RecordingStopReason = audio.stopReason;
+  } else if (outcome.kind === 'failed') {
+    const error: RecordingErrorKind = outcome.error;
+  }
+});
+recorder.stop();
+recorder.cancel();
+recorder.dispose();
+// @ts-expect-error Recording internals must remain inaccessible.
+import { BrowserAudioRecorder as PrivateRecorder } from '@roithme0/chat-ui/recording/src/browser-audio-recorder';
 const emptyRoot: keyof typeof Root extends never ? true : false = true;
 const publish = (state: SessionViewState): void => { const turns: readonly ChatTurn[] = state.turns; };
 const transport: SessionTransport = new HttpSessionTransport('/api/v1', 'visual-demo', 'demo:default');

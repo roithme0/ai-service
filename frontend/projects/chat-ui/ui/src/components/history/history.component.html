@@ -1,0 +1,98 @@
+<div
+  #historyViewport
+  class="history"
+  role="log"
+  aria-live="polite"
+  (wheel)="stopFollowingHistory()"
+  (pointerdown)="stopFollowingHistory()"
+  (keydown)="stopFollowingHistory()"
+>
+  @if (bannerTitle() || bannerDescription()) {
+    <section class="banner">
+      @if (bannerTitle()) {
+        <h2>{{ bannerTitle() }}</h2>
+      }
+      @if (bannerDescription()) {
+        <p>{{ bannerDescription() }}</p>
+      }
+    </section>
+  }
+
+  <div #historyContent class="messages">
+    @for (section of sections(); track section.key; let lastTurn = $last) {
+      @let turn = section.turn;
+      @let run = turn.runKey === null ? null : detailRuns().get(turn.runKey);
+      @for (item of turn.content; track item.id; let last = $last) {
+        @if (
+          item.kind !== 'failure' || !lastTurn || !last || conversationStatus()?.kind !== 'error'
+        ) {
+          @let anchor = historyAnchorFor(turn, item);
+          <div
+            class="history-item"
+            [attr.data-scroll-anchor]="anchor"
+            [class.history-scroll-anchor]="anchor !== null && anchor === scrollAnchor()"
+          >
+            <ai-chat-history-item
+              [collapsed]="
+                (item.kind === 'tool' || item.kind === 'intermediate') && detailsHidden(turn)
+              "
+            >
+              @switch (item.kind) {
+                @case ('artifact') {
+                  <ai-chat-artifact-card
+                    [artifact]="item"
+                    [renderer]="rendererFor(item.type)"
+                    (expansionToggled)="anchorArtifact(anchor)"
+                  />
+                }
+                @case ('tool') {
+                  <ai-chat-tool-call [toolCall]="item" />
+                }
+                @case ('failure') {
+                  <ai-chat-status
+                    [status]="{ kind: 'error', placement: 'assistant', message: item.text }"
+                    aria-label="Fehlgeschlagene Antwort"
+                  />
+                }
+                @case ('intermediate') {
+                  <ai-chat-intermediate-message [message]="item" />
+                }
+                @case ('text') {
+                  @if (item.role === 'user') {
+                    <ai-chat-user-message [message]="item" />
+                  } @else {
+                    <ai-chat-assistant-message
+                      [message]="item"
+                      [showDetailsToggle]="item.isFinal && !!run"
+                      [detailsExpanded]="detailsExpanded(turn)"
+                      (detailsToggled)="
+                        setDetailsExpanded(turn.runKey, !detailsExpanded(turn), item.id)
+                      "
+                    />
+                  }
+                }
+              }
+            </ai-chat-history-item>
+          </div>
+        }
+      }
+    }
+
+    @if (conversationStatus(); as status) {
+      <div class="history-item">
+        <ai-chat-history-item>
+          <ai-chat-status
+            [status]="status"
+            (actionTriggered)="statusActionTriggered.emit($event)"
+            (contentRevealed)="requestHistoryScroll()"
+          />
+        </ai-chat-history-item>
+      </div>
+    }
+  </div>
+  <div
+    class="history-scroll-buffer"
+    [style.--panel-scroll-clearance]="panelScrollClearance() + 'px'"
+    aria-hidden="true"
+  ></div>
+</div>

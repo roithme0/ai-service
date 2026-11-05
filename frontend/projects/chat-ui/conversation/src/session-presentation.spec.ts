@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PresentedSession, PresentedTurn, PresentationPart } from '../generated/types.gen';
+import type { PresentedSession, PresentedTurn, PresentationPart } from './generated/types.gen';
 import { presentSession } from './session-presentation';
 
 const EMPTY_USAGE: PresentedSession['usage'] = {

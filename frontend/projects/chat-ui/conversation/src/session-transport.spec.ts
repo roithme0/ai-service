@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpSessionTransport, SessionHttpError, SessionTransportError } from './session-transport';
-import type { SessionEvent, PresentedSession } from '../generated/types.gen';
+import type { SessionEvent, PresentedSession } from './generated/types.gen';
 
 const EMPTY_USAGE: PresentedSession['usage'] = {
   input_tokens: 0,

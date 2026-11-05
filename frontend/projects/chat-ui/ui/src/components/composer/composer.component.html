@@ -35,13 +35,17 @@
       (blur)="stopObservingViewport()"
     ></textarea>
     <div class="actions">
+      <ai-chat-dictation-button
+        [source]="dictationEnvironment"
+        (transcribed)="appendTranscript($event)"
+      />
       <button
         aiChatPreventPointerFocus
         class="send-button"
         matIconButton
         type="submit"
         aria-label="Nachricht senden"
-        [disabled]="disabled() || editingDisabled() || draft().trim() === ''"
+        [disabled]="disabled() || editingDisabled() || dictationBusy() || draft().trim() === ''"
       >
         <mat-icon svgIcon="ai-chat:send" aria-hidden="true" />
       </button>
