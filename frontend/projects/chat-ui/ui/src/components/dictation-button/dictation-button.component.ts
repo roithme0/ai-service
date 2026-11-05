@@ -107,7 +107,16 @@ export class DictationButtonComponent {
 
   private async run(operation: DictationOperation): Promise<void> {
     try {
-      const recorder = this.createRecorder(operation);
+      const generation = {};
+      this.recorderGeneration = generation;
+      const recorder = operation.config.createRecorder((state) => {
+        if (
+          this.recorderGeneration === generation &&
+          operation.phase === 'capture' &&
+          this.isCurrent(operation)
+        )
+          this.recordingState.set(state);
+      });
       this.recorder = recorder;
       const result = await recorder.start();
       if (!this.isCurrent(operation)) return;

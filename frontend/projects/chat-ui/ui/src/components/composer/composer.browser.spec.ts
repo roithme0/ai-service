@@ -1,6 +1,7 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material/icon';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { registerChatIcons } from '../../chat-icons';
@@ -24,7 +25,7 @@ const USAGE: ChatUsage = {
 };
 
 beforeEach(async () => {
-  TestBed.configureTestingModule({ imports: [ComposerComponent] });
+  TestBed.configureTestingModule({ imports: [ComposerComponent, MatSnackBarModule] });
   registerChatIcons(TestBed.inject(MatIconRegistry), TestBed.inject(DomSanitizer));
   fixture = TestBed.createComponent(ComposerComponent);
   fixture.componentRef.setInput('mascotSource', '/images/mascot-idle.png');
@@ -181,6 +182,20 @@ it('keeps dictation controls accessible and blocks native keyboard submission', 
       start.element().getBoundingClientRect().top - send.element().getBoundingClientRect().top,
     ),
   ).toBeLessThan(2);
+  const assertAligned = (): void => {
+    const micRect = start.element().getBoundingClientRect();
+    const sendRect = send.element().getBoundingClientRect();
+    const micIcon = start.element().querySelector('mat-icon')!.getBoundingClientRect();
+    const sendIcon = send.element().querySelector('mat-icon')!.getBoundingClientRect();
+    expect(Math.abs(micRect.top - sendRect.top)).toBeLessThan(2);
+    expect(Math.abs(micIcon.top - sendIcon.top)).toBeLessThan(2);
+  };
+  assertAligned();
+  const snackBar = TestBed.inject(MatSnackBar).open('Recording error', 'OK');
+  await expect.element(page.getByText('Recording error')).toBeVisible();
+  assertAligned();
+  snackBar.dismiss();
+  assertAligned();
   await start.click();
   expect(document.activeElement).toBe(textarea);
   await expect.element(send).toBeDisabled();
