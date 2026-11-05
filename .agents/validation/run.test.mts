@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -64,6 +65,7 @@ void test("relevance runs full selection once and aggregate cache tracks both sc
     }),
   );
   const services: ValidationServices = {
+    contracts: () => Promise.resolve(),
     profiles: (_root: string, scope: ValidationScope) =>
       Promise.resolve(
         profiles.filter(
@@ -95,6 +97,7 @@ void test("relevance runs full selection once and aggregate cache tracks both sc
 
 async function aggregateFixture() {
   const root = await mkdtemp(join(tmpdir(), "aggregate-transitions-"));
+  execFileSync("git", ["init", "-q"], { cwd: root });
   const fingerprints: Record<string, string> = {
     frontend: "initial",
     backend: "initial",
@@ -130,6 +133,11 @@ async function aggregateFixture() {
     }),
   );
   const services: ValidationServices = {
+    contracts: () => {
+      calls.push("contracts");
+      if (failure === "contracts") throw new Error("contracts failed");
+      return Promise.resolve();
+    },
     profiles: (_root, scope) =>
       Promise.resolve(
         profiles.filter(
@@ -183,7 +191,7 @@ void test("aggregate validation orders checks, preserves retry, and never caches
       .failed,
     true,
   );
-  assert.deepEqual(f.calls, ["format:frontend", "lint:frontend", "tests"]);
+  assert.deepEqual(f.calls, ["format:frontend", "lint:frontend", "contracts", "tests"]);
   f.calls.length = 0;
   f.fail("");
   f.changeDuringTests(true);
@@ -218,7 +226,7 @@ void test("missing snapshots honor dirty state and formatting reports changed fi
     f.services,
   );
   assert.match(result.message ?? "", /frontend\/source\.ts/);
-  assert.deepEqual(f.calls, ["format:frontend", "lint:frontend", "tests"]);
+  assert.deepEqual(f.calls, ["format:frontend", "lint:frontend", "contracts", "tests"]);
 });
 void test("equivalent group selections reuse successful aggregate validation", async () => {
   const f = await aggregateFixture();
@@ -262,13 +270,23 @@ void test("CI validation phases cover non-E2E and prebuilt E2E through the centr
   );
   assert.deepEqual(phases[1].selection.groups, ["e2e"]);
   assert.equal(phases[1].selection.prebuiltImages, true);
+  assert.equal(phases[0].omitContracts, false);
+  assert.equal(phases[1].omitContracts, true);
+  assert.match(workflow, /pull_request:/);
+  assert.match(workflow, /push:\s*\n\s*tags:/);
+  assert.doesNotMatch(workflow, /npm run check:(conversation|transcription)-contract/);
   assert.match(workflow, /python -m venv \.venv/);
   assert.match(workflow, /\[test,dev\]/);
   assert.match(workflow, /build-app:\s*\n\s*needs: \[validate\]/);
   assert.match(workflow, /e2e:\s*\n\s*needs: build-app/);
+  assert.match(workflow, /build-chat-ui:\s*\n\s*needs: e2e/);
   assert.match(
     workflow,
     /publish-app:\s*\n\s*needs: \[build-app, build-chat-ui, e2e\]/,
+  );
+  assert.match(
+    workflow,
+    /publish-chat-ui:\s*\n\s*needs: \[build-app, build-chat-ui, e2e\]/,
   );
 });
 
@@ -297,4 +315,55 @@ void test("cache distinguishes partial selection, format state, session and forc
   f.calls.length = 0;
   await validate(f.root, { ...request, force: true }, noFormat, f.services);
   assert.equal(f.calls.filter((call) => call === "tests").length, 1);
+});
+
+void test("freshness runs across scopes and selections and omitted runs cannot populate the cache", async () => {
+  const f = await aggregateFixture();
+  const request = { sessionId: "gate", start: false, continued: false };
+  for (const args of [["--scope", "frontend", "--group", "backend"], ["--scope", "backend", "--group", "tooling"]]) {
+    f.calls.length = 0;
+    await validate(f.root, request, parseValidationArguments(args), f.services);
+    assert.ok(f.calls.includes("contracts"));
+  }
+  assert.throws(() => parseValidationArguments(["--ci-prerequisite-contracts"]), /only for/);
+  const omitted = parseValidationArguments(["--group", "e2e", "--ci-prerequisite-contracts"]);
+  f.calls.length = 0;
+  const actions = process.env["GITHUB_ACTIONS"];
+  const job = process.env["GITHUB_JOB"];
+  try {
+    delete process.env["GITHUB_ACTIONS"];
+    delete process.env["GITHUB_JOB"];
+    assert.equal((await validate(f.root, { ...request, force: true }, omitted, f.services)).failed, true);
+    process.env["GITHUB_ACTIONS"] = "true";
+    process.env["GITHUB_JOB"] = "validate";
+    assert.equal((await validate(f.root, { ...request, force: true }, omitted, f.services)).failed, true);
+    process.env["GITHUB_JOB"] = "e2e";
+    assert.equal((await validate(f.root, request, omitted, f.services)).failed, true);
+    assert.deepEqual(await validate(f.root, { ...request, force: true }, omitted, f.services), {});
+    assert.ok(!f.calls.includes("contracts"));
+  } finally {
+    if (actions === undefined) delete process.env["GITHUB_ACTIONS"]; else process.env["GITHUB_ACTIONS"] = actions;
+    if (job === undefined) delete process.env["GITHUB_JOB"]; else process.env["GITHUB_JOB"] = job;
+  }
+  f.calls.length = 0;
+  await validate(f.root, request, parseValidationArguments([]), f.services);
+  assert.ok(f.calls.includes("contracts"));
+  f.calls.length = 0;
+  await validate(f.root, request, parseValidationArguments([]), f.services);
+  assert.ok(!f.calls.includes("contracts"));
+});
+
+void test("freshness failure prevents tests and is never cached", async () => {
+  const f = await aggregateFixture();
+  const request = { sessionId: "gate-failure", start: false, continued: false };
+  f.fail("contracts");
+  const failed = await validate(f.root, request, parseValidationArguments([]), f.services);
+  assert.equal(failed.failed, true);
+  assert.match(failed.message ?? "", /contracts failed/);
+  assert.ok(!f.calls.includes("tests"));
+  f.fail("");
+  f.calls.length = 0;
+  await validate(f.root, { ...request, continued: true }, parseValidationArguments([]), f.services);
+  assert.ok(f.calls.includes("contracts"));
+  assert.ok(f.calls.includes("tests"));
 });

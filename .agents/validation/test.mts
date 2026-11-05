@@ -5,7 +5,7 @@ import { backendPython, runBackendPytest } from './backend.mts';
 import { runCheck } from './shared.mts';
 
 export const toolingFiles = {
-  'tooling-shared': ['.agents/validation/shared.test.mts', '.agents/validation/run.test.mts', '.agents/validation/fingerprints.test.mts', '.agents/validation/test.test.mts', '.codex/validate.test.mts'],
+  'tooling-shared': ['.agents/validation/shared.test.mts', '.agents/validation/run.test.mts', '.agents/validation/fingerprints.test.mts', '.agents/validation/contracts.test.mts', '.agents/validation/test.test.mts', '.codex/validate.test.mts'],
   'tooling-frontend': ['.agents/validation/frontend.test.mts', 'frontend/scripts/contract-comparison.test.mjs'],
   'tooling-backend': ['.agents/validation/backend.test.mts'],
   'tooling-contracts': ['frontend/scripts/transcription-contract.test.mjs'],

@@ -34,7 +34,7 @@ After frontend, backend, or shared tooling edits, run from the **repository root
 node .agents/validation/run.mts
 ```
 
-This formats changed files, lints, and runs all non-E2E tests. Install frontend dependencies, Playwright Chromium, and the backend local venv with `test` and `dev` extras first; see [development setup](docs/development.md).
+This formats changed files, lints, checks both generated contracts, and runs all non-E2E tests. Install frontend dependencies, Playwright Chromium, and the backend local Python 3.13 venv with `test` and `dev` extras first; see [development setup](docs/development.md). The paired freshness checks use that venv and run for every validation scope and test selection; direct test commands remain tests-only.
 
 For focused tests during implementation, discover groups with `node .agents/validation/test.mts --list` and select them with `--group NAME`. Focused runs do not replace full validation. `--scope frontend|backend` limits formatting and lint only; tests remain the full non-E2E suite.
 

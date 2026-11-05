@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, rename, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rename, readFile, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fingerprint, frontendProfile } from "./frontend.mts";
 import { e2eProfile } from "./e2e.mts";
-import { backendProfile } from "./backend.mts";
+import { backendProfile, backendPython } from "./backend.mts";
 import {
   parseValidationArguments,
   validate,
@@ -16,6 +16,36 @@ import {
 function git(root: string, args: string[]): string {
   return execFileSync("git", args, { cwd: root, encoding: "utf8" });
 }
+
+void test("contract source, outputs, dependencies, policy and installed environments affect aggregate inputs", async () => {
+  const root = await mkdtemp(join(tmpdir(), "contract-inputs-"));
+  execFileSync("git", ["init", "-q"], { cwd: root });
+  const profiles = [frontendProfile(root), backendProfile(root)].map((profile) => profile.dependencies(root));
+  let previous = await Promise.all(profiles.map((profile) => profile.fingerprint()));
+  const python = backendPython(root);
+  const paths: [string, number[]][] = [
+    ["backend/app/api/conversation.py", [1]],
+    ["backend/scripts/export_openapi.py", [1]],
+    ["backend/pyproject.toml", [1]],
+    ["frontend/scripts/contract-generator.mjs", [0]],
+    ["frontend/scripts/conversation-contract.mjs", [0]],
+    ["frontend/package-lock.json", [0]],
+    ["frontend/projects/chat-ui/conversation/src/generated.ts", [0]],
+    [".agents/validation/contracts.mts", [0, 1]],
+    ["frontend/node_modules/.package-lock.json", [0]],
+    ["backend/.venv/pyvenv.cfg", [1]],
+    [python.slice(root.length + 1), [1]],
+  ];
+  for (const [path, affected] of paths) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), "changed");
+    const current = await Promise.all(profiles.map((profile) => profile.fingerprint()));
+    for (const index of affected) assert.notEqual(current[index], previous[index], path);
+    previous = current;
+  }
+  await unlink(join(root, "frontend/projects/chat-ui/conversation/src/generated.ts"));
+  assert.notEqual(await profiles[0].fingerprint(), previous[0]);
+});
 
 void test("shared validation and Codex adapter changes invalidate every validation scope", async () => {
   const root = await mkdtemp(join(tmpdir(), "ai-service-validation-scopes-"));
@@ -76,6 +106,7 @@ void test("selected E2E detects deployment edits during execution", async () => 
   await mkdir(dirname(deployment), { recursive: true });
   await writeFile(deployment, "before");
   const services: ValidationServices = {
+    contracts: () => Promise.resolve(),
     profiles: () =>
       Promise.resolve([
         {

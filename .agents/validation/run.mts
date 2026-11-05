@@ -5,16 +5,18 @@ import { fileURLToPath } from 'node:url';
 import { backendProfile } from './backend.mts';
 import { frontendProfile } from './frontend.mts';
 import { e2eProfile } from './e2e.mts';
+import { checkContracts } from './contracts.mts';
 import { describeSelection, groupDescriptions, parseTestArguments, runTests, type TestSelection } from './test.mts';
 import type { ValidationFeedback, ValidationProfile, ValidationRequest } from './shared.mts';
 
 export type ValidationScope = 'all' | 'frontend' | 'backend';
-export interface ValidationArguments { scope: ValidationScope; format: boolean; selection: TestSelection }
+export interface ValidationArguments { scope: ValidationScope; format: boolean; selection: TestSelection; omitContracts?: boolean }
 
 export function parseValidationArguments(args: readonly string[]): ValidationArguments {
   let scope: ValidationScope = 'all';
   let format = true;
   let seenScope = false;
+  let omitContracts = false;
   const testArgs: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i];
@@ -26,12 +28,15 @@ export function parseValidationArguments(args: readonly string[]): ValidationArg
       if (value !== 'all' && value !== 'frontend' && value !== 'backend') throw new Error('Expected --scope all|frontend|backend.');
       scope = value;
     } else if (arg === '--no-format') format = false;
+    else if (arg === '--ci-prerequisite-contracts') omitContracts = true;
     else testArgs.push(arg);
   }
-  return { scope, format, selection: parseTestArguments(testArgs, false) };
+  const selection = parseTestArguments(testArgs, false);
+  if (omitContracts && (selection.groups.length !== 1 || selection.groups[0] !== 'e2e')) throw new Error('--ci-prerequisite-contracts is only for the downstream CI E2E phase after prerequisite validation.');
+  return { scope, format, selection, omitContracts };
 }
 export function describeChecks(options: ValidationArguments): string {
-  return `Validation (${options.scope}): ${options.format ? 'format, ' : ''}lint. ${describeSelection(options.selection)}`;
+  return `Validation (${options.scope}): ${options.format ? 'format, ' : ''}lint, ${options.omitContracts ? 'contracts omitted (CI prerequisite)' : 'paired contract freshness'}. ${describeSelection(options.selection)}`;
 }
 
 interface State { prompts?: Record<string, string>; pending?: string[]; successful?: string }
@@ -53,8 +58,12 @@ export function validationProfiles(root: string, scope: ValidationScope): Promis
 export interface ValidationServices {
   profiles: (root: string, scope: ValidationScope) => Promise<ValidationProfile[]>;
   tests: typeof runTests;
+  contracts?: typeof checkContracts;
 }
 export async function validate(root: string, request: ValidationRequest, options: ValidationArguments, services: ValidationServices = { profiles: validationProfiles, tests: runTests }): Promise<ValidationFeedback> {
+  if (options.omitContracts && (!request.force || process.env['GITHUB_ACTIONS'] !== 'true' || process.env['GITHUB_JOB'] !== 'e2e')) {
+    return { failed: true, message: '--ci-prerequisite-contracts is restricted to the GitHub Actions downstream E2E job after prerequisite validation.' };
+  }
   const session = hash(request.sessionId);
   const cache = join(root, '.agents/.codex-validation/aggregate-v2', session);
   await mkdir(cache, { recursive: true });
@@ -86,14 +95,15 @@ export async function validate(root: string, request: ValidationRequest, options
     await writeFile(path, JSON.stringify(state));
     if (options.format) for (const profile of relevant) formatted.push(...(await deps.get(profile.scope)!.format()).formatted);
     const current = await fingerprints();
-    const identity = hash(['aggregate-v2', relevant.map((profile) => profile.scope), options.format, true, options.selection.groups, current]);
+    const identity = hash(['aggregate-v3-paired-contracts', relevant.map((profile) => profile.scope), options.format, true, options.selection.groups, current]);
     if (request.force || options.selection.groups.includes('e2e') || identity !== state.successful) {
       state.successful = undefined;
       await writeFile(path, JSON.stringify(state));
       for (const profile of relevant) await deps.get(profile.scope)!.lint?.();
+      if (!options.omitContracts) await (services.contracts ?? checkContracts)(root, join(cache, 'contracts'));
       await services.tests(root, options.selection);
       if (hash(await fingerprints()) !== hash(current)) throw new Error('Files changed during validation. Run validation again after edits finish.');
-      state.successful = identity;
+      if (!options.omitContracts) state.successful = identity;
     }
     state.pending = [];
     await writeFile(path, JSON.stringify(state));
