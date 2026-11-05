@@ -1,121 +1,119 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { backendProfile } from './backend.mts';
+import { frontendProfile } from './frontend.mts';
 import { e2eProfile } from './e2e.mts';
-import {
-  runCheck,
-  runValidation,
-  defaultChecks,
-  type ValidationChecks,
-  type ValidationFeedback,
-  type ValidationProfile,
-  type ValidationRequest,
-} from './shared.mts';
+import { describeSelection, groupDescriptions, parseTestArguments, runTests, type TestSelection } from './test.mts';
+import type { ValidationFeedback, ValidationProfile, ValidationRequest } from './shared.mts';
 
 export type ValidationScope = 'all' | 'frontend' | 'backend';
-
-export interface ValidationArguments {
-  scope: ValidationScope;
-  checks: Readonly<ValidationChecks>;
-}
-
-const checkFlags: ReadonlyMap<string, keyof ValidationChecks> = new Map([
-  ['--app-tests', 'appTests'],
-  ['--tooling-tests', 'toolingTests'],
-  ['--shared-tooling-tests', 'sharedToolingTests'],
-  ['--e2e', 'e2e'],
-]);
+export interface ValidationArguments { scope: ValidationScope; format: boolean; selection: TestSelection }
 
 export function parseValidationArguments(args: readonly string[]): ValidationArguments {
   let scope: ValidationScope = 'all';
-  const checks = { ...defaultChecks };
-  const seen = new Set<string>();
-  for (let index = 0; index < args.length; index += 1) {
-    const [flag, inline, extra] = args[index].split('=');
-    if (extra !== undefined) throw new Error(`Invalid validation option: ${args[index]}`);
-    if (seen.has(flag)) throw new Error(`Repeated validation option: ${flag}`);
-    seen.add(flag);
-    if (flag === '--scope') {
-      const value = inline ?? args[++index];
-      if (value !== 'all' && value !== 'frontend' && value !== 'backend') {
-        throw new Error('Expected --scope all|frontend|backend.');
-      }
+  let format = true;
+  let seenScope = false;
+  const testArgs: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (/^--(?:app-tests|tooling-tests|shared-tooling-tests|e2e)(?:=|$)/.test(arg)) throw new Error(`Legacy option ${arg} was removed; use --group NAME (or --group e2e).`);
+    if (arg === '--scope' || arg.startsWith('--scope=')) {
+      if (seenScope) throw new Error('Repeated --scope.');
+      seenScope = true;
+      const value = arg === '--scope' ? args[++i] : arg.slice('--scope='.length);
+      if (value !== 'all' && value !== 'frontend' && value !== 'backend') throw new Error('Expected --scope all|frontend|backend.');
       scope = value;
-      continue;
+    } else if (arg === '--no-format') format = false;
+    else testArgs.push(arg);
+  }
+  return { scope, format, selection: parseTestArguments(testArgs, false) };
+}
+export function describeChecks(options: ValidationArguments): string {
+  return `Validation (${options.scope}): ${options.format ? 'format, ' : ''}lint. ${describeSelection(options.selection)}`;
+}
+
+interface State { prompts?: Record<string, string>; pending?: string[]; successful?: string }
+async function readState(path: string): Promise<State> {
+  try {
+    const value: unknown = JSON.parse(await readFile(path, 'utf8'));
+    if (typeof value !== 'object' || value === null) return {};
+    const state = value as State;
+    return state;
+  } catch (error: unknown) {
+    if (error instanceof SyntaxError || (error instanceof Error && 'code' in error && error.code === 'ENOENT')) return {};
+    throw error;
+  }
+}
+function hash(value: unknown): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
+export function validationProfiles(root: string, scope: ValidationScope): Promise<ValidationProfile[]> {
+  return Promise.resolve([frontendProfile(root), backendProfile(root)].filter((profile) => scope === 'all' || profile.scope === scope));
+}
+export interface ValidationServices {
+  profiles: (root: string, scope: ValidationScope) => Promise<ValidationProfile[]>;
+  tests: typeof runTests;
+}
+export async function validate(root: string, request: ValidationRequest, options: ValidationArguments, services: ValidationServices = { profiles: validationProfiles, tests: runTests }): Promise<ValidationFeedback> {
+  const session = hash(request.sessionId);
+  const cache = join(root, '.agents/.codex-validation/aggregate-v2', session);
+  await mkdir(cache, { recursive: true });
+  const path = join(cache, 'state.json');
+  const state = await readState(path);
+  const profiles = await services.profiles(root, options.scope);
+  const allProfiles = await services.profiles(root, 'all');
+  const deps = new Map(allProfiles.map((profile) => [profile.scope, profile.dependencies(join(cache, profile.scope))]));
+  for (const profile of allProfiles) await mkdir(join(cache, profile.scope), { recursive: true });
+  const fingerprints = async (): Promise<Record<string, string>> => {
+    const result = Object.fromEntries(await Promise.all(allProfiles.map(async (profile) => [profile.scope, await deps.get(profile.scope)!.fingerprint()] as const)));
+    if (options.selection.groups.includes('e2e')) result['e2e'] = await e2eProfile(root).dependencies(cache).fingerprint();
+    return result;
+  };
+  const formatted: string[] = [];
+  try {
+    const before = await fingerprints();
+    if (request.start) {
+      state.prompts = { ...state.prompts, ...Object.fromEntries(profiles.map((profile) => [profile.scope, before[profile.scope]])) };
+      await writeFile(path, JSON.stringify(state));
+      return {};
     }
-    const key = checkFlags.get(flag);
-    if (!key || (inline !== undefined && inline !== 'true' && inline !== 'false')) {
-      throw new Error(`Unknown validation option or invalid boolean: ${args[index]}`);
+    const relevant = profiles.filter((profile) => {
+      const dep = deps.get(profile.scope)!;
+      return request.force || (request.continued && state.pending?.includes(profile.scope)) || (state.prompts?.[profile.scope] ? state.prompts[profile.scope] !== before[profile.scope] : dep.hasChanges());
+    });
+    if (!relevant.length) return {};
+    state.pending = relevant.map((profile) => profile.scope);
+    await writeFile(path, JSON.stringify(state));
+    if (options.format) for (const profile of relevant) formatted.push(...(await deps.get(profile.scope)!.format()).formatted);
+    const current = await fingerprints();
+    const identity = hash(['aggregate-v2', relevant.map((profile) => profile.scope), options.format, true, options.selection.groups, current]);
+    if (request.force || options.selection.groups.includes('e2e') || identity !== state.successful) {
+      state.successful = undefined;
+      await writeFile(path, JSON.stringify(state));
+      for (const profile of relevant) await deps.get(profile.scope)!.lint?.();
+      await services.tests(root, options.selection);
+      if (hash(await fingerprints()) !== hash(current)) throw new Error('Files changed during validation. Run validation again after edits finish.');
+      state.successful = identity;
     }
-    checks[key] = inline !== 'false';
+    state.pending = [];
+    await writeFile(path, JSON.stringify(state));
+    return formatted.length ? { message: `Formatted: ${formatted.join(', ')}. Review the diff before completing. Selected validation checks passed.` } : {};
+  } catch (error: unknown) {
+    if (request.start) throw error;
+    return { failed: true, message: `${formatted.length ? `Formatted: ${formatted.join(', ')}. Review the diff.\n` : ''}${error instanceof Error ? error.message : String(error)}\nFix findings and rerun node .agents/validation/run.mts. If blocked, report validation as incomplete.` };
   }
-  return { scope, checks };
 }
-
-export function describeChecks({ scope, checks }: ValidationArguments): string {
-  const selected = scope === 'backend' ? ['format'] : ['format', 'lint'];
-  const skipped: string[] = [];
-  for (const [flag, key] of checkFlags) {
-    (checks[key] ? selected : skipped).push(flag.slice(2));
-  }
-  return `Validation (${scope}): selected ${selected.join(', ')}; skipped ${skipped.join(', ') || 'none'}.`;
-}
-
-async function runSharedTests(root: string, cache: string): Promise<void> {
-  await runCheck(
-    root,
-    'Shared validation tests',
-    ['--test', '.agents/validation/shared.test.mts', '.agents/validation/run.test.mts'],
-    join(cache, 'shared-tests.log'),
-    120_000,
-  );
-}
-
-export async function validationProfiles(
-  root: string,
-  { scope = 'all', checks = defaultChecks }: Partial<ValidationArguments> = {},
-): Promise<ValidationProfile[]> {
-  const profiles: ValidationProfile[] = [];
-  if (scope !== 'backend') {
-    const { frontendProfile } = await import('./frontend.mts');
-    profiles.push(frontendProfile(root, checks));
-  }
-  if (scope !== 'frontend') profiles.push(backendProfile(root, checks));
-  if (checks.e2e) profiles.push(e2eProfile(root));
-  return profiles;
-}
-
-export async function validate(
-  root: string,
-  request: ValidationRequest,
-  { scope = 'all', checks = defaultChecks }: Partial<ValidationArguments> = {},
-): Promise<ValidationFeedback> {
-  const profiles = await validationProfiles(root, { scope, checks });
-  return runValidation(root, profiles, request, {
-    checkShared: checks.sharedToolingTests
-      ? (cache: string) => runSharedTests(root, cache)
-      : undefined,
-    checks,
-  });
-}
-
-export async function runValidationCommand(
-  root: string,
-  args: readonly string[],
-  run: typeof validate = validate,
-): Promise<number> {
+export async function runValidationCommand(root: string, args: readonly string[], run: typeof validate = validate): Promise<number> {
   try {
     const options = parseValidationArguments(args);
-    process.stdout.write(`${describeChecks(options)}\n`);
-    const result = await run(
-      root,
-      { sessionId: `manual-${randomUUID()}`, start: false, continued: false, force: true },
-      options,
-    );
-    if (result.message) {
-      process.stderr.write(`${result.message}\n`);
+    if (options.selection.list) {
+      for (const [name, description] of Object.entries(groupDescriptions)) process.stdout.write(`${name}: ${description}\n`);
+      process.stdout.write('tooling: group alias\nnon-e2e: group alias\nall: group alias\n');
+      return 0;
     }
+    process.stdout.write(`${describeChecks(options)}\n`);
+    const result = await run(root, { sessionId: `manual-${randomUUID()}`, start: false, continued: false, force: true }, options);
+    if (result.message) process.stderr.write(`${result.message}\n`);
     if (!result.failed) process.stdout.write('Selected validation checks passed.\n');
     return result.failed ? 1 : 0;
   } catch (error: unknown) {
@@ -123,10 +121,4 @@ export async function runValidationCommand(
     return 1;
   }
 }
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  process.exitCode = await runValidationCommand(
-    resolve(dirname(fileURLToPath(import.meta.url)), '../..'),
-    process.argv.slice(2),
-  );
-}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.exitCode = await runValidationCommand(resolve(dirname(fileURLToPath(import.meta.url)), '../..'), process.argv.slice(2));

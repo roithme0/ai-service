@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describeChecks, validate } from '../.agents/validation/run.mts';
+import { describeChecks, parseValidationArguments, validate } from '../.agents/validation/run.mts';
 import type {
-  ValidationChecks,
   ValidationFeedback,
   ValidationRequest,
 } from '../.agents/validation/shared.mts';
@@ -13,13 +12,6 @@ export interface HookOutput {
   reason?: string;
   systemMessage?: string;
 }
-
-export const hookChecks: Readonly<ValidationChecks> = {
-  appTests: true,
-  toolingTests: true,
-  sharedToolingTests: true,
-  e2e: false,
-};
 
 interface HookArguments {
   start: boolean;
@@ -66,16 +58,14 @@ function writeHookOutput(feedback: ValidationFeedback, continued: boolean): void
   process.stdout.write(JSON.stringify(hookOutput(feedback, continued)));
 }
 
-async function runHook({ start, scope }: HookArguments): Promise<void> {
+export async function runHook({ start, scope }: HookArguments, root: string): Promise<void> {
   let continued = false;
   try {
     const request = hookRequest(JSON.parse(readFileSync(0, 'utf8')) as unknown, start);
     continued = request.continued;
-    process.stderr.write(`${describeChecks({ scope, checks: hookChecks })}\n`);
-    const result = await validate(resolve(dirname(fileURLToPath(import.meta.url)), '..'), request, {
-      scope,
-      checks: hookChecks,
-    });
+    const options = parseValidationArguments(['--scope', scope]);
+    process.stderr.write(`${describeChecks(options)}\n`);
+    const result = await validate(root, request, options);
     writeHookOutput(result, continued);
   } catch (error: unknown) {
     const message = `Validation hook failed: ${error instanceof Error ? error.message : String(error)}. Report validation as incomplete.`;
@@ -87,5 +77,5 @@ async function runHook({ start, scope }: HookArguments): Promise<void> {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  await runHook(parseHookArguments(process.argv.slice(2)));
+  await runHook(parseHookArguments(process.argv.slice(2)), resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 }

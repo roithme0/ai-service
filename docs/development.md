@@ -40,13 +40,21 @@ Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have
 
 ## Validate changes
 
-After installing the backend and frontend dependencies described in [Run locally](#run-locally), run `node .agents/validation/run.mts` from the **repository root** to format changed files, lint the frontend, and run app and tooling tests. Review the formatting diff. Use `--scope frontend|backend` to limit scope, `--e2e` to include [browser tests](#end-to-end-browser-tests), or `--app-tests=false`, `--tooling-tests=false`, and `--shared-tooling-tests=false` to skip test groups.
+Complete [local setup](#run-locally) for both backend and frontend, then [install Playwright Chromium](#end-to-end-browser-tests). From the **repository root**:
+
+```powershell
+node .agents/validation/run.mts
+```
+
+This formats changed files, lints, and runs all non-E2E tests, including browser components. Review the formatting diff. `--scope frontend|backend` limits formatting and lint only; `--no-format` retains lint and tests without formatting.
+
+For tests only, use `node .agents/validation/test.mts` from the **repository root**. Discover groups with `--list` and select them with repeated `--group NAME`. The `tooling` group requires both ecosystems; `tooling-frontend` needs no Python. `tooling-e2e` mocks orchestration; actual E2E has [separate prerequisites](#end-to-end-browser-tests). See the [runner](../.agents/validation/test.mts) for native argument forwarding and individual-file selection.
 
 For backend edits, run from the **repository root**:
 
 ```powershell
 node .agents/validation/backend.mts --format
-node --test .agents/validation/shared.test.mts .agents/validation/run.test.mts .agents/validation/backend.test.mts
+node .agents/validation/test.mts --group tooling-backend --group tooling-shared
 ```
 
 Then, from **backend/**, with its virtual environment active:
@@ -71,6 +79,7 @@ npm run lint
 npm run test:tooling
 npm run test:app
 npm run test:chat-ui
+npm run test:chat-ui:browser
 ```
 
 For build verification, run `npm run build:app` and `npm run build:chat-ui`. Test locations are listed in [navigation](navigation.md#find-related-tests).
@@ -150,6 +159,6 @@ With the [local servers](#run-locally) running, open `http://localhost:4204/demo
 | [Hooks](../.codex/hooks.json) | Codex adapter snapshots content before prompts and validates affected scopes on stop. |
 | [Project configuration](../.codex/config.toml) | Angular CLI and OpenAI documentation MCP connections. |
 
-Review and trust hooks before relying on them. Hooks enable app, scope tooling, and shared tooling tests; they exclude E2E. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/{frontend,backend,e2e}/`. Review formatting changes before completion.
+Review and trust hooks before relying on them. Hooks format and lint relevant scopes and run all non-E2E tests. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/`.
 
 Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.
