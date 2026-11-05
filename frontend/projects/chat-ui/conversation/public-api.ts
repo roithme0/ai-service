@@ -11,7 +11,7 @@ export type {
   PresentedUsage,
   SessionEvent,
   TurnAccepted,
-} from './generated/types.gen';
+} from './src/generated/types.gen';
 export { SessionController } from './src/session-controller';
 export type { SessionViewState } from './src/session-controller';
 export { presentSession, presentSessionArtifact } from './src/session-presentation';

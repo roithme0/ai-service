@@ -15,7 +15,10 @@ import {
 import { ArtifactCardComponent } from '../artifact-card/artifact-card.component';
 import { ChatUiComponent } from './chat-ui.component';
 import { presentSession } from '../../../../conversation/src/session-presentation';
-import type { PresentedSession, PresentedTurn } from '../../../../conversation/generated/types.gen';
+import type {
+  PresentedSession,
+  PresentedTurn,
+} from '../../../../conversation/src/generated/types.gen';
 import type { ChatUsage } from '../../models/chat-usage';
 
 const EMPTY_CHAT_USAGE: ChatUsage = {

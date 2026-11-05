@@ -3,7 +3,7 @@
 await generateContract({
   name: 'conversation',
   exportFlag: '--native',
-  directory: ['projects', 'chat-ui', 'conversation', 'generated'],
+  directory: ['projects', 'chat-ui', 'conversation', 'src', 'generated'],
   formatOutput: false,
   zodRequests: true,
 });

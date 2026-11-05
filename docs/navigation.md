@@ -39,7 +39,7 @@ The [gateway](../deployment/gateway/nginx.conf) serves the demos and API. Visual
 | [Live Demo](../backend/app/demos/live_conversation_demo/) | Model-backed conversations, registered as `live-demo`; the [live page](../frontend/src/app/pages/live-demo/live-demo.component.ts) hosts its chat UI at `/demos/live`. |
 | [Deployment](../deployment/) | Environment-specific Compose definitions and gateway routing. The [publishing workflow](../.github/workflows/publish-app.yml) builds and publishes application images and the chat UI package. |
 
-The [contract generator](../frontend/scripts/conversation-contract.mjs) produces [TypeScript types and Zod schemas](../frontend/projects/chat-ui/conversation/generated/) from the session router's OpenAPI document.
+The [contract generator](../frontend/scripts/conversation-contract.mjs) produces [TypeScript types and Zod schemas](../frontend/projects/chat-ui/conversation/src/generated/) from the session router's OpenAPI document.
 
 The [transcription generator](../frontend/scripts/transcription-contract.mjs) owns the [transcription types and validators](../frontend/projects/chat-ui/transcription/src/generated/). See [contract generation](development.md#update-generated-contracts) for commands.
 
