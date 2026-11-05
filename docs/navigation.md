@@ -33,12 +33,15 @@ The [gateway](../deployment/gateway/nginx.conf) serves the demos and API. Visual
 | [Execution](../backend/app/capabilities/conversations/runner.py) | Owns background turns. [Registry](../backend/app/capabilities/conversations/sessions.py) handles ownership and expiry; [session state](../backend/app/capabilities/conversations/session_state.py) retains conversation, lifecycle, and artifacts. |
 | [Agent composition](../backend/app/capabilities/conversations/wiring.py) | Configures the Kochwiki model and MCP connection. [Turns](../backend/app/capabilities/conversations/turns.py) execute through Pydantic AI; [artifacts](../backend/app/capabilities/conversations/artifacts.py) validate and publish presentation data. |
 | [Chat UI package](../frontend/projects/chat-ui/) | `@roithme0/chat-ui/ui` renders host-supplied content; `@roithme0/chat-ui/conversation` supplies the [controller](../frontend/projects/chat-ui/conversation/src/session-controller.ts), HTTP/SSE transport, and snapshot mapping. |
+| [Composer dictation](../frontend/projects/chat-ui/README.md#composer-dictation) | The composer coordinates host-supplied recording, transcription, and error presentation. Defaults live in the [recording](../frontend/projects/chat-ui/recording/) and [transcription](../frontend/projects/chat-ui/transcription/) entry points. |
 | [Demo styles](../frontend/src/app/styles/tokens.css) | Shared semantic tokens for the demo host, separate from the Chat UI package's tokens. |
 | [Visual Demo](../backend/app/demos/visual_conversation_demo/) | Scripted conversation with messages, artifacts, simulated delays, and error states. The [visual page](../frontend/src/app/pages/visual-demo/visual-demo.component.ts) hosts its chat UI at `/demos/visual`; the [landing page](../frontend/src/app/pages/demo-landing/demo-landing.component.ts) at `/` selects demos. |
 | [Live Demo](../backend/app/demos/live_conversation_demo/) | Model-backed conversations, registered as `live-demo`; the [live page](../frontend/src/app/pages/live-demo/live-demo.component.ts) hosts its chat UI at `/demos/live`. |
 | [Deployment](../deployment/) | Environment-specific Compose definitions and gateway routing. The [publishing workflow](../.github/workflows/publish-app.yml) builds and publishes application images and the chat UI package. |
 
 The [contract generator](../frontend/scripts/conversation-contract.mjs) produces [TypeScript types and Zod schemas](../frontend/projects/chat-ui/conversation/generated/) from the session router's OpenAPI document.
+
+The [transcription generator](../frontend/scripts/transcription-contract.mjs) owns the [transcription types and validators](../frontend/projects/chat-ui/transcription/src/generated/). See [contract generation](development.md#update-generated-contracts) for commands.
 
 ## Follow a flow
 

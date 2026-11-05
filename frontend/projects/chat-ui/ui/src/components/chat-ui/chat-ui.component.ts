@@ -15,6 +15,7 @@ import {
 } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material/icon';
+import type { DictationConfig } from '../../dictation';
 import { registerChatIcons } from '../../chat-icons';
 import { HistoryItemComponent } from '../history-item/history-item.component';
 import { ToolCallComponent } from '../tool-call/tool-call.component';
@@ -71,6 +72,8 @@ export class ChatUiComponent {
   readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
   readonly usage = input<ChatUsage | null>(null);
+  readonly dictation = input<DictationConfig | null>(null);
+  readonly dictationContextKey = input<string | null>(null);
   readonly composerDisabled = input(false);
   readonly composerEditingDisabled = input(false);
   readonly composerPlaceholder = input('Nachricht schreiben');

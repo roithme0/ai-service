@@ -93,6 +93,6 @@ def test_generated_contract_matches_transcription_router() -> None:
     app.include_router(router)
     contract = (
         Path(__file__).resolve().parents[4]
-        / "frontend/contracts/transcription/generated/openapi.json"
+        / "frontend/projects/chat-ui/transcription/src/generated/openapi.json"
     )
     assert json.loads(contract.read_text(encoding="utf-8")) == app.openapi()

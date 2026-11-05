@@ -1,7 +1,7 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material/icon';
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { registerChatIcons } from '../../chat-icons';
 import type { ChatSubmission } from '../../models/chat-message';
@@ -132,4 +132,78 @@ it('grows with multiline input, caps at five rows with scrolling, and shrinks af
 
   await draft.fill('');
   await expect.poll(height).toBeLessThanOrEqual(initialHeight + 1);
+});
+
+it('keeps dictation controls accessible and blocks native keyboard submission', async () => {
+  let resolve!: (outcome: import('@roithme0/chat-ui/recording').RecordingOutcome) => void;
+  const promise = new Promise<import('@roithme0/chat-ui/recording').RecordingOutcome>(
+    (complete) => {
+      resolve = complete;
+    },
+  );
+  let publish!: (state: import('@roithme0/chat-ui/recording').RecordingState) => void;
+  const stop = vi.fn<() => void>();
+  fixture.componentRef.setInput('dictation', {
+    createRecorder: (
+      callback: (state: import('@roithme0/chat-ui/recording').RecordingState) => void,
+    ) => {
+      publish = callback;
+      return { start: () => promise, stop, cancel: () => {}, dispose: () => {} };
+    },
+    transcribe: () => Promise.resolve('spoken'),
+    onError: () => {},
+  });
+  fixture.componentRef.setInput('dictationContextKey', 'context');
+  fixture.detectChanges();
+  const draft = page.getByRole('textbox', { name: 'Nachricht', exact: true });
+  const start = page.getByRole('button', { name: 'Aufnahme starten', exact: true });
+  const send = page.getByRole('button', { name: 'Nachricht senden', exact: true });
+  const submissions: ChatSubmission[] = [];
+  fixture.componentInstance.messageSubmitted.subscribe((value) => submissions.push(value));
+  await draft.fill('draft');
+  expect(start.element().closest('ai-chat-dictation-button')?.nextElementSibling).toBe(
+    send.element(),
+  );
+  const host = fixture.nativeElement as HTMLElement;
+  host.style.width = '320px';
+  await expect
+    .poll(
+      () =>
+        start.element().getBoundingClientRect().right <=
+        send.element().getBoundingClientRect().left,
+    )
+    .toBe(true);
+  expect(send.element().getBoundingClientRect().right).toBeLessThanOrEqual(
+    host.getBoundingClientRect().right,
+  );
+  expect(
+    Math.abs(
+      start.element().getBoundingClientRect().top - send.element().getBoundingClientRect().top,
+    ),
+  ).toBeLessThan(2);
+  await start.click();
+  expect(document.activeElement).toBe(textarea);
+  await expect.element(send).toBeDisabled();
+  await draft.click();
+  await userEvent.keyboard('{Enter}');
+  expect(submissions).toHaveLength(0);
+  publish('recording');
+  fixture.detectChanges();
+  const recording = page.getByRole('button', { name: 'Aufnahme stoppen', exact: true });
+  await expect.element(recording).toHaveAttribute('aria-pressed', 'true');
+  expect(recording.element().classList.contains('recording')).toBe(true);
+  recording.element().focus();
+  await userEvent.keyboard('{Enter}');
+  expect(stop).toHaveBeenCalledOnce();
+  resolve({
+    kind: 'recorded',
+    recording: {
+      blob: new Blob(['audio'], { type: 'audio/webm' }),
+      mimeType: 'audio/webm',
+      durationMs: 10,
+      stopReason: 'manual',
+    },
+  });
+  await expect.element(draft).toHaveValue('draft spoken');
+  expect(submissions).toHaveLength(0);
 });

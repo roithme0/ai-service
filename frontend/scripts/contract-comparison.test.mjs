@@ -12,7 +12,7 @@ test('transcription OpenAPI declares each supported binary media type and route 
   const { readFile } = await import('node:fs/promises');
   const schema = JSON.parse(
     await readFile(
-      new URL('../contracts/transcription/generated/openapi.json', import.meta.url),
+      new URL('../projects/chat-ui/transcription/src/generated/openapi.json', import.meta.url),
       'utf8',
     ),
   );
@@ -53,7 +53,7 @@ test('transcription OpenAPI declares each supported binary media type and route 
 });
 
 test('generated transcription validators accept valid responses and reject malformed data', async () => {
-  const validators = await import('../contracts/transcription/generated/zod.gen.ts');
+  const validators = await import('../projects/chat-ui/transcription/src/generated/zod.gen.ts');
   const { zTranscriptionResponse, zTranscriptionErrorResponse, zHttpErrorResponse } = validators;
   assert.equal('zTranscribeApiV1TranscriptionsPostBody' in validators, false);
   for (const text of ['', '  multilingual ??  '])
@@ -87,7 +87,7 @@ test('generated transcription validators accept valid responses and reject malfo
 test('generated transcription request accepts a Blob and rejects JSON text', async () => {
   const ts = await import('typescript');
   const filename = new URL(
-    '../contracts/transcription/generated/__typecheck__.ts',
+    '../projects/chat-ui/transcription/src/generated/__typecheck__.ts',
     import.meta.url,
   ).pathname.replace(/^\/(\w:)/, '$1');
   const source = `import type { TranscribeApiV1TranscriptionsPostData } from './types.gen';\nconst valid: TranscribeApiV1TranscriptionsPostData = { body: new Blob(), url: '/api/v1/transcriptions' };\nconst file: TranscribeApiV1TranscriptionsPostData = { body: new File([], 'audio.ogg'), url: '/api/v1/transcriptions' };\n// @ts-expect-error JSON strings are not raw audio blobs\nconst invalid: TranscribeApiV1TranscriptionsPostData = { body: 'audio', url: '/api/v1/transcriptions' };\nvoid valid; void file; void invalid;`;

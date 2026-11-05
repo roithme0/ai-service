@@ -99,6 +99,8 @@
   </div>
 
   <ai-chat-composer
+    [dictation]="dictation()"
+    [dictationContextKey]="dictationContextKey()"
     [usage]="usage()"
     [mascotSource]="mascotSource()"
     [disabled]="composerDisabled()"

@@ -1,0 +1,22 @@
+@use '../../styles/tokens';
+
+:host {
+  display: inline-flex;
+}
+
+.microphone-button.mat-mdc-icon-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  color: tokens.value('muted-text');
+  pointer-events: auto;
+}
+
+.microphone-button.recording {
+  color: #c62828;
+}
+
+.microphone-button:focus-visible {
+  outline: tokens.value('focus-width') solid tokens.value('focus');
+  outline-offset: 0.15rem;
+}

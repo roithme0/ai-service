@@ -2,11 +2,12 @@
 
 `@roithme0/chat-ui` provides an Angular 22 conversation UI with optional AI Service integration. It has no Kochwiki dependency.
 
-| Entry point                      | API                                                                                                                         |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `@roithme0/chat-ui/ui`           | `ChatUiComponent`, content/status types, artifact renderers, and capabilities. Renders host state without backend requests. |
-| `@roithme0/chat-ui/conversation` | `SessionController`, `HttpSessionTransport`, snapshot mapping, and generated session types.                                 |
-| `@roithme0/chat-ui/recording`    | `BrowserAudioRecorder` and typed recording outcomes. Framework-independent microphone capture without transcription or UI.  |
+| Entry point                       | API                                                                                                                         |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `@roithme0/chat-ui/ui`            | `ChatUiComponent`, content/status types, artifact renderers, and capabilities. Renders host state without backend requests. |
+| `@roithme0/chat-ui/conversation`  | `SessionController`, `HttpSessionTransport`, snapshot mapping, and generated session types.                                 |
+| `@roithme0/chat-ui/transcription` | `HttpTranscriber` and typed backend transcription errors.                                                                   |
+| `@roithme0/chat-ui/recording`     | `BrowserAudioRecorder` and typed recording outcomes. Framework-independent microphone capture without transcription or UI.  |
 
 The root entry point exports no API. All entry points share one version.
 
@@ -23,6 +24,16 @@ Import `BrowserAudioRecorder` from `@roithme0/chat-ui/recording` for microphone 
 Recording stops automatically after five minutes of capture, excluding the permission wait, with `stopReason: 'duration-limit'`; manual stop reports `'manual'`. Browser throttling or suspension can delay the limit. `durationMs` measures elapsed capture time through the stop request, rather than encoded-media duration.
 
 The browser chooses the encoding; consumers must check whether their transcription service accepts the returned MIME type. Capture interruption discards partial audio. Hosts own error presentation, page-backgrounding policy, and storage or object URLs for returned audio; the recorder does not persist it.
+
+## Composer dictation
+
+Opt in through the `dictation` and `dictationContextKey` inputs on `ai-chat-ui`. See the [configuration types](ui/src/dictation.ts) and [live demo](../../src/app/pages/live-demo/live-demo.component.ts) for default recorder, transcription adapter, and host toast wiring. Backend limits and errors belong to the [speech-to-text contract](../../../docs/domains/transcriptions.md).
+
+- Keep the configuration reference stable. Its factory must return an independent recorder; the composer owns cancellation and disposal.
+- Supply a non-null context key independent of the backend session ID. Keep it stable during a conversation. Before switching or resetting, propagate a new key to the composer synchronously; the live demo shows this ordering.
+- Provide accessible toast presentation with safe messages through `onError`; there is no library default. Custom transcribers use the exported [TranscriptionError](transcription/src/http-transcriber.ts) for operational failures. Intentional cancellation is silent.
+
+The microphone is hidden without configuration or browser recording support. Transcripts append to the editable draft for review and are never sent automatically. Hiding the page cancels capture but allows transcription already in progress to finish. Context/configuration changes, destruction, and editing disable cancel pending work and discard late results. Audio is not stored by the library.
 
 ## Host setup
 

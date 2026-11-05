@@ -230,3 +230,11 @@ function microphoneError(error: unknown): 'permission-denied' | 'microphone-unav
   }
   return 'microphone-unavailable';
 }
+
+export function isBrowserRecordingSupported(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    typeof navigator.mediaDevices?.getUserMedia === 'function' &&
+    typeof MediaRecorder !== 'undefined'
+  );
+}

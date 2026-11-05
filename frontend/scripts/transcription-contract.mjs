@@ -3,7 +3,7 @@
 await generateContract({
   name: 'transcription',
   exportFlag: '--transcription',
-  directory: ['contracts', 'transcription', 'generated'],
+  directory: ['projects', 'chat-ui', 'transcription', 'src', 'generated'],
   formatOutput: true,
   zodRequests: false,
 });

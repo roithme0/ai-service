@@ -109,7 +109,7 @@ Codegen takes its URL explicitly. Results and failure traces go to gitignored `e
 
 The [CI workflow](../.github/workflows/publish-app.yml) runs E2E on pull requests and release tags against the built application images. Releases publish those same images only after tests pass. Download the `e2e-diagnostics` artifact from a failed run for logs and traces.
 
-## Update the conversation contract
+## Update generated contracts
 
 Install backend and frontend dependencies first. From **frontend/**:
 
@@ -117,9 +117,11 @@ Install backend and frontend dependencies first. From **frontend/**:
 $env:PYTHON = (Resolve-Path ../backend/.venv/Scripts/python.exe).Path
 npm run generate:conversation-contract
 npm run check:conversation-contract
+npm run generate:transcription-contract
+npm run check:transcription-contract
 ```
 
-The generator exports the session router's OpenAPI document without starting agents, then produces TypeScript types and Zod validators. Ship backend schema changes, generated files, and frontend consumers together. Review generated changes; do not edit them by hand.
+Each generator exports its capability router's OpenAPI document without starting agents, then produces TypeScript types and Zod validators. Ship backend schema changes, generated files, and frontend consumers together. Review generated changes; do not edit them by hand.
 
 ## Develop the chat UI package
 

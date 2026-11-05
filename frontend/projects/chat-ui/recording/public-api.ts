@@ -6,3 +6,4 @@ export type {
   RecordingState,
   RecordingStopReason,
 } from './src/recording-types';
+export { isBrowserRecordingSupported } from './src/browser-audio-recorder';

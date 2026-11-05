@@ -8,7 +8,7 @@ import ts from 'typescript';
 const frontend = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const packageRoot = resolve(frontend, 'dist/chat-ui');
 const manifest = JSON.parse(await readFile(resolve(packageRoot, 'package.json'), 'utf8'));
-for (const entry of ['.', './ui', './conversation', './recording']) {
+for (const entry of ['.', './ui', './conversation', './recording', './transcription']) {
   assert.ok(manifest.exports[entry]?.types, `Missing declarations for ${entry}`);
   assert.ok(manifest.exports[entry]?.default, `Missing JavaScript for ${entry}`);
 }
@@ -20,6 +20,7 @@ const recording = await import(
 assert.deepEqual(Object.keys(recording).sort(), [
   'BrowserAudioRecorder',
   'MAX_RECORDING_DURATION_MS',
+  'isBrowserRecordingSupported',
 ]);
 assert.equal(recording.MAX_RECORDING_DURATION_MS, 300_000);
 const recorder = new recording.BrowserAudioRecorder();
@@ -27,6 +28,10 @@ assert.equal(recorder.state, 'ready');
 assert.deepEqual(await recorder.start(), { kind: 'failed', error: 'unsupported' });
 recorder.dispose();
 assert.equal(recorder.state, 'disposed');
+const transcription = await import(
+  pathToFileURL(resolve(packageRoot, manifest.exports['./transcription'].default)).href
+);
+assert.equal(typeof new transcription.HttpTranscriber('/api/v1').transcribe, 'function');
 const conversation = await import(
   pathToFileURL(resolve(packageRoot, manifest.exports['./conversation'].default)).href
 );
@@ -112,17 +117,33 @@ const source = resolve(consumer, 'consumer.mts');
 await writeFile(
   source,
   `
-import { ChatUiComponent, artifactRenderer, type ChatSubmission, type ChatTurn } from '@roithme0/chat-ui/ui';
+import { ChatUiComponent, artifactRenderer, type ChatSubmission, type ChatTurn, type DictationConfig, type DictationRecorder } from '@roithme0/chat-ui/ui';
 import { SessionController, HttpSessionTransport, presentSessionArtifact,
   SessionHttpError, SessionTransportError,
   type SessionArtifactMapper, type SessionViewState, type SessionTransport
 } from '@roithme0/chat-ui/conversation';
 import * as Root from '@roithme0/chat-ui';
+import { HttpTranscriber, TranscriptionError } from '@roithme0/chat-ui/transcription';
 import { BrowserAudioRecorder, MAX_RECORDING_DURATION_MS,
   type AudioRecording, type RecordingErrorKind, type RecordingOutcome,
   type RecordingState, type RecordingStopReason
 } from '@roithme0/chat-ui/recording';
 const recorder = new BrowserAudioRecorder((state: RecordingState): void => {});
+const transcriber = new HttpTranscriber('/api/v1');
+const defaults: DictationConfig = {
+  createRecorder: (publish): DictationRecorder => new BrowserAudioRecorder(publish),
+  transcribe: (audio, signal): Promise<string> => transcriber.transcribe(audio, signal),
+  onError: (error): void => { const kind: string = error.reason; },
+};
+const custom: DictationConfig = {
+  createRecorder: (publish): DictationRecorder => ({
+    start: async (): Promise<RecordingOutcome> => ({ kind: 'cancelled' }),
+    stop: (): void => {}, cancel: (): void => {}, dispose: (): void => {},
+  }),
+  transcribe: async (audio, signal): Promise<string> => { throw new TranscriptionError('network'); },
+  onError: (error): void => {},
+};
+void defaults; void custom;
 const maximum: number = MAX_RECORDING_DURATION_MS;
 const capture: Promise<RecordingOutcome> = recorder.start();
 void capture.then((outcome): void => {
