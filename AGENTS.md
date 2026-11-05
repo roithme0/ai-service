@@ -28,20 +28,21 @@
 
 ## Validation
 
-After edits, run the applicable commands in order:
+After frontend, backend, or shared tooling edits, run from the **repository root**:
 
-| Scope | Working directory | Commands |
-| --- | --- | --- |
-| Frontend | `frontend` | `npm run format:changed`, `npm run lint`, `npm run test:tooling`, `npm run test:app`, `npm run test:chat-ui`, `npm run test:chat-ui:browser` |
-| Backend | Repository root | `node .agents/validation/backend.mts --format`, `node --test .agents/validation/shared.test.mts .agents/validation/run.test.mts .agents/validation/backend.test.mts` |
-| Backend | `backend` | `.venv/Scripts/python.exe -m pytest` (`.venv/bin/python` on Unix) |
+```powershell
+node .agents/validation/run.mts
+```
 
-Use `npm.cmd` if PowerShell blocks `npm.ps1`. See [development setup and contract validation](docs/development.md) for dependencies, editor configuration, and generated API contracts.
+This formats changed files, lints, checks both generated contracts, and runs all non-E2E tests. Install frontend dependencies, Playwright Chromium, and the backend local Python 3.13 venv with `test` and `dev` extras first; see [development setup](docs/development.md). The paired freshness checks use that venv and run for every validation scope and test selection; direct test commands remain tests-only.
+
+For focused tests during implementation, discover groups with `node .agents/validation/test.mts --list` and select them with `--group NAME`. Focused runs do not replace full validation. `--scope frontend|backend` limits formatting and lint only; tests remain the full non-E2E suite.
+
+For browser flow, frontend/backend integration, or local deployment changes, also run `node .agents/validation/e2e.mts` from the repository root. It updates Docker and runs Playwright.
 
 - Format only changed staged, unstaged, and untracked files, respecting configured exclusions and leaving the Git index unchanged. Coordinate before formatting unrelated user edits and review the resulting diff. Full-backend formatting requires an explicit request.
 - Lint errors and warnings fail validation. Run `lint:fix` only deliberately and review its diff; hooks and CI never apply lint fixes.
-- Run `node .agents/validation/e2e.mts` for browser flow, frontend/backend integration, or local deployment changes. It updates Docker and runs Playwright; report missing prerequisites as incomplete validation. Hooks exclude E2E.
-- Review and trust hooks before relying on them. They validate changed scopes automatically and reuse success only for identical content after all checks pass. Shared hook changes validate both scopes; persistent failures request at most one continuation.
+- Review and trust hooks before relying on them. Hooks format and lint relevant scopes and run all non-E2E tests. They reuse success only for identical inputs after all checks pass and request at most one continuation for persistent failures.
 - Fix findings introduced by your work; broader cleanup requires authorization. Report missing dependencies or failed checks as incomplete validation. Hooks never install dependencies automatically.
 
 ## Communication Preferences

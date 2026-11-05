@@ -12,8 +12,6 @@ import {
   type PendingFormatting,
   type ValidationPolicy,
   type ValidationProfile,
-  type ValidationChecks,
-  defaultChecks,
 } from './shared.mts';
 
 const changeInputs = ['backend/', '.codex/', '.agents/validation/'];
@@ -22,8 +20,7 @@ const policy: ValidationPolicy = {
   label: 'Backend',
   formatter: 'Black',
   success: 'Selected backend checks passed.',
-  retry:
-    'backend validation: node .agents/validation/backend.mts --format, node --test .agents/validation/shared.test.mts .agents/validation/run.test.mts .agents/validation/backend.test.mts from the repository root, then .venv/Scripts/python.exe -m pytest from backend (use .venv/bin/python on Unix)',
+  retry: 'node .agents/validation/run.mts',
 };
 
 export function backendPython(root: string): string {
@@ -110,6 +107,7 @@ export async function runBackendPytest(
   cache: string,
   python: string = backendPython(root),
   run: typeof runCheck = runCheck,
+  nativeArgs: readonly string[] = [],
 ): Promise<void> {
   await mkdir(cache, { recursive: true });
   const artifacts = await mkdtemp(join(cache, 'pytest-'));
@@ -122,6 +120,7 @@ export async function runBackendPytest(
       `--basetemp=${join(artifacts, 'tmp')}`,
       '-o',
       `cache_dir=${join(artifacts, 'cache')}`,
+      ...nativeArgs,
     ],
     join(cache, 'pytest.log'),
     300_000,
@@ -131,8 +130,6 @@ export async function runBackendPytest(
 
 export function backendProfile(
   root: string,
-  checks: Readonly<ValidationChecks> = defaultChecks,
-  run: typeof runCheck = runCheck,
 ): ValidationProfile {
   return {
     scope: 'backend',
@@ -142,26 +139,9 @@ export function backendProfile(
       hasChanges: () =>
         git(root, ['status', '--porcelain', '-z', '--', ...changeInputs]).length > 0,
       format: () => formatBackend(root, cache),
-      test: async () => {
-        if (checks.toolingTests) await testBackendTooling(root, cache, run);
-        if (checks.appTests) await runBackendPytest(root, cache, backendPython(root), run);
-      },
+      test: () => Promise.resolve(),
     }),
   };
-}
-
-async function testBackendTooling(
-  root: string,
-  cache: string,
-  run: typeof runCheck,
-): Promise<void> {
-  await run(
-    root,
-    'Backend tooling tests',
-    ['--test', '.agents/validation/backend.test.mts'],
-    join(cache, 'tooling-tests.log'),
-    120_000,
-  );
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
