@@ -258,6 +258,110 @@ def test_mcp_connection_failure_cleans_up_without_model_request() -> None:
     assert attempts == 1
 
 
+def test_multiple_servers_prefix_tools_and_route_overlapping_resource_uris() -> None:
+    reads: list[str] = []
+    lookups: list[str] = []
+    toolsets: list[MCPToolset[None]] = []
+
+    def server(label: str) -> MCPServer:
+        instance = MCPServer(label)
+
+        @instance.resource("data://shared", name="Shared")
+        def reference() -> str:
+            reads.append(label)
+            return label
+
+        @instance.tool()
+        def lookup() -> str:
+            lookups.append(label)
+            return label
+
+        return instance
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        assert {tool.name for tool in info.function_tools} == {
+            f"{label}__{tool}"
+            for label in ("alpha", "beta")
+            for tool in ("lookup", "get_mcp_resource")
+        }
+        indexes = [
+            part.content
+            for message in messages
+            for part in message.parts
+            if isinstance(part, UserPromptPart)
+            and isinstance(part.content, str)
+            and part.content.startswith("MCP resource index")
+        ]
+        assert len(indexes) == 2
+        for label in ("alpha", "beta"):
+            assert any(
+                f"use {label}__get_mcp_resource " in index and "data://shared" in index
+                for index in indexes
+            )
+        results = {
+            part.tool_name: part.content
+            for message in messages
+            for part in message.parts
+            if isinstance(part, ToolReturnPart)
+        }
+        if not results:
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(f"{label}__{tool}", args, f"{label}-{tool}")
+                    for label in ("alpha", "beta")
+                    for tool, args in (
+                        ("lookup", {}),
+                        ("get_mcp_resource", {"uri": "data://shared"}),
+                    )
+                ]
+            )
+        assert results == {
+            "alpha__lookup": "alpha",
+            "beta__lookup": "beta",
+            "alpha__get_mcp_resource": ["alpha"],
+            "beta__get_mcp_resource": ["beta"],
+        }
+        return ModelResponse(parts=[TextPart("done")])
+
+    async def exercise() -> None:
+        async with (
+            connected_toolset(server("alpha")) as (_, alpha_http),
+            connected_toolset(server("beta")) as (_, beta_http),
+        ):
+
+            def alpha_factory(ctx: RunContext[None]) -> MCPToolset[None]:
+                toolset = create_mcp_toolset(
+                    "http://localhost/mcp/", id="alpha", http_client=alpha_http
+                )
+                toolsets.append(toolset)
+                return toolset
+
+            def beta_factory(ctx: RunContext[None]) -> MCPToolset[None]:
+                toolset = create_mcp_toolset(
+                    "http://localhost/mcp/", id="beta", http_client=beta_http
+                )
+                toolsets.append(toolset)
+                return toolset
+
+            agent = create_turn_agent(
+                FunctionModel(respond),
+                instructions="Help.",
+                capabilities=[
+                    MCPResources(alpha_factory, id="alpha"),
+                    MCPResources(beta_factory, id="beta"),
+                ],
+            )
+            async with agent:
+                result = await execute_turn(agent, "Read both servers.")
+                assert result.output == "done"
+            assert len(toolsets) == 2
+            assert all(not toolset.client.is_connected() for toolset in toolsets)
+        assert sorted(reads) == ["alpha", "beta"]
+        assert sorted(lookups) == ["alpha", "beta"]
+
+    asyncio.run(exercise())
+
+
 def test_resource_index_and_native_history_across_turns() -> None:
     server = MCPServer("Domain")
     methods: list[str] = []
@@ -299,13 +403,15 @@ def test_resource_index_and_native_history_across_turns() -> None:
         assert '"name": "Unused"' in index[0] and '"description": ""' in index[0]
         assert text not in index[0]
         assert "data://template" not in index[0]
-        assert "get_mcp_resource" in {tool.name for tool in info.function_tools}
+        assert "domain__get_mcp_resource" in {tool.name for tool in info.function_tools}
         if requests == 1:
             assert not reads
             return ModelResponse(
                 parts=[
                     ToolCallPart(
-                        "get_mcp_resource", {"uri": "data://reference"}, "read-1"
+                        "domain__get_mcp_resource",
+                        {"uri": "data://reference"},
+                        "read-1",
                     )
                 ]
             )
@@ -386,7 +492,7 @@ def test_resource_read_errors_are_native_failed_tool_results(
                 else "data://reference"
             )
             return ModelResponse(
-                parts=[ToolCallPart("get_mcp_resource", {"uri": uri}, "read")]
+                parts=[ToolCallPart("domain__get_mcp_resource", {"uri": uri}, "read")]
             )
         result = next(
             part
@@ -444,7 +550,9 @@ def test_multipart_text_preserves_boundaries(monkeypatch: pytest.MonkeyPatch) ->
         if calls == 1:
             return ModelResponse(
                 parts=[
-                    ToolCallPart("get_mcp_resource", {"uri": "data://parts"}, "read")
+                    ToolCallPart(
+                        "domain__get_mcp_resource", {"uri": "data://parts"}, "read"
+                    )
                 ]
             )
         result = next(
@@ -487,7 +595,7 @@ def test_empty_catalog_discovered_once(monkeypatch: pytest.MonkeyPatch) -> None:
         calls += 1
         assert "MCP resource index" not in str(messages)
         return (
-            ModelResponse(parts=[ToolCallPart("lookup", {}, "lookup")])
+            ModelResponse(parts=[ToolCallPart("domain__lookup", {}, "lookup")])
             if calls == 1
             else ModelResponse(parts=[TextPart("done")])
         )
@@ -540,7 +648,9 @@ def test_resource_transport_failure_closes_session(method: str) -> None:
         assert calls == 1, str(messages)
         return ModelResponse(
             parts=[
-                ToolCallPart("get_mcp_resource", {"uri": "data://reference"}, "read")
+                ToolCallPart(
+                    "domain__get_mcp_resource", {"uri": "data://reference"}, "read"
+                )
             ]
         )
 

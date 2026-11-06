@@ -144,15 +144,15 @@ def test_kochwiki_cutover_mcp_outage_recovery_and_resource_cleanup(
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         assert info.instructions is not None and "Use lookup" in info.instructions
         assert {tool.name for tool in info.function_tools} == {
-            "lookup",
-            "get_mcp_resource",
+            "kochwiki__lookup",
+            "kochwiki__get_mcp_resource",
         }
         last = messages[-1]
         if any(isinstance(part, ToolReturnPart) for part in last.parts) and not any(
             isinstance(part, UserPromptPart) for part in last.parts
         ):
             return ModelResponse(parts=[TextPart("Found soup.")])
-        return ModelResponse(parts=[ToolCallPart("lookup", {"name": "Soup"})])
+        return ModelResponse(parts=[ToolCallPart("kochwiki__lookup", {"name": "Soup"})])
 
     async def exercise() -> None:
         nonlocal available, lose_tool_response

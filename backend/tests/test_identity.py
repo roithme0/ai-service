@@ -231,9 +231,9 @@ def test_background_turns_forward_isolated_assertions_on_actual_mcp_requests(
             if not returns:
                 return ModelResponse(
                     parts=[
-                        ToolCallPart("caller_identity", {}, "identity"),
+                        ToolCallPart("kochwiki__caller_identity", {}, "identity"),
                         ToolCallPart(
-                            "get_mcp_resource",
+                            "kochwiki__get_mcp_resource",
                             {"uri": "identity://current"},
                             "resource",
                         ),
