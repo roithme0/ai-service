@@ -2,7 +2,9 @@ import asyncio
 from decimal import Decimal
 
 import httpx
+import httpx2
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from pydantic_ai import Agent, models
@@ -18,7 +20,6 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.usage import RequestUsage
 
 from app import lifespan
-from app.main import app
 from app.capabilities.conversations.presentation import (
     AcceptedArtifact,
     AssistantText,
@@ -37,10 +38,12 @@ BASE = "/api/v1/agents/live-demo/sessions"
 @pytest.mark.parametrize("key", [None, "", "   ", SecretStr("   ")])
 def test_live_demo_requires_shared_provider_credentials(
     key: str | SecretStr | None,
+    mcp_http_client: httpx2.AsyncClient,
 ) -> None:
     with pytest.raises(ValueError, match="OPENAI_API_KEY"):
         create_live_conversation_demo_agent(
-            ProviderSettings(_env_file=None, openai_api_key=key)
+            ProviderSettings(_env_file=None, openai_api_key=key),
+            mcp_http_client=mcp_http_client,
         )
 
 
@@ -48,10 +51,13 @@ def test_live_demo_requires_shared_provider_credentials(
     "failure", [ValueError("Missing key"), RuntimeError("Private startup detail")]
 )
 def test_live_demo_startup_failure_keeps_visual_demo_available(
+    app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
     failure: Exception,
 ) -> None:
-    def unavailable(settings: ProviderSettings) -> Agent[None, str]:
+    def unavailable(
+        settings: ProviderSettings, *, mcp_http_client: httpx2.AsyncClient
+    ) -> Agent[None, str]:
         raise failure
 
     monkeypatch.setattr(lifecycle, "create_live_conversation_demo_agent", unavailable)
@@ -69,11 +75,14 @@ def test_live_demo_startup_failure_keeps_visual_demo_available(
 
 
 def test_live_demo_configuration_and_session_artifacts_through_http(
+    app: FastAPI,
+    mcp_http_client: httpx2.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)
     agent = create_live_conversation_demo_agent(
-        ProviderSettings(_env_file=None, openai_api_key="test-key")
+        ProviderSettings(_env_file=None, openai_api_key="test-key"),
+        mcp_http_client=mcp_http_client,
     )
     assert agent.name == "live-demo"
     model = agent.model
@@ -84,7 +93,9 @@ def test_live_demo_configuration_and_session_artifacts_through_http(
     assert model.settings["openai_store"] is False
     assert model.client.api_key == "test-key"
     monkeypatch.setattr(
-        lifecycle, "create_live_conversation_demo_agent", lambda settings: agent
+        lifecycle,
+        "create_live_conversation_demo_agent",
+        lambda settings, mcp_http_client: agent,
     )
     monkeypatch.setattr(
         lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None)
@@ -92,7 +103,12 @@ def test_live_demo_configuration_and_session_artifacts_through_http(
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         assert not info.model_request_parameters.native_tools
-        assert {tool.name for tool in info.function_tools} == {"present_artifact"}
+        assert {tool.name for tool in info.function_tools} == {
+            "present_artifact",
+            "get_mcp_resource",
+            "greet",
+            "farewell",
+        }
         usage = RequestUsage(input_tokens=10, output_tokens=5, cost=Decimal("0.001"))
         if any(isinstance(part, ToolReturnPart) for part in messages[-1].parts):
             return ModelResponse(
@@ -195,15 +211,19 @@ def test_live_demo_configuration_and_session_artifacts_through_http(
 
 
 def test_partial_live_runner_startup_closes_model(
+    mcp_http_client: httpx2.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     agent = create_live_conversation_demo_agent(
-        ProviderSettings(_env_file=None, openai_api_key="test-key")
+        ProviderSettings(_env_file=None, openai_api_key="test-key"),
+        mcp_http_client=mcp_http_client,
     )
     model = agent.model
     assert isinstance(model, OpenAIResponsesModel)
     monkeypatch.setattr(
-        lifecycle, "create_live_conversation_demo_agent", lambda settings: agent
+        lifecycle,
+        "create_live_conversation_demo_agent",
+        lambda settings, mcp_http_client: agent,
     )
 
     async def fail_start(runner: AgentTurnRunner) -> AgentTurnRunner:
@@ -213,7 +233,7 @@ def test_partial_live_runner_startup_closes_model(
 
     async def exercise() -> None:
         async with lifecycle.live_conversation_demo_runner(
-            ProviderSettings(_env_file=None)
+            ProviderSettings(_env_file=None), mcp_http_client=mcp_http_client
         ) as runner:
             assert runner is None
             assert model.client.is_closed()

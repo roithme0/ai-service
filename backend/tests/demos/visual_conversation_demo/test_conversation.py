@@ -2,6 +2,7 @@ import asyncio
 
 import httpx
 import pytest
+from fastapi import FastAPI
 from pydantic_ai import models
 
 from app.capabilities.conversations.http import SnapshotEvent
@@ -21,7 +22,6 @@ from app.demos.visual_conversation_demo.agent import (
     create_visual_conversation_demo_agent,
 )
 from app import main
-from app.main import app
 from tests.capabilities.conversations.test_http import stream
 
 BASE = "/api/v1/agents/visual-demo/sessions"
@@ -44,6 +44,7 @@ def _turns(snapshot: PresentedSession) -> list[PresentedTurn]:
 
 
 def test_visual_conversation_demo_through_http_and_live_snapshots(
+    app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)

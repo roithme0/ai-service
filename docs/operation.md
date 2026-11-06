@@ -25,6 +25,8 @@ Create `deployment/.env` from [.env.example](../deployment/.env.example); host-s
 
 Visual Demo (`visual-demo`) needs no provider or Kochwiki settings. Live Demo (`live-demo`) requires only `OPENAI_API_KEY`; Kochwiki also requires its model and MCP URL. Missing required settings or initialization failure leaves the affected agent unavailable with `503 agent_unavailable`; restart after correcting startup configuration. Kochwiki connects MCP per turn, so an outage can recover on a later turn without restarting.
 
+Live Demo includes a stateless greetings MCP server mounted at `/mcp/` in the backend. Its read-only `greet` and `farewell` tools accept a name and language (`en` or `de`); `greetings://catalog` supplies vocabulary and a fictional club motto. The live agent uses the mounted endpoint through an in-process HTTP transport, with resources indexed each turn and read on demand. No separate MCP process, endpoint configuration, or database is required. Direct local MCP clients can use `http://localhost:8004/mcp/` when running the backend locally; the deployment gateway does not publish this route.
+
 Transcription uses `OPENAI_API_KEY` and its own optional model setting. Missing credentials or an empty model make transcription unavailable without disabling other capabilities. See the [speech-to-text contract](domains/transcriptions.md) for upload limits, errors, and provider handling.
 
 For a Kochwiki server on the Docker host, the example uses `http://host.docker.internal:8002/mcp/`; ensure that name resolves on your host. Container `localhost` refers to the container itself.

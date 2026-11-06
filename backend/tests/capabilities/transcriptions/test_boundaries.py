@@ -270,7 +270,9 @@ def test_application_starts_without_provider_key(
 ) -> None:
     from app import lifespan
     from app.core.config import ProviderSettings
-    from app.main import app
+    from app.main import create_app
+
+    app = create_app()
 
     monkeypatch.setattr(
         lifespan,
