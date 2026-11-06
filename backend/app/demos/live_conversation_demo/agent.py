@@ -4,7 +4,7 @@ from httpx2 import AsyncClient
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPToolset
 
-from app.capabilities.conversations.mcp import EagerMCPResources, create_mcp_toolset
+from app.capabilities.conversations.mcp import MCPResources, create_mcp_toolset
 
 from app.capabilities.conversations.turns import create_openai_model, create_turn_agent
 from app.core.config import ProviderSettings
@@ -33,7 +33,7 @@ def create_live_conversation_demo_agent(
     agent = create_turn_agent(
         create_openai_model("gpt-6-luna", api_key, reasoning_effort="medium"),
         instructions=LIVE_DEMO_INSTRUCTIONS,
-        capabilities=[EagerMCPResources(create_greetings_toolset, id="greetings")],
+        capabilities=[MCPResources(create_greetings_toolset, id="greetings")],
     )
     agent.name = "live-demo"
     return agent

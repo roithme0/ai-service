@@ -105,6 +105,7 @@ def test_live_demo_configuration_and_session_artifacts_through_http(
         assert not info.model_request_parameters.native_tools
         assert {tool.name for tool in info.function_tools} == {
             "present_artifact",
+            "get_mcp_resource",
             "greet",
             "farewell",
         }

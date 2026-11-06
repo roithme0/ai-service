@@ -88,17 +88,24 @@ def test_live_agent_receives_mcp_guidance_resources_and_both_tool_results(
         requests += 1
         assert info.instructions is not None
         assert "Consult greetings://catalog" in info.instructions
-        assert {tool.name for tool in info.function_tools} == {"greet", "farewell"}
+        assert {tool.name for tool in info.function_tools} == {
+            "greet",
+            "farewell",
+            "get_mcp_resource",
+        }
         assert any(
             isinstance(part, UserPromptPart)
             and isinstance(part.content, str)
-            and "Every hello starts an adventure." in part.content
+            and "greetings://catalog" in part.content
             for message in messages
             for part in message.parts
         )
         if requests == 1:
             return ModelResponse(
                 parts=[
+                    ToolCallPart(
+                        "get_mcp_resource", {"uri": "greetings://catalog"}, "catalog"
+                    ),
                     ToolCallPart("greet", {"name": "Ada", "language": "de"}, "hello"),
                     ToolCallPart("farewell", {"name": "Ada", "language": "en"}, "bye"),
                 ]
@@ -110,6 +117,7 @@ def test_live_agent_receives_mcp_guidance_resources_and_both_tool_results(
             if isinstance(part, ToolReturnPart)
         }
         assert results["hello"].outcome == results["bye"].outcome == "success"
+        assert "Every hello starts an adventure." in str(results["catalog"].content)
         assert "Hallo, Ada!" in str(results["hello"].content)
         assert "Goodbye, Ada!" in str(results["bye"].content)
         return ModelResponse(parts=[TextPart("Greetings verified.")])
@@ -124,7 +132,7 @@ def test_live_agent_receives_mcp_guidance_resources_and_both_tool_results(
                 with agent.override(model=FunctionModel(respond)):
                     result = await execute_turn(agent, "Welcome Ada and say goodbye.")
                     assert result.output == "Greetings verified."
-                    assert result.usage.tool_calls == 2
+                    assert result.usage.tool_calls == 3
 
     asyncio.run(exercise())
     assert requests == 2

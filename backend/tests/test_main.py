@@ -143,7 +143,10 @@ def test_kochwiki_cutover_mcp_outage_recovery_and_resource_cleanup(
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         assert info.instructions is not None and "Use lookup" in info.instructions
-        assert {tool.name for tool in info.function_tools} == {"lookup"}
+        assert {tool.name for tool in info.function_tools} == {
+            "lookup",
+            "get_mcp_resource",
+        }
         last = messages[-1]
         if any(isinstance(part, ToolReturnPart) for part in last.parts) and not any(
             isinstance(part, UserPromptPart) for part in last.parts

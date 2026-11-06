@@ -214,22 +214,14 @@ def test_background_turns_forward_isolated_assertions_on_actual_mcp_requests(
         monkeypatch.setattr(mcp_http, "create_mcp_http_client", http_client)
 
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-            resource_prompts = [
-                part.content
+            assert any(
+                isinstance(part, UserPromptPart)
+                and isinstance(part.content, str)
+                and "identity://current" in part.content
                 for message in messages
                 for part in message.parts
-                if isinstance(part, UserPromptPart)
-                and isinstance(part.content, str)
-                and part.content.startswith("MCP resource data")
-            ]
-            assert len(resource_prompts) == 1
-            expected = current_turn_identity().to_header()
-            assert "Resource owner: " + expected in resource_prompts[0]
-            assert all(
-                owner.to_header() not in resource_prompts[0]
-                for owner in owners
-                if owner.to_header() != expected
             )
+            expected = current_turn_identity().to_header()
             returns = [
                 part
                 for message in messages
@@ -238,9 +230,24 @@ def test_background_turns_forward_isolated_assertions_on_actual_mcp_requests(
             ]
             if not returns:
                 return ModelResponse(
-                    parts=[ToolCallPart("caller_identity", {}, "identity")]
+                    parts=[
+                        ToolCallPart("caller_identity", {}, "identity"),
+                        ToolCallPart(
+                            "get_mcp_resource",
+                            {"uri": "identity://current"},
+                            "resource",
+                        ),
+                    ]
                 )
-            return ModelResponse(parts=[TextPart(str(returns[-1].content))])
+            resource = next(part for part in returns if part.tool_call_id == "resource")
+            assert "Resource owner: " + expected in str(resource.content)
+            assert all(
+                owner.to_header() not in str(resource.content)
+                for owner in owners
+                if owner.to_header() != expected
+            )
+            identity = next(part for part in returns if part.tool_call_id == "identity")
+            return ModelResponse(parts=[TextPart(str(identity.content))])
 
         agent = create_kochwiki_agent(
             KochwikiConversationSettings(
