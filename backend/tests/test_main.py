@@ -4,6 +4,7 @@ from unittest.mock import patch
 import httpx
 import httpx2
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
@@ -29,13 +30,12 @@ from app.capabilities.conversations.presentation import PresentedTurn
 from app.capabilities.conversations.runner import AgentTurnRunner, RunnerClosedError
 from app.core.config import ProviderSettings
 from app.capabilities.conversations.config import KochwikiConversationSettings
-from app.main import app
 from tests.capabilities.conversations.test_http import stream
 
-client = TestClient(app)
 
-
-def test_application_http_errors_remain_typed_and_hide_internal_details() -> None:
+def test_application_http_errors_remain_typed_and_hide_internal_details(
+    app: FastAPI,
+) -> None:
     runner = AgentTurnRunner(
         Agent(
             FunctionModel(
@@ -85,6 +85,7 @@ def test_application_http_errors_remain_typed_and_hide_internal_details() -> Non
     [ValueError("Invalid configuration"), RuntimeError("Initialization failed")],
 )
 def test_kochwiki_initialization_failure_does_not_block_application(
+    app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
     failure: Exception,
 ) -> None:
@@ -125,6 +126,7 @@ def test_kochwiki_initialization_failure_does_not_block_application(
 
 
 def test_kochwiki_cutover_mcp_outage_recovery_and_resource_cleanup(
+    app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = MCPServer("Kochwiki", instructions="Use lookup for recipe data.")

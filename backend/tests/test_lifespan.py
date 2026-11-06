@@ -2,12 +2,12 @@ import asyncio
 from contextlib import nullcontext
 
 import pytest
-from fastapi import FastAPI
 from pydantic import SecretStr
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIResponsesModel
 
 from app import lifespan
+from app.main import create_app
 from app.capabilities.conversations import lifecycle
 from app.capabilities.conversations.config import KochwikiConversationSettings
 from app.capabilities.conversations.runner import AgentTurnRunner, RunnerClosedError
@@ -62,9 +62,9 @@ def test_later_application_startup_failure_closes_started_capabilities(
     )
 
     async def exercise() -> None:
-        application = FastAPI()
+        application = create_app()
         with pytest.raises(RuntimeError, match="Visual demo initialization failed"):
-            async with lifespan.application_lifespan(application):
+            async with application.router.lifespan_context(application):
                 raise AssertionError("Startup should have failed")
         assert service.client is not None and service.client.is_closed()
         assert configured_model.client.is_closed()
@@ -93,17 +93,17 @@ def test_application_shutdown_clears_registry_and_closes_all_resources(
     monkeypatch.setattr(
         live_demo_lifecycle,
         "create_live_conversation_demo_agent",
-        lambda settings: live_agent,
+        lambda settings, mcp_http_client: live_agent,
     )
 
     async def exercise() -> None:
-        application = FastAPI()
+        application = create_app()
         with (
             pytest.raises(LookupError, match="Application failure")
             if fail_body
             else nullcontext()
         ):
-            async with lifespan.application_lifespan(application):
+            async with application.router.lifespan_context(application):
                 runners: dict[str, AgentTurnRunner | None] = (
                     application.state.agent_runners
                 )
