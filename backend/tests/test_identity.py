@@ -17,6 +17,7 @@ from pydantic_ai.messages import (
     TextPart,
     ToolCallPart,
     ToolReturnPart,
+    UserPromptPart,
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from starlette.requests import Request
@@ -173,6 +174,10 @@ def test_background_turns_forward_isolated_assertions_on_actual_mcp_requests(
 
         server.middleware.append(capture)
 
+        @server.resource("identity://current")
+        def identity_resource() -> str:
+            return "Resource owner: " + asserted_identity.get()
+
         @server.tool()
         async def caller_identity() -> str:
             """Return the identity retained across a concurrent tool invocation."""
@@ -209,6 +214,22 @@ def test_background_turns_forward_isolated_assertions_on_actual_mcp_requests(
         monkeypatch.setattr(mcp_http, "create_mcp_http_client", http_client)
 
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            resource_prompts = [
+                part.content
+                for message in messages
+                for part in message.parts
+                if isinstance(part, UserPromptPart)
+                and isinstance(part.content, str)
+                and part.content.startswith("MCP resource data")
+            ]
+            assert len(resource_prompts) == 1
+            expected = current_turn_identity().to_header()
+            assert "Resource owner: " + expected in resource_prompts[0]
+            assert all(
+                owner.to_header() not in resource_prompts[0]
+                for owner in owners
+                if owner.to_header() != expected
+            )
             returns = [
                 part
                 for message in messages

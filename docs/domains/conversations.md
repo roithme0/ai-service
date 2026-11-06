@@ -27,6 +27,12 @@ A session connects one owner to one configured agent. The service manages execut
 - Failure or cancellation retains captured history and accepted artifacts. It does not establish whether interrupted external actions occurred.
 - Model-request and tool-call budgets reset for each turn; there are no cumulative conversation request or tool-call caps. [Execution limits](../../backend/app/capabilities/conversations/config.py) are separate from session lifetime.
 
+## MCP resources
+
+Before each turn's first model request, Kochwiki lists and reads text resources through the same MCP connection as its tools. URI/name-attributed contents are reference data throughout that turn; snapshots do not accumulate in conversation history. Binary resources are skipped, and resource templates are not discovered or expanded.
+
+Discovery/read failures or actual text exceeding 64,000 aggregate characters fail the turn before the model runs. Content is never truncated.
+
 ## Observation and recovery
 
 - Backend snapshots supply displayed conversation content; the frontend adds no optimistic messages.

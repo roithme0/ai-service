@@ -4,12 +4,11 @@ from urllib.parse import urlparse
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPToolset
-from pydantic_ai.toolsets import DynamicToolset
 
 from app.capabilities.conversations.instructions import CONVERSATION_INSTRUCTIONS
 from app.capabilities.conversations.config import KochwikiConversationSettings
 from app.capabilities.conversations.identity import current_turn_identity
-from app.capabilities.conversations.mcp import create_mcp_toolset
+from app.capabilities.conversations.mcp import EagerMCPResources, create_mcp_toolset
 from app.capabilities.conversations.turns import create_openai_model, create_turn_agent
 from app.core.config import ProviderSettings
 
@@ -48,9 +47,7 @@ def create_kochwiki_agent(
             reasoning_effort=settings.kochwiki_openai_reasoning_effort,
         ),
         instructions=CONVERSATION_INSTRUCTIONS,
-        toolsets=[
-            DynamicToolset(create_kochwiki_toolset, per_run_step=False, id="kochwiki")
-        ],
+        capabilities=[EagerMCPResources(create_kochwiki_toolset, id="kochwiki")],
         web_search=True,
     )
     agent.name = "kochwiki"
