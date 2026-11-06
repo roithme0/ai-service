@@ -13,8 +13,6 @@ import {
   type PendingFormatting,
   type ValidationPolicy,
   type ValidationProfile,
-  type ValidationChecks,
-  defaultChecks,
 } from './shared.mts';
 
 const changeInputs = ['frontend/', '.codex/', '.agents/validation/'];
@@ -27,8 +25,7 @@ const policy: ValidationPolicy = {
   label: 'Frontend',
   formatter: 'Prettier',
   success: 'Selected frontend checks passed.',
-  retry:
-    'frontend validation: npm run lint, npm run test:tooling, npm run test:app, npm run test:chat-ui, and npm run test:chat-ui:browser from frontend',
+  retry: 'node .agents/validation/run.mts',
 };
 
 export function fingerprint(root: string): Promise<string> {
@@ -41,8 +38,6 @@ export function fingerprint(root: string): Promise<string> {
 
 export function frontendProfile(
   root: string,
-  checks: Readonly<ValidationChecks> = defaultChecks,
-  run: typeof runCheck = runCheck,
 ): ValidationProfile {
   return {
     scope: 'frontend',
@@ -53,10 +48,7 @@ export function frontendProfile(
         git(root, ['status', '--porcelain', '-z', '--', ...changeInputs]).length > 0,
       format: () => formatFrontend(root),
       lint: () => lintFrontend(root, join(cache, 'lint.log')),
-      test: async () => {
-        if (checks.toolingTests) await testFrontendTooling(root, cache, run);
-        if (checks.appTests) await testFrontendProjects(root, cache, run);
-      },
+      test: () => Promise.resolve(),
     }),
   };
 }
@@ -75,52 +67,6 @@ async function lintFrontend(root: string, logPath: string): Promise<void> {
     ],
     logPath,
     120_000,
-  );
-}
-
-async function testFrontendTooling(
-  root: string,
-  cache: string,
-  run: typeof runCheck,
-): Promise<void> {
-  const frontend = join(root, 'frontend');
-  await run(
-    frontend,
-    'Frontend tooling tests',
-    ['--test', '../.agents/validation/frontend.test.mts', '../.codex/validate.test.mts'],
-    join(cache, 'tooling-tests.log'),
-    120_000,
-  );
-}
-
-async function testFrontendProjects(
-  root: string,
-  cache: string,
-  run: typeof runCheck,
-): Promise<void> {
-  const frontend = join(root, 'frontend');
-  for (const project of ['ai-service-frontend', 'chat-ui']) {
-    await run(
-      frontend,
-      `Frontend tests (${project})`,
-      [join(frontend, 'node_modules/@angular/cli/bin/ng.js'), 'test', project, '--watch=false'],
-      join(cache, `tests-${project}.log`),
-      300_000,
-    );
-  }
-  await run(
-    frontend,
-    'Frontend browser component tests (chat-ui)',
-    [
-      join(frontend, 'node_modules/@angular/cli/bin/ng.js'),
-      'test',
-      'chat-ui',
-      '--configuration',
-      'browser',
-      '--watch=false',
-    ],
-    join(cache, 'tests-chat-ui-browser.log'),
-    300_000,
   );
 }
 

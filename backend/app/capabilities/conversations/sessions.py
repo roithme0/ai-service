@@ -61,7 +61,6 @@ class SessionSnapshot:
     artifacts: tuple[SessionArtifact, ...]
     turn_executions: tuple[TurnExecution, ...]
     conversation: Conversation
-    limit_reached: bool
 
     @property
     def messages(self) -> tuple[ModelMessage, ...]:
@@ -190,7 +189,6 @@ class AgentSessionRegistry:
             artifacts=state.artifacts,
             turn_executions=state.turn_executions,
             conversation=state.conversation,
-            limit_reached=state.limit_reached,
         )
 
     def _publish(self, session_id: str) -> None:

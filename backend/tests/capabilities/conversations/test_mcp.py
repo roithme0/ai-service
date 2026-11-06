@@ -6,9 +6,10 @@ from contextlib import asynccontextmanager
 import httpx2
 import pytest
 from mcp.server import MCPServer
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
-from pydantic_ai import Conversation, Tool, models
+from pydantic_ai import Conversation, RunContext, Tool, models
 from pydantic_ai.messages import (
     ModelMessage,
     ModelMessagesTypeAdapter,
@@ -16,11 +17,12 @@ from pydantic_ai.messages import (
     TextPart,
     ToolCallPart,
     ToolReturnPart,
+    UserPromptPart,
 )
-from pydantic_ai.mcp import MCPToolset
+from pydantic_ai.mcp import MCPToolset, Resource
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from app.capabilities.conversations.mcp import create_mcp_toolset
+from app.capabilities.conversations.mcp import MCPResources, create_mcp_toolset
 from app.capabilities.conversations.observation import TurnObservation
 from app.capabilities.conversations.turns import create_turn_agent, execute_turn
 
@@ -207,7 +209,9 @@ def test_lost_mcp_response_does_not_replay_completed_operation() -> None:
             assert [call.tool_call_id for call in observation.started_tool_calls] == [
                 "call-1"
             ]
-            assert observation.messages[-1].state == "interrupted"
+            assert observation.messages[-1].state == "interrupted", str(
+                observation.messages
+            )
             assert not any(
                 isinstance(part, ToolReturnPart)
                 for msg in observation.messages
@@ -252,3 +256,428 @@ def test_mcp_connection_failure_cleans_up_without_model_request() -> None:
 
     asyncio.run(exercise())
     assert attempts == 1
+
+
+def test_multiple_servers_prefix_tools_and_route_overlapping_resource_uris() -> None:
+    reads: list[str] = []
+    lookups: list[str] = []
+    toolsets: list[MCPToolset[None]] = []
+
+    def server(label: str) -> MCPServer:
+        instance = MCPServer(label)
+
+        @instance.resource("data://shared", name="Shared")
+        def reference() -> str:
+            reads.append(label)
+            return label
+
+        @instance.tool()
+        def lookup() -> str:
+            lookups.append(label)
+            return label
+
+        return instance
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        assert {tool.name for tool in info.function_tools} == {
+            f"{label}__{tool}"
+            for label in ("alpha", "beta")
+            for tool in ("lookup", "get_mcp_resource")
+        }
+        indexes = [
+            part.content
+            for message in messages
+            for part in message.parts
+            if isinstance(part, UserPromptPart)
+            and isinstance(part.content, str)
+            and part.content.startswith("MCP resource index")
+        ]
+        assert len(indexes) == 2
+        for label in ("alpha", "beta"):
+            assert any(
+                f"use {label}__get_mcp_resource " in index and "data://shared" in index
+                for index in indexes
+            )
+        results = {
+            part.tool_name: part.content
+            for message in messages
+            for part in message.parts
+            if isinstance(part, ToolReturnPart)
+        }
+        if not results:
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(f"{label}__{tool}", args, f"{label}-{tool}")
+                    for label in ("alpha", "beta")
+                    for tool, args in (
+                        ("lookup", {}),
+                        ("get_mcp_resource", {"uri": "data://shared"}),
+                    )
+                ]
+            )
+        assert results == {
+            "alpha__lookup": "alpha",
+            "beta__lookup": "beta",
+            "alpha__get_mcp_resource": ["alpha"],
+            "beta__get_mcp_resource": ["beta"],
+        }
+        return ModelResponse(parts=[TextPart("done")])
+
+    async def exercise() -> None:
+        async with (
+            connected_toolset(server("alpha")) as (_, alpha_http),
+            connected_toolset(server("beta")) as (_, beta_http),
+        ):
+
+            def alpha_factory(ctx: RunContext[None]) -> MCPToolset[None]:
+                toolset = create_mcp_toolset(
+                    "http://localhost/mcp/", id="alpha", http_client=alpha_http
+                )
+                toolsets.append(toolset)
+                return toolset
+
+            def beta_factory(ctx: RunContext[None]) -> MCPToolset[None]:
+                toolset = create_mcp_toolset(
+                    "http://localhost/mcp/", id="beta", http_client=beta_http
+                )
+                toolsets.append(toolset)
+                return toolset
+
+            agent = create_turn_agent(
+                FunctionModel(respond),
+                instructions="Help.",
+                capabilities=[
+                    MCPResources(alpha_factory, id="alpha"),
+                    MCPResources(beta_factory, id="beta"),
+                ],
+            )
+            async with agent:
+                result = await execute_turn(agent, "Read both servers.")
+                assert result.output == "done"
+            assert len(toolsets) == 2
+            assert all(not toolset.client.is_connected() for toolset in toolsets)
+        assert sorted(reads) == ["alpha", "beta"]
+        assert sorted(lookups) == ["alpha", "beta"]
+
+    asyncio.run(exercise())
+
+
+def test_resource_index_and_native_history_across_turns() -> None:
+    server = MCPServer("Domain")
+    methods: list[str] = []
+    reads: list[str] = []
+    text = "x" * 80_000
+    requests = 0
+
+    @server.resource("data://reference", name="Reference", description="Useful data")
+    def reference() -> str:
+        reads.append(text)
+        return text
+
+    @server.resource("data://unused", name="Unused")
+    def unused() -> str:
+        pytest.fail("Unrequested resource must not be read")
+
+    @server.resource("data://template/{key}")
+    def template(key: str) -> str:
+        pytest.fail("Templates must not be expanded")
+
+    async def record(response: httpx2.Response) -> None:
+        if response.request.method == "POST":
+            methods.append(json.loads(response.request.content)["method"])
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        nonlocal requests
+        requests += 1
+        index = [
+            part.content
+            for message in messages
+            for part in message.parts
+            if isinstance(part, UserPromptPart)
+            and isinstance(part.content, str)
+            and part.content.startswith("MCP resource index")
+        ]
+        assert len(index) == 1
+        assert "data://reference" in index[0] and "Useful data" in index[0]
+        assert '"name": "Reference"' in index[0]
+        assert '"name": "Unused"' in index[0] and '"description": ""' in index[0]
+        assert text not in index[0]
+        assert "data://template" not in index[0]
+        assert "domain__get_mcp_resource" in {tool.name for tool in info.function_tools}
+        if requests == 1:
+            assert not reads
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        "domain__get_mcp_resource",
+                        {"uri": "data://reference"},
+                        "read-1",
+                    )
+                ]
+            )
+        results = [
+            part
+            for message in messages
+            for part in message.parts
+            if isinstance(part, ToolReturnPart)
+        ]
+        assert results[0].content == [text]
+        return ModelResponse(parts=[TextPart("done")])
+
+    async def exercise() -> None:
+        async with connected_toolset(server, response_hook=record) as (_, http):
+            toolsets: list[MCPToolset[None]] = []
+
+            def factory(ctx: RunContext[None]) -> MCPToolset[None]:
+                toolset = create_mcp_toolset(
+                    "http://localhost/mcp/", id="domain", http_client=http
+                )
+                toolsets.append(toolset)
+                return toolset
+
+            agent = create_turn_agent(
+                FunctionModel(respond),
+                instructions="Help.",
+                capabilities=[MCPResources(factory)],
+            )
+            async with agent:
+                first = await execute_turn(agent, "First")
+                assert text in first.all_messages_json().decode()
+                assert "MCP resource index" not in first.all_messages_json().decode()
+                await execute_turn(
+                    agent,
+                    "Second",
+                    conversation=Conversation(messages=first.all_messages()),
+                )
+            assert all(not toolset.client.is_connected() for toolset in toolsets)
+        assert methods.count("resources/list") == 2
+        assert methods.count("resources/read") == 1
+        assert "resources/templates/list" not in methods
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("kind", ["unknown", "binary", "mixed", "server_error"])
+def test_resource_read_errors_are_native_failed_tool_results(
+    kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    server = MCPServer("Domain")
+    reads: list[str] = []
+
+    @server.resource("data://reference")
+    def reference() -> str:
+        return "unused"
+
+    async def read(uri: object, context: object) -> list[ReadResourceContents]:
+        reads.append(str(uri))
+        if kind == "server_error":
+            raise ValueError("unavailable")
+        if kind == "binary":
+            return [ReadResourceContents(content=b"secret", mime_type="image/png")]
+        return [
+            ReadResourceContents(content="text", mime_type="application/json"),
+            ReadResourceContents(content=b"secret", mime_type="image/png"),
+        ]
+
+    monkeypatch.setattr(server, "read_resource", read)
+    requests = 0
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        nonlocal requests
+        requests += 1
+        if requests == 1:
+            uri = (
+                "https://example.invalid/unknown"
+                if kind == "unknown"
+                else "data://reference"
+            )
+            return ModelResponse(
+                parts=[ToolCallPart("domain__get_mcp_resource", {"uri": uri}, "read")]
+            )
+        result = next(
+            part
+            for message in messages
+            for part in message.parts
+            if isinstance(part, ToolReturnPart)
+        )
+        assert result.outcome == "failed"
+        assert "secret" not in str(result.content)
+        assert (
+            "not in the current index"
+            if kind == "unknown"
+            else (
+                "read failed"
+                if kind == "server_error"
+                else "binary content is unsupported"
+            )
+        ) in str(result.content)
+        return ModelResponse(parts=[TextPart("done")])
+
+    async def exercise() -> None:
+        async with connected_toolset(server) as (toolset, _):
+            agent = create_turn_agent(
+                FunctionModel(respond),
+                instructions="Help.",
+                capabilities=[MCPResources(lambda ctx: toolset)],
+            )
+            async with agent:
+                await execute_turn(agent, "Read")
+            assert not toolset.client.is_connected()
+        assert reads == ([] if kind == "unknown" else ["data://reference"])
+
+    asyncio.run(exercise())
+
+
+def test_multipart_text_preserves_boundaries(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = MCPServer("Domain")
+
+    @server.resource("data://parts")
+    def parts() -> str:
+        return "unused"
+
+    async def read(uri: object, context: object) -> list[ReadResourceContents]:
+        return [
+            ReadResourceContents(content="<a />", mime_type="application/xml"),
+            ReadResourceContents(content="{}", mime_type="application/json"),
+        ]
+
+    monkeypatch.setattr(server, "read_resource", read)
+    calls = 0
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        "domain__get_mcp_resource", {"uri": "data://parts"}, "read"
+                    )
+                ]
+            )
+        result = next(
+            part
+            for message in messages
+            for part in message.parts
+            if isinstance(part, ToolReturnPart)
+        )
+        assert result.content == ["<a />", "{}"]
+        return ModelResponse(parts=[TextPart("done")])
+
+    async def exercise() -> None:
+        async with connected_toolset(server) as (toolset, _):
+            agent = create_turn_agent(
+                FunctionModel(respond),
+                instructions="Help.",
+                capabilities=[MCPResources(lambda ctx: toolset)],
+            )
+            async with agent:
+                await execute_turn(agent, "Read")
+
+    asyncio.run(exercise())
+
+
+def test_empty_catalog_discovered_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = MCPServer("Domain")
+    methods: list[str] = []
+    calls = 0
+
+    @server.tool()
+    def lookup() -> str:
+        return "done"
+
+    async def record(response: httpx2.Response) -> None:
+        if response.request.method == "POST":
+            methods.append(json.loads(response.request.content)["method"])
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        nonlocal calls
+        calls += 1
+        assert "MCP resource index" not in str(messages)
+        return (
+            ModelResponse(parts=[ToolCallPart("domain__lookup", {}, "lookup")])
+            if calls == 1
+            else ModelResponse(parts=[TextPart("done")])
+        )
+
+    async def exercise() -> None:
+        async with connected_toolset(server, response_hook=record) as (toolset, _):
+            discoveries = 0
+            original_list = toolset.list_resources
+
+            async def discover() -> list[Resource]:
+                nonlocal discoveries
+                discoveries += 1
+                return await original_list()
+
+            monkeypatch.setattr(toolset, "list_resources", discover)
+            agent = create_turn_agent(
+                FunctionModel(respond),
+                instructions="Help.",
+                capabilities=[MCPResources(lambda ctx: toolset)],
+            )
+            async with agent:
+                await execute_turn(agent, "Read")
+            assert discoveries == 1
+        assert methods.count("resources/list") <= 1
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("method", ["resources/list", "resources/read"])
+def test_resource_transport_failure_closes_session(method: str) -> None:
+    server = MCPServer("Domain")
+    calls = 0
+
+    @server.resource("data://reference")
+    def reference() -> str:
+        return "content"
+
+    async def fail(response: httpx2.Response) -> None:
+        if (
+            response.request.method == "POST"
+            and json.loads(response.request.content).get("method") == method
+        ):
+            await response.aclose()
+            raise httpx2.ReadError("Resource unavailable", request=response.request)
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        nonlocal calls
+        calls += 1
+        assert method == "resources/read"
+        assert calls == 1, str(messages)
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    "domain__get_mcp_resource", {"uri": "data://reference"}, "read"
+                )
+            ]
+        )
+
+    async def exercise() -> None:
+        async with connected_toolset(server, response_hook=fail) as (toolset, _):
+            agent = create_turn_agent(
+                FunctionModel(respond),
+                instructions="Help.",
+                capabilities=[MCPResources(lambda ctx: toolset)],
+            )
+            observation = TurnObservation()
+            with pytest.raises(httpx2.ReadError, match="Resource unavailable"):
+                async with agent:
+                    await execute_turn(agent, "Read", observation=observation)
+            assert not toolset.client.is_connected()
+            if method == "resources/read":
+                assert [
+                    call.tool_call_id for call in observation.started_tool_calls
+                ] == ["read"]
+                assert observation.messages[-1].state == "interrupted", str(
+                    observation.messages
+                )
+                assert not any(
+                    isinstance(part, ToolReturnPart)
+                    for msg in observation.messages
+                    for part in msg.parts
+                )
+        assert calls == (0 if method == "resources/list" else 1)
+
+    asyncio.run(exercise())

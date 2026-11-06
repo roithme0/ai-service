@@ -6,7 +6,7 @@ from contextlib import nullcontext
 from openai.types.shared import ReasoningEffort
 from pydantic import SecretStr
 from pydantic_ai import Agent, Conversation, Tool
-from pydantic_ai.capabilities import Caching, WebSearch
+from pydantic_ai.capabilities import AbstractCapability, Caching, WebSearch
 from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -53,6 +53,7 @@ def create_turn_agent(
     tools: Sequence[Tool[None]] = (),
     toolsets: Sequence[AbstractToolset[None]] = (),
     web_search: bool = False,
+    capabilities: Sequence[AbstractCapability[None]] = (),
 ) -> Agent[None, str]:
     return Agent(
         model,
@@ -70,7 +71,7 @@ def create_turn_agent(
             "request_timeout": MODEL_REQUEST_TIMEOUT_SECONDS,
             "max_retries": MODEL_REQUEST_MAX_RETRIES,
         },
-        capabilities=[Caching(), WebSearch()] if web_search else [Caching()],
+        capabilities=[Caching(), *([WebSearch()] if web_search else []), *capabilities],
     )
 
 

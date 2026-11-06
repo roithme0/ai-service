@@ -43,9 +43,6 @@ def get_kochwiki_conversation_settings() -> KochwikiConversationSettings:
 MAX_MODEL_REQUESTS_PER_TURN: Final[int] = 40
 MAX_TOOL_CALLS_PER_TURN: Final[int] = 32
 
-MAX_MODEL_REQUESTS_PER_CONVERSATION: Final[int] = 50
-MAX_TOOL_CALLS_PER_CONVERSATION: Final[int] = 40
-
 MAX_NATIVE_TOOL_CALLS_PER_RESPONSE: Final[int] = 16
 MAX_OUTPUT_TOKENS: Final[int] = 16_384
 

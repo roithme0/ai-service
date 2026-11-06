@@ -17,12 +17,17 @@ Create `deployment/.env` from [.env.example](../deployment/.env.example); host-s
 | Variable | Purpose |
 | --- | --- |
 | `GATEWAY_PORT` | Published gateway port for Compose. The example selects 8004. |
-| `OPENAI_API_KEY` | Provider credentials for embeddings, Kochwiki, and Live Demo. |
+| `OPENAI_API_KEY` | Provider credentials for transcription, embeddings, Kochwiki, and Live Demo. |
+| `TRANSCRIPTION_OPENAI_MODEL` | Optional transcription model; defaults to `gpt-transcribe`. |
 | `KOCHWIKI_OPENAI_MODEL` | Model used by the Kochwiki agent. |
 | `KOCHWIKI_MCP_URL` | External Streamable HTTP MCP endpoint, including its path. |
 | `KOCHWIKI_OPENAI_REASONING_EFFORT` | Optional model reasoning effort; blank uses the model default. Support depends on the selected model. |
 
 Visual Demo (`visual-demo`) needs no provider or Kochwiki settings. Live Demo (`live-demo`) requires only `OPENAI_API_KEY`; Kochwiki also requires its model and MCP URL. Missing required settings or initialization failure leaves the affected agent unavailable with `503 agent_unavailable`; restart after correcting startup configuration. Kochwiki connects MCP per turn, so an outage can recover on a later turn without restarting.
+
+Live Demo includes a stateless greetings MCP server mounted at `/mcp/` in the backend. Its read-only `greet` and `farewell` tools accept a name and language (`en` or `de`); `greetings://catalog` supplies vocabulary and a fictional club motto. The live agent uses the mounted endpoint through an in-process HTTP transport, with resources indexed each turn and read on demand. No separate MCP process, endpoint configuration, or database is required. Direct local MCP clients can use `http://localhost:8004/mcp/` when running the backend locally; the deployment gateway does not publish this route.
+
+Transcription uses `OPENAI_API_KEY` and its own optional model setting. Missing credentials or an empty model make transcription unavailable without disabling other capabilities. See the [speech-to-text contract](domains/transcriptions.md) for upload limits, errors, and provider handling.
 
 For a Kochwiki server on the Docker host, the example uses `http://host.docker.internal:8002/mcp/`; ensure that name resolves on your host. Container `localhost` refers to the container itself.
 
@@ -71,4 +76,4 @@ Retain deployment configuration and protect backups of credentials. Application 
 | Submission returns 409 | A turn is already running, or the conversation budget is exhausted. |
 | Observation disconnects | Gateway/upstream connectivity. The controller reconnects transient failures; this does not resubmit prompts. |
 
-The [gateway](../deployment/gateway/nginx.conf) has a 60-second read inactivity timeout and no upstream retries. [SSE heartbeats](../backend/app/capabilities/conversations/http.py) keep idle streams active every 15 seconds; configure additional proxies to allow a longer read inactivity interval and forward the stream without buffering. A lost admission response does not establish whether execution started; do not blindly replay it. Execution budgets live in [conversations/config.py](../backend/app/capabilities/conversations/config.py).
+The [gateway](../deployment/gateway/nginx.conf) has a 60-second read inactivity timeout for conversation routes and no upstream retries. The transcription route has separate upload and upstream limits described in the [speech-to-text contract](domains/transcriptions.md). [SSE heartbeats](../backend/app/capabilities/conversations/http.py) keep idle streams active every 15 seconds; configure additional proxies to allow a longer read inactivity interval and forward the stream without buffering. A lost admission response does not establish whether execution started; do not blindly replay it. Execution budgets live in [conversations/config.py](../backend/app/capabilities/conversations/config.py).

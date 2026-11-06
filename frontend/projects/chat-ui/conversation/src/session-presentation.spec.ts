@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PresentedSession, PresentedTurn, PresentationPart } from '../generated/types.gen';
+import type { PresentedSession, PresentedTurn, PresentationPart } from './generated/types.gen';
 import { presentSession } from './session-presentation';
 
 const EMPTY_USAGE: PresentedSession['usage'] = {
@@ -33,7 +33,7 @@ function run(
   };
 }
 function snapshot(history: PresentedSession['history'] = []): PresentedSession {
-  return { session_id: 'session', expires_at: time, history, error: null, usage: EMPTY_USAGE };
+  return { session_id: 'session', expires_at: time, history, usage: EMPTY_USAGE };
 }
 const tool: PresentationPart = {
   part_kind: 'tool-call',

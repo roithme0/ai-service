@@ -1,197 +1,369 @@
-import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { test } from "node:test";
 import {
   parseValidationArguments,
-  describeChecks,
-  validationProfiles,
   validate,
-  runValidationCommand,
-} from './run.mts';
-import { defaultChecks, type runCheck, type ValidationFeedback } from './shared.mts';
-import { backendProfile } from './backend.mts';
-import { frontendProfile } from './frontend.mts';
+  type ValidationServices,
+  type ValidationScope,
+} from "./run.mts";
+import type { ValidationProfile } from "./shared.mts";
+import { parseTestArguments } from "./test.mts";
 
-void test('validation options default to app and tooling tests and opt in to E2E', () => {
-  assert.deepEqual(parseValidationArguments([]), { scope: 'all', checks: defaultChecks });
-  assert.deepEqual(
-    parseValidationArguments([
-      '--scope',
-      'backend',
-      '--app-tests=false',
-      '--tooling-tests=false',
-      '--shared-tooling-tests=false',
-      '--e2e',
-    ]),
-    {
-      scope: 'backend',
-      checks: {
-        appTests: false,
-        toolingTests: false,
-        sharedToolingTests: false,
-        e2e: true,
+void test("validation uses full non-E2E selection independently of scope and rejects old flags", () => {
+  const options = parseValidationArguments([
+    "--scope",
+    "frontend",
+    "--no-format",
+  ]);
+  assert.equal(options.format, false);
+  assert.equal(options.scope, "frontend");
+  assert.ok(options.selection.groups.includes("backend"));
+  assert.ok(!options.selection.groups.includes("e2e"));
+  for (const flag of [
+    "--app-tests",
+    "--tooling-tests=false",
+    "--shared-tooling-tests",
+    "--e2e",
+  ])
+    assert.throws(() => parseValidationArguments([flag]), /removed.*--group/);
+  assert.throws(
+    () => parseValidationArguments(["--group", "backend", "--", "-q"]),
+    /only by test/,
+  );
+});
+
+void test("relevance runs full selection once and aggregate cache tracks both scopes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "validation-aggregate-"));
+  const fingerprints: Record<string, string> = { frontend: "a", backend: "a" };
+  const calls: string[] = [];
+  const profiles: ValidationProfile[] = ["frontend", "backend"].map(
+    (scope) => ({
+      scope,
+      policy: {
+        label: scope,
+        formatter: "formatter",
+        success: "passed",
+        retry: "retry",
       },
-    },
-  );
-  assert.equal(parseValidationArguments(['--scope=frontend', '--e2e=false']).scope, 'frontend');
-  assert.match(
-    describeChecks(parseValidationArguments([])),
-    /selected format, lint, app-tests, tooling-tests, shared-tooling-tests; skipped e2e/,
-  );
-  assert.match(
-    describeChecks(parseValidationArguments(['--scope=backend'])),
-    /selected format, app-tests, tooling-tests, shared-tooling-tests;/,
-  );
-  assert.doesNotMatch(describeChecks(parseValidationArguments(['--scope=backend'])), /lint/);
-  for (const args of [
-    ['--format=false'],
-    ['--lint=false'],
-    ['--e2e=yes'],
-    ['--e2e=true=false'],
-    ['--scope'],
-    ['--scope', 'unknown'],
-    ['--e2e', '--e2e=false'],
-  ]) {
-    assert.throws(() => parseValidationArguments(args));
-  }
-});
-
-void test('manual validation reports formatting separately from failures', async (t) => {
-  const cases: { name: string; feedback: ValidationFeedback; exitCode: number }[] = [
-    { name: 'passed', feedback: {}, exitCode: 0 },
-    {
-      name: 'formatted',
-      feedback: { message: 'Formatted source.ts. Review the diff.' },
-      exitCode: 0,
-    },
-    { name: 'failed', feedback: { message: 'Lint failed.', failed: true }, exitCode: 1 },
-  ];
-  for (const { name, feedback, exitCode } of cases) {
-    await t.test(name, async (context) => {
-      const stdout: string[] = [];
-      const stderr: string[] = [];
-      context.mock.method(process.stdout, 'write', (chunk: string | Uint8Array): boolean => {
-        stdout.push(String(chunk));
-        return true;
-      });
-      context.mock.method(process.stderr, 'write', (chunk: string | Uint8Array): boolean => {
-        stderr.push(String(chunk));
-        return true;
-      });
-      const run: typeof validate = (root, request, options) => {
-        assert.equal(root, 'fixture');
-        assert.equal(request.force, true);
-        assert.equal(request.start, false);
-        assert.deepEqual(options, {
-          scope: 'backend',
-          checks: { ...defaultChecks, appTests: false },
-        });
-        return Promise.resolve(feedback);
-      };
-      assert.equal(
-        await runValidationCommand('fixture', ['--scope=backend', '--app-tests=false'], run),
-        exitCode,
-      );
-      assert.equal(stdout.join('').includes('Selected validation checks passed.'), exitCode === 0);
-      assert.equal(stderr.join(''), feedback.message ? `${feedback.message}\n` : '');
-    });
-  }
-});
-
-void test('manual validation rejects invalid arguments and reports orchestration errors', async (t) => {
-  const stderr: string[] = [];
-  t.mock.method(process.stdout, 'write', (): boolean => true);
-  t.mock.method(process.stderr, 'write', (chunk: string | Uint8Array): boolean => {
-    stderr.push(String(chunk));
-    return true;
-  });
-  assert.equal(
-    await runValidationCommand('fixture', ['--unknown'], () => {
-      assert.fail('Invalid arguments must not run validation');
+      dependencies: () => ({
+        fingerprint: () => Promise.resolve(fingerprints[scope]),
+        hasChanges: () => true,
+        format: () => {
+          calls.push(`format:${scope}`);
+          return Promise.resolve({ checked: [], formatted: [] });
+        },
+        lint: () => {
+          calls.push(`lint:${scope}`);
+          return Promise.resolve();
+        },
+        test: () => Promise.resolve(),
+      }),
     }),
-    1,
   );
-  assert.match(stderr.join(''), /Unknown validation option/);
-  stderr.length = 0;
-  assert.equal(
-    await runValidationCommand('fixture', [], () => Promise.reject(new Error('Unavailable'))),
-    1,
-  );
-  assert.equal(stderr.join(''), 'Unavailable\n');
+  const services: ValidationServices = {
+    contracts: () => Promise.resolve(),
+    profiles: (_root: string, scope: ValidationScope) =>
+      Promise.resolve(
+        profiles.filter(
+          (profile) => scope === "all" || profile.scope === scope,
+        ),
+      ),
+    tests: (_root, selection) => {
+      calls.push(`tests:${selection.groups.join(",")}`);
+      return Promise.resolve();
+    },
+  };
+  const options = parseValidationArguments([]);
+  const start = { sessionId: "session", start: true, continued: false };
+  const stop = { ...start, start: false };
+  assert.deepEqual(await validate(root, start, options, services), {});
+  assert.deepEqual(await validate(root, stop, options, services), {});
+  assert.deepEqual(calls, []);
+  fingerprints["frontend"] = "b";
+  assert.deepEqual(await validate(root, stop, options, services), {});
+  assert.deepEqual(calls.slice(0, 2), ["format:frontend", "lint:frontend"]);
+  assert.match(calls[2], /tooling-backend.*backend.*chat-ui-browser/);
+  calls.length = 0;
+  assert.deepEqual(await validate(root, stop, options, services), {});
+  assert.deepEqual(calls, ["format:frontend"]);
+  fingerprints["backend"] = "b";
+  assert.deepEqual(await validate(root, stop, options, services), {});
+  assert.ok(calls.join(" ").includes("tests:"));
 });
 
-void test('profile selection excludes Docker by default and independently skips scope tests', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'ai-service-check-selection-'));
-  assert.deepEqual(
-    (await validationProfiles(root)).map(({ scope }) => scope),
-    ['frontend', 'backend'],
-  );
-  const checks = { ...defaultChecks, appTests: false, toolingTests: false, e2e: true };
-  const profiles = await validationProfiles(root, { scope: 'backend', checks });
-  assert.deepEqual(
-    profiles.map(({ scope }) => scope),
-    ['backend', 'e2e'],
-  );
-  for (const profile of await validationProfiles(root, { checks: { ...checks, e2e: false } })) {
-    await profile.dependencies(root).test();
-  }
-});
-
-void test('app and scope tooling tests execute exactly the selected commands', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'ai-service-independent-checks-'));
-  for (const createProfile of [frontendProfile, backendProfile]) {
-    for (const appTests of [false, true]) {
-      for (const toolingTests of [false, true]) {
-        const calls: string[] = [];
-        const run: typeof runCheck = (_cwd, label, args) => {
-          calls.push(label);
-          if (label === 'Frontend browser component tests (chat-ui)') {
-            assert.deepEqual(args.slice(1), [
-              'test',
-              'chat-ui',
-              '--configuration',
-              'browser',
-              '--watch=false',
-            ]);
-          }
-          return Promise.resolve('');
-        };
-        const profile = createProfile(root, { ...defaultChecks, appTests, toolingTests }, run);
-        await profile.dependencies(root).test();
-        const expected: string[] = [];
-        if (toolingTests) expected.push(`${profile.policy.label} tooling tests`);
-        if (appTests)
-          expected.push(
-            ...(profile.scope === 'frontend'
-              ? [
-                  'Frontend tests (ai-service-frontend)',
-                  'Frontend tests (chat-ui)',
-                  'Frontend browser component tests (chat-ui)',
-                ]
-              : ['Backend pytest']),
-          );
-        assert.deepEqual(calls, expected);
-      }
-    }
-  }
-});
-
-void test('orchestration runs shared-only checks and honors their disabled flag', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'ai-service-shared-selection-'));
-  await mkdir(join(root, 'backend'));
-  execFileSync('git', ['init', '-q'], { cwd: root, windowsHide: true });
-  const request = { sessionId: 'fixture', start: false, continued: false, force: true };
-  const checks = { ...defaultChecks, appTests: false, toolingTests: false };
-  assert.deepEqual(
-    await validate(root, request, {
-      scope: 'backend',
-      checks: { ...checks, sharedToolingTests: false },
+async function aggregateFixture() {
+  const root = await mkdtemp(join(tmpdir(), "aggregate-transitions-"));
+  execFileSync("git", ["init", "-q"], { cwd: root });
+  const fingerprints: Record<string, string> = {
+    frontend: "initial",
+    backend: "initial",
+  };
+  const calls: string[] = [];
+  let failure = "";
+  let changeDuringTests = false;
+  let dirty = true;
+  let formatted: string[] = [];
+  const profiles: ValidationProfile[] = ["frontend", "backend"].map(
+    (scope) => ({
+      scope,
+      policy: {
+        label: scope,
+        formatter: "formatter",
+        success: "passed",
+        retry: "retry",
+      },
+      dependencies: () => ({
+        fingerprint: () => Promise.resolve(fingerprints[scope]),
+        hasChanges: () => dirty,
+        format: () => {
+          calls.push(`format:${scope}`);
+          if (failure === "format") throw new Error("format failed");
+          return Promise.resolve({ checked: [], formatted });
+        },
+        lint: () => {
+          calls.push(`lint:${scope}`);
+          return Promise.resolve();
+        },
+        test: () => Promise.resolve(),
+      }),
     }),
+  );
+  const services: ValidationServices = {
+    contracts: () => {
+      calls.push("contracts");
+      if (failure === "contracts") throw new Error("contracts failed");
+      return Promise.resolve();
+    },
+    profiles: (_root, scope) =>
+      Promise.resolve(
+        profiles.filter(
+          (profile) => scope === "all" || profile.scope === scope,
+        ),
+      ),
+    tests: () => {
+      calls.push("tests");
+      if (changeDuringTests) fingerprints["backend"] += "!";
+      if (failure === "test") throw new Error("test failed");
+      return Promise.resolve();
+    },
+  };
+  return {
+    root,
+    fingerprints,
+    calls,
+    services,
+    fail: (value: string) => {
+      failure = value;
+    },
+    changeDuringTests: (value: boolean) => {
+      changeDuringTests = value;
+    },
+    dirty: (value: boolean) => {
+      dirty = value;
+    },
+    formatted: (value: string[]) => {
+      formatted = value;
+    },
+  };
+}
+
+void test("aggregate validation orders checks, preserves retry, and never caches failures or concurrent edits", async () => {
+  const f = await aggregateFixture();
+  const options = parseValidationArguments([]);
+  const start = { sessionId: "retry", start: true, continued: false };
+  const stop = { ...start, start: false };
+  await validate(f.root, start, options, f.services);
+  f.fingerprints["frontend"] = "changed";
+  f.fail("format");
+  assert.equal(
+    (await validate(f.root, stop, options, f.services)).failed,
+    true,
+  );
+  assert.deepEqual(f.calls, ["format:frontend"]);
+  f.calls.length = 0;
+  f.fail("test");
+  assert.equal(
+    (await validate(f.root, { ...stop, continued: true }, options, f.services))
+      .failed,
+    true,
+  );
+  assert.deepEqual(f.calls, ["format:frontend", "lint:frontend", "contracts", "tests"]);
+  f.calls.length = 0;
+  f.fail("");
+  f.changeDuringTests(true);
+  assert.match(
+    (await validate(f.root, { ...stop, continued: true }, options, f.services))
+      .message ?? "",
+    /changed during validation/,
+  );
+  f.calls.length = 0;
+  f.changeDuringTests(false);
+  assert.deepEqual(
+    await validate(f.root, { ...stop, continued: true }, options, f.services),
     {},
   );
-  const result = await validate(root, request, { scope: 'backend', checks });
-  assert.match(result.message ?? '', /Shared validation tests failed/);
+  assert.equal(f.calls.filter((call) => call === "tests").length, 1);
+});
+void test("missing snapshots honor dirty state and formatting reports changed files", async () => {
+  const f = await aggregateFixture();
+  const request = { sessionId: "missing", start: false, continued: false };
+  f.dirty(false);
+  assert.deepEqual(
+    await validate(f.root, request, parseValidationArguments([]), f.services),
+    {},
+  );
+  assert.deepEqual(f.calls, []);
+  f.dirty(true);
+  f.formatted(["frontend/source.ts"]);
+  const result = await validate(
+    f.root,
+    request,
+    parseValidationArguments(["--scope", "frontend"]),
+    f.services,
+  );
+  assert.match(result.message ?? "", /frontend\/source\.ts/);
+  assert.deepEqual(f.calls, ["format:frontend", "lint:frontend", "contracts", "tests"]);
+});
+void test("equivalent group selections reuse successful aggregate validation", async () => {
+  const f = await aggregateFixture();
+  const request = { sessionId: "normalized", start: false, continued: false };
+  await validate(
+    f.root,
+    request,
+    parseValidationArguments(["--group", "tooling", "--group", "backend"]),
+    f.services,
+  );
+  f.calls.length = 0;
+  await validate(
+    f.root,
+    request,
+    parseValidationArguments([
+      "--group",
+      "backend",
+      "--group",
+      "tooling",
+      "--group",
+      "backend",
+    ]),
+    f.services,
+  );
+  assert.ok(!f.calls.includes("tests"));
+});
+void test("CI validation phases cover non-E2E and prebuilt E2E through the central selector", async () => {
+  const workflow = await readFile(
+    new URL("../../.github/workflows/publish-app.yml", import.meta.url),
+    "utf8",
+  );
+  const commands = [
+    ...workflow.matchAll(/run: node \.agents\/validation\/run\.mts([^\r\n]*)/g),
+  ].map((match) => match[1].trim().split(/\s+/).filter(Boolean));
+  assert.equal(commands.length, 2);
+  const phases = commands.map(parseValidationArguments);
+  assert.ok(phases.every((phase) => !phase.format));
+  assert.deepEqual(
+    phases[0].selection.groups,
+    parseTestArguments(["--group", "non-e2e"]).groups,
+  );
+  assert.deepEqual(phases[1].selection.groups, ["e2e"]);
+  assert.equal(phases[1].selection.prebuiltImages, true);
+  assert.equal(phases[0].omitContracts, false);
+  assert.equal(phases[1].omitContracts, true);
+  assert.match(workflow, /pull_request:/);
+  assert.match(workflow, /push:\s*\n\s*tags:/);
+  assert.doesNotMatch(workflow, /npm run check:(conversation|transcription)-contract/);
+  assert.match(workflow, /python -m venv \.venv/);
+  assert.match(workflow, /\[test,dev\]/);
+  assert.match(workflow, /build-app:\s*\n\s*needs: \[validate\]/);
+  assert.match(workflow, /e2e:\s*\n\s*needs: build-app/);
+  assert.match(workflow, /build-chat-ui:\s*\n\s*needs: e2e/);
+  assert.match(
+    workflow,
+    /publish-app:\s*\n\s*needs: \[build-app, build-chat-ui, e2e\]/,
+  );
+  assert.match(
+    workflow,
+    /publish-chat-ui:\s*\n\s*needs: \[build-app, build-chat-ui, e2e\]/,
+  );
+});
+
+void test("cache distinguishes partial selection, format state, session and forced runs", async () => {
+  const f = await aggregateFixture();
+  const full = parseValidationArguments([]);
+  const partial = parseValidationArguments(["--group", "backend"]);
+  const noFormat = parseValidationArguments(["--no-format"]);
+  const request = { sessionId: "cache", start: false, continued: false };
+  await validate(f.root, request, partial, f.services);
+  f.calls.length = 0;
+  await validate(f.root, request, full, f.services);
+  assert.equal(f.calls.filter((call) => call === "tests").length, 1);
+  f.calls.length = 0;
+  await validate(f.root, request, noFormat, f.services);
+  assert.ok(!f.calls.some((call) => call.startsWith("format:")));
+  assert.equal(f.calls.filter((call) => call === "tests").length, 1);
+  f.calls.length = 0;
+  await validate(
+    f.root,
+    { ...request, sessionId: "other" },
+    noFormat,
+    f.services,
+  );
+  assert.equal(f.calls.filter((call) => call === "tests").length, 1);
+  f.calls.length = 0;
+  await validate(f.root, { ...request, force: true }, noFormat, f.services);
+  assert.equal(f.calls.filter((call) => call === "tests").length, 1);
+});
+
+void test("freshness runs across scopes and selections and omitted runs cannot populate the cache", async () => {
+  const f = await aggregateFixture();
+  const request = { sessionId: "gate", start: false, continued: false };
+  for (const args of [["--scope", "frontend", "--group", "backend"], ["--scope", "backend", "--group", "tooling"]]) {
+    f.calls.length = 0;
+    await validate(f.root, request, parseValidationArguments(args), f.services);
+    assert.ok(f.calls.includes("contracts"));
+  }
+  assert.throws(() => parseValidationArguments(["--ci-prerequisite-contracts"]), /only for/);
+  const omitted = parseValidationArguments(["--group", "e2e", "--ci-prerequisite-contracts"]);
+  f.calls.length = 0;
+  const actions = process.env["GITHUB_ACTIONS"];
+  const job = process.env["GITHUB_JOB"];
+  try {
+    delete process.env["GITHUB_ACTIONS"];
+    delete process.env["GITHUB_JOB"];
+    assert.equal((await validate(f.root, { ...request, force: true }, omitted, f.services)).failed, true);
+    process.env["GITHUB_ACTIONS"] = "true";
+    process.env["GITHUB_JOB"] = "validate";
+    assert.equal((await validate(f.root, { ...request, force: true }, omitted, f.services)).failed, true);
+    process.env["GITHUB_JOB"] = "e2e";
+    assert.equal((await validate(f.root, request, omitted, f.services)).failed, true);
+    assert.deepEqual(await validate(f.root, { ...request, force: true }, omitted, f.services), {});
+    assert.ok(!f.calls.includes("contracts"));
+  } finally {
+    if (actions === undefined) delete process.env["GITHUB_ACTIONS"]; else process.env["GITHUB_ACTIONS"] = actions;
+    if (job === undefined) delete process.env["GITHUB_JOB"]; else process.env["GITHUB_JOB"] = job;
+  }
+  f.calls.length = 0;
+  await validate(f.root, request, parseValidationArguments([]), f.services);
+  assert.ok(f.calls.includes("contracts"));
+  f.calls.length = 0;
+  await validate(f.root, request, parseValidationArguments([]), f.services);
+  assert.ok(!f.calls.includes("contracts"));
+});
+
+void test("freshness failure prevents tests and is never cached", async () => {
+  const f = await aggregateFixture();
+  const request = { sessionId: "gate-failure", start: false, continued: false };
+  f.fail("contracts");
+  const failed = await validate(f.root, request, parseValidationArguments([]), f.services);
+  assert.equal(failed.failed, true);
+  assert.match(failed.message ?? "", /contracts failed/);
+  assert.ok(!f.calls.includes("tests"));
+  f.fail("");
+  f.calls.length = 0;
+  await validate(f.root, { ...request, continued: true }, parseValidationArguments([]), f.services);
+  assert.ok(f.calls.includes("contracts"));
+  assert.ok(f.calls.includes("tests"));
 });

@@ -1,0 +1,25 @@
+<section class="chat-ui" aria-label="Chat-Unterhaltung">
+  <ai-chat-history
+    [bannerTitle]="bannerTitle()"
+    [bannerDescription]="bannerDescription()"
+    [turns]="turns()"
+    [artifactRenderers]="artifactRenderers()"
+    [conversationStatus]="conversationStatus()"
+    [panelScrollClearance]="panelScrollClearance()"
+    [messageBoundaryTop]="messageBoundaryTop"
+    (statusActionTriggered)="statusActionTriggered.emit($event)"
+  />
+
+  <ai-chat-composer
+    [dictation]="dictation()"
+    [dictationContextKey]="dictationContextKey()"
+    [usage]="usage()"
+    [mascotSource]="mascotSource()"
+    [disabled]="composerDisabled()"
+    [editingDisabled]="composerEditingDisabled()"
+    [placeholder]="composerPlaceholder()"
+    (messageSubmitted)="messageSubmitted.emit($event)"
+    (focused)="history()?.requestHistoryScroll()"
+    (viewportResized)="history()?.requestHistoryScroll()"
+  />
+</section>

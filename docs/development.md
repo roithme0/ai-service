@@ -40,22 +40,19 @@ Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have
 
 ## Validate changes
 
-After installing the backend and frontend dependencies described in [Run locally](#run-locally), run `node .agents/validation/run.mts` from the **repository root** to format changed files, lint the frontend, and run app and tooling tests. Review the formatting diff. Use `--scope frontend|backend` to limit scope, `--e2e` to include [browser tests](#end-to-end-browser-tests), or `--app-tests=false`, `--tooling-tests=false`, and `--shared-tooling-tests=false` to skip test groups.
-
-For backend edits, run from the **repository root**:
+Complete [local setup](#run-locally) for both backend and frontend, then [install Playwright Chromium](#end-to-end-browser-tests). From the **repository root**:
 
 ```powershell
-node .agents/validation/backend.mts --format
-node --test .agents/validation/shared.test.mts .agents/validation/run.test.mts .agents/validation/backend.test.mts
+node .agents/validation/run.mts
 ```
 
-Then, from **backend/**, with its virtual environment active:
+This formats changed files, lints, checks freshness of both generated contracts, and runs all non-E2E tests, including browser components. Formatting includes staged, unstaged, and untracked changed files; review unrelated edits first and inspect the resulting diff. `--scope frontend|backend` limits formatting and lint only; `--no-format` skips formatting. Contract checks run regardless of scope or test group.
 
-```powershell
-python -m pytest
-```
+Validation uses Python 3.13 from `backend/.venv` with the `test` and `dev` extras, frontend npm dependencies, and Playwright Chromium. No running application, Docker, or secrets are needed. See [generated contracts](#update-generated-contracts) for manual freshness checks.
 
-Use the backend virtual environment's Black in your editor to match the version and settings in `backend/pyproject.toml`. Formatting includes staged, unstaged, and untracked changed files; review unrelated edits first.
+For tests only, use `node .agents/validation/test.mts` from the **repository root**. Discover groups with `--list` and select them with repeated `--group NAME`. The `tooling` group requires both ecosystems; `tooling-frontend` needs no Python. `tooling-e2e` mocks orchestration; actual E2E has [separate prerequisites](#end-to-end-browser-tests). See the [runner](../.agents/validation/test.mts) for native argument forwarding and individual-file selection.
+
+For focused backend tests, select `--group backend`; for frontend tests, select `--group frontend-app` or `--group chat-ui`. Focused runs do not replace full validation. Use the backend virtual environment's Black in your editor to match [the project settings](../backend/pyproject.toml).
 
 Container alternative, from the **repository root**:
 
@@ -63,17 +60,7 @@ Container alternative, from the **repository root**:
 docker compose -f deployment/tests/backend/compose.yml up --build --abort-on-container-exit --exit-code-from backend-tests
 ```
 
-From **frontend/**, run in order after frontend edits. Formatting includes staged, unstaged, and untracked files; review unrelated edits first.
-
-```powershell
-npm run format:changed
-npm run lint
-npm run test:tooling
-npm run test:app
-npm run test:chat-ui
-```
-
-For build verification, run `npm run build:app` and `npm run build:chat-ui`. Test locations are listed in [navigation](navigation.md#find-related-tests).
+For build verification, run `npm run build:app` and `npm run build:chat-ui` from **frontend/**. Test locations are listed in [navigation](navigation.md#find-related-tests).
 
 With Docker running, run the [gateway regression tests](../deployment/tests/gateway/test_timeout.py) from the **repository root**:
 
@@ -107,9 +94,9 @@ Remove-Item Env:PLAYWRIGHT_BASE_URL
 
 Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Run `node .agents/validation/e2e.mts` from the repository root for browser flow, frontend/backend integration, or local deployment changes. It updates Docker using the build cache and runs Playwright. The stack stays running; logs are in `.agents/.codex-validation/e2e/`.
 
-The [CI workflow](../.github/workflows/publish-app.yml) runs E2E on pull requests and release tags against the built application images. Releases publish those same images only after tests pass. Download the `e2e-diagnostics` artifact from a failed run for logs and traces.
+The [CI workflow](../.github/workflows/publish-app.yml) defines validation, image testing, and publication dependencies. The isolated runner writes browser results and HTML reports under separate `.agents/.codex-validation/e2e/manual/playwright-*/` directories. On failure, the `e2e-diagnostics` artifact contains available results and reports with their run directories preserved, along with top-level manual logs.
 
-## Update the conversation contract
+## Update generated contracts
 
 Install backend and frontend dependencies first. From **frontend/**:
 
@@ -117,9 +104,11 @@ Install backend and frontend dependencies first. From **frontend/**:
 $env:PYTHON = (Resolve-Path ../backend/.venv/Scripts/python.exe).Path
 npm run generate:conversation-contract
 npm run check:conversation-contract
+npm run generate:transcription-contract
+npm run check:transcription-contract
 ```
 
-The generator exports the session router's OpenAPI document without starting agents, then produces TypeScript types and Zod validators. Ship backend schema changes, generated files, and frontend consumers together. Review generated changes; do not edit them by hand.
+Generators produce TypeScript types and Zod validators from backend schemas without starting the application. Manual commands use `PYTHON` when set or Python on PATH; automated validation selects the repository virtual environment explicitly. Check commands compare generated output without modifying checked-in files. Ship backend schema changes, generated files, and frontend consumers together. Review generated changes; do not edit them by hand.
 
 ## Develop the chat UI package
 
@@ -131,12 +120,7 @@ See the [package README](../frontend/projects/chat-ui/README.md) for component i
 
 From **frontend/**, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This verifies built exports, runtime behavior, explicit application identity, and strict consumer declarations without workspace aliases.
 
-With the [local servers](#run-locally) running, open `http://localhost:4204/demos/visual` at a portrait-phone viewport:
-
-- Submit arbitrary text through the introduction, two JSON greeting artifacts (one greeting and a list of 30), invalid publication, scripted failure, and completion guidance. The error's demo action is intentionally inert.
-- Expand/collapse the long artifact and run details; check retained content after failure and scroll position during toggles in Chrome and Firefox.
-- Send one more message to trigger the frontend-only compatibility error without a backend request or retry. Refresh to restart.
-- Check history/composer placement during viewport changes, no horizontal overflow, Enter/send submitting once, and Shift+Enter adding a line break.
+For manual layout and interaction checks, use [Visual Demo](http://localhost:4204/demos/visual) with the [local servers](#run-locally) running. Check narrow viewports, scrolling, artifact expansion, and keyboard submission in Chrome and Firefox. Refresh to restart the scripted session.
 
 ## AI-assisted development
 
@@ -148,6 +132,6 @@ With the [local servers](#run-locally) running, open `http://localhost:4204/demo
 | [Hooks](../.codex/hooks.json) | Codex adapter snapshots content before prompts and validates affected scopes on stop. |
 | [Project configuration](../.codex/config.toml) | Angular CLI and OpenAI documentation MCP connections. |
 
-Review and trust hooks before relying on them. Hooks enable app, scope tooling, and shared tooling tests; they exclude E2E. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/{frontend,backend,e2e}/`. Review formatting changes before completion.
+Review and trust hooks before relying on them. Relevant hooks perform [validation](#validate-changes), including both contract freshness checks; unchanged discussion turns run none. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/`.
 
 Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.

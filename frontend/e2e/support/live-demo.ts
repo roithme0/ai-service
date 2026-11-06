@@ -3,11 +3,11 @@ import type {
   PresentedSession,
   PresentedTurn,
   PresentationPart,
-} from '../../projects/chat-ui/conversation/generated/types.gen';
+} from '../../projects/chat-ui/conversation/src/generated/types.gen';
 import {
   zPresentedSession,
   zSessionCreated,
-} from '../../projects/chat-ui/conversation/generated/zod.gen';
+} from '../../projects/chat-ui/conversation/src/generated/zod.gen';
 
 export class LiveDemo {
   readonly title: Locator;

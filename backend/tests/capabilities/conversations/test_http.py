@@ -67,18 +67,12 @@ def test_native_frontend_contract_matches_router() -> None:
     app.include_router(create_session_router(lambda: {}))
     contract = (
         Path(__file__).resolve().parents[4]
-        / "frontend/projects/chat-ui/conversation/generated/openapi.json"
+        / "frontend/projects/chat-ui/conversation/src/generated/openapi.json"
     )
     assert json.loads(contract.read_text(encoding="utf-8")) == app.openapi()
 
 
-def test_exhausted_conversation_is_readable_observable_and_rejects_submission(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "app.capabilities.conversations.limits.MAX_MODEL_REQUESTS_PER_CONVERSATION", 1
-    )
-
+def test_conversation_continues_past_previous_request_cap() -> None:
     async def exercise() -> None:
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             return ModelResponse(parts=[TextPart("Retained answer")])
@@ -99,25 +93,22 @@ def test_exhausted_conversation_is_readable_observable_and_rejects_submission(
             path = f"{BASE}/{created.json()['session_id']}"
             async with stream(app, f"{path}/events") as updates:
                 await updates.event()
-                accepted = await client.post(f"{path}/turns", json={"prompt": "Hello"})
-                assert accepted.status_code == 202
-                exhausted = await updates.until(
-                    lambda snapshot: snapshot.error is not None
-                )
-                assert exhausted.error == "conversation_limit_reached"
-                assert turns(exhausted)[0].lifecycle.status == "completed"
-                assert "Retained answer" in exhausted.model_dump_json()
-                rejected = await client.post(
-                    f"{path}/turns", json={"prompt": "Rejected"}
-                )
-                assert rejected.status_code == 409
-                assert rejected.json() == {"kind": "conversation_limit_reached"}
+                for index in range(51):
+                    accepted = await client.post(
+                        f"{path}/turns", json={"prompt": str(index)}
+                    )
+                    assert accepted.status_code == 202
+                    completed = await updates.until(
+                        lambda snapshot: len(turns(snapshot)) == index + 1
+                        and turns(snapshot)[-1].lifecycle.status == "completed"
+                    )
+                assert completed.usage.requests == 51
+                assert "Retained answer" in completed.model_dump_json()
                 read = await client.get(path)
-                assert read.status_code == 200
-                assert PresentedSession.model_validate_json(read.content) == exhausted
+                assert PresentedSession.model_validate_json(read.content) == completed
             async with stream(app, f"{path}/events") as reconnected:
                 event = await reconnected.event()
-                assert isinstance(event, SnapshotEvent) and event.snapshot == exhausted
+                assert isinstance(event, SnapshotEvent) and event.snapshot == completed
 
     asyncio.run(exercise())
 
@@ -549,7 +540,9 @@ def test_idle_heartbeats_preserve_updates_and_close_pending_observation(
         assert await anext(events) == ": heartbeat\n\n"
         assert await anext(events) == ": heartbeat\n\n"
         assert reads == 1 and not closed.is_set()
-        updated = first.model_copy(update={"error": "conversation_limit_reached"})
+        updated = first.model_copy(
+            update={"expires_at": first.expires_at + timedelta(seconds=1)}
+        )
         queued.put_nowait(updated)
         assert await anext(events) == (
             f"data: {SnapshotEvent(snapshot=updated).model_dump_json()}\n\n"

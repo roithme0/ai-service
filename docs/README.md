@@ -9,7 +9,7 @@ These docs contain only the essential guidance for getting started with the repo
 | [../README.md](../README.md) | What the product offers | A concise product introduction, screenshot, feature highlights, and a link to this index. Keep technical detail in the documentation below. |
 | [README.md](README.md) | How to use and maintain the documentation | Documentation scope, page responsibilities, writing rules, and exclusions. |
 | [decisions/](decisions/) | Why we chose an approach | A shared [ADR template](decisions/template.md) and one numbered record per significant architectural decision: context, decision, alternatives, consequences, status, and acceptance date. |
-| [domains/](domains/) | What our language means | Contracts and terminology for [conversations](domains/conversations.md), [artifacts](domains/artifacts.md), and [embeddings](domains/embeddings.md). |
+| [domains/](domains/) | What our language means | Contracts and terminology for [conversations](domains/conversations.md), [artifacts](domains/artifacts.md), [embeddings](domains/embeddings.md), and [speech-to-text](domains/transcriptions.md). |
 | [navigation.md](navigation.md) | How the current system fits together | Responsibilities, boundaries, code entry points, and representative flows. Link to relevant code and tests. |
 | [development.md](development.md) | How to work on the code | Local setup, running, testing, debugging, contract generation, and AI-assisted development workflows, skills, and hooks. |
 | [operation.md](operation.md) | How to run deployed environments | Deployment, configuration, updates, persistence, backup/recovery, and troubleshooting. Document available procedures and their limitations. |

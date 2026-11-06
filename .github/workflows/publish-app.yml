@@ -32,54 +32,20 @@ jobs:
           python-version: '3.13'
 
       - name: Install backend dependencies
-        run: python -m pip install -e "../backend[test]"
-
-      - name: Run backend tests
         working-directory: backend
-        run: python -m pytest
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -e ".[test,dev]"
 
       - name: Install frontend dependencies
         run: npm ci
-
-      - name: Check generated conversation contract
-        run: npm run check:conversation-contract
-
-      - name: Lint frontend
-        run: npm run lint
-
-  frontend-tests:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Run frontend tooling tests
-        run: npm run test:tooling
-
-      - name: Run frontend app tests
-        run: npm run test:app
-
-      - name: Run chat UI tests
-        run: npm run test:chat-ui
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run chat UI browser component tests
-        run: npm run test:chat-ui:browser
+      - name: Validate all non-E2E groups
+        working-directory: .
+        run: node .agents/validation/run.mts --no-format
 
       - name: Upload browser component diagnostics
         if: failure()
@@ -91,7 +57,7 @@ jobs:
           retention-days: 7
 
   build-app:
-    needs: [validate, frontend-tests]
+    needs: [validate]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -211,7 +177,7 @@ jobs:
       - name: Run Docker-based end-to-end tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: node .agents/validation/e2e.mts --prebuilt-images
+        run: node .agents/validation/run.mts --no-format --group e2e --prebuilt-images --ci-prerequisite-contracts
 
       - name: Collect container logs
         if: failure()
@@ -226,7 +192,8 @@ jobs:
           name: e2e-diagnostics
           path: |
             .agents/.codex-validation/e2e/manual/*.log
-            frontend/e2e/test-results/
+            .agents/.codex-validation/e2e/manual/playwright-*/test-results/**
+            .agents/.codex-validation/e2e/manual/playwright-*/html-report/**
           include-hidden-files: true
           retention-days: 7
 
@@ -290,14 +257,6 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-
-      - name: Install backend contract dependencies
-        run: python -m pip install -e ../backend
-
       - name: Validate release tag
         if: github.event_name == 'push'
         id: release
@@ -316,9 +275,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Check generated conversation contract
-        run: npm run check:conversation-contract
 
       - name: Build library
         run: npm run build:chat-ui

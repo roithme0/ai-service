@@ -1,0 +1,15 @@
+@if (visible()) {
+  <button
+    aiChatPreventPointerFocus
+    class="microphone-button"
+    matIconButton
+    type="button"
+    [class.recording]="recordingState() === 'recording'"
+    [attr.aria-label]="recordingState() === 'recording' ? 'Aufnahme stoppen' : 'Aufnahme starten'"
+    [attr.aria-pressed]="recordingState() === 'recording'"
+    [disabled]="buttonDisabled()"
+    (click)="toggle()"
+  >
+    <mat-icon svgIcon="ai-chat:microphone" aria-hidden="true" />
+  </button>
+}

@@ -52,6 +52,7 @@ export async function testE2E(
   cache: string,
   run: typeof runCheck = runCheck,
   prebuiltImages = false,
+  nativeArgs: readonly string[] = [],
 ): Promise<void> {
   await mkdir(cache, { recursive: true });
   const env = {
@@ -77,7 +78,7 @@ export async function testE2E(
     await prepareDocker(context);
     const baseURL = `http://localhost:${env.GATEWAY_PORT}`;
     await waitForGateway(baseURL);
-    await runPlaywright(context, cli, baseURL);
+    await runPlaywright(context, cli, baseURL, nativeArgs);
   } catch (error: unknown) {
     await collectDiagnostics(context);
     throw error;
@@ -149,12 +150,13 @@ async function runPlaywright(
   { root, cache, env, run }: E2EContext,
   cli: string,
   baseURL: string,
+  nativeArgs: readonly string[],
 ): Promise<void> {
   const artifacts = await mkdtemp(join(cache, 'playwright-'));
   await run(
     join(root, 'frontend'),
     'Playwright',
-    [cli, 'test', '--output', join(artifacts, 'test-results')],
+    [cli, 'test', '--output', join(artifacts, 'test-results'), ...nativeArgs],
     join(cache, 'playwright.log'),
     180_000,
     process.execPath,
@@ -214,16 +216,7 @@ export function e2eProfile(root: string): ValidationProfile {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const args = process.argv.slice(2);
-  if (args.length > 1 || (args.length === 1 && args[0] !== '--prebuilt-images')) {
-    throw new Error('Usage: node .agents/validation/e2e.mts [--prebuilt-images]');
-  }
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-  await testE2E(
-    root,
-    join(root, '.agents/.codex-validation/e2e/manual'),
-    runCheck,
-    args[0] === '--prebuilt-images',
-  );
-  process.stdout.write('Docker preparation and Playwright passed.\n');
+  void import('./test.mts').then(async ({ runTestCommand }) => {
+    process.exitCode = await runTestCommand(resolve(dirname(fileURLToPath(import.meta.url)), '../..'), ['--group', 'e2e', ...process.argv.slice(2)]);
+  });
 }

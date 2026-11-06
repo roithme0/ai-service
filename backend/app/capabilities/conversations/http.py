@@ -13,7 +13,6 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
 from starlette.types import Receive, Scope, Send
 
 from app.capabilities.conversations.config import MAX_PROMPT_CHARACTERS
-from app.capabilities.conversations.limits import ConversationLimitReached
 from app.capabilities.conversations.session_state import SessionBusyError
 from app.capabilities.conversations.presentation import PresentedSession
 from app.capabilities.conversations.response import ResponseModel
@@ -63,7 +62,6 @@ class BoundaryError(ResponseModel):
         "agent_unavailable",
         "invalid_input",
         "observation_limit",
-        "conversation_limit_reached",
     ]
 
 
@@ -85,7 +83,6 @@ type SessionEvent = Annotated[
 def _error_response(
     error: (
         SessionNotFoundError
-        | ConversationLimitReached
         | SessionBusyError
         | RunnerClosedError
         | ObservationLimitError
@@ -95,8 +92,6 @@ def _error_response(
     match error:
         case SessionNotFoundError():
             status_code, body = 404, BoundaryError(kind="unknown")
-        case ConversationLimitReached():
-            status_code, body = 409, BoundaryError(kind="conversation_limit_reached")
         case SessionBusyError():
             status_code, body = 409, BoundaryError(kind="busy")
         case RunnerClosedError():
@@ -258,7 +253,6 @@ def create_session_router(
         except (
             SessionNotFoundError,
             SessionBusyError,
-            ConversationLimitReached,
             RunnerClosedError,
         ) as error:
             return _error_response(error)

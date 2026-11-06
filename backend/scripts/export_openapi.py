@@ -7,13 +7,22 @@ import argparse
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--native", action="store_true")
+    parser.add_argument("--transcription", action="store_true")
     options = parser.parse_args()
-    if options.native:
+    if options.native and options.transcription:
+        parser.error("Choose one router export")
+    if options.native or options.transcription:
         from fastapi import FastAPI
-        from app.capabilities.conversations.http import create_session_router
 
         app = FastAPI()
-        app.include_router(create_session_router(lambda: {}))
+        if options.native:
+            from app.capabilities.conversations.http import create_session_router
+
+            app.include_router(create_session_router(lambda: {}))
+        else:
+            from app.capabilities.transcriptions.http import router
+
+            app.include_router(router)
     else:
         from app.main import app
 

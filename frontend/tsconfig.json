@@ -16,7 +16,9 @@
     "module": "preserve",
     "paths": {
       "@roithme0/chat-ui/ui": ["./projects/chat-ui/ui/public-api.ts"],
-      "@roithme0/chat-ui/conversation": ["./projects/chat-ui/conversation/public-api.ts"]
+      "@roithme0/chat-ui/conversation": ["./projects/chat-ui/conversation/public-api.ts"],
+      "@roithme0/chat-ui/recording": ["./projects/chat-ui/recording/public-api.ts"],
+      "@roithme0/chat-ui/transcription": ["./projects/chat-ui/transcription/public-api.ts"]
     }
   },
   "angularCompilerOptions": {

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HttpSessionTransport, SessionHttpError, SessionTransportError } from './session-transport';
-import type { SessionEvent, PresentedSession } from '../generated/types.gen';
+import type { SessionEvent, PresentedSession } from './generated/types.gen';
 
 const EMPTY_USAGE: PresentedSession['usage'] = {
   input_tokens: 0,
@@ -16,7 +16,6 @@ const EMPTY_USAGE: PresentedSession['usage'] = {
 
 const expires = '2026-10-21T12:00:00Z';
 const snapshot: PresentedSession = {
-  error: null,
   usage: {
     ...EMPTY_USAGE,
     input_tokens: 100,

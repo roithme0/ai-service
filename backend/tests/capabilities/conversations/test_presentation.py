@@ -96,7 +96,6 @@ def snapshot(
             execution("run", status, observation if status == "running" else None),
         ),
         conversation=Conversation(messages=list(messages)),
-        limit_reached=False,
     )
 
 
@@ -336,7 +335,6 @@ def test_cumulative_history_groups_old_turns_and_matches_reused_ids_by_call_orde
             *internal.turn_executions,
         ),
         conversation=internal.conversation,
-        limit_reached=False,
     )
     projected = present_session(internal)
     empty = groups(projected)[1]
@@ -372,7 +370,6 @@ def test_admission_and_setup_failure_expose_lifecycle_without_context() -> None:
         conversation=Conversation(
             messages=[ModelRequest(parts=[context_prompt("SECRET_CONTEXT")])]
         ),
-        limit_reached=False,
     )
     projected = present_session(internal)
     assert [item.lifecycle.status for item in groups(projected)] == [
@@ -404,7 +401,6 @@ def test_turn_without_response_follows_retained_history_and_carries_its_lifecycl
         artifacts=(),
         turn_executions=(*internal.turn_executions, pending),
         conversation=internal.conversation,
-        limit_reached=False,
     )
     projected = present_session(internal)
     assert [item.part_kind for item in projected.history] == [
@@ -447,7 +443,6 @@ def test_native_request_merging_preserves_failed_prompts_without_exposing_contex
         expires_at=NOW,
         artifacts=(),
         conversation=Conversation(messages=history),
-        limit_reached=False,
         turn_executions=(
             execution("first", "failed"),
             execution("second", "failed"),

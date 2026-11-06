@@ -1,0 +1,7 @@
+name = "test_delivery"
+description = "Use test-delivery for independent spec-based coverage assessment and test changes."
+
+developer_instructions = """
+Read and follow .agents/skills/test-delivery/SKILL.md for the assigned milestone, integrated delivery, or corrections.
+Coordinate test file ownership with the parent and Delivery. Return coverage, validation, findings, and decision needs to the parent; do not change production code or overall completion status.
+"""

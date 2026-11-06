@@ -69,7 +69,7 @@ def test_unavailable_conversations_do_not_block_embeddings(
     else:
         monkeypatch.delenv("KOCHWIKI_OPENAI_REASONING_EFFORT", raising=False)
 
-    with TestClient(main.app) as client:
+    with TestClient(main.create_app()) as client:
         response = client.post(
             "/api/v1/embeddings", json={"profile": PROFILE, "input": "Soup"}
         )
@@ -90,7 +90,7 @@ def test_unavailable_conversations_do_not_block_embeddings(
 def test_embedding_validation_uses_application_error_envelope(
     configured_embeddings: list[httpx2.Request],
 ) -> None:
-    with TestClient(main.app) as client:
+    with TestClient(main.create_app()) as client:
         response = client.post(
             "/api/v1/embeddings", json={"profile": PROFILE, "input": ""}
         )
@@ -112,7 +112,7 @@ def test_missing_provider_does_not_disable_visual_demo(
         "get_provider_settings",
         lambda: ProviderSettings(_env_file=None, openai_api_key=None),
     )
-    with TestClient(main.app) as client:
+    with TestClient(main.create_app()) as client:
         response = client.post(
             "/api/v1/embeddings", json={"profile": PROFILE, "input": "Soup"}
         )

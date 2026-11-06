@@ -19,7 +19,6 @@ const EMPTY_USAGE: PresentedSession['usage'] = {
 };
 
 const EMPTY: PresentedSession = {
-  error: null,
   usage: EMPTY_USAGE,
   session_id: 'visual-demo-1',
   expires_at: '2026-10-21T12:00:00Z',

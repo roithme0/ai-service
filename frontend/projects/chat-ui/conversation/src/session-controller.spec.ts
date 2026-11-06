@@ -4,7 +4,7 @@ import type {
   SessionCreated,
   SessionEvent,
   TurnAccepted,
-} from '../generated/types.gen';
+} from './generated/types.gen';
 import type { SessionTransport } from './session-transport';
 import { SessionHttpError, SessionTransportError } from './session-transport';
 import { SessionController } from './session-controller';
@@ -27,7 +27,6 @@ function snapshot(
   prompt = true,
 ): PresentedSession {
   return {
-    error: null,
     usage: EMPTY_USAGE,
     session_id: 'session',
     expires_at: time,
@@ -113,42 +112,32 @@ async function setup(): Promise<{ transport: Transport; controller: SessionContr
 }
 
 describe('SessionController', () => {
-  it.each(['snapshot', 'admission'] as const)(
-    'offers new-session recovery when a session exhausted through %s becomes unavailable',
-    async (source) => {
-      const { transport, controller } = await setup();
-      if (source === 'snapshot') {
-        transport.emit({ ...snapshot('completed'), error: 'conversation_limit_reached' });
-        await flush();
-      } else {
-        transport.submitPrompt.mockRejectedValueOnce(
-          new SessionHttpError(409, 'conversation_limit_reached'),
-        );
-        await controller.submit('Rejected', vi.fn());
-      }
-      const retainedSnapshot = controller.state.snapshot;
-      transport.error('unknown');
-      await flush();
-      expect(controller.state.snapshot).toBe(retainedSnapshot);
-      expect(controller.state.status?.message).toContain(
-        'Diese Unterhaltung ist nicht mehr verf\u00fcgbar.',
-      );
-      expect(controller.state.status?.action).toEqual({
-        id: 'new-session',
-        label: 'Neue Unterhaltung starten',
-      });
-      expect(controller.state.composerDisabled).toBe(true);
-      expect(controller.state.observation).toBe('lost');
-      expect(transport.signal?.aborted).toBe(true);
-      await controller.performAction('new-session');
-      transport.emit(snapshot());
-      await flush();
-      expect(transport.createSession).toHaveBeenCalledTimes(2);
-      expect(controller.state.composerDisabled).toBe(false);
-      expect(controller.state.status).toBeNull();
-      controller.dispose();
-    },
-  );
+  it('offers new-session recovery when a completed session becomes unavailable', async () => {
+    const { transport, controller } = await setup();
+    transport.emit(snapshot('completed'));
+    await flush();
+    const retainedSnapshot = controller.state.snapshot;
+    transport.error('unknown');
+    await flush();
+    expect(controller.state.snapshot).toBe(retainedSnapshot);
+    expect(controller.state.status?.message).toContain(
+      'Diese Unterhaltung ist nicht mehr verf\u00fcgbar.',
+    );
+    expect(controller.state.status?.action).toEqual({
+      id: 'new-session',
+      label: 'Neue Unterhaltung starten',
+    });
+    expect(controller.state.composerDisabled).toBe(true);
+    expect(controller.state.observation).toBe('lost');
+    expect(transport.signal?.aborted).toBe(true);
+    await controller.performAction('new-session');
+    transport.emit(snapshot());
+    await flush();
+    expect(transport.createSession).toHaveBeenCalledTimes(2);
+    expect(controller.state.composerDisabled).toBe(false);
+    expect(controller.state.status).toBeNull();
+    controller.dispose();
+  });
 
   it('retains session and turn usage in the consumer snapshot', async () => {
     const { transport, controller } = await setup();
@@ -168,20 +157,20 @@ describe('SessionController', () => {
     controller.dispose();
   });
 
-  it('shows a later compatibility failure instead of stale exhaustion', async () => {
+  it('shows a compatibility failure after completed history', async () => {
     const transport = new Transport();
     vi.spyOn(transport, 'observeSession').mockImplementation(async function* () {
       await Promise.resolve();
       yield {
         kind: 'snapshot',
-        snapshot: { ...snapshot('completed'), error: 'conversation_limit_reached' },
+        snapshot: snapshot('completed'),
       };
       throw new SessionHttpError(405, 'method_not_allowed');
     });
     const controller = new SessionController(transport, vi.fn());
     await controller.start();
     await flush();
-    expect(controller.state.snapshot?.error).toBe('conversation_limit_reached');
+    expect(controller.state.snapshot).toEqual(snapshot('completed'));
     expect(controller.state.status).toEqual({
       kind: 'error',
       placement: 'assistant',
@@ -189,44 +178,6 @@ describe('SessionController', () => {
     });
     expect(controller.state.composerDisabled).toBe(true);
     expect(controller.state.observation).toBe('lost');
-    controller.dispose();
-  });
-
-  it('keeps exhausted history visible and disables submission through the existing error status', async () => {
-    const { transport, controller } = await setup();
-    const exhausted = { ...snapshot('completed'), error: 'conversation_limit_reached' as const };
-    transport.emit(exhausted);
-    await flush();
-    expect(controller.state.snapshot).toEqual(exhausted);
-    expect(controller.state.turns[0]?.content[0]).toMatchObject({ text: 'same', role: 'user' });
-    expect(controller.state.composerDisabled).toBe(true);
-    expect(controller.state.status).toEqual({
-      kind: 'error',
-      placement: 'assistant',
-      message: 'Conversation limit reached',
-    });
-    await controller.submit('Rejected', vi.fn());
-    expect(transport.submitPrompt).not.toHaveBeenCalled();
-    controller.dispose();
-  });
-
-  it('blocks admission after a limit rejection before the exhausted snapshot arrives', async () => {
-    const { transport, controller } = await setup();
-    transport.submitPrompt.mockRejectedValueOnce(
-      new SessionHttpError(409, 'conversation_limit_reached'),
-    );
-    await controller.submit('Rejected', vi.fn());
-    expect(controller.state.composerDisabled).toBe(true);
-    expect(controller.state.status?.message).toBe('Conversation limit reached');
-    expect(controller.state.observation).toBe('connected');
-    expect(transport.signal?.aborted).toBe(false);
-    await controller.submit('Rejected again', vi.fn());
-    expect(transport.submitPrompt).toHaveBeenCalledOnce();
-    await controller.start();
-    transport.emit(snapshot());
-    await flush();
-    expect(controller.state.composerDisabled).toBe(false);
-    expect(controller.state.status).toBeNull();
     controller.dispose();
   });
 

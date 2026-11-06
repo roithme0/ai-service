@@ -5,7 +5,7 @@ import type {
   PresentationPart,
   PublishedArtifact,
   UserPrompt,
-} from '../generated/types.gen';
+} from './generated/types.gen';
 
 export type SessionArtifactMapper = (artifact: PublishedArtifact) => ChatArtifact | null;
 
