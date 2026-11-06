@@ -138,10 +138,18 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
             for tool in info.model_request_parameters.native_tools
         )
         if prompts == ["Find and present soup."]:
-            assert names == {"lookup_recipe", "present_artifact", "get_mcp_resource"}
+            assert names == {
+                "kochwiki__lookup_recipe",
+                "present_artifact",
+                "kochwiki__get_mcp_resource",
+            }
             if not results:
                 return ModelResponse(
-                    parts=[ToolCallPart("lookup_recipe", {"name": "Soup"}, "lookup-1")]
+                    parts=[
+                        ToolCallPart(
+                            "kochwiki__lookup_recipe", {"name": "Soup"}, "lookup-1"
+                        )
+                    ]
                 )
             if len(results) == 1:
                 assert results[0].content == {"name": "Soup"}
@@ -167,13 +175,16 @@ def test_configured_agent_composes_mcp_artifacts_history_and_native_lifecycle(
         else:
             if prompts == ["Find and present soup.", "Repeat that."]:
                 assert names == {
-                    "lookup_recipe",
+                    "kochwiki__lookup_recipe",
                     "present_artifact",
-                    "get_mcp_resource",
+                    "kochwiki__get_mcp_resource",
                 }
                 assert len(results) == 2
             else:
-                assert names == {"lookup_recipe", "get_mcp_resource"}
+                assert names == {
+                    "kochwiki__lookup_recipe",
+                    "kochwiki__get_mcp_resource",
+                }
                 assert prompts == ["Hello."]
                 assert results == []
         return ModelResponse(parts=[TextPart("Soup is ready.")])

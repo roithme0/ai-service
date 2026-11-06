@@ -105,9 +105,9 @@ def test_live_demo_configuration_and_session_artifacts_through_http(
         assert not info.model_request_parameters.native_tools
         assert {tool.name for tool in info.function_tools} == {
             "present_artifact",
-            "get_mcp_resource",
-            "greet",
-            "farewell",
+            "greetings__get_mcp_resource",
+            "greetings__greet",
+            "greetings__farewell",
         }
         usage = RequestUsage(input_tokens=10, output_tokens=5, cost=Decimal("0.001"))
         if any(isinstance(part, ToolReturnPart) for part in messages[-1].parts):

@@ -89,9 +89,9 @@ def test_live_agent_receives_mcp_guidance_resources_and_both_tool_results(
         assert info.instructions is not None
         assert "Consult greetings://catalog" in info.instructions
         assert {tool.name for tool in info.function_tools} == {
-            "greet",
-            "farewell",
-            "get_mcp_resource",
+            "greetings__greet",
+            "greetings__farewell",
+            "greetings__get_mcp_resource",
         }
         assert any(
             isinstance(part, UserPromptPart)
@@ -104,10 +104,16 @@ def test_live_agent_receives_mcp_guidance_resources_and_both_tool_results(
             return ModelResponse(
                 parts=[
                     ToolCallPart(
-                        "get_mcp_resource", {"uri": "greetings://catalog"}, "catalog"
+                        "greetings__get_mcp_resource",
+                        {"uri": "greetings://catalog"},
+                        "catalog",
                     ),
-                    ToolCallPart("greet", {"name": "Ada", "language": "de"}, "hello"),
-                    ToolCallPart("farewell", {"name": "Ada", "language": "en"}, "bye"),
+                    ToolCallPart(
+                        "greetings__greet", {"name": "Ada", "language": "de"}, "hello"
+                    ),
+                    ToolCallPart(
+                        "greetings__farewell", {"name": "Ada", "language": "en"}, "bye"
+                    ),
                 ]
             )
         results = {

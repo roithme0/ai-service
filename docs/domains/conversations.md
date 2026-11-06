@@ -29,7 +29,9 @@ A session connects one owner to one configured agent. The service manages execut
 
 ## MCP resources
 
-Before each turn's first model request, Kochwiki lists concrete MCP resources through the same connection as its tools. The model receives their names, descriptions, and URIs as reference data and can call `get_mcp_resource` to read a listed URI on demand. Tool calls and complete text results remain in conversation history; the index is request-only. Binary or mixed text and binary responses are rejected, and resource templates are not discovered or expanded.
+MCP tool names separate the stable, unique server ID from the tool ID with `__`, such as `kochwiki__search_foodstuffs` and `kochwiki__get_mcp_resource`. Local application tools such as `present_artifact` remain unprefixed.
+
+Each turn advertises concrete resources as reference data: names, descriptions, URIs, and the server's prefixed resource reader. Resource URIs are scoped to their server, so separate servers can advertise the same URI. Reads use the existing MCP connection. Tool calls and complete text results remain in conversation history; the index is request-only. Binary or mixed text and binary responses are rejected, and resource templates are not discovered or expanded.
 
 Discovery failures fail the turn. Resource read errors are reported to the model as failed tool results; transport failures propagate. Text is not truncated by the application.
 
