@@ -1,3 +1,4 @@
+import { chatModel } from '../../chat-model';
 import { Component, OnInit, OnDestroy, computed, signal } from '@angular/core';
 import {
   ChatUiComponent,
@@ -35,6 +36,7 @@ const INITIAL_STATE: SessionViewState = {
 })
 export class VisualDemo implements OnInit, OnDestroy {
   protected readonly chat = signal<SessionViewState>(INITIAL_STATE);
+  protected readonly model = computed(() => chatModel(this.chat().snapshot?.model));
   protected readonly usage = computed(() => chatUsage(this.chat().snapshot?.usage));
   private compatibilityFailure = false;
   private readonly controller = new SessionController(new VisualDemoTransport(), (state) =>

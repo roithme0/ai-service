@@ -25,3 +25,5 @@ export { artifactRenderer } from './src/models/chat-message';
 export { JSON_ARTIFACT_CAPABILITY } from './src/artifact-capabilities';
 export type { ChatArtifactCapability } from './src/artifact-capabilities';
 export type { DictationConfig, DictationError, DictationRecorder } from './src/dictation';
+
+export type { ChatModel } from './src/models/chat-model';

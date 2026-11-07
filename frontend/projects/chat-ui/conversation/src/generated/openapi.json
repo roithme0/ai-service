@@ -334,6 +334,43 @@
           }
         ]
       },
+      "PresentedModel": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Name",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          }
+        },
+        "required": [
+          "name",
+          "reasoning_effort"
+        ],
+        "title": "PresentedModel",
+        "type": "object"
+      },
       "PresentedSession": {
         "additionalProperties": false,
         "properties": {
@@ -349,6 +386,16 @@
             "title": "History",
             "type": "array"
           },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PresentedModel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "session_id": {
             "title": "Session Id",
             "type": "string"
@@ -359,6 +406,7 @@
         },
         "required": [
           "session_id",
+          "model",
           "usage",
           "expires_at",
           "history"

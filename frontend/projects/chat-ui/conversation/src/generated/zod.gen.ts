@@ -78,6 +78,22 @@ export const zObservationErrorEvent = z.object({
 });
 
 /**
+ * PresentedModel
+ */
+export const zPresentedModel = z.object({
+    name: z.string().min(1).regex(/\S/),
+    reasoning_effort: z.enum([
+        'none',
+        'minimal',
+        'low',
+        'medium',
+        'high',
+        'xhigh',
+        'max'
+    ]).nullable()
+});
+
+/**
  * PresentedUsage
  */
 export const zPresentedUsage = z.object({
@@ -218,6 +234,7 @@ export const zHistoryItem = z.discriminatedUnion('part_kind', [
 export const zPresentedSession = z.object({
     expires_at: z.iso.datetime(),
     history: z.array(zHistoryItem),
+    model: zPresentedModel.nullable(),
     session_id: z.string(),
     usage: zPresentedUsage
 });

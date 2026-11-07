@@ -154,6 +154,10 @@ it('keeps dictation controls accessible and blocks native keyboard submission', 
     transcribe: () => Promise.resolve('spoken'),
     onError: () => {},
   });
+  fixture.componentRef.setInput('model', {
+    name: 'provider/' + 'long-model-identifier-'.repeat(12),
+    reasoningEffort: 'high',
+  });
   fixture.componentRef.setInput('dictationContextKey', 'context');
   fixture.detectChanges();
   const draft = page.getByRole('textbox', { name: 'Nachricht', exact: true });
@@ -177,6 +181,15 @@ it('keeps dictation controls accessible and blocks native keyboard submission', 
   expect(send.element().getBoundingClientRect().right).toBeLessThanOrEqual(
     host.getBoundingClientRect().right,
   );
+  const metadata = host.querySelector('ai-chat-model-metadata');
+  const effort = metadata?.querySelector('.effort');
+  if (!(metadata instanceof HTMLElement) || !(effort instanceof HTMLElement))
+    throw new Error('Metadata missing');
+  expect(metadata.getBoundingClientRect().right).toBeLessThanOrEqual(
+    start.element().getBoundingClientRect().left,
+  );
+  expect(effort.clientWidth).toBeGreaterThan(15);
+  expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
   expect(
     Math.abs(
       start.element().getBoundingClientRect().top - send.element().getBoundingClientRect().top,
@@ -222,3 +235,89 @@ it('keeps dictation controls accessible and blocks native keyboard submission', 
   await expect.element(draft).toHaveValue('draft spoken');
   expect(submissions).toHaveLength(0);
 });
+
+it.each([
+  [320, null],
+  [320, 'high'],
+  [900, null],
+  [900, 'high'],
+] as const)(
+  'keeps long model metadata accessible at %ipx with effort %s',
+  async (width, reasoningEffort) => {
+    const host = fixture.nativeElement as HTMLElement;
+    host.style.width = `${width}px`;
+    host.style.fontFamily = 'monospace';
+    host.style.fontSize = '16px';
+    host.style.lineHeight = '1.5';
+    if (width === 900) host.style.setProperty('--ai-chat-composer-secondary-font-size', '13px');
+    const name = 'provider/' + 'long-model-identifier-'.repeat(12);
+    fixture.componentRef.setInput('model', { name, reasoningEffort });
+    fixture.componentRef.setInput('usage', USAGE);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const metadata = host.querySelector('ai-chat-model-metadata');
+    if (!(metadata instanceof HTMLElement)) throw new Error('Metadata missing');
+    const model = metadata.querySelector('.name');
+    const effort = metadata.querySelector('.effort');
+    if (!(model instanceof HTMLElement) || !(effort instanceof HTMLElement))
+      throw new Error('Labels missing');
+    const send = page.getByRole('button', { name: 'Nachricht senden', exact: true }).element();
+    expect(model.textContent?.trim()).toBe('Modell: ' + name);
+
+    const effortText = reasoningEffort ?? 'nicht festgelegt';
+    expect(effort.textContent?.trim()).toBe('Reasoning: ' + effortText);
+    expect(model.title).toBe(name);
+    expect(effort.title).toBe(effortText);
+    const separator = metadata.querySelector('.separator');
+    if (!(separator instanceof HTMLElement)) throw new Error('Separator missing');
+    expect(separator.textContent).toBe('\u00b7');
+    expect(separator.getAttribute('aria-hidden')).toBe('true');
+    expect(getComputedStyle(model).textTransform).toBe('uppercase');
+    expect(getComputedStyle(effort).textTransform).toBe('uppercase');
+    expect(getComputedStyle(model).fontSize).toBe(getComputedStyle(effort).fontSize);
+    const usageLine = host.querySelector('ai-chat-usage-line');
+    if (!(usageLine instanceof HTMLElement)) throw new Error('Usage line missing');
+    expect(getComputedStyle(model).fontSize).toBe(getComputedStyle(usageLine).fontSize);
+    expect(getComputedStyle(usageLine).fontFamily).toBe(getComputedStyle(textarea).fontFamily);
+    if (width === 900) expect(getComputedStyle(usageLine).fontSize).toBe('13px');
+    const chevron = host.querySelector('.usage-toggle mat-icon svg');
+    if (!(chevron instanceof SVGSVGElement)) throw new Error('Usage chevron missing');
+    const usageBounds = usageLine.getBoundingClientRect();
+    const chevronBounds = chevron.getBoundingClientRect();
+    expect(
+      Math.abs(
+        chevronBounds.top + chevronBounds.height / 2 - usageBounds.top - usageBounds.height / 2,
+      ),
+    ).toBeLessThan(1);
+    expect(
+      Math.abs(model.getBoundingClientRect().left - textarea.getBoundingClientRect().left),
+    ).toBeLessThan(1);
+    expect(Number.parseFloat(getComputedStyle(model).fontSize)).toBeLessThan(
+      Number.parseFloat(getComputedStyle(textarea).fontSize),
+    );
+    const effortLabel = effort.querySelector('.visually-hidden');
+    if (!(effortLabel instanceof HTMLElement)) throw new Error('Effort label missing');
+    expect(effortLabel.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+    expect(model.getBoundingClientRect().right).toBeLessThanOrEqual(
+      separator.getBoundingClientRect().left,
+    );
+    expect(separator.getBoundingClientRect().right).toBeLessThanOrEqual(
+      effort.getBoundingClientRect().left,
+    );
+    expect(
+      Math.abs(model.getBoundingClientRect().top - effort.getBoundingClientRect().top),
+    ).toBeLessThan(2);
+    expect(effort.scrollWidth).toBeLessThanOrEqual(effort.clientWidth);
+    expect(metadata.getBoundingClientRect().right).toBeLessThanOrEqual(
+      send.getBoundingClientRect().left,
+    );
+    expect(send.getBoundingClientRect().right).toBeLessThanOrEqual(
+      host.getBoundingClientRect().right,
+    );
+    expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+    expect(metadata.querySelector('button, a, input, [tabindex]')).toBeNull();
+    fixture.componentRef.setInput('model', null);
+    fixture.detectChanges();
+    expect(host.querySelector('ai-chat-model-metadata')).toBeNull();
+  },
+);

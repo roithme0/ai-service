@@ -8,8 +8,10 @@ from collections.abc import AsyncGenerator, Callable, Sequence
 from contextlib import aclosing
 from datetime import datetime, timedelta
 from types import TracebackType
+from typing import cast
 
 from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.toolsets import AbstractToolset
 from pydantic_ai.usage import UsageLimits
@@ -22,7 +24,11 @@ from app.capabilities.conversations.presentation import (
     PresentedSession,
     present_session,
 )
-from app.capabilities.conversations.sessions import AgentSessionRegistry, SessionCreated
+from app.capabilities.conversations.sessions import (
+    AgentSessionRegistry,
+    SessionCreated,
+    SessionModel,
+)
 from app.capabilities.conversations.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
 from app.core.identity import ApplicationIdentity
@@ -48,6 +54,17 @@ class AgentTurnRunner:
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._agent = agent
+        model = agent.model
+        self._model = (
+            SessionModel(
+                name=model.model_name,
+                reasoning_effort=cast(
+                    OpenAIResponsesModelSettings, model.settings or {}
+                ).get("openai_reasoning_effort"),
+            )
+            if isinstance(model, OpenAIResponsesModel) and model.model_name.strip()
+            else None
+        )
         self._sessions = AgentSessionRegistry(lifetime=session_lifetime, clock=clock)
         self._turn_tasks: set[asyncio.Task[AgentRunResult[str]]] = set()
         self._closed = False
@@ -77,6 +94,7 @@ class AgentTurnRunner:
             raise RunnerClosedError("The turn runner is closed.")
         return self._sessions.create(
             owner=owner,
+            model=self._model,
             initial_context=initial_context,
             artifact_capabilities=artifact_capabilities,
             max_artifacts=max_artifacts,

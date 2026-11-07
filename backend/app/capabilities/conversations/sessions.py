@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from openai.types.shared import ReasoningEffort
 from pydantic_ai import Agent, Conversation
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.run import AgentRunResult
@@ -53,6 +54,12 @@ class SessionCreated:
 
 
 @dataclass(frozen=True)
+class SessionModel:
+    name: str
+    reasoning_effort: ReasoningEffort
+
+
+@dataclass(frozen=True)
 class SessionSnapshot:
     """Detached internal data; not a public timeline or HTTP contract."""
 
@@ -61,6 +68,7 @@ class SessionSnapshot:
     artifacts: tuple[SessionArtifact, ...]
     turn_executions: tuple[TurnExecution, ...]
     conversation: Conversation
+    model: SessionModel | None = None
 
     @property
     def messages(self) -> tuple[ModelMessage, ...]:
@@ -88,6 +96,7 @@ class _Session:
     owner: ApplicationIdentity
     expires_at: datetime
     state: SessionState
+    model: SessionModel | None
 
 
 @dataclass(eq=False)
@@ -153,6 +162,7 @@ class AgentSessionRegistry:
         initial_context: dict[str, FiniteJsonValue] | None = None,
         artifact_capabilities: Sequence[ArtifactCapability] = (),
         max_artifacts: int = MAX_ARTIFACTS_PER_SESSION,
+        model: SessionModel | None = None,
     ) -> SessionCreated:
         now = self._now()
         self._discard_expired(now)
@@ -165,7 +175,7 @@ class AgentSessionRegistry:
         )
         expires_at = now + self._lifetime
         self._sessions[session_id] = _Session(
-            owner=owner, expires_at=expires_at, state=state
+            owner=owner, expires_at=expires_at, state=state, model=model
         )
         return SessionCreated(session_id, expires_at)
 
@@ -189,6 +199,7 @@ class AgentSessionRegistry:
             artifacts=state.artifacts,
             turn_executions=state.turn_executions,
             conversation=state.conversation,
+            model=session.model,
         )
 
     def _publish(self, session_id: str) -> None:

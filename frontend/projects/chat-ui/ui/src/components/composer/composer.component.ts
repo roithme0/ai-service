@@ -1,3 +1,5 @@
+import { ModelMetadataComponent } from '../model-metadata/model-metadata.component';
+import type { ChatModel } from '../../models/chat-model';
 import {
   afterRenderEffect,
   computed,
@@ -35,6 +37,7 @@ import {
     UsageLineComponent,
     UsagePanelComponent,
     DictationButtonComponent,
+    ModelMetadataComponent,
   ],
   templateUrl: './composer.component.html',
   styleUrl: './composer.component.scss',
@@ -47,6 +50,7 @@ export class ComposerComponent {
   readonly placeholder = input('Nachricht schreiben');
   readonly mascotSource = input.required<string>();
   readonly usage = input<ChatUsage | null>(null);
+  readonly model = input<ChatModel | null>(null);
 
   readonly messageSubmitted = output<ChatSubmission>();
   readonly focused = output<void>();

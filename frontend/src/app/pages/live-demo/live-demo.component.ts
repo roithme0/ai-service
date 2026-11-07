@@ -1,3 +1,4 @@
+import { chatModel } from '../../chat-model';
 import {
   ChangeDetectorRef,
   Component,
@@ -56,6 +57,7 @@ export class LiveDemo implements OnInit, OnDestroy {
     onError: (error) => this.showDictationError(error),
   };
   protected readonly chat = signal<SessionViewState>(INITIAL_STATE);
+  protected readonly model = computed(() => chatModel(this.chat().snapshot?.model));
   protected readonly usage = computed(() => chatUsage(this.chat().snapshot?.usage));
   private readonly controller = new SessionController(
     new HttpSessionTransport('/api/v1', 'live-demo', 'demo:default'),
