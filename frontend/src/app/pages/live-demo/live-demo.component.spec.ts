@@ -25,6 +25,7 @@ const EMPTY_USAGE: PresentedSession['usage'] = {
 const EMPTY: PresentedSession = {
   usage: EMPTY_USAGE,
   session_id: 'live-session',
+  model: null,
   expires_at: '2026-10-27T12:00:00Z',
   history: [],
 };
@@ -310,5 +311,22 @@ describe('Live demo application', () => {
     expect(JSON.parse(server.fetch.mock.calls[1][1]?.body as string) as unknown).toEqual({
       artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
     });
+  });
+
+  it('maps snapshot metadata and clears it when starting another session', async () => {
+    const server = new LiveDemoServer();
+    vi.stubGlobal('fetch', server.fetch);
+    const { fixture, chat } = createPage();
+    expect(chat.model()).toBeNull();
+    await render(fixture, () => expect(chat.composerDisabled()).toBe(false));
+    server.snapshot({ ...EMPTY, model: { name: 'provider/model', reasoning_effort: 'none' } });
+    await render(fixture, () =>
+      expect(chat.model()).toEqual({ name: 'provider/model', reasoningEffort: 'none' }),
+    );
+    chat.statusActionTriggered.emit('new-session');
+    fixture.detectChanges();
+    expect(chat.model()).toBeNull();
+    await render(fixture, () => expect(chat.composerDisabled()).toBe(false));
+    expect(chat.model()).toBeNull();
   });
 });

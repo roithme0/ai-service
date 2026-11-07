@@ -327,3 +327,124 @@ def test_configured_mcp_failure_is_confined_to_each_run(
 
     asyncio.run(exercise())
     assert attempts == 2
+
+
+@pytest.mark.parametrize("effort", [None, "none", "high"])
+def test_configured_metadata_matches_requests_and_lifecycle(
+    effort: str | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+    from contextlib import aclosing
+    from typing import cast
+
+    from pydantic_ai.capabilities import Caching
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    from app.capabilities.conversations import turns
+    from app.capabilities.conversations.presentation import PresentedTurn
+    from app.capabilities.conversations.runner import AgentTurnRunner
+
+    async def exercise() -> None:
+        requests: list[dict[str, object]] = []
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def respond(request: httpx2.Request) -> httpx2.Response:
+            requests.append(cast(dict[str, object], json.loads(request.content)))
+            started.set()
+            await release.wait()
+            if len(requests) == 2:
+                return httpx2.Response(400, json={"error": {"message": "failed"}})
+            return httpx2.Response(
+                200,
+                json={
+                    "id": "resp_1",
+                    "object": "response",
+                    "created_at": 1,
+                    "model": "configured-model",
+                    "status": "completed",
+                    "error": None,
+                    "output": [
+                        {
+                            "type": "message",
+                            "id": "msg_1",
+                            "role": "assistant",
+                            "status": "completed",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": "Done",
+                                    "annotations": [],
+                                }
+                            ],
+                        }
+                    ],
+                },
+            )
+
+        async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as http:
+
+            def provider(*, api_key: str) -> OpenAIProvider:
+                return OpenAIProvider(api_key=api_key, http_client=http)
+
+            monkeypatch.setattr(turns, "OpenAIProvider", provider)
+            monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", True)
+            monkeypatch.setattr(
+                wiring, "MCPResources", lambda *args, **kwargs: Caching()
+            )
+            agent = wiring.create_kochwiki_agent(
+                settings(
+                    kochwiki_openai_model="configured-model",
+                    kochwiki_openai_reasoning_effort=effort,
+                ),
+                provider_settings=ProviderSettings(
+                    _env_file=None, openai_api_key="test-key"
+                ),
+            )
+            runner = AgentTurnRunner(agent)
+            owner = ApplicationIdentity("test", "alice")
+            created = runner.create_session(owner=owner)
+            expected = {"name": "configured-model", "reasoning_effort": effort}
+
+            def check_model(snapshot: object) -> None:
+                from app.capabilities.conversations.presentation import PresentedSession
+
+                assert isinstance(snapshot, PresentedSession)
+                assert snapshot.model is not None
+                assert snapshot.model.model_dump() == expected
+
+            async with (
+                agent,
+                runner,
+                aclosing(
+                    runner.observe_session(created.session_id, owner=owner)
+                ) as updates,
+            ):
+                check_model(runner.read_session(created.session_id, owner=owner))
+                check_model(await anext(updates))
+                for outcome in ("completed", "failed"):
+                    started.clear()
+                    release.clear()
+                    await runner.submit(created.session_id, owner=owner, prompt="Hello")
+                    await asyncio.wait_for(started.wait(), 5)
+                    running = runner.read_session(created.session_id, owner=owner)
+                    assert isinstance(running.history[-1], PresentedTurn)
+                    assert running.history[-1].lifecycle.status == "running"
+                    check_model(running)
+                    check_model(await anext(updates))
+                    release.set()
+                    async with asyncio.timeout(5):
+                        async for snapshot in updates:
+                            check_model(snapshot)
+                            if (
+                                isinstance(snapshot.history[-1], PresentedTurn)
+                                and snapshot.history[-1].lifecycle.status == outcome
+                            ):
+                                break
+                    check_model(runner.read_session(created.session_id, owner=owner))
+            assert len(requests) == 2
+            for request in requests:
+                assert request["model"] == expected["name"]
+                reasoning = request.get("reasoning")
+                assert reasoning == ({"effort": effort} if effort is not None else None)
+
+    asyncio.run(exercise())

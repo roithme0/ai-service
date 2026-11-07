@@ -6,6 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
+from openai.types.shared import ReasoningEffort
 from pydantic import Field
 from pydantic_ai.usage import RunUsage
 from pydantic_ai.messages import (
@@ -102,8 +103,14 @@ type HistoryItem = Annotated[
 ]
 
 
+class PresentedModel(ResponseModel):
+    name: Annotated[str, Field(min_length=1, pattern=r"\S")]
+    reasoning_effort: ReasoningEffort
+
+
 class PresentedSession(ResponseModel):
     session_id: str
+    model: PresentedModel | None
     usage: PresentedUsage
     expires_at: datetime
     history: tuple[HistoryItem, ...]
@@ -324,6 +331,14 @@ def present_session(snapshot: SessionSnapshot) -> PresentedSession:
 
     return PresentedSession(
         session_id=snapshot.session_id,
+        model=(
+            PresentedModel(
+                name=snapshot.model.name,
+                reasoning_effort=snapshot.model.reasoning_effort,
+            )
+            if snapshot.model
+            else None
+        ),
         usage=_present_usage(snapshot.usage),
         expires_at=snapshot.expires_at,
         history=_present_history(

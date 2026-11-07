@@ -54,6 +54,7 @@ globalThis.fetch = async (url, options) => {
               kind: 'snapshot',
               snapshot: {
                 session_id: 'built-session',
+                model: null,
                 expires_at: '2026-09-26T12:00:00Z',
                 history: [],
                 usage: {

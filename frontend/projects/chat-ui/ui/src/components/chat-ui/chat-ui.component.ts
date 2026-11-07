@@ -1,3 +1,4 @@
+import type { ChatModel } from '../../models/chat-model';
 import { Component, computed, inject, input, output, viewChild } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material/icon';
@@ -26,6 +27,7 @@ export class ChatUiComponent {
   readonly artifactRenderers = input<ChatArtifactRendererMap>({});
   readonly conversationStatus = input<ChatConversationStatus | null>(null);
   readonly usage = input<ChatUsage | null>(null);
+  readonly model = input<ChatModel | null>(null);
   readonly dictation = input<DictationConfig | null>(null);
   readonly dictationContextKey = input<string | null>(null);
   readonly composerDisabled = input(false);

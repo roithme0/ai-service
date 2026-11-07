@@ -577,6 +577,7 @@ describe('ChatUiComponent', () => {
         'turns',
         presentSession({
           session_id: 'session',
+          model: null,
           expires_at: time,
 
           usage: EMPTY_USAGE,
@@ -633,6 +634,7 @@ describe('ChatUiComponent', () => {
     const snapshot: PresentedSession = {
       usage: EMPTY_USAGE,
       session_id: 's',
+      model: null,
       expires_at: lifecycle.started_at,
       history: [first],
     };

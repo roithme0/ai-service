@@ -4,6 +4,7 @@ $values: (
   'composer-background': var(--ai-chat-composer-background, defaults.$surface-background),
   'composer-border': var(--ai-chat-composer-border, defaults.$surface-border),
   'composer-text': var(--ai-chat-composer-text, defaults.$primary-text),
+  'composer-secondary-font-size': var(--ai-chat-composer-secondary-font-size, 0.6875rem),
   'send-background': var(--ai-chat-send-background, #c00059),
   'send-hover-background': var(--ai-chat-send-hover-background, #df0067),
   'send-text': var(--ai-chat-send-text, defaults.$on-accent-text),
