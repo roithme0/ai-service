@@ -29,6 +29,7 @@ function snapshot(
   return {
     usage: EMPTY_USAGE,
     session_id: 'session',
+    model: null,
     expires_at: time,
     history:
       status === undefined
@@ -114,9 +115,13 @@ async function setup(): Promise<{ transport: Transport; controller: SessionContr
 describe('SessionController', () => {
   it('offers new-session recovery when a completed session becomes unavailable', async () => {
     const { transport, controller } = await setup();
-    transport.emit(snapshot('completed'));
+    transport.emit({
+      ...snapshot('completed'),
+      model: { name: 'provider/model', reasoning_effort: 'high' },
+    });
     await flush();
     const retainedSnapshot = controller.state.snapshot;
+    expect(retainedSnapshot?.model).toEqual({ name: 'provider/model', reasoning_effort: 'high' });
     transport.error('unknown');
     await flush();
     expect(controller.state.snapshot).toBe(retainedSnapshot);

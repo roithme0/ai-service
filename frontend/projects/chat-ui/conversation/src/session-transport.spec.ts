@@ -25,6 +25,7 @@ const snapshot: PresentedSession = {
     estimated_cost_usd: '0.01234567890123456789',
   },
   session_id: 's/1',
+  model: null,
   expires_at: expires,
   history: [
     { part_kind: 'user-prompt', content: ['First', 'Second'] },

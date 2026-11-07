@@ -80,6 +80,7 @@ def test_visual_conversation_demo_through_http_and_live_snapshots(
                         isinstance(initial, SnapshotEvent)
                         and initial.snapshot.history == ()
                     )
+                    assert initial.snapshot.model is None
                     snapshots: list[PresentedSession] = []
                     for ordinal, status in enumerate(
                         ("completed", "completed", "failed", "completed"), 1
@@ -96,6 +97,7 @@ def test_visual_conversation_demo_through_http_and_live_snapshots(
                                 and _turns(snapshot)[-1].lifecycle.status == status
                             )
                         )
+                    assert all(snapshot.model is None for snapshot in snapshots)
                     final_turns = _turns(snapshots[-1])
                     assert "SECRET_CONTEXT" not in snapshots[-1].model_dump_json()
                     assert [

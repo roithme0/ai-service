@@ -145,6 +145,20 @@ export type PresentationPart = ({
 } & AcceptedArtifact);
 
 /**
+ * PresentedModel
+ */
+export type PresentedModel = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Reasoning Effort
+     */
+    reasoning_effort: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | null;
+};
+
+/**
  * PresentedSession
  */
 export type PresentedSession = {
@@ -156,6 +170,7 @@ export type PresentedSession = {
      * History
      */
     history: Array<HistoryItem>;
+    model: PresentedModel | null;
     /**
      * Session Id
      */

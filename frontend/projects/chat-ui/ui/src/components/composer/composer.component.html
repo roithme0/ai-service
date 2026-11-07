@@ -35,6 +35,9 @@
       (blur)="stopObservingViewport()"
     ></textarea>
     <div class="actions">
+      @if (model(); as model) {
+        <ai-chat-model-metadata [model]="model" />
+      }
       <ai-chat-dictation-button
         [source]="dictationEnvironment"
         (transcribed)="appendTranscript($event)"

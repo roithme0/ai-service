@@ -21,6 +21,7 @@ const EMPTY_USAGE: PresentedSession['usage'] = {
 const EMPTY: PresentedSession = {
   usage: EMPTY_USAGE,
   session_id: 'visual-demo-1',
+  model: null,
   expires_at: '2026-10-21T12:00:00Z',
   history: [],
 };
