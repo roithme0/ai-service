@@ -9,11 +9,11 @@ Perform an evidence-based review of combined production changes and tests. Remai
 
 ## Workflow
 
-1. Establish whether the assignment covers a milestone, corrections, or final integrated delivery. Read repository guidance, the approved spec in `.agents/specs/`, delivery plan in `.agents/plans/`, relevant related artifacts, and combined production/test changes. Resolve paths from the target repository root. If required artifacts are unavailable, report the conformance gap rather than inferring their contents.
+1. Establish the reviewed scope: milestone, corrections, or integrated delivery. Read repository guidance, the approved spec in `.agents/specs/`, delivery plan in `.agents/plans/`, and relevant production/test changes. Resolve paths from the target repository root and report missing artifacts.
 2. Read [references/review-criteria.md](references/review-criteria.md) and apply each relevant review lane proportionally to the change.
 3. Run safe, relevant validation needed to confirm or challenge the recorded results. Inspect test assertions and behavior independently; passing checks alone do not establish regression protection. Treat failing checks as evidence to assess against the spec, not automatic proof of a production defect.
-4. Trace applicable acceptance criteria to implementation and current evidence. For final review, cover every criterion and the entire integrated delivery, including cross-milestone behavior and all tests, rather than only the latest changes. Do not treat a checked plan item as proof.
-5. Report findings and the assessment for the reviewed scope. When reviewing corrections, inspect the resulting changes and affected surrounding behavior and rerun relevant validation; a summary of fixes is not proof. If Test and Review overlap, inspect subsequently changed tests before concluding.
+4. Trace applicable acceptance criteria to implementation and current evidence. Final review covers every criterion, the integrated production changes and tests, and cross-milestone behavior. A checked plan item is not proof.
+5. For corrections, inspect the fixes and affected surrounding behavior and run relevant validation. If Test and Review overlap, inspect subsequently changed tests before concluding. Report findings and the assessment for the reviewed scope.
 
 ## Finding Format
 
@@ -24,7 +24,7 @@ Report all current findings, ordered by severity. For each finding include:
 3. Evidence and why it matters.
 4. Suggested follow-up.
 
-Identify whether follow-up belongs to production/docs (Delivery), tests (Test), or a material decision (supervisor/user), where evidence allows. A test/production disagreement must be resolved against approved behavior, not by assuming either side is correct.
+Identify the remediation owner where evidence allows: Delivery for production/docs, Test for tests, or supervisor/user for material decisions.
 
 Distinguish confirmed defects from risks or questions. Avoid speculative findings without a plausible failure mode.
 
