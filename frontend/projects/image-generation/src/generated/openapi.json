@@ -1,0 +1,713 @@
+{
+  "components": {
+    "schemas": {
+      "CompletedSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "configured_model": {
+            "title": "Configured Model",
+            "type": "string"
+          },
+          "content": {
+            "$ref": "#/components/schemas/Content"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
+          },
+          "generation_id": {
+            "format": "uuid",
+            "title": "Generation Id",
+            "type": "string"
+          },
+          "provider_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Model"
+          },
+          "status": {
+            "const": "completed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generation_id",
+          "created_at",
+          "completed_at",
+          "configured_model",
+          "provider_model",
+          "estimated_cost_usd",
+          "status",
+          "content"
+        ],
+        "title": "CompletedSnapshot",
+        "type": "object"
+      },
+      "Content": {
+        "additionalProperties": false,
+        "properties": {
+          "media_type": {
+            "const": "image/png",
+            "title": "Media Type",
+            "type": "string"
+          },
+          "size_bytes": {
+            "exclusiveMinimum": 0.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": ["url", "media_type", "size_bytes"],
+        "title": "Content",
+        "type": "object"
+      },
+      "ErrorEnvelope_Literal__image_generation_unavailable____image_generation_idempotency_conflict____image_generation_not_completed___": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "image_generation_unavailable",
+              "image_generation_idempotency_conflict",
+              "image_generation_not_completed"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": ["detail", "kind"],
+        "title": "ErrorEnvelope[Literal['image_generation_unavailable', 'image_generation_idempotency_conflict', 'image_generation_not_completed']]",
+        "type": "object"
+      },
+      "FailedSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "format": "date-time",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "configured_model": {
+            "title": "Configured Model",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/components/schemas/Failure"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
+          },
+          "generation_id": {
+            "format": "uuid",
+            "title": "Generation Id",
+            "type": "string"
+          },
+          "provider_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Model"
+          },
+          "status": {
+            "const": "failed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generation_id",
+          "created_at",
+          "completed_at",
+          "configured_model",
+          "provider_model",
+          "estimated_cost_usd",
+          "status",
+          "error"
+        ],
+        "title": "FailedSnapshot",
+        "type": "object"
+      },
+      "Failure": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "image_generation_timeout",
+              "image_generation_rejected",
+              "image_generation_provider_failed",
+              "image_generation_invalid_output",
+              "image_generation_storage_failed",
+              "image_generation_failed"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": ["kind", "detail"],
+        "title": "Failure",
+        "type": "object"
+      },
+      "GenerationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "instructions": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Instructions",
+            "type": "string"
+          }
+        },
+        "required": ["instructions"],
+        "title": "GenerationRequest",
+        "type": "object"
+      },
+      "HttpErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
+          "kind": {
+            "enum": ["not_found", "method_not_allowed", "http_error", "internal_error"],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": ["detail", "kind"],
+        "title": "HttpErrorResponse",
+        "type": "object"
+      },
+      "RequestValidationErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationDetail"
+            },
+            "minItems": 1,
+            "title": "Detail",
+            "type": "array"
+          },
+          "kind": {
+            "const": "request_validation",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": ["detail", "kind"],
+        "title": "RequestValidationErrorResponse",
+        "type": "object"
+      },
+      "RunningSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "title": "Completed At",
+            "type": "null"
+          },
+          "configured_model": {
+            "title": "Configured Model",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "estimated_cost_usd": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
+          },
+          "generation_id": {
+            "format": "uuid",
+            "title": "Generation Id",
+            "type": "string"
+          },
+          "provider_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Model"
+          },
+          "status": {
+            "const": "running",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "generation_id",
+          "created_at",
+          "completed_at",
+          "configured_model",
+          "provider_model",
+          "estimated_cost_usd",
+          "status"
+        ],
+        "title": "RunningSnapshot",
+        "type": "object"
+      },
+      "ValidationDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "minItems": 1,
+            "title": "Loc",
+            "type": "array"
+          },
+          "msg": {
+            "minLength": 1,
+            "title": "Msg",
+            "type": "string"
+          },
+          "type": {
+            "minLength": 1,
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationDetail",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/image-generations": {
+      "post": {
+        "operationId": "submit_api_v1_image_generations_post",
+        "parameters": [
+          {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+            "in": "header",
+            "name": "X-Application-User",
+            "required": true,
+            "schema": {
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
+              "title": "X-Application-User",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "completed": "#/components/schemas/CompletedSnapshot",
+                      "failed": "#/components/schemas/FailedSnapshot",
+                      "running": "#/components/schemas/RunningSnapshot"
+                    },
+                    "propertyName": "status"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/RunningSnapshot"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CompletedSnapshot"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FailedSnapshot"
+                    }
+                  ],
+                  "title": "Response 200 Submit Api V1 Image Generations Post"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "completed": "#/components/schemas/CompletedSnapshot",
+                      "failed": "#/components/schemas/FailedSnapshot",
+                      "running": "#/components/schemas/RunningSnapshot"
+                    },
+                    "propertyName": "status"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/RunningSnapshot"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CompletedSnapshot"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FailedSnapshot"
+                    }
+                  ],
+                  "title": "Response Submit Api V1 Image Generations Post"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope_Literal__image_generation_unavailable____image_generation_idempotency_conflict____image_generation_not_completed___"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestValidationErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope_Literal__image_generation_unavailable____image_generation_idempotency_conflict____image_generation_not_completed___"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Submit"
+      }
+    },
+    "/api/v1/image-generations/{generation_id}": {
+      "get": {
+        "operationId": "status_api_v1_image_generations__generation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "generation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Generation Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+            "in": "header",
+            "name": "X-Application-User",
+            "required": true,
+            "schema": {
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
+              "title": "X-Application-User",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "completed": "#/components/schemas/CompletedSnapshot",
+                      "failed": "#/components/schemas/FailedSnapshot",
+                      "running": "#/components/schemas/RunningSnapshot"
+                    },
+                    "propertyName": "status"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/RunningSnapshot"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CompletedSnapshot"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FailedSnapshot"
+                    }
+                  ],
+                  "title": "Response Status Api V1 Image Generations  Generation Id  Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestValidationErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Status"
+      }
+    },
+    "/api/v1/image-generations/{generation_id}/content": {
+      "get": {
+        "operationId": "content_api_v1_image_generations__generation_id__content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "generation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Generation Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+            "in": "header",
+            "name": "X-Application-User",
+            "required": true,
+            "schema": {
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
+              "title": "X-Application-User",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope_Literal__image_generation_unavailable____image_generation_idempotency_conflict____image_generation_not_completed___"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestValidationErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Content"
+      }
+    }
+  }
+}

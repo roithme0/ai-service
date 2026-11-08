@@ -15,16 +15,16 @@ async function fixture(): Promise<string> {
   return root;
 }
 
-void test("freshness checks both capabilities using the repository interpreter", async () => {
+void test("freshness checks all capabilities using the repository interpreter", async () => {
   const root = await fixture();
   const calls: Parameters<typeof runCheck>[] = [];
   const run: typeof runCheck = (...args) => { calls.push(args); return Promise.resolve(""); };
   await checkContracts(root, join(root, "cache"), run);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4);
   assert.equal(calls[0][5], backendPython(root));
   assert.match(calls[0][2][1], /sys\.exit/);
   assert.doesNotMatch(calls[0][2][1], /\bassert\b/);
-  for (const [index, capability] of ["conversation", "transcription"].entries()) {
+  for (const [index, capability] of ["conversation", "transcription", "image-generation"].entries()) {
     const call = calls[index + 1];
     assert.match(call[1], new RegExp(capability));
     assert.deepEqual(call[2], [join(root, `frontend/scripts/${capability}-contract.mjs`), "--check"]);

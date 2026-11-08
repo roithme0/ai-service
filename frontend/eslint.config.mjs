@@ -18,6 +18,7 @@ export default defineConfig(
     'playwright-report/**',
     'projects/chat-ui/conversation/src/generated/**',
     'projects/chat-ui/transcription/src/generated/**',
+    'projects/image-generation/src/generated/**',
   ]),
   {
     files: ['**/*.{js,cjs,mjs}'],

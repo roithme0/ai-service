@@ -7,9 +7,13 @@ services:
     environment:
       KOCHWIKI_MCP_URL: "${KOCHWIKI_MCP_URL:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      IMAGE_GENERATION_OPENAI_MODEL: "${IMAGE_GENERATION_OPENAI_MODEL:-}"
+      IMAGE_GENERATION_STORAGE_ROOT: "${IMAGE_GENERATION_STORAGE_ROOT:-}"
       TRANSCRIPTION_OPENAI_MODEL: "${TRANSCRIPTION_OPENAI_MODEL:-gpt-transcribe}"
       KOCHWIKI_OPENAI_MODEL: "${KOCHWIKI_OPENAI_MODEL:-}"
       KOCHWIKI_OPENAI_REASONING_EFFORT: "${KOCHWIKI_OPENAI_REASONING_EFFORT:-}"
+    volumes:
+      - ./backend/image-generation:/var/lib/ai-service/image-generation
 
   frontend:
     image: roithme0/ai-service-frontend:alpha

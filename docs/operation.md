@@ -17,8 +17,10 @@ Create `deployment/.env` from [.env.example](../deployment/.env.example); host-s
 | Variable | Purpose |
 | --- | --- |
 | `GATEWAY_PORT` | Published gateway port for Compose. The example selects 8004. |
-| `OPENAI_API_KEY` | Provider credentials for transcription, embeddings, Kochwiki, and Live Demo. |
+| `OPENAI_API_KEY` | Provider credentials for transcription, embeddings, image generation, Kochwiki, and Live Demo. |
 | `TRANSCRIPTION_OPENAI_MODEL` | Optional transcription model; defaults to `gpt-transcribe`. |
+| `IMAGE_GENERATION_OPENAI_MODEL` | GPT Image model for image generation; recommended initial value `gpt-image-2`. |
+| `IMAGE_GENERATION_STORAGE_ROOT` | Absolute dedicated image storage directory. |
 | `KOCHWIKI_OPENAI_MODEL` | Model used by the Kochwiki agent. |
 | `KOCHWIKI_MCP_URL` | External Streamable HTTP MCP endpoint, including its path. |
 | `KOCHWIKI_OPENAI_REASONING_EFFORT` | Optional model reasoning effort; blank uses the model default. Support depends on the selected model. |
@@ -28,6 +30,8 @@ Visual Demo (`visual-demo`) needs no provider or Kochwiki settings. Live Demo (`
 Live Demo includes a stateless greetings MCP server mounted at `/mcp/` in the backend. Its read-only `greet` and `farewell` tools accept a name and language (`en` or `de`); `greetings://catalog` supplies vocabulary and a fictional club motto. The live agent uses the mounted endpoint through an in-process HTTP transport, with resources indexed each turn and read on demand. No separate MCP process, endpoint configuration, or database is required. Direct local MCP clients can use `http://localhost:8004/mcp/` when running the backend locally; the deployment gateway does not publish this route.
 
 Transcription uses `OPENAI_API_KEY` and its own optional model setting. Missing credentials or an empty model make transcription unavailable without disabling other capabilities. See the [speech-to-text contract](domains/transcriptions.md) for upload limits, errors, and provider handling.
+
+Image generation requires `OPENAI_API_KEY` and both image settings. It is unavailable by default. A configured storage root is initialized even if the provider is disabled; an unsafe or unusable root prevents startup. Run one backend process with an exclusive disk-backed root and sufficient capacity; no overlapping instances may share it. Files and metadata grow without a quota until restart, and concurrent submissions have no application queue or spending limit. For Compose, set `IMAGE_GENERATION_STORAGE_ROOT=/var/lib/ai-service/image-generation` to use the dedicated named volume. See [image generation](domains/image-generation.md) for retention and request behavior.
 
 For a Kochwiki server on the Docker host, the example uses `http://host.docker.internal:8002/mcp/`; ensure that name resolves on your host. Container `localhost` refers to the container itself.
 

@@ -30,6 +30,7 @@ The [gateway](../deployment/gateway/nginx.conf) serves the demos and API. Visual
 | [Application lifespan](../backend/app/lifespan.py) | Starts and stops capabilities and demos. Loads shared [provider settings](../backend/app/core/config.py); the conversation lifecycle loads [conversation settings](../backend/app/capabilities/conversations/config.py). |
 | [Session API](../backend/app/capabilities/conversations/http.py) | Session creation, reads, prompt admission, and SSE observation under `/api/v1/agents/{configuration}/sessions`. [Presentation](../backend/app/capabilities/conversations/presentation.py) projects native history into public snapshots. |
 | [Embeddings](../backend/app/capabilities/embeddings/) | Embedding endpoint and provider integration. See [usage and profiles](domains/embeddings.md). |
+| [Image generation](../backend/app/capabilities/image_generation/) | One-off HTTP image generation. See [usage and lifetime](domains/image-generation.md). |
 | [Execution](../backend/app/capabilities/conversations/runner.py) | Owns background turns. [Registry](../backend/app/capabilities/conversations/sessions.py) handles ownership and expiry; [session state](../backend/app/capabilities/conversations/session_state.py) retains conversation, lifecycle, and artifacts. |
 | [Agent composition](../backend/app/capabilities/conversations/wiring.py) | Configures the Kochwiki model and MCP connection. [Turns](../backend/app/capabilities/conversations/turns.py) execute through Pydantic AI; [artifacts](../backend/app/capabilities/conversations/artifacts.py) validate and publish presentation data. |
 | [Chat UI package](../frontend/projects/chat-ui/) | `@roithme0/chat-ui/ui` renders host-supplied content; `@roithme0/chat-ui/conversation` supplies the [controller](../frontend/projects/chat-ui/conversation/src/session-controller.ts), HTTP/SSE transport, and snapshot mapping. |
@@ -42,6 +43,8 @@ The [gateway](../deployment/gateway/nginx.conf) serves the demos and API. Visual
 The [contract generator](../frontend/scripts/conversation-contract.mjs) produces [TypeScript types and Zod schemas](../frontend/projects/chat-ui/conversation/src/generated/) from the session router's OpenAPI document.
 
 The [transcription generator](../frontend/scripts/transcription-contract.mjs) owns the [transcription types and validators](../frontend/projects/chat-ui/transcription/src/generated/). See [contract generation](development.md#update-generated-contracts) for commands.
+
+The [image generator contract script](../frontend/scripts/image-generation-contract.mjs) produces [types and validators](../frontend/projects/image-generation/src/generated/) for direct HTTP consumers.
 
 ## Follow a flow
 

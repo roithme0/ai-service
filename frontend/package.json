@@ -10,6 +10,8 @@
     "check:conversation-contract": "node scripts/conversation-contract.mjs --check",
     "generate:transcription-contract": "node scripts/transcription-contract.mjs",
     "check:transcription-contract": "node scripts/transcription-contract.mjs --check",
+    "generate:image-generation-contract": "node scripts/image-generation-contract.mjs",
+    "check:image-generation-contract": "node scripts/image-generation-contract.mjs --check",
     "test:app": "node ../.agents/validation/test.mts --group frontend-app",
     "test:chat-ui": "node ../.agents/validation/test.mts --group chat-ui",
     "test:chat-ui:browser": "node ../.agents/validation/test.mts --group chat-ui-browser",
