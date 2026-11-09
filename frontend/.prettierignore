@@ -8,5 +8,5 @@ playwright-report/
 .codex-validation/
 projects/chat-ui/conversation/src/generated/
 projects/chat-ui/transcription/src/generated/
-projects/image-generation/src/generated/
+projects/image-generation/controller/src/generated/
 package-lock.json

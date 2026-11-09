@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -60,6 +60,7 @@ class Record:
     instructions: str
     snapshot: Snapshot
     path: Path | None = None
+    observers: set[asyncio.Queue[Snapshot | None]] = field(default_factory=set)
 
 
 class ImageGenerationService:
@@ -79,7 +80,7 @@ class ImageGenerationService:
             deadline,
         )
         self.records: dict[UUID, Record] = {}
-        self.keys: dict[tuple[ApplicationIdentity, UUID], UUID] = {}
+        self.generation_ids_by_key: dict[tuple[ApplicationIdentity, UUID], UUID] = {}
         self.tasks: set[asyncio.Task[None]] = set()
         self.cleanups: set[asyncio.Task[None]] = set()
         self.closing = False
@@ -130,8 +131,8 @@ class ImageGenerationService:
         self, owner: ApplicationIdentity, key: UUID, instructions: str
     ) -> tuple[Snapshot, bool]:
         association = (owner, key)
-        if association in self.keys:
-            record = self.records[self.keys[association]]
+        if association in self.generation_ids_by_key:
+            record = self.records[self.generation_ids_by_key[association]]
             if record.instructions != instructions:
                 raise Conflict()
             return record.snapshot, False
@@ -149,7 +150,7 @@ class ImageGenerationService:
         )
         record = Record(owner, instructions, snapshot)
         self.records[generation_id] = record
-        self.keys[association] = generation_id
+        self.generation_ids_by_key[association] = generation_id
         task = asyncio.create_task(
             self._execute(record, asyncio.get_running_loop().time() + self.deadline)
         )
@@ -160,6 +161,28 @@ class ImageGenerationService:
     def get(self, owner: ApplicationIdentity, generation_id: UUID) -> Record | None:
         record = self.records.get(generation_id)
         return record if record and record.owner == owner else None
+
+    def subscribe(
+        self, owner: ApplicationIdentity, generation_id: UUID
+    ) -> tuple[Snapshot, asyncio.Queue[Snapshot | None]] | None:
+        record = self.get(owner, generation_id)
+        if record is None:
+            return None
+        queue: asyncio.Queue[Snapshot | None] = asyncio.Queue(maxsize=1)
+        record.observers.add(queue)
+        return record.snapshot, queue
+
+    def unsubscribe(
+        self, record: Record, queue: asyncio.Queue[Snapshot | None]
+    ) -> None:
+        record.observers.discard(queue)
+
+    def _publish(self, record: Record, snapshot: Snapshot) -> None:
+        record.snapshot = snapshot
+        for queue in record.observers:
+            if queue.full():
+                queue.get_nowait()
+            queue.put_nowait(snapshot)
 
     async def _execute(self, record: Record, deadline: float) -> None:
         assert self.generator and self.run
@@ -216,18 +239,21 @@ class ImageGenerationService:
                 if asyncio.get_running_loop().time() >= deadline:
                     raise TimeoutError()
                 record.path = path
-                record.snapshot = CompletedSnapshot(
-                    status="completed",
-                    generation_id=base.generation_id,
-                    created_at=base.created_at,
-                    completed_at=datetime.now(UTC),
-                    configured_model=base.configured_model,
-                    provider_model=provider_model,
-                    estimated_cost_usd=cost,
-                    content=Content(
-                        media_type="image/png",
-                        url=f"/api/v1/image-generations/{base.generation_id}/content",
-                        size_bytes=size,
+                self._publish(
+                    record,
+                    CompletedSnapshot(
+                        status="completed",
+                        generation_id=base.generation_id,
+                        created_at=base.created_at,
+                        completed_at=datetime.now(UTC),
+                        configured_model=base.configured_model,
+                        provider_model=provider_model,
+                        estimated_cost_usd=cost,
+                        content=Content(
+                            media_type="image/png",
+                            url=f"/api/v1/image-generations/{base.generation_id}/content",
+                            size_bytes=size,
+                        ),
                     ),
                 )
                 return
@@ -250,19 +276,26 @@ class ImageGenerationService:
                 cleanup_task = asyncio.create_task(cleanup())
                 self.cleanups.add(cleanup_task)
                 cleanup_task.add_done_callback(self.cleanups.discard)
-        record.snapshot = FailedSnapshot(
-            status="failed",
-            generation_id=base.generation_id,
-            created_at=base.created_at,
-            completed_at=datetime.now(UTC),
-            configured_model=base.configured_model,
-            provider_model=provider_model,
-            estimated_cost_usd=cost,
-            error=Failure(kind=kind, detail=DETAILS[kind]),
+        self._publish(
+            record,
+            FailedSnapshot(
+                status="failed",
+                generation_id=base.generation_id,
+                created_at=base.created_at,
+                completed_at=datetime.now(UTC),
+                configured_model=base.configured_model,
+                provider_model=provider_model,
+                estimated_cost_usd=cost,
+                error=Failure(kind=kind, detail=DETAILS[kind]),
+            ),
         )
 
     async def close(self) -> None:
         self.closing = True
+        for record in self.records.values():
+            for queue in record.observers:
+                if not queue.full():
+                    queue.put_nowait(None)
         for task in tuple(self.tasks):
             task.cancel()
         while self.tasks:

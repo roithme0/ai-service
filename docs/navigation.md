@@ -44,7 +44,7 @@ The [contract generator](../frontend/scripts/conversation-contract.mjs) produces
 
 The [transcription generator](../frontend/scripts/transcription-contract.mjs) owns the [transcription types and validators](../frontend/projects/chat-ui/transcription/src/generated/). See [contract generation](development.md#update-generated-contracts) for commands.
 
-The [image generator contract script](../frontend/scripts/image-generation-contract.mjs) produces [types and validators](../frontend/projects/image-generation/src/generated/) for direct HTTP consumers.
+The [image generator contract script](../frontend/scripts/image-generation-contract.mjs) produces [types and validators](../frontend/projects/image-generation/controller/src/generated/) for direct HTTP consumers.
 
 ## Follow a flow
 

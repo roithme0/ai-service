@@ -38,6 +38,16 @@ docker compose --env-file deployment/.env -f deployment/docker-compose-local.yml
 
 Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have no source reload; rebuild after changes. Follow backend logs with the same Compose command prefix and `logs -f backend`.
 
+## Frontend scripts
+
+Run `npm run <script>` from **frontend/** after `npm ci`. Common scripts in [package.json](../frontend/package.json) include:
+
+- `start:app`, `build:app`, and `watch:app` run or build the app. See [chat UI development](#develop-the-chat-ui-package) and [image generation development](#develop-the-image-generation-package) for library commands.
+- `generate:image-generation-contract` and `check:image-generation-contract` update or verify the image generation contract; see [generated contracts](#update-generated-contracts) for all contracts and prerequisites.
+- `test:app` and `test:image-generation` run focused test groups; browser tests require Playwright Chromium. See [validation](#validate-changes) for the full suite.
+- `format:changed`, `lint`, and `lint:fix` format or lint frontend and shared tooling changes.
+- `ng` forwards arguments to the Angular CLI.
+
 ## Validate changes
 
 Complete [local setup](#run-locally) for both backend and frontend, then [install Playwright Chromium](#end-to-end-browser-tests). From the **repository root**:
@@ -123,6 +133,12 @@ See the [package README](../frontend/projects/chat-ui/README.md) for component i
 From **frontend/**, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This verifies built exports, runtime behavior, explicit application identity, and strict consumer declarations without workspace aliases.
 
 For manual layout and interaction checks, use [Visual Demo](http://localhost:4204/demos/visual) with the [local servers](#run-locally) running. Check narrow viewports, scrolling, artifact expansion, and keyboard submission in Chrome and Firefox. Refresh to restart the scripted session.
+
+## Develop the image generation package
+
+After `npm ci`, build the standalone controller package from **frontend/** with `npm run build:image-generation`, then verify its packed controller entrypoint and declarations with `npm run check:image-generation-package`. Use `npm run pack:image-generation` to build and create a package archive.
+
+Run its focused tests from the **repository root** with `node .agents/validation/test.mts --group image-generation` after completing [local setup](#run-locally). Focused runs do not replace [full validation](#validate-changes).
 
 ## AI-assisted development
 

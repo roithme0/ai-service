@@ -89,6 +89,14 @@ export const zHttpErrorResponse = z.object({
 });
 
 /**
+ * ObservationErrorEvent
+ */
+export const zObservationErrorEvent = z.object({
+  kind: z.literal('error'),
+  reason: z.literal('internal_error'),
+});
+
+/**
  * RunningSnapshot
  */
 export const zRunningSnapshot = z.object({
@@ -103,6 +111,22 @@ export const zRunningSnapshot = z.object({
   provider_model: z.string().nullable(),
   status: z.literal('running'),
 });
+
+export const zSnapshot = z.discriminatedUnion('status', [
+  zRunningSnapshot,
+  zCompletedSnapshot,
+  zFailedSnapshot,
+]);
+
+/**
+ * SnapshotEvent
+ */
+export const zSnapshotEvent = z.object({
+  kind: z.literal('snapshot'),
+  snapshot: zSnapshot,
+});
+
+export const zImageEvent = z.discriminatedUnion('kind', [zSnapshotEvent, zObservationErrorEvent]);
 
 /**
  * ValidationDetail
@@ -130,10 +154,10 @@ export const zSubmitApiV1ImageGenerationsPostHeaders = z.object({
   'Idempotency-Key': z.uuid(),
 });
 
-export const zSubmitApiV1ImageGenerationsPostResponse = z.union([
-  z.discriminatedUnion('status', [zRunningSnapshot, zCompletedSnapshot, zFailedSnapshot]),
-  z.discriminatedUnion('status', [zRunningSnapshot, zCompletedSnapshot, zFailedSnapshot]),
-]);
+/**
+ * OK
+ */
+export const zSubmitApiV1ImageGenerationsPostResponse = zSnapshot;
 
 export const zStatusApiV1ImageGenerationsGenerationIdGetHeaders = z.object({
   'X-Application-User': z
@@ -146,15 +170,9 @@ export const zStatusApiV1ImageGenerationsGenerationIdGetPath = z.object({
 });
 
 /**
- * Response Status Api V1 Image Generations  Generation Id  Get
- *
  * Successful Response
  */
-export const zStatusApiV1ImageGenerationsGenerationIdGetResponse = z.discriminatedUnion('status', [
-  zRunningSnapshot,
-  zCompletedSnapshot,
-  zFailedSnapshot,
-]);
+export const zStatusApiV1ImageGenerationsGenerationIdGetResponse = zSnapshot;
 
 export const zContentApiV1ImageGenerationsGenerationIdContentGetHeaders = z.object({
   'X-Application-User': z
@@ -170,3 +188,18 @@ export const zContentApiV1ImageGenerationsGenerationIdContentGetPath = z.object(
  * Successful Response
  */
 export const zContentApiV1ImageGenerationsGenerationIdContentGetResponse = z.string();
+
+export const zEventsApiV1ImageGenerationsGenerationIdEventsGetHeaders = z.object({
+  'X-Application-User': z
+    .string()
+    .regex(/^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$/),
+});
+
+export const zEventsApiV1ImageGenerationsGenerationIdEventsGetPath = z.object({
+  generation_id: z.uuid(),
+});
+
+/**
+ * Successful Response
+ */
+export const zEventsApiV1ImageGenerationsGenerationIdEventsGetResponse = zImageEvent;

@@ -176,6 +176,34 @@
           }
         }
       }
+    },
+    "image-generation": {
+      "projectType": "library",
+      "root": "projects/image-generation",
+      "sourceRoot": "projects/image-generation",
+      "prefix": "ai",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:ng-packagr",
+          "options": {
+            "project": "projects/image-generation/ng-package.json"
+          },
+          "configurations": {
+            "production": {
+              "tsConfig": "projects/image-generation/tsconfig.lib.json"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "buildTarget": "image-generation:build:production",
+            "tsConfig": "projects/image-generation/tsconfig.spec.json",
+            "runnerConfig": "projects/image-generation/vitest.config.ts"
+          }
+        }
+      }
     }
   }
 }

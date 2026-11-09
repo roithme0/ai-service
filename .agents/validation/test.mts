@@ -21,6 +21,7 @@ export const groupDescriptions = {
   backend: 'Backend pytest suite',
   'frontend-app': 'Angular application tests',
   'chat-ui': 'Chat UI unit and component tests',
+  'image-generation': 'Image generation controller tests',
   'chat-ui-browser': 'Chat UI browser component tests',
   e2e: 'Docker-backed application flow',
 } as const;
@@ -101,7 +102,8 @@ export async function runTests(root: string, selection: TestSelection, run: type
       await testE2E(root, join(root, '.agents/.codex-validation/e2e/manual'), run, selection.prebuiltImages, selection.nativeArgs);
     } else {
       const frontend = join(root, 'frontend');
-      const project = group === 'frontend-app' ? 'ai-service-frontend' : 'chat-ui';
+      if (group === 'image-generation') await run(frontend, 'image-generation-build', [join(frontend, 'node_modules/@angular/cli/bin/ng.js'), 'build', 'image-generation'], join(cache, 'image-generation-build.log'), 300_000);
+      const project = group === 'frontend-app' ? 'ai-service-frontend' : group === 'image-generation' ? 'image-generation' : 'chat-ui';
       await run(frontend, group, [join(frontend, 'node_modules/@angular/cli/bin/ng.js'), 'test', project, ...(group === 'chat-ui-browser' ? ['--configuration', 'browser'] : []), '--watch=false', ...selection.nativeArgs], log, 300_000);
     }
   }

@@ -154,6 +154,28 @@ export type HttpErrorResponse = {
   kind: 'not_found' | 'method_not_allowed' | 'http_error' | 'internal_error';
 };
 
+export type ImageEvent =
+  | ({
+      kind: 'snapshot';
+    } & SnapshotEvent)
+  | ({
+      kind: 'error';
+    } & ObservationErrorEvent);
+
+/**
+ * ObservationErrorEvent
+ */
+export type ObservationErrorEvent = {
+  /**
+   * Kind
+   */
+  kind: 'error';
+  /**
+   * Reason
+   */
+  reason: 'internal_error';
+};
+
 /**
  * RequestValidationErrorResponse
  */
@@ -200,6 +222,28 @@ export type RunningSnapshot = {
    * Status
    */
   status: 'running';
+};
+
+export type Snapshot =
+  | ({
+      status: 'running';
+    } & RunningSnapshot)
+  | ({
+      status: 'completed';
+    } & CompletedSnapshot)
+  | ({
+      status: 'failed';
+    } & FailedSnapshot);
+
+/**
+ * SnapshotEvent
+ */
+export type SnapshotEvent = {
+  /**
+   * Kind
+   */
+  kind: 'snapshot';
+  snapshot: Snapshot;
 };
 
 /**
@@ -267,35 +311,13 @@ export type SubmitApiV1ImageGenerationsPostError =
 
 export type SubmitApiV1ImageGenerationsPostResponses = {
   /**
-   * Response 200 Submit Api V1 Image Generations Post
-   *
    * OK
    */
-  200:
-    | ({
-        status: 'running';
-      } & RunningSnapshot)
-    | ({
-        status: 'completed';
-      } & CompletedSnapshot)
-    | ({
-        status: 'failed';
-      } & FailedSnapshot);
+  200: Snapshot;
   /**
-   * Response Submit Api V1 Image Generations Post
-   *
    * Successful Response
    */
-  202:
-    | ({
-        status: 'running';
-      } & RunningSnapshot)
-    | ({
-        status: 'completed';
-      } & CompletedSnapshot)
-    | ({
-        status: 'failed';
-      } & FailedSnapshot);
+  202: Snapshot;
 };
 
 export type SubmitApiV1ImageGenerationsPostResponse =
@@ -341,20 +363,9 @@ export type StatusApiV1ImageGenerationsGenerationIdGetError =
 
 export type StatusApiV1ImageGenerationsGenerationIdGetResponses = {
   /**
-   * Response Status Api V1 Image Generations  Generation Id  Get
-   *
    * Successful Response
    */
-  200:
-    | ({
-        status: 'running';
-      } & RunningSnapshot)
-    | ({
-        status: 'completed';
-      } & CompletedSnapshot)
-    | ({
-        status: 'failed';
-      } & FailedSnapshot);
+  200: Snapshot;
 };
 
 export type StatusApiV1ImageGenerationsGenerationIdGetResponse =
@@ -411,3 +422,51 @@ export type ContentApiV1ImageGenerationsGenerationIdContentGetResponses = {
 
 export type ContentApiV1ImageGenerationsGenerationIdContentGetResponse =
   ContentApiV1ImageGenerationsGenerationIdContentGetResponses[keyof ContentApiV1ImageGenerationsGenerationIdContentGetResponses];
+
+export type EventsApiV1ImageGenerationsGenerationIdEventsGetData = {
+  body?: never;
+  headers: {
+    /**
+     * X-Application-User
+     *
+     * Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).
+     */
+    'X-Application-User': string;
+  };
+  path: {
+    /**
+     * Generation Id
+     */
+    generation_id: string;
+  };
+  query?: never;
+  url: '/api/v1/image-generations/{generation_id}/events';
+};
+
+export type EventsApiV1ImageGenerationsGenerationIdEventsGetErrors = {
+  /**
+   * Not Found
+   */
+  404: HttpErrorResponse;
+  /**
+   * Unprocessable Content
+   */
+  422: RequestValidationErrorResponse;
+  /**
+   * Internal Server Error
+   */
+  500: HttpErrorResponse;
+};
+
+export type EventsApiV1ImageGenerationsGenerationIdEventsGetError =
+  EventsApiV1ImageGenerationsGenerationIdEventsGetErrors[keyof EventsApiV1ImageGenerationsGenerationIdEventsGetErrors];
+
+export type EventsApiV1ImageGenerationsGenerationIdEventsGetResponses = {
+  /**
+   * Successful Response
+   */
+  200: ImageEvent;
+};
+
+export type EventsApiV1ImageGenerationsGenerationIdEventsGetResponse =
+  EventsApiV1ImageGenerationsGenerationIdEventsGetResponses[keyof EventsApiV1ImageGenerationsGenerationIdEventsGetResponses];

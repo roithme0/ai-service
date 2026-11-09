@@ -1,21 +1,28 @@
 """HTTP endpoints for image generation."""
 
 import asyncio
+import logging
+from contextlib import aclosing
+from collections.abc import AsyncGenerator
 from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
+from starlette.types import Receive, Scope, Send
 
 from app.capabilities.image_generation.models import GenerationRequest, Snapshot
 from app.capabilities.image_generation.service import (
     Conflict,
     ImageGenerationService,
+    Record,
     Unavailable,
 )
 from app.core.http import require_application_user
 from app.core.identity import ApplicationIdentity
+from app.core.sse import EventStreamResponse, frame, with_heartbeats
 from app.core.models import (
     ErrorEnvelope,
     HttpErrorResponse,
@@ -164,3 +171,100 @@ async def content(
             "Content-Disposition": f'attachment; filename="{generation_id}.png"',
         },
     )
+
+
+class SnapshotEvent(BaseModel):
+    kind: Literal["snapshot"]
+    snapshot: Snapshot
+
+
+class ObservationErrorEvent(BaseModel):
+    kind: Literal["error"]
+    reason: Literal["internal_error"]
+
+
+type ImageEvent = Annotated[
+    SnapshotEvent | ObservationErrorEvent, Field(discriminator="kind")
+]
+
+
+async def _updates(
+    queue: asyncio.Queue[Snapshot | None],
+) -> AsyncGenerator[Snapshot, None]:
+    while (snapshot := await queue.get()) is not None:
+        yield snapshot
+        if snapshot.status != "running":
+            return
+
+
+async def _events(
+    first: Snapshot, updates: AsyncGenerator[Snapshot, None]
+) -> AsyncGenerator[str, None]:
+    try:
+        yield frame(SnapshotEvent(kind="snapshot", snapshot=first))
+        if first.status != "running":
+            return
+        async with aclosing(with_heartbeats(updates)) as stream:
+            async for snapshot in stream:
+                if snapshot is None:
+                    yield ": heartbeat\n\n"
+                else:
+                    yield frame(SnapshotEvent(kind="snapshot", snapshot=snapshot))
+                    if snapshot.status != "running":
+                        return
+    except Exception as exc:
+        logging.getLogger(__name__).error(
+            "Image observation failed (%s)", type(exc).__name__
+        )
+        yield frame(ObservationErrorEvent(kind="error", reason="internal_error"))
+
+
+class ImageEventResponse(EventStreamResponse):
+    def __init__(
+        self,
+        generation: ImageGenerationService,
+        record: Record,
+        first: Snapshot,
+        queue: asyncio.Queue[Snapshot | None],
+    ) -> None:
+        self.generation = generation
+        self.record = record
+        self.queue = queue
+        updates = _updates(queue)
+        super().__init__(_events(first, updates), updates, "private, no-store")
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self.generation.unsubscribe(self.record, self.queue)
+
+
+@router.get(
+    "/api/v1/image-generations/{generation_id}/events",
+    status_code=200,
+    response_class=EventStreamResponse,
+    response_model=ImageEvent,
+    responses={
+        200: {
+            "content": {
+                "text/event-stream": {
+                    "schema": {"$ref": "#/components/schemas/ImageEvent"}
+                }
+            }
+        },
+        **RESPONSES,
+    },
+)
+async def events(
+    generation_id: UUID,
+    owner: Annotated[ApplicationIdentity, Depends(require_application_user)],
+    generation: Annotated[ImageGenerationService, Depends(service)],
+) -> Response:
+    subscription = generation.subscribe(owner, generation_id)
+    if subscription is None:
+        return error(404, "not_found", "Not Found")
+    first, queue = subscription
+    record = generation.get(owner, generation_id)
+    assert record is not None
+    return ImageEventResponse(generation, record, first, queue)

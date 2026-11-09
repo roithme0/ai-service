@@ -1,0 +1,9 @@
+{
+  "name": "@roithme0/image-generation",
+  "version": "0.0.0",
+  "dependencies": {
+    "tslib": "^2.3.0",
+    "zod": "4.4.3"
+  },
+  "sideEffects": false
+}

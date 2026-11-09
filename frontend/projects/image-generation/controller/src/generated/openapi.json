@@ -235,6 +235,40 @@
         "title": "HttpErrorResponse",
         "type": "object"
       },
+      "ImageEvent": {
+        "discriminator": {
+          "mapping": {
+            "error": "#/components/schemas/ObservationErrorEvent",
+            "snapshot": "#/components/schemas/SnapshotEvent"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SnapshotEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ObservationErrorEvent"
+          }
+        ]
+      },
+      "ObservationErrorEvent": {
+        "properties": {
+          "kind": {
+            "const": "error",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "const": "internal_error",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": ["kind", "reason"],
+        "title": "ObservationErrorEvent",
+        "type": "object"
+      },
       "RequestValidationErrorResponse": {
         "additionalProperties": false,
         "properties": {
@@ -316,6 +350,42 @@
           "status"
         ],
         "title": "RunningSnapshot",
+        "type": "object"
+      },
+      "Snapshot": {
+        "discriminator": {
+          "mapping": {
+            "completed": "#/components/schemas/CompletedSnapshot",
+            "failed": "#/components/schemas/FailedSnapshot",
+            "running": "#/components/schemas/RunningSnapshot"
+          },
+          "propertyName": "status"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RunningSnapshot"
+          },
+          {
+            "$ref": "#/components/schemas/CompletedSnapshot"
+          },
+          {
+            "$ref": "#/components/schemas/FailedSnapshot"
+          }
+        ]
+      },
+      "SnapshotEvent": {
+        "properties": {
+          "kind": {
+            "const": "snapshot",
+            "title": "Kind",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/Snapshot"
+          }
+        },
+        "required": ["kind", "snapshot"],
+        "title": "SnapshotEvent",
         "type": "object"
       },
       "ValidationDetail": {
@@ -401,26 +471,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "discriminator": {
-                    "mapping": {
-                      "completed": "#/components/schemas/CompletedSnapshot",
-                      "failed": "#/components/schemas/FailedSnapshot",
-                      "running": "#/components/schemas/RunningSnapshot"
-                    },
-                    "propertyName": "status"
-                  },
-                  "oneOf": [
-                    {
-                      "$ref": "#/components/schemas/RunningSnapshot"
-                    },
-                    {
-                      "$ref": "#/components/schemas/CompletedSnapshot"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FailedSnapshot"
-                    }
-                  ],
-                  "title": "Response 200 Submit Api V1 Image Generations Post"
+                  "$ref": "#/components/schemas/Snapshot"
                 }
               }
             },
@@ -437,26 +488,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "discriminator": {
-                    "mapping": {
-                      "completed": "#/components/schemas/CompletedSnapshot",
-                      "failed": "#/components/schemas/FailedSnapshot",
-                      "running": "#/components/schemas/RunningSnapshot"
-                    },
-                    "propertyName": "status"
-                  },
-                  "oneOf": [
-                    {
-                      "$ref": "#/components/schemas/RunningSnapshot"
-                    },
-                    {
-                      "$ref": "#/components/schemas/CompletedSnapshot"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FailedSnapshot"
-                    }
-                  ],
-                  "title": "Response Submit Api V1 Image Generations Post"
+                  "$ref": "#/components/schemas/Snapshot"
                 }
               }
             },
@@ -555,26 +587,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "discriminator": {
-                    "mapping": {
-                      "completed": "#/components/schemas/CompletedSnapshot",
-                      "failed": "#/components/schemas/FailedSnapshot",
-                      "running": "#/components/schemas/RunningSnapshot"
-                    },
-                    "propertyName": "status"
-                  },
-                  "oneOf": [
-                    {
-                      "$ref": "#/components/schemas/RunningSnapshot"
-                    },
-                    {
-                      "$ref": "#/components/schemas/CompletedSnapshot"
-                    },
-                    {
-                      "$ref": "#/components/schemas/FailedSnapshot"
-                    }
-                  ],
-                  "title": "Response Status Api V1 Image Generations  Generation Id  Get"
+                  "$ref": "#/components/schemas/Snapshot"
                 }
               }
             },
@@ -707,6 +720,79 @@
           }
         },
         "summary": "Content"
+      }
+    },
+    "/api/v1/image-generations/{generation_id}/events": {
+      "get": {
+        "operationId": "events_api_v1_image_generations__generation_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "generation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Generation Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+            "in": "header",
+            "name": "X-Application-User",
+            "required": true,
+            "schema": {
+              "description": "Unverified identity: encodeURIComponent(issuer):encodeURIComponent(subject).",
+              "pattern": "^(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+:(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+$",
+              "title": "X-Application-User",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageEvent",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestValidationErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "500": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Events"
       }
     }
   }

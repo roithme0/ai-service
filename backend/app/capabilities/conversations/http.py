@@ -1,16 +1,13 @@
 """Injectable native conversation HTTP boundary with caller-owned composition."""
 
-import asyncio
 import logging
+from contextlib import aclosing
 from collections.abc import AsyncGenerator, Callable, Mapping
-from contextlib import suppress
 from typing import Annotated, Literal
 
-from anyio import CancelScope
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
-from starlette.types import Receive, Scope, Send
 
 from app.capabilities.conversations.config import MAX_PROMPT_CHARACTERS
 from app.capabilities.conversations.session_state import SessionBusyError
@@ -27,6 +24,7 @@ from app.core.http import require_application_user
 from app.core.identity import ApplicationIdentity
 from app.capabilities.conversations.artifacts import ArtifactCapability
 from app.core.json import FiniteJsonValue
+from app.core.sse import EventStreamResponse, frame, with_heartbeats
 
 _logger = logging.getLogger(__name__)
 _HEARTBEAT_INTERVAL_SECONDS = 15.0
@@ -107,65 +105,31 @@ async def _events(
     first: PresentedSession,
     updates: AsyncGenerator[PresentedSession, None],
 ) -> AsyncGenerator[str, None]:
-    pending: asyncio.Task[PresentedSession] | None = None
     try:
-        yield f"data: {SnapshotEvent(snapshot=first).model_dump_json()}\n\n"
-        while True:
-            if pending is None:
-                pending = asyncio.create_task(anext(updates))
-            done, _ = await asyncio.wait(
-                (pending,), timeout=_HEARTBEAT_INTERVAL_SECONDS
-            )
-            if not done:
-                yield ": heartbeat\n\n"
-                continue
-            snapshot = pending.result()
-            pending = None
-            yield f"data: {SnapshotEvent(snapshot=snapshot).model_dump_json()}\n\n"
-    except StopAsyncIteration:
-        return
+        yield frame(SnapshotEvent(snapshot=first))
+        async with aclosing(
+            with_heartbeats(updates, _HEARTBEAT_INTERVAL_SECONDS)
+        ) as stream:
+            async for snapshot in stream:
+                yield (
+                    ": heartbeat\n\n"
+                    if snapshot is None
+                    else frame(SnapshotEvent(snapshot=snapshot))
+                )
     except SessionNotFoundError:
-        yield f"data: {ObservationErrorEvent(reason='unknown').model_dump_json()}\n\n"
+        yield frame(ObservationErrorEvent(reason="unknown"))
     except ObservationOverflowError:
-        yield f"data: {ObservationErrorEvent(reason='observation_overflow').model_dump_json()}\n\n"
+        yield frame(ObservationErrorEvent(reason="observation_overflow"))
     except Exception as error:
         _logger.error("Session observation failed (%s).", type(error).__name__)
-        yield f"data: {ObservationErrorEvent(reason='internal_error').model_dump_json()}\n\n"
-    finally:
-        with CancelScope(shield=True):
-            if pending is not None:
-                pending.cancel()
-                with suppress(asyncio.CancelledError, Exception):
-                    await pending
-            await updates.aclose()
-
-
-class EventStreamResponse(StreamingResponse):
-    media_type = "text/event-stream"
+        yield frame(ObservationErrorEvent(reason="internal_error"))
 
 
 class _SessionEventResponse(EventStreamResponse):
     def __init__(
         self, first: PresentedSession, updates: AsyncGenerator[PresentedSession, None]
     ) -> None:
-        self._updates = updates
-        self._events = _events(first, updates)
-        super().__init__(
-            self._events,
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no",
-            },
-        )
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        try:
-            await super().__call__(scope, receive, send)
-        finally:
-            with CancelScope(shield=True):
-                await self._events.aclose()
-                await self._updates.aclose()
+        super().__init__(_events(first, updates), updates, "no-cache")
 
 
 def create_session_router(

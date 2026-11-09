@@ -67,6 +67,6 @@ class FailedSnapshot(SnapshotBase):
     error: Failure
 
 
-Snapshot = Annotated[
+type Snapshot = Annotated[
     RunningSnapshot | CompletedSnapshot | FailedSnapshot, Field(discriminator="status")
 ]
