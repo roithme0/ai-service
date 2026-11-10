@@ -19,8 +19,8 @@ Create `deployment/.env` from [.env.example](../deployment/.env.example); host-s
 | `GATEWAY_PORT` | Published gateway port for Compose. The example selects 8004. |
 | `OPENAI_API_KEY` | Provider credentials for transcription, embeddings, image generation, Kochwiki, and Live Demo. |
 | `TRANSCRIPTION_OPENAI_MODEL` | Optional transcription model; defaults to `gpt-transcribe`. |
-| `IMAGE_GENERATION_OPENAI_MODEL` | GPT Image model for image generation; recommended initial value `gpt-image-2`. |
-| `IMAGE_GENERATION_STORAGE_ROOT` | Absolute dedicated image storage directory. |
+| `IMAGE_GENERATION_OPENAI_MODEL` | Optional GPT Image model for image generation; blank disables it. |
+| `IMAGE_GENERATION_STORAGE_ROOT` | Absolute dedicated image storage directory; blank leaves storage unconfigured. |
 | `KOCHWIKI_OPENAI_MODEL` | Model used by the Kochwiki agent. |
 | `KOCHWIKI_MCP_URL` | External Streamable HTTP MCP endpoint, including its path. |
 | `KOCHWIKI_OPENAI_REASONING_EFFORT` | Optional model reasoning effort; blank uses the model default. Support depends on the selected model. |
@@ -31,7 +31,9 @@ Live Demo includes a stateless greetings MCP server mounted at `/mcp/` in the ba
 
 Transcription uses `OPENAI_API_KEY` and its own optional model setting. Missing credentials or an empty model make transcription unavailable without disabling other capabilities. See the [speech-to-text contract](domains/transcriptions.md) for upload limits, errors, and provider handling.
 
-Image generation requires `OPENAI_API_KEY` and both image settings. It is unavailable by default. A configured storage root is initialized even if the provider is disabled; an unsafe or unusable root prevents startup. Run one backend process with an exclusive disk-backed root and sufficient capacity; no overlapping instances may share it. Files and metadata grow without a quota until restart, and concurrent submissions have no application queue or spending limit. For Compose, set `IMAGE_GENERATION_STORAGE_ROOT=/var/lib/ai-service/image-generation` to use the dedicated named volume. See [image generation](domains/image-generation.md) for retention and request behavior.
+Image generation requires `OPENAI_API_KEY` and both image settings. It is disabled by default; admission returns `503 image_generation_unavailable` while other capabilities remain available. A configured storage root is initialized even if the provider is disabled; an unsafe or unusable root prevents startup. Host development needs an absolute, dedicated writable host directory. For Compose, set `IMAGE_GENERATION_STORAGE_ROOT=/var/lib/ai-service/image-generation` exactly; paths outside that mount are unsupported. Local Compose uses a named disk-backed volume. Staging and production bind `./backend/image-generation` relative to their Compose file: use separate deployment directories and roots for each environment, create each host folder, and grant the container write permission.
+
+Run one backend replica and one worker with exclusive ownership of its disk-backed root. Never overlap instances sharing a root, including different Compose projects or manual processes; Compose cannot enforce that cross-project rule. Files and metadata grow without a quota until restart, and concurrent submissions have no application queue or spending limit. See [image generation](domains/image-generation.md) for retention and request behavior.
 
 For a Kochwiki server on the Docker host, the example uses `http://host.docker.internal:8002/mcp/`; ensure that name resolves on your host. Container `localhost` refers to the container itself.
 
@@ -43,16 +45,21 @@ From **deployment/**, for production; substitute the staging filename as needed:
 
 ```powershell
 docker compose --env-file .env -f docker-compose-production.yml pull
-docker compose --env-file .env -f docker-compose-production.yml up -d
+docker compose --env-file .env -f docker-compose-production.yml stop backend
+docker compose --env-file .env -f docker-compose-production.yml ps -a backend
+# Verify the old backend is stopped before continuing.
+docker compose --env-file .env -f docker-compose-production.yml up -d --scale backend=1
 docker compose --env-file .env -f docker-compose-production.yml ps -a
 docker compose --env-file .env -f docker-compose-production.yml logs --tail=100 backend gateway
 ```
+
+This stop-before-start sequence causes downtime and loses active sessions, image references and idempotency keys. For rollback, set the backend and frontend `image` references in the deployment's Compose file to the recorded version tags or digests, then repeat the pull, stop, verify and start sequence. Do not start a replacement until every old process using its storage root has stopped.
 
 Check the visual demo through the gateway by submitting messages and observing text, artifacts, and the intentional scripted failure. Test Kochwiki through a configured consumer if enabled. Container startup alone does not verify model or MCP connectivity.
 
 ### Releases
 
-The [publishing workflow](../.github/workflows/publish-app.yml) publishes both Docker Hub images and `@roithme0/chat-ui` to GitHub Packages from one commit. It does not deploy to a host.
+The [publishing workflow](../.github/workflows/publish-app.yml) publishes both Docker Hub images and `@roithme0/chat-ui` to GitHub Packages from one commit. It does not deploy to a host. The image-generation package can be built and packed locally but is not published by this workflow.
 
 | Repository tag | Published version | Channel |
 | --- | --- | --- |
@@ -61,7 +68,7 @@ The [publishing workflow](../.github/workflows/publish-app.yml) publishes both D
 
 Tags allow three numeric version parts, optionally `-alpha` or `-alpha.N`, without leading zeroes. Each release needs a new version; source package versions remain unchanged. Both builds must succeed before publication, but registry failures can still leave a partial release. Verify the entire workflow succeeded.
 
-Record image IDs before updating. Channel tags move; matching version tags or digests make rollback reproducible. Recreating the backend loses active sessions.
+Record version tags or digests before updating. Channel tags move; matching version tags or digests make rollback reproducible. Follow the [deployment sequence and rollback guidance](#deploy-or-update).
 
 ## Persistence and recovery
 

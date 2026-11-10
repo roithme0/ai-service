@@ -117,5 +117,5 @@ await writeFile(
 );
 run(process.execPath, [join(temp, 'ui-consumer.mjs')]);
 console.log(
-  'Packed controller entrypoint, empty root, controller flow and strict declarations verified.',
+  'Packed controller and UI entrypoints, empty root, controller flow and strict declarations verified.',
 );

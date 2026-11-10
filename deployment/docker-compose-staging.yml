@@ -2,6 +2,7 @@ name: ai-service-staging
 
 services:
   backend:
+    scale: 1
     image: roithme0/ai-service-backend:alpha
     restart: unless-stopped
     environment:

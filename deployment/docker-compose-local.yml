@@ -2,6 +2,7 @@ name: ai-service-local
 
 services:
   backend:
+    scale: 1
     build:
       context: ../backend
     environment:

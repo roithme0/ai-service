@@ -8,7 +8,7 @@ import { DemoLanding } from './pages/demo-landing/demo-landing.component';
 describe('Demo navigation', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('shows links to both demos without starting a session', async () => {
+  it('shows links to all demos without starting a session', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     vi.stubGlobal('fetch', fetch);
     TestBed.configureTestingModule({ providers: [provideRouter(routes)] });
@@ -19,6 +19,7 @@ describe('Demo navigation', () => {
     expect(Array.from(page.querySelectorAll('a'), (link) => link.getAttribute('href'))).toEqual([
       '/demos/visual',
       '/demos/live',
+      '/demos/image-generation',
     ]);
     expect(TestBed.inject(Router).url).toBe('/');
     expect(fetch).not.toHaveBeenCalled();

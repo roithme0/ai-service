@@ -2,6 +2,7 @@ name: ai-service-production
 
 services:
   backend:
+    scale: 1
     image: roithme0/ai-service-backend:latest
     restart: unless-stopped
     environment:

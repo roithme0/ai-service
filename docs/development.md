@@ -24,9 +24,9 @@ npm ci
 npm run start:app
 ```
 
-Open `http://localhost:4204` for the demo selector: **Visual Demo** (`/demos/visual`) or **Live Demo** (`/demos/live`). API requests proxy to port 8004. Visual Demo needs no model credentials or Kochwiki connection; Live Demo requires the [provider key](operation.md#configuration). Refresh or re-enter a demo to start a new session.
+Open `http://localhost:4204` for the demo selector: **Visual Demo** (`/demos/visual`), **Live Demo** (`/demos/live`), or **Image Generation** (`/demos/image-generation`). API requests proxy to port 8004. Visual Demo needs no model credentials or Kochwiki connection; Live Demo requires the [provider key](operation.md#configuration). Image Generation requires the [provider key, model, and dedicated storage directory](operation.md#configuration). Refresh or re-enter a conversation demo to start a new session.
 
-For model-backed conversations, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [agent settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
+For model-backed conversations or image generation, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [required settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
 
 ### Container alternative
 
@@ -136,7 +136,7 @@ For manual layout and interaction checks, use [Visual Demo](http://localhost:420
 
 ## Develop the image generation package
 
-After `npm ci`, build the standalone controller package from **frontend/** with `npm run build:image-generation`, then verify its packed controller entrypoint and declarations with `npm run check:image-generation-package`. Use `npm run pack:image-generation` to build and create a package archive.
+After `npm ci`, build the standalone image generation package from **frontend/** with `npm run build:image-generation`, then verify its packed controller entrypoint and declarations with `npm run check:image-generation-package`. Use `npm run pack:image-generation` to build and create a package archive.
 
 Run its focused tests from the **repository root** with `node .agents/validation/test.mts --group image-generation` after completing [local setup](#run-locally). Focused runs do not replace [full validation](#validate-changes).
 
