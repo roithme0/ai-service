@@ -1,6 +1,5 @@
+import { TextFieldModule } from '@angular/cdk/text-field';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { Component, ElementRef, input, output, viewChild } from '@angular/core';
 
 let nextId = 0;
@@ -8,7 +7,7 @@ let nextId = 0;
 @Component({
   selector: 'ai-image-generation-input-panel',
   standalone: true,
-  imports: [MatButtonModule, MatFormFieldModule, MatInputModule],
+  imports: [TextFieldModule, MatButtonModule],
   templateUrl: './input-panel.component.html',
   styleUrls: ['../panel.scss', './input-panel.component.scss'],
 })

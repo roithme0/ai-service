@@ -1,9 +1,11 @@
+@use '../../../../../shared/styles/tokens';
+
 :host {
   display: block;
   min-width: 0;
   height: 100%;
-  color: var(--image-ui-text, #222);
-  background: var(--image-ui-background, #fff);
+  color: tokens.value('text');
+  background: tokens.value('background');
   font: inherit;
 }
 

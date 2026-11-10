@@ -1,0 +1,18 @@
+@use 'defaults';
+
+$values: (
+  'banner-background': var(--ai-ui-banner-background, defaults.$surface-background),
+  'banner-text': var(--ai-ui-banner-text, defaults.$primary-text),
+  'user-background': var(--ai-ui-user-background, #a9004f),
+  'user-text': var(--ai-ui-user-text, defaults.$on-accent-text),
+  'assistant-text': var(--ai-ui-assistant-text, var(--ai-ui-text, defaults.$primary-text)),
+  'banner-heading-font-size': var(--ai-ui-banner-heading-font-size, 1.25rem),
+  'banner-heading-font-weight': var(--ai-ui-banner-heading-font-weight, 600),
+  'banner-heading-line-height': var(--ai-ui-banner-heading-line-height, 1.3),
+  'tool-status-font-size': var(--ai-ui-tool-status-font-size, defaults.$small-font-size),
+  'banner-radius': var(--ai-ui-banner-radius, defaults.$surface-radius),
+  'user-radius': var(--ai-ui-user-radius, 1.125rem 1.125rem 0.25rem 1.125rem),
+  'banner-padding': var(--ai-ui-banner-padding, 1.125rem),
+  'user-padding': var(--ai-ui-user-padding, 0.75rem 1rem),
+  'user-max-width': var(--ai-ui-user-max-width, min(82%, 34rem)),
+);

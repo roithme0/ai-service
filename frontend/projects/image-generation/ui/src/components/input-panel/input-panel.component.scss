@@ -1,8 +1,31 @@
-mat-form-field {
-  width: 100%;
+@use '../../../../../shared/styles/tokens';
+
+.surface {
+  padding: tokens.value('composer-padding');
+  border: tokens.value('surface-border-width') solid tokens.value('composer-border');
+  border-radius: tokens.value('composer-radius');
+  background: tokens.value('composer-background');
+}
+
+.surface:focus-within {
+  outline: tokens.value('focus-width') solid tokens.value('focus');
+  outline-offset: 0.1rem;
 }
 
 textarea {
-  min-height: 13rem;
-  resize: vertical;
+  display: block;
+  box-sizing: content-box;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: tokens.value('composer-text');
+  font: inherit;
+  line-height: 1.5rem;
+  resize: none;
+}
+
+textarea::placeholder {
+  color: tokens.value('muted-text');
 }

@@ -1,0 +1,10 @@
+@use 'defaults';
+
+$values: (
+  'panel-background': var(--ai-ui-panel-background, defaults.$surface-background),
+  'panel-border': var(--ai-ui-panel-border, defaults.$surface-border),
+  'panel-font-size': var(--ai-ui-panel-font-size, defaults.$small-font-size),
+  'panel-radius': var(--ai-ui-panel-radius, 0.875rem),
+  'panel-padding': var(--ai-ui-panel-padding, 0.625rem 0.875rem 1.75rem),
+  'usage-transition-duration': var(--ai-ui-usage-transition-duration, 160ms),
+);

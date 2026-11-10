@@ -1,0 +1,27 @@
+@use 'defaults';
+
+$values: (
+  'background': var(--ai-ui-background, #130d0f),
+  'text': var(--ai-ui-text, defaults.$primary-text),
+  'muted-text': var(--ai-ui-muted-text, defaults.$muted-text),
+  'accent': var(--ai-ui-accent, #e00067),
+  'link': var(--ai-ui-link, #ff7aad),
+  'focus': var(--ai-ui-focus, #ff9fc1),
+  'control-hover-background': var(--ai-ui-control-hover-background, defaults.$surface-background),
+  'control-active-background': var(--ai-ui-control-active-background, defaults.$surface-background),
+  'code-background': var(--ai-ui-code-background, #251a1e),
+  'message-line-height': var(--ai-ui-message-line-height, 1.6),
+  'heading-line-height': var(--ai-ui-heading-line-height, 1.35),
+  'heading-font-size': var(--ai-ui-heading-font-size, 1rem),
+  'secondary-font-size': var(--ai-ui-secondary-font-size, 0.875rem),
+  'code-font-family': var(
+      --ai-ui-code-font-family,
+      (ui-monospace, SFMono-Regular, Consolas, monospace)
+    ),
+  'surface-border-width': var(--ai-ui-surface-border-width, 1px),
+  'focus-width': var(--ai-ui-focus-width, 0.15rem),
+  'control-radius': var(--ai-ui-control-radius, 0.5rem),
+  'code-radius': var(--ai-ui-code-radius, 0.75rem),
+  'content-padding-inline': var(--ai-ui-content-padding-inline, defaults.$surface-padding),
+  'code-padding': var(--ai-ui-code-padding, 0.75rem),
+);

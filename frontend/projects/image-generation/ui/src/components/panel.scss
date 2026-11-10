@@ -1,3 +1,5 @@
+@use '../../../../shared/styles/tokens';
+
 :host {
   display: flex;
   flex: 1 1 auto;
@@ -34,10 +36,10 @@ h2 {
 }
 
 summary:focus-visible {
-  outline: 2px solid var(--image-ui-focus, #3768d8);
+  outline: 2px solid tokens.value('focus');
   outline-offset: 2px;
 }
 
 .error {
-  color: var(--image-ui-error, #b3261e);
+  color: tokens.value('error-text');
 }

@@ -90,11 +90,14 @@ it('validates code points and submits exact instructions once while pending', as
   const pending = deferred<void>();
   const t = setup();
   vi.mocked(t.actions.submit).mockReturnValue(pending.promise);
+  expect(t.button('Generate image').disabled).toBe(true);
   t.edit('  ');
+  expect(t.button('Generate image').disabled).toBe(true);
   t.button('Generate image').click();
   t.fixture.detectChanges();
   expect(t.actions.submit).not.toHaveBeenCalled();
   t.edit('\u{1F600}'.repeat(32001));
+  expect(t.button('Generate image').disabled).toBe(false);
   t.button('Generate image').click();
   expect(t.actions.submit).not.toHaveBeenCalled();
   const text = `  ${'\u{1F600}'.repeat(31996)}  `;
@@ -339,6 +342,11 @@ it('associates labels and validation errors independently across instances', () 
   fixture.componentRef.setInput('actions', a.actions);
   fixture.detectChanges();
   const root = fixture.nativeElement as HTMLElement;
+  a.edit('x'.repeat(32001));
+  const secondInput = root.querySelector('textarea')!;
+  secondInput.value = 'x'.repeat(32001);
+  secondInput.dispatchEvent(new Event('input'));
+  fixture.detectChanges();
   a.button('Generate image').click();
   root.querySelector('button')!.click();
   a.fixture.detectChanges();
@@ -346,8 +354,8 @@ it('associates labels and validation errors independently across instances', () 
   const first = a.root.querySelector('textarea')!;
   const second = root.querySelector('textarea')!;
   expect(first.id).not.toBe(second.id);
-  expect(a.root.querySelector('label')?.htmlFor).toBe(first.id);
-  expect(root.querySelector('label')?.htmlFor).toBe(second.id);
+  expect(first.getAttribute('aria-label')).toBe('Instructions');
+  expect(second.getAttribute('aria-label')).toBe('Instructions');
   expect(first.getAttribute('aria-describedby')).not.toBe(second.getAttribute('aria-describedby'));
 });
 

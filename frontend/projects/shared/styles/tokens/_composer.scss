@@ -1,0 +1,14 @@
+@use 'defaults';
+
+$values: (
+  'composer-background': var(--ai-ui-composer-background, defaults.$surface-background),
+  'composer-border': var(--ai-ui-composer-border, defaults.$surface-border),
+  'composer-text': var(--ai-ui-composer-text, defaults.$primary-text),
+  'composer-secondary-font-size': var(--ai-ui-composer-secondary-font-size, 0.6875rem),
+  'send-background': var(--ai-ui-send-background, #c00059),
+  'send-hover-background': var(--ai-ui-send-hover-background, #df0067),
+  'send-text': var(--ai-ui-send-text, defaults.$on-accent-text),
+  'composer-radius': var(--ai-ui-composer-radius, 1.25rem),
+  'composer-padding': var(--ai-ui-composer-padding, 0.75rem),
+  'mascot-width': var(--ai-ui-mascot-width, 3.85rem),
+);

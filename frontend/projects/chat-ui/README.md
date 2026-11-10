@@ -211,9 +211,9 @@ Direct transport methods: `createSession(initialization?)`, `readSession(session
 
 ## Theme
 
-Set CSS variables on an ancestor of `ai-chat-ui`; fallback defaults preserve inherited overrides. Material styles controls; library styles are bundled.
+Set `--ai-ui-*` CSS variables on an ancestor of `ai-chat-ui` or `ai-image-generation` to theme both packages. Defaults are bundled with each UI; Material styles controls.
 
-See the [token catalog](https://github.com/roithme0/ai-service/blob/production/frontend/projects/chat-ui/ui/src/styles/_tokens.scss) and its imported semantic groups for configurable variables and defaults.
+See the [token catalog](https://github.com/roithme0/ai-service/blob/production/frontend/projects/shared/styles/_tokens.scss) and its imported semantic groups for configurable variables and defaults.
 
 ## Repository workflows
 

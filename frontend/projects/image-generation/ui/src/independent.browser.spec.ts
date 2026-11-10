@@ -31,17 +31,38 @@ it('supports native textarea and keyboard activation in a narrow host', async ()
   const host = fixture.nativeElement as HTMLElement;
   host.style.width = '320px';
   host.style.height = '400px';
+  host.style.setProperty('--ai-ui-composer-background', 'rgb(12, 34, 56)');
+  host.style.setProperty('--ai-ui-composer-border', 'rgb(65, 43, 21)');
   fixture.detectChanges();
   await fixture.whenStable();
   const input = page.getByRole('textbox', { name: 'Instructions' });
-  const inputBounds = input.element().getBoundingClientRect();
-  expect(inputBounds.height).toBeGreaterThan(host.clientHeight / 2);
+  const textarea = input.element() as HTMLTextAreaElement;
+  const surface = textarea.parentElement!;
+  expect(getComputedStyle(surface).backgroundColor).toBe('rgb(12, 34, 56)');
+  expect(getComputedStyle(surface).borderColor).toBe('rgb(65, 43, 21)');
+  const lineHeight = Number.parseFloat(getComputedStyle(textarea).lineHeight);
+  const contentHeight = (): number => {
+    const style = getComputedStyle(textarea);
+    return (
+      textarea.clientHeight -
+      Number.parseFloat(style.paddingTop) -
+      Number.parseFloat(style.paddingBottom)
+    );
+  };
+  expect(contentHeight()).toBeCloseTo(lineHeight * 3, 0);
+  expect(getComputedStyle(textarea).resize).toBe('none');
+  await input.fill(Array.from({ length: 6 }, () => 'line').join('\n'));
+  await expect.poll(contentHeight).toBeCloseTo(lineHeight * 6, 0);
+  await input.fill(Array.from({ length: 12 }, () => 'line').join('\n'));
+  await expect.poll(contentHeight).toBeCloseTo(lineHeight * 10, 0);
+  expect(textarea.scrollHeight).toBeGreaterThan(textarea.clientHeight);
+  await input.fill('first');
+  await expect.poll(contentHeight).toBeCloseTo(lineHeight * 3, 0);
   const generateBounds = page
     .getByRole('button', { name: 'Generate image' })
     .element()
     .getBoundingClientRect();
   expect(generateBounds.bottom).toBeLessThanOrEqual(host.getBoundingClientRect().bottom);
-  await input.fill('first');
   await userEvent.keyboard('{Enter}second');
   await expect.element(input).toHaveValue('first\nsecond');
   expect(actions.submit).not.toHaveBeenCalled();

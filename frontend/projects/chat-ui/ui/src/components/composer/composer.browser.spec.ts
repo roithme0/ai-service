@@ -249,7 +249,7 @@ it.each([
     host.style.fontFamily = 'monospace';
     host.style.fontSize = '16px';
     host.style.lineHeight = '1.5';
-    if (width === 900) host.style.setProperty('--ai-chat-composer-secondary-font-size', '13px');
+    if (width === 900) host.style.setProperty('--ai-ui-composer-secondary-font-size', '13px');
     const name = 'provider/' + 'long-model-identifier-'.repeat(12);
     fixture.componentRef.setInput('model', { name, reasoningEffort });
     fixture.componentRef.setInput('usage', USAGE);
