@@ -1,0 +1,20 @@
+<h2 #heading tabindex="-1">Generating image</h2>
+<div class="center" aria-live="polite">
+  @if (admission() === 'uncertain') {
+    <p>Could not confirm submission</p>
+    <button mat-stroked-button type="button" [disabled]="pending()" (click)="recover.emit()">
+      Recover request
+    </button>
+  } @else if (observation() === 'lost') {
+    <p>Connection to generation status lost.</p>
+    <button mat-stroked-button type="button" [disabled]="pending()" (click)="reconnect.emit()">
+      Reconnect to status
+    </button>
+  } @else {
+    <mat-spinner diameter="32" aria-hidden="true" />
+    <p>{{ admission() === 'accepted' ? 'Generating image' : 'Submitting request' }}</p>
+  }
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+</div>

@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   copyFile,
@@ -307,17 +307,17 @@ void test("CI E2E diagnostics collect isolated trees and logs only", async () =>
     .map((line) => line.trim());
   const root = await mkdtemp(join(tmpdir(), "ci-e2e-artifact-"));
   const fixtures = [
-    ".agents/.codex-validation/e2e/manual/containers.log",
-    ".agents/.codex-validation/e2e/manual/services.log",
-    ".agents/.codex-validation/e2e/manual/playwright-a/test-results/case/trace.zip",
-    ".agents/.codex-validation/e2e/manual/playwright-a/test-results/case/screenshot.png",
-    ".agents/.codex-validation/e2e/manual/playwright-a/html-report/index.html",
-    ".agents/.codex-validation/e2e/manual/playwright-a/html-report/data/nested/attachment.png",
-    ".agents/.codex-validation/e2e/manual/playwright-b/test-results/case/trace.zip",
-    ".agents/.codex-validation/e2e/manual/playwright-b/html-report/data/attachment.zip",
-    ".agents/.codex-validation/e2e/manual/playwright-b/other/private.txt",
-    ".agents/.codex-validation/e2e/manual/nested/unrelated.log",
-    ".agents/.codex-validation/e2e/session/private.txt",
+    ".codex-validation/e2e/manual/containers.log",
+    ".codex-validation/e2e/manual/services.log",
+    ".codex-validation/e2e/manual/playwright-a/test-results/case/trace.zip",
+    ".codex-validation/e2e/manual/playwright-a/test-results/case/screenshot.png",
+    ".codex-validation/e2e/manual/playwright-a/html-report/index.html",
+    ".codex-validation/e2e/manual/playwright-a/html-report/data/nested/attachment.png",
+    ".codex-validation/e2e/manual/playwright-b/test-results/case/trace.zip",
+    ".codex-validation/e2e/manual/playwright-b/html-report/data/attachment.zip",
+    ".codex-validation/e2e/manual/playwright-b/other/private.txt",
+    ".codex-validation/e2e/manual/nested/unrelated.log",
+    ".codex-validation/e2e/session/private.txt",
     "frontend/e2e/test-results/stale.zip",
   ];
   for (const fixture of fixtures) {
@@ -377,11 +377,11 @@ void test("CI E2E diagnostics collect isolated trees and logs only", async () =>
   const earlyRoot = await mkdtemp(join(tmpdir(), "ci-e2e-early-"));
   const earlyLog = join(
     earlyRoot,
-    ".agents/.codex-validation/e2e/manual/containers.log",
+    ".codex-validation/e2e/manual/containers.log",
   );
   await mkdir(dirname(earlyLog), { recursive: true });
   await writeFile(earlyLog, "early failure");
   assert.deepEqual(selected(earlyRoot, earlyRoot), [
-    ".agents/.codex-validation/e2e/manual/containers.log",
+    ".codex-validation/e2e/manual/containers.log",
   ]);
 });

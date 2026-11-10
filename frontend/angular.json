@@ -200,7 +200,18 @@
           "options": {
             "buildTarget": "image-generation:build:production",
             "tsConfig": "projects/image-generation/tsconfig.spec.json",
-            "runnerConfig": "projects/image-generation/vitest.config.ts"
+            "runnerConfig": "projects/image-generation/vitest.config.ts",
+            "exclude": ["**/*.browser.spec.ts"]
+          },
+          "configurations": {
+            "browser": {
+              "buildTarget": "ai-service-frontend:build:development",
+              "runnerConfig": "projects/image-generation/vitest.browser.config.ts",
+              "include": ["ui/**/*.browser.spec.ts"],
+              "exclude": [],
+              "browsers": ["chromiumHeadless"],
+              "browserViewport": "390x844"
+            }
           }
         }
       }

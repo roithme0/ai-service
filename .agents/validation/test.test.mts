@@ -249,6 +249,8 @@ void test("selected runners receive their working directory and native arguments
     "--watch=false",
     "--include=example",
   ]);
+  await runTests(fixture, parseTestArguments(["--group", "image-generation-browser"]), run);
+  assert.deepEqual(calls[2]?.args.slice(1), ["test", "image-generation", "--configuration", "browser", "--watch=false"]);
   const fail: typeof runCheck = () =>
     Promise.reject(new Error("runner failed"));
   await assert.rejects(

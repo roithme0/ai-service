@@ -102,9 +102,9 @@ npx playwright test --headed
 Remove-Item Env:PLAYWRIGHT_BASE_URL
 ```
 
-Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Run `node .agents/validation/e2e.mts` from the repository root for browser flow, frontend/backend integration, or local deployment changes. It updates Docker using the build cache and runs Playwright. The stack stays running; logs are in `.agents/.codex-validation/e2e/`.
+Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Run `node .agents/validation/e2e.mts` from the repository root for browser flow, frontend/backend integration, or local deployment changes. It updates Docker using the build cache and runs Playwright. The stack stays running; logs are in `.codex-validation/e2e/`.
 
-The [CI workflow](../.github/workflows/publish-app.yml) defines validation, image testing, and publication dependencies. The isolated runner writes browser results and HTML reports under separate `.agents/.codex-validation/e2e/manual/playwright-*/` directories. On failure, the `e2e-diagnostics` artifact contains available results and reports with their run directories preserved, along with top-level manual logs.
+The [CI workflow](../.github/workflows/publish-app.yml) defines validation, image testing, and publication dependencies. The isolated runner writes browser results and HTML reports under separate `.codex-validation/e2e/manual/playwright-*/` directories. On failure, the `e2e-diagnostics` artifact contains available results and reports with their run directories preserved, along with top-level manual logs.
 
 ## Update generated contracts
 
@@ -150,6 +150,6 @@ Run its focused tests from the **repository root** with `node .agents/validation
 | [Hooks](../.codex/hooks.json) | Codex adapter snapshots content before prompts and validates affected scopes on stop. |
 | [Project configuration](../.codex/config.toml) | Angular CLI and OpenAI documentation MCP connections. |
 
-Review and trust hooks before relying on them. Relevant hooks perform [validation](#validate-changes), including contract freshness checks; unchanged discussion turns run none. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/`.
+Review and trust hooks before relying on them. Relevant hooks perform [validation](#validate-changes), including contract freshness checks; unchanged discussion turns run none. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.codex-validation/`.
 
 Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.

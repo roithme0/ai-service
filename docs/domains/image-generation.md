@@ -19,3 +19,13 @@ The framework-independent `@roithme0/image-generation/controller` entrypoint pro
 Completed content is returned as a PNG Blob with a filename and snapshot. The host owns any object URLs it creates and must revoke them. Failed downloads can be retried while the completed snapshot remains available.
 
 See the [controller](../../frontend/projects/image-generation/controller/src/controller.ts) and [HTTP transport](../../frontend/projects/image-generation/controller/src/transport.ts) for construction, methods, state transitions, and error handling.
+
+## Reusable UI
+
+`@roithme0/image-generation/ui` provides a standalone Angular component driven by host-supplied state and actions. It can use the supplied controller through explicit host wiring or work independently. The host owns state publication and controller disposal; the UI owns its cached PNG Blob and object URLs. Content must be loaded with the owner header, never through a bare backend URL.
+
+Submission and recovery actions must publish accepted, rejected, or uncertain admission even when their callbacks reject; callback settlement alone cannot classify admission. Recovery repeats the original uncertain request, while reconnection observes the known generation without resubmitting.
+
+Refinement keeps the successful result and its submitted instructions separate from the editable draft. Returning to the result preserves draft edits; an explicit new generation replaces the result. An optional async primary action receives the PNG Blob, filename, completed snapshot and submitted instructions. Competing actions are disabled while it runs; failure permits retry, and success leaves closing or navigation to the host. Save or import the Blob during handoff when it must survive backend restart.
+
+Give the component a bounded height for scrolling. See the [component and public types](../../frontend/projects/image-generation/ui/src/image-generation.component.ts), [styling variables](../../frontend/projects/image-generation/ui/src/image-generation.component.scss), and [independent-host and controller-wiring tests](../../frontend/projects/image-generation/ui/src/independent.spec.ts) for integration details.

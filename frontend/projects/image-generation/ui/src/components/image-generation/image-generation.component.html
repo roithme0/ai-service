@@ -1,0 +1,43 @@
+<section class="layout">
+  @switch (panel()) {
+    @case ('input') {
+      <ai-image-generation-input-panel
+        [draft]="draft()"
+        [error]="error()"
+        [pending]="pending()"
+        [canGoBack]="state().snapshot?.status === 'completed' && !failure()"
+        (draftChange)="draft.set($event)"
+        (generate)="submit()"
+        (back)="back()"
+      />
+    }
+    @case ('generating') {
+      <ai-image-generation-generating-panel
+        [admission]="state().admission"
+        [observation]="state().observation"
+        [error]="error()"
+        [pending]="pending()"
+        (recover)="invoke(actions().recoverSubmission, 'Could not recover request.')"
+        (reconnect)="invoke(actions().reconnect, 'Could not reconnect to status.')"
+      />
+    }
+    @case ('outcome') {
+      <ai-image-generation-outcome-panel
+        [image]="result()"
+        [snapshot]="state().snapshot"
+        [instructions]="submitted()"
+        [failure]="failure()"
+        [error]="error()"
+        [contentError]="contentError()"
+        [loading]="loading()"
+        [pending]="pending()"
+        [primaryLabel]="primaryAction()?.label ?? null"
+        (refine)="refine()"
+        (download)="download()"
+        (handoff)="handoff()"
+        (retryImage)="retryImage()"
+        (imageError)="imageError()"
+      />
+    }
+  }
+</section>

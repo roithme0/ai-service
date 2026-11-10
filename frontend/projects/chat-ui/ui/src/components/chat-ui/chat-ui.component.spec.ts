@@ -302,12 +302,12 @@ describe('ChatUiComponent', () => {
     };
     fixture.componentRef.setInput('turns', [turn]);
     fixture.detectChanges();
-    expect(mascot.getAttribute('src')).toBe('images/maskot-working.png');
+    expect(mascot.getAttribute('src')).toBe('images/mascot-working.gif');
 
     fixture.componentRef.setInput('turns', [{ ...turn, content: DETAILS_CONTENT }]);
     fixture.componentRef.setInput('conversationStatus', null);
     fixture.detectChanges();
-    expect(mascot.getAttribute('src')).toBe('images/maskot-working.png');
+    expect(mascot.getAttribute('src')).toBe('images/mascot-working.gif');
 
     for (const status of ['completed', 'failed', 'unknown'] as const) {
       fixture.componentRef.setInput('turns', [{ ...turn, status }]);
@@ -333,7 +333,7 @@ describe('ChatUiComponent', () => {
       { runKey: 'completed', status: 'completed', content: [] },
     ]);
     fixture.detectChanges();
-    expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/maskot-working.png');
+    expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/mascot-working.gif');
   });
 
   it('shows enabled final-answer actions while active and retains them through automatic collapse', () => {

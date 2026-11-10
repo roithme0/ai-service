@@ -1,0 +1,26 @@
+<h2 #heading tabindex="-1">Create an image</h2>
+<mat-form-field appearance="outline">
+  <mat-label>Instructions</mat-label>
+  <textarea
+    matInput
+    #textarea
+    [id]="inputId"
+    required
+    [value]="draft()"
+    (input)="draftChange.emit(textarea.value)"
+    [attr.aria-invalid]="error() ? 'true' : null"
+    [attr.aria-describedby]="error() ? errorId : null"
+    placeholder="Describe the image you want to create"
+  ></textarea>
+</mat-form-field>
+@if (error()) {
+  <p [id]="errorId" class="error" role="alert">{{ error() }}</p>
+}
+<div class="actions">
+  @if (canGoBack()) {
+    <button mat-stroked-button type="button" (click)="back.emit()">Back to result</button>
+  }
+  <button mat-flat-button type="button" [disabled]="pending()" (click)="generate.emit()">
+    Generate image
+  </button>
+</div>

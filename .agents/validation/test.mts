@@ -23,6 +23,7 @@ export const groupDescriptions = {
   'chat-ui': 'Chat UI unit and component tests',
   'image-generation': 'Image generation controller tests',
   'chat-ui-browser': 'Chat UI browser component tests',
+  'image-generation-browser': 'Image generation browser component tests',
   e2e: 'Docker-backed application flow',
 } as const;
 export type TestGroup = keyof typeof groupDescriptions;
@@ -88,7 +89,7 @@ export async function assertToolingMembership(root: string): Promise<void> {
 }
 
 export async function runTests(root: string, selection: TestSelection, run: typeof runCheck = runCheck): Promise<void> {
-  const cache = join(root, '.agents/.codex-validation/tests/manual');
+  const cache = join(root, '.codex-validation/tests/manual');
   await mkdir(cache, { recursive: true });
   for (const group of selection.groups) {
     const log = join(cache, `${group}.log`);
@@ -99,12 +100,12 @@ export async function runTests(root: string, selection: TestSelection, run: type
       await runBackendPytest(root, cache, backendPython(root), run, selection.nativeArgs);
     } else if (group === 'e2e') {
       const { testE2E } = await import('./e2e.mts');
-      await testE2E(root, join(root, '.agents/.codex-validation/e2e/manual'), run, selection.prebuiltImages, selection.nativeArgs);
+      await testE2E(root, join(root, '.codex-validation/e2e/manual'), run, selection.prebuiltImages, selection.nativeArgs);
     } else {
       const frontend = join(root, 'frontend');
       if (group === 'image-generation') await run(frontend, 'image-generation-build', [join(frontend, 'node_modules/@angular/cli/bin/ng.js'), 'build', 'image-generation'], join(cache, 'image-generation-build.log'), 300_000);
-      const project = group === 'frontend-app' ? 'ai-service-frontend' : group === 'image-generation' ? 'image-generation' : 'chat-ui';
-      await run(frontend, group, [join(frontend, 'node_modules/@angular/cli/bin/ng.js'), 'test', project, ...(group === 'chat-ui-browser' ? ['--configuration', 'browser'] : []), '--watch=false', ...selection.nativeArgs], log, 300_000);
+      const project = group === 'frontend-app' ? 'ai-service-frontend' : (group === 'image-generation' || group === 'image-generation-browser') ? 'image-generation' : 'chat-ui';
+      await run(frontend, group, [join(frontend, 'node_modules/@angular/cli/bin/ng.js'), 'test', project, ...((group === 'chat-ui-browser' || group === 'image-generation-browser') ? ['--configuration', 'browser'] : []), '--watch=false', ...selection.nativeArgs], log, 300_000);
     }
   }
 }

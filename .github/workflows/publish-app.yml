@@ -182,8 +182,8 @@ jobs:
       - name: Collect container logs
         if: failure()
         run: |
-          mkdir -p .agents/.codex-validation/e2e/manual
-          docker compose -f deployment/docker-compose-local.yml -f deployment/docker-compose-e2e.override.yml logs --no-color > .agents/.codex-validation/e2e/manual/containers.log 2>&1
+          mkdir -p .codex-validation/e2e/manual
+          docker compose -f deployment/docker-compose-local.yml -f deployment/docker-compose-e2e.override.yml logs --no-color > .codex-validation/e2e/manual/containers.log 2>&1
 
       - name: Upload end-to-end diagnostics
         if: failure()
@@ -191,9 +191,9 @@ jobs:
         with:
           name: e2e-diagnostics
           path: |
-            .agents/.codex-validation/e2e/manual/*.log
-            .agents/.codex-validation/e2e/manual/playwright-*/test-results/**
-            .agents/.codex-validation/e2e/manual/playwright-*/html-report/**
+            .codex-validation/e2e/manual/*.log
+            .codex-validation/e2e/manual/playwright-*/test-results/**
+            .codex-validation/e2e/manual/playwright-*/html-report/**
           include-hidden-files: true
           retention-days: 7
 

@@ -10,6 +10,7 @@
     "watch:chat-ui": "ng build chat-ui --watch",
     "pack:chat-ui": "npm run build:chat-ui && npm pack ./dist/chat-ui --pack-destination ./dist",
     "build:image-generation": "ng build image-generation",
+    "watch:image-generation": "ng build image-generation --watch",
     "pack:image-generation": "npm run build:image-generation && npm pack ./dist/image-generation --pack-destination ./dist",
     "check:image-generation-package": "node scripts/check-image-generation-package.mjs",
     "generate:conversation-contract": "node scripts/conversation-contract.mjs",

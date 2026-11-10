@@ -75,6 +75,47 @@ await controller.readStatus(); controller.reconnect(); await new Promise(resolve
 if (controller.state.snapshot.status !== 'completed' || (await controller.loadContent()).blob.size !== 1 || posts !== 2) throw Error('flow'); controller.dispose();`,
 );
 run(process.execPath, [join(temp, 'consumer.mjs')]);
+// Resolve Angular only for the UI consumer, after the controller-only check.
+await mkdir(join(temp, 'node_modules', '@angular'), { recursive: true });
+for (const dependency of [
+  'core',
+  'compiler',
+  'common',
+  'forms',
+  'platform-browser',
+  'cdk',
+  'material',
+])
+  await symlink(
+    resolve('node_modules', '@angular', dependency),
+    join(temp, 'node_modules', '@angular', dependency),
+    'junction',
+  );
+await symlink(resolve('node_modules', 'rxjs'), join(temp, 'node_modules', 'rxjs'), 'junction');
+await writeFile(
+  join(temp, 'ui-consumer.ts'),
+  `import { ImageGenerationUiComponent, type ImageGenerationActions, type ImageGenerationHandoff, type ImageGenerationPrimaryAction } from '@roithme0/image-generation/ui';
+const action: ImageGenerationPrimaryAction = { label: 'Use image', run: async (payload: ImageGenerationHandoff): Promise<void> => { void payload.blob; } };
+const use = (component: ImageGenerationUiComponent, actions: ImageGenerationActions): void => { void component; void actions; void action; }; void use;`,
+);
+run(process.execPath, [
+  resolve('node_modules/typescript/bin/tsc'),
+  '--ignoreConfig',
+  '--strict',
+  '--noEmit',
+  '--target',
+  'ES2022',
+  '--module',
+  'NodeNext',
+  '--moduleResolution',
+  'NodeNext',
+  join(temp, 'ui-consumer.ts'),
+]);
+await writeFile(
+  join(temp, 'ui-consumer.mjs'),
+  `import '@angular/compiler'; import { ImageGenerationUiComponent } from '@roithme0/image-generation/ui'; if (!ImageGenerationUiComponent) throw Error('UI missing');`,
+);
+run(process.execPath, [join(temp, 'ui-consumer.mjs')]);
 console.log(
   'Packed controller entrypoint, empty root, controller flow and strict declarations verified.',
 );

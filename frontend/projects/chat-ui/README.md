@@ -69,7 +69,7 @@ Add to the application's build `assets` array in `angular.json`:
 }
 ```
 
-Set `mascotAssetPath="assets/chat-ui/images"`; the default is `images`, relative to the application base URL. The package supplies `mascot-idle.png` and `maskot-working.png` (spelling intentional). Any `active` turn selects the working mascot, even after final text arrives.
+Set `mascotAssetPath="assets/chat-ui/images"`; the default is `images`, relative to the application base URL. The package supplies `mascot-idle.png` and `mascot-working.gif` (spelling intentional). Any `active` turn selects the working mascot, even after final text arrives.
 
 ## AI Service integration
 

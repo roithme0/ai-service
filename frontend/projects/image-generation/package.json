@@ -5,5 +5,17 @@
     "tslib": "^2.3.0",
     "zod": "4.4.3"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "peerDependencies": {
+    "@angular/core": "^22.0.0",
+    "@angular/material": "^22.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@angular/core": {
+      "optional": true
+    },
+    "@angular/material": {
+      "optional": true
+    }
+  }
 }

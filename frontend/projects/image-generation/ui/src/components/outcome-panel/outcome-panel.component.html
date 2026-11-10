@@ -1,0 +1,53 @@
+<h2 #heading tabindex="-1">{{ failure() ? 'Generation failed' : 'Your image' }}</h2>
+<div class="body" aria-live="polite">
+  @if (failure()) {
+    <p class="error">{{ failure() }}</p>
+  } @else {
+    @if (image(); as image) {
+      <img [src]="image.url" alt="Generated image" (error)="imageError.emit()" />
+    } @else if (loading()) {
+      <p>Loading image...</p>
+    }
+    @if (contentError()) {
+      <p class="error" role="alert">{{ contentError() }}</p>
+      <button mat-stroked-button type="button" (click)="retryImage.emit()">Retry image</button>
+    }
+  }
+  @if (metadata(); as metadata) {
+    <p>Model: {{ metadata.provider_model || metadata.configured_model }}</p>
+    <p>Estimated cost: {{ cost(metadata.estimated_cost_usd) }}</p>
+  }
+  <details>
+    <summary>View instructions</summary>
+    <p class="instructions">{{ instructions() }}</p>
+  </details>
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+</div>
+<div class="actions">
+  <button mat-stroked-button type="button" [disabled]="pending()" (click)="refine.emit()">
+    Refine instructions
+  </button>
+  @if (!failure()) {
+    <button
+      mat-stroked-button
+      type="button"
+      [disabled]="!image() || pending()"
+      (click)="download.emit()"
+    >
+      Download PNG
+    </button>
+    @if (primaryLabel() !== null) {
+      <button
+        mat-flat-button
+        type="button"
+        [disabled]="!image() || pending() || !primaryLabel()?.trim()"
+        [attr.aria-busy]="pending()"
+        (click)="handoff.emit()"
+      >
+        {{ primaryLabel() }}
+      </button>
+    }
+  }
+</div>
