@@ -3,44 +3,32 @@
     <h1 id="demo-heading">Demo auswählen</h1>
     <p class="intro">Entdecke die Demos für Unterhaltung und Bilderstellung.</p>
     <div class="cards">
-      <a class="card" routerLink="/demos/conversation/visual"
-        ><div class="card-heading">
-          <h2>Unterhaltung - visuelle Demo</h2>
-          <app-demo-tag label="Skript" />
-        </div>
-        <p>
-          Erlebe Chat, Tool-Aufrufe, Artefakte und simulierte Fehler. Dabei wird kein KI-Modell
-          verwendet.
-        </p>
-        <app-navigation-link>Visuelle Unterhaltungsdemo öffnen</app-navigation-link></a
+      <app-demo-card
+        route="/demos/conversation/visual"
+        title="Unterhaltung - visuelle Demo"
+        tag="Skript"
       >
-      <a class="card" routerLink="/demos/conversation/live"
-        ><div class="card-heading">
-          <h2>Unterhaltung - Live-Demo</h2>
-          <app-demo-tag label="Live" />
-        </div>
-        <p>Chatte mit dem KI-Dienst und erlebe echte Modellantworten und Tool-Aufrufe.</p>
-        <app-navigation-link>Live-Unterhaltungsdemo öffnen</app-navigation-link></a
+        Erlebe Chat, Tool-Aufrufe, Artefakte und simulierte Fehler. Dabei wird kein KI-Modell
+        verwendet.
+      </app-demo-card>
+      <app-demo-card route="/demos/conversation/live" title="Unterhaltung - Live-Demo" tag="Live">
+        Chatte mit dem KI-Dienst und erlebe echte Modellantworten und Tool-Aufrufe.
+      </app-demo-card>
+      <app-demo-card
+        route="/demos/image-generation/visual"
+        title="Bilderstellung - visuelle Demo"
+        tag="Skript"
       >
-      <a class="card" routerLink="/demos/image-generation/visual"
-        ><div class="card-heading">
-          <h2>Bilderstellung - visuelle Demo</h2>
-          <app-demo-tag label="Skript" />
-        </div>
-        <p>Erlebe die Bilderstellung und Wiederherstellung mit einem vordefinierten Bild.</p>
-        <app-navigation-link>Visuelle Bilderstellungsdemo öffnen</app-navigation-link></a
+        Erlebe die Bilderstellung und Wiederherstellung mit einem vordefinierten Bild.
+      </app-demo-card>
+      <app-demo-card
+        route="/demos/image-generation/live"
+        title="Bilderstellung - Live-Demo"
+        tag="Live"
       >
-      <a class="card" routerLink="/demos/image-generation/live"
-        ><div class="card-heading">
-          <h2>Bilderstellung - Live-Demo</h2>
-          <app-demo-tag label="Live" />
-        </div>
-        <p>
-          Erstelle ein Bild mit dem konfigurierten Anbieter. Referenzen sind nur vorübergehend
-          verfügbar.
-        </p>
-        <app-navigation-link>Live-Bilderstellungsdemo öffnen</app-navigation-link></a
-      >
+        Erstelle ein Bild mit dem konfigurierten Anbieter. Referenzen sind nur vorübergehend
+        verfügbar.
+      </app-demo-card>
     </div>
   </div>
 </main>

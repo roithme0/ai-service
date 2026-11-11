@@ -1,0 +1,8 @@
+<a class="card" [routerLink]="route()">
+  <div class="card-heading">
+    <h2>{{ title() }}</h2>
+    <app-demo-tag [label]="tag()" />
+  </div>
+  <p><ng-content /></p>
+  <app-navigation-link>Demo öffnen</app-navigation-link>
+</a>

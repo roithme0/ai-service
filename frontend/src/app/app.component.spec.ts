@@ -22,6 +22,11 @@ describe('Demo-Navigation', () => {
       '/demos/image-generation/visual',
       '/demos/image-generation/live',
     ]);
+    expect(
+      Array.from(page.querySelectorAll('app-navigation-link'), (link) =>
+        link.textContent?.replace(/\s+/g, ' ').trim(),
+      ),
+    ).toEqual(Array(4).fill('Demo \u00f6ffnen\u2192'));
     expect(TestBed.inject(Router).url).toBe('/');
     expect(fetch).not.toHaveBeenCalled();
   });

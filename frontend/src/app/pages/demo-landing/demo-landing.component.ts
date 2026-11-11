@@ -1,11 +1,9 @@
 import { Component } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { DemoTag } from '../../components/demo-tag/demo-tag.component';
-import { NavigationLink } from '../../components/navigation-link/navigation-link.component';
+import { DemoCard } from '../../components/demo-card/demo-card.component';
 
 @Component({
   selector: 'app-demo-landing',
-  imports: [RouterLink, DemoTag, NavigationLink],
+  imports: [DemoCard],
   templateUrl: './demo-landing.component.html',
   styleUrl: './demo-landing.component.scss',
 })

@@ -1,0 +1,49 @@
+.card {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--demo-surface-padding);
+  border: var(--demo-border-width) solid var(--demo-border);
+  border-radius: var(--demo-surface-radius);
+  background: var(--demo-surface-background);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.card:hover {
+  background: var(--demo-surface-hover-background);
+  border-color: var(--demo-hover-border);
+}
+
+.card:focus-visible {
+  outline: var(--demo-focus-width) solid var(--demo-focus);
+  outline-offset: var(--demo-focus-offset);
+}
+
+.card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--demo-content-gap);
+}
+
+h2 {
+  margin: 0;
+  font-size: var(--demo-section-title-font-size);
+  font-weight: var(--demo-emphasis-font-weight);
+}
+
+p {
+  display: block;
+  margin: 0.875rem 0 1.25rem;
+  line-height: var(--demo-body-line-height);
+}
+
+@media (max-width: 30rem) {
+  .card {
+    padding: var(--demo-compact-surface-padding);
+  }
+}
