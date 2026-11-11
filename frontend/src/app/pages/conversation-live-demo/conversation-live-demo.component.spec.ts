@@ -9,7 +9,7 @@ import {
   type DictationConfig,
 } from '@roithme0/chat-ui/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LiveDemo } from './live-demo.component';
+import { ConversationLiveDemo } from './conversation-live-demo.component';
 
 const EMPTY_USAGE: PresentedSession['usage'] = {
   input_tokens: 0,
@@ -36,7 +36,7 @@ const LIFECYCLE = {
   finished_at: '2026-10-26T10:00:01Z',
 };
 
-class LiveDemoServer {
+class ConversationLiveDemoServer {
   private events!: ReadableStreamDefaultController<Uint8Array>;
   readonly fetch = vi.fn<typeof fetch>((input, init) => {
     const url = input instanceof Request ? input.url : input.toString();
@@ -71,16 +71,22 @@ class LiveDemoServer {
   }
 }
 
-function createPage(): { fixture: ComponentFixture<LiveDemo>; chat: ChatUiComponent } {
-  TestBed.configureTestingModule({ imports: [LiveDemo], providers: [provideRouter([])] });
-  const fixture = TestBed.createComponent(LiveDemo);
+function createPage(): { fixture: ComponentFixture<ConversationLiveDemo>; chat: ChatUiComponent } {
+  TestBed.configureTestingModule({
+    imports: [ConversationLiveDemo],
+    providers: [provideRouter([])],
+  });
+  const fixture = TestBed.createComponent(ConversationLiveDemo);
   fixture.detectChanges();
   const chat = fixture.debugElement.query(By.directive(ChatUiComponent))
     .componentInstance as ChatUiComponent;
   return { fixture, chat };
 }
 
-async function render(fixture: ComponentFixture<LiveDemo>, condition: () => void): Promise<void> {
+async function render(
+  fixture: ComponentFixture<ConversationLiveDemo>,
+  condition: () => void,
+): Promise<void> {
   await vi.waitFor(() => {
     fixture.detectChanges();
     condition();
@@ -91,7 +97,7 @@ describe('Live demo application', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('starts only a live session, advertises JSON artifacts, and renders tool results and actual usage', async () => {
-    const server = new LiveDemoServer();
+    const server = new ConversationLiveDemoServer();
     vi.stubGlobal('fetch', server.fetch);
     const { fixture, chat } = createPage();
     await render(fixture, () => expect(chat.composerDisabled()).toBe(false));
@@ -185,14 +191,14 @@ describe('Live demo application', () => {
         .map((part) => part.kind),
     ).toEqual(['text', 'intermediate', 'tool', 'artifact', 'text']);
     const page = fixture.nativeElement as HTMLElement;
-    expect(page.querySelector('app-demo-header')?.textContent).toContain('Live Demo');
+    expect(page.querySelector('app-demo-header')?.textContent).toContain('Conversation Live Demo');
     expect(page.querySelector('pre')?.textContent).toContain('"message": "Hallo!"');
     expect(page.querySelector('ai-chat-usage-line')?.textContent).toContain('$0.002');
     expect(chat.composerDisabled()).toBe(false);
   });
 
   it('keeps ordinary failed-turn handling and accepts messages after more than three completed runs', async () => {
-    const server = new LiveDemoServer();
+    const server = new ConversationLiveDemoServer();
     vi.stubGlobal('fetch', server.fetch);
     const { fixture, chat } = createPage();
     await render(fixture, () => expect(chat.composerDisabled()).toBe(false));
@@ -222,7 +228,7 @@ describe('Live demo application', () => {
   });
 
   it('keeps dictation identity stable across backend session assignment and resets it before recovery', async () => {
-    const server = new LiveDemoServer();
+    const server = new ConversationLiveDemoServer();
     server.fetch.mockResolvedValueOnce(
       Response.json({ kind: 'agent_unavailable' }, { status: 503 }),
     );
@@ -250,12 +256,15 @@ describe('Live demo application', () => {
     expect(chat.dictation()).toBe(config);
   });
   it('invalidates a pending transcript synchronously when recovery starts', async () => {
-    const server = new LiveDemoServer();
+    const server = new ConversationLiveDemoServer();
     vi.stubGlobal('fetch', server.fetch);
     vi.stubGlobal('MediaRecorder', class {});
     vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn() } });
-    TestBed.configureTestingModule({ imports: [LiveDemo], providers: [provideRouter([])] });
-    const fixture = TestBed.createComponent(LiveDemo);
+    TestBed.configureTestingModule({
+      imports: [ConversationLiveDemo],
+      providers: [provideRouter([])],
+    });
+    const fixture = TestBed.createComponent(ConversationLiveDemo);
     let resolve!: (text: string) => void;
     const pending = new Promise<string>((complete) => {
       resolve = complete;
@@ -296,7 +305,7 @@ describe('Live demo application', () => {
   });
 
   it('uses the normal retry action when the live agent is unavailable', async () => {
-    const server = new LiveDemoServer();
+    const server = new ConversationLiveDemoServer();
     server.fetch.mockResolvedValueOnce(
       Response.json({ kind: 'agent_unavailable' }, { status: 503 }),
     );
@@ -314,7 +323,7 @@ describe('Live demo application', () => {
   });
 
   it('maps snapshot metadata and clears it when starting another session', async () => {
-    const server = new LiveDemoServer();
+    const server = new ConversationLiveDemoServer();
     vi.stubGlobal('fetch', server.fetch);
     const { fixture, chat } = createPage();
     expect(chat.model()).toBeNull();

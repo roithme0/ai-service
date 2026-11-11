@@ -1,0 +1,34 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+.track {
+  display: flex;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid color-mix(in srgb, var(--mat-app-text-color) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mat-app-text-color) 7%, transparent);
+}
+button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mat-app-text-color);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+button.active {
+  background: var(--app-accent-container-color);
+  color: var(--app-on-accent-container-color);
+  font-weight: 600;
+}
+button:focus-visible {
+  outline: 2px solid var(--demo-focus);
+  outline-offset: -3px;
+}

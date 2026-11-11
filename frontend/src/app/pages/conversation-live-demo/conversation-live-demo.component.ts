@@ -1,4 +1,4 @@
-import { chatModel } from '../../chat-model';
+import { chatModel } from '../../conversation/chat-model';
 import {
   ChangeDetectorRef,
   Component,
@@ -22,7 +22,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { BrowserAudioRecorder } from '@roithme0/chat-ui/recording';
 import { HttpTranscriber } from '@roithme0/chat-ui/transcription';
 import type { DictationConfig, DictationError } from '@roithme0/chat-ui/ui';
-import { chatUsage } from '../../chat-usage';
+import { chatUsage } from '../../conversation/chat-usage';
 import { DemoHeader } from '../../components/demo-header/demo-header.component';
 
 const INITIAL_STATE: SessionViewState = {
@@ -40,12 +40,12 @@ const INITIAL_STATE: SessionViewState = {
 };
 
 @Component({
-  selector: 'app-live-demo',
+  selector: 'app-conversation-live-demo',
   imports: [ChatUiComponent, DemoHeader],
-  templateUrl: './live-demo.component.html',
-  styleUrl: './live-demo.component.scss',
+  templateUrl: './conversation-live-demo.component.html',
+  styleUrl: './conversation-live-demo.component.scss',
 })
-export class LiveDemo implements OnInit, OnDestroy {
+export class ConversationLiveDemo implements OnInit, OnDestroy {
   private readonly snackBar = inject(MatSnackBar);
   private readonly changeDetector = inject(ChangeDetectorRef);
 

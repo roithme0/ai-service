@@ -44,7 +44,7 @@ interface ToolCallExpectation {
   status: string;
 }
 
-export class ScriptedDemo {
+export class ConversationVisualDemo {
   readonly title: Locator;
   readonly scriptedBadge: Locator;
   readonly landingPageLink: Locator;
@@ -69,7 +69,7 @@ export class ScriptedDemo {
 
   constructor(page: Page) {
     const header = page.getByRole('banner');
-    this.title = header.getByText('Visual Demo', { exact: true });
+    this.title = header.getByText('Conversation Visual Demo', { exact: true });
     this.scriptedBadge = header.getByText('Scripted', { exact: true });
     this.landingPageLink = header
       .getByRole('navigation', { name: 'Demo navigation' })

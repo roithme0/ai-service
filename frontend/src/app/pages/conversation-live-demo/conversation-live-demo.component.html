@@ -1,8 +1,10 @@
-<app-demo-header label="Visual Demo" tag="Scripted" />
+<app-demo-header label="Conversation Live Demo" tag="Live" />
 <main class="chat-shell">
   <ai-chat-ui
-    bannerDescription="Diese Demo folgt einem festen Skript ohne KI-Modell. Sende nach der Abschlussantwort noch eine Nachricht, um einen simulierten API-Fehler zu sehen. Lade die Seite neu, um von vorn zu beginnen."
+    bannerDescription="Stelle eine Frage oder starte ein Gespräch mit dem KI-Modell. Bitte um ein JSON-Artefakt, um die Tool-Nutzung auszuprobieren."
     composerPlaceholder="Nachricht schreiben"
+    [dictation]="dictation"
+    [dictationContextKey]="dictationContextKey()"
     [turns]="chat().turns"
     [usage]="usage()"
     [model]="model()"

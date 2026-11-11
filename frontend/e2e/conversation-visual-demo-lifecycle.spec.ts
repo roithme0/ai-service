@@ -1,19 +1,19 @@
 import { test, expect } from '@playwright/test';
 import {
-  ScriptedDemo,
+  ConversationVisualDemo,
   demoAnswers,
   demoPrompts,
   demoArtifacts,
   trackSubmittedPrompts,
-} from './support/scripted-demo';
+} from './support/conversation-visual-demo';
 
-test.describe('Scripted demo integrated lifecycle', () => {
+test.describe('Conversation visual demo integrated lifecycle', () => {
   test('completes the scripted conversation, retains intentional failures, blocks the extra submission, and resets on reload', async ({
     page,
   }) => {
     test.setTimeout(60_000);
 
-    const demo = new ScriptedDemo(page);
+    const demo = new ConversationVisualDemo(page);
     const submittedPrompts = trackSubmittedPrompts(page);
     const conversationPrompts = [
       demoPrompts.introduction,
@@ -29,7 +29,7 @@ test.describe('Scripted demo integrated lifecycle', () => {
     ];
 
     await test.step('Initialize an empty scripted demo session', async () => {
-      await page.goto('/demos/visual');
+      await page.goto('/demos/conversation/visual');
       await expect(demo.composer).toBeEditable();
       await expect(demo.history).toContainText(
         'Diese Demo folgt einem festen Skript ohne KI-Modell.',

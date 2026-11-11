@@ -9,7 +9,7 @@ import {
   zSessionCreated,
 } from '../../projects/chat-ui/conversation/src/generated/zod.gen';
 
-export class LiveDemo {
+export class ConversationLiveDemo {
   readonly title: Locator;
   readonly liveBadge: Locator;
   readonly landingPageLink: Locator;
@@ -19,7 +19,7 @@ export class LiveDemo {
 
   constructor(private readonly page: Page) {
     const header = page.getByRole('banner');
-    this.title = header.getByText('Live Demo', { exact: true });
+    this.title = header.getByText('Conversation Live Demo', { exact: true });
     this.liveBadge = header.getByText('Live', { exact: true });
     this.landingPageLink = header
       .getByRole('navigation', { name: 'Demo navigation' })
@@ -34,14 +34,14 @@ export class LiveDemo {
         response.request().method() === 'POST' &&
         new URL(response.url()).pathname === '/api/v1/agents/live-demo/sessions',
     );
-    await this.page.goto('/demos/live');
+    await this.page.goto('/demos/conversation/live');
     const response = await created;
     expect(response.status()).toBe(201);
     const session = zSessionCreated.parse(await response.json());
     this.sessionUrl = `${response.url()}/${encodeURIComponent(session.session_id)}`;
   }
 
-  async sendMessage(message: string): Promise<LiveDemoResponse> {
+  async sendMessage(message: string): Promise<ConversationLiveDemoResponse> {
     const previous = await this.readSession();
     const previousRuns = new Set(
       previous.history
@@ -79,7 +79,7 @@ export class LiveDemo {
       .locator('.history-item')
       .filter({ has: prompt })
       .locator('~ .history-item');
-    return new LiveDemoResponse(
+    return new ConversationLiveDemoResponse(
       content,
       turns.flatMap((turn) => turn.parts),
     );
@@ -100,7 +100,7 @@ export class LiveDemo {
   }
 }
 
-class LiveDemoResponse {
+class ConversationLiveDemoResponse {
   private readonly answer: Locator;
 
   constructor(

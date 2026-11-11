@@ -1,0 +1,37 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  max-width: 30rem;
+  margin: auto;
+}
+.page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--demo-page-background);
+}
+.controls {
+  padding: 1rem max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left));
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+mat-form-field {
+  flex: 1;
+  min-width: 0;
+}
+.controls p {
+  margin: 0 0 0.5rem;
+}
+.showcase {
+  height: max(32rem, 70vh);
+  min-width: 0;
+  box-shadow: var(--demo-chat-shadow);
+}

@@ -5,7 +5,7 @@ import {
   type TurnAccepted,
 } from '@roithme0/chat-ui/conversation';
 
-export class VisualDemoTransport extends HttpSessionTransport {
+export class ConversationVisualDemoTransport extends HttpSessionTransport {
   constructor() {
     super('/api/v1', 'visual-demo', 'demo:default');
   }

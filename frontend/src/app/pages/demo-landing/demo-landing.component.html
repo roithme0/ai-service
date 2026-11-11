@@ -1,34 +1,40 @@
 <main class="landing" aria-labelledby="demo-heading">
   <div class="content">
     <h1 id="demo-heading">Choose a demo</h1>
-    <p class="intro">Explore the chat interface or try the live service.</p>
-
+    <p class="intro">Explore the conversation and image generation demos.</p>
     <div class="cards">
-      <a class="card" routerLink="/demos/visual">
-        <div class="card-heading">
-          <h2>Visual Demo</h2>
+      <a class="card" routerLink="/demos/conversation/visual"
+        ><div class="card-heading">
+          <h2>Conversation Visual Demo</h2>
           <app-demo-tag label="Scripted" />
         </div>
         <p>Walk through chat, tool calls, artifacts, and simulated errors. No AI model involved.</p>
-        <app-navigation-link>Open visual demo</app-navigation-link>
-      </a>
-
-      <a class="card" routerLink="/demos/live">
-        <div class="card-heading">
-          <h2>Live Demo</h2>
+        <app-navigation-link>Open conversation visual demo</app-navigation-link></a
+      >
+      <a class="card" routerLink="/demos/conversation/live"
+        ><div class="card-heading">
+          <h2>Conversation Live Demo</h2>
           <app-demo-tag label="Live" />
         </div>
         <p>Chat with the AI service using real model responses and tool execution.</p>
-        <app-navigation-link>Open live demo</app-navigation-link>
-      </a>
-      <a class="card" routerLink="/demos/image-generation">
-        <div class="card-heading">
-          <h2>Image Generation</h2>
+        <app-navigation-link>Open conversation live demo</app-navigation-link></a
+      >
+      <a class="card" routerLink="/demos/image-generation/visual"
+        ><div class="card-heading">
+          <h2>Image Generation Visual Demo</h2>
+          <app-demo-tag label="Scripted" />
+        </div>
+        <p>Explore image generation and recovery with a predefined image.</p>
+        <app-navigation-link>Open image generation visual demo</app-navigation-link></a
+      >
+      <a class="card" routerLink="/demos/image-generation/live"
+        ><div class="card-heading">
+          <h2>Image Generation Live Demo</h2>
           <app-demo-tag label="Live" />
         </div>
         <p>Generate an image with the configured provider. References are temporary.</p>
-        <app-navigation-link>Open image generation</app-navigation-link>
-      </a>
+        <app-navigation-link>Open image generation live demo</app-navigation-link></a
+      >
     </div>
   </div>
 </main>

@@ -1,4 +1,4 @@
-import { chatModel } from '../../chat-model';
+import { chatModel } from '../../conversation/chat-model';
 import { Component, OnInit, OnDestroy, computed, signal } from '@angular/core';
 import {
   ChatUiComponent,
@@ -7,8 +7,8 @@ import {
 } from '@roithme0/chat-ui/ui';
 import { SessionController, type SessionViewState } from '@roithme0/chat-ui/conversation';
 import { DemoHeader } from '../../components/demo-header/demo-header.component';
-import { chatUsage } from '../../chat-usage';
-import { VisualDemoTransport } from '../../visual-demo-transport';
+import { chatUsage } from '../../conversation/chat-usage';
+import { ConversationVisualDemoTransport } from './conversation-visual-demo-transport';
 
 const VISUAL_DEMO_ERROR_MESSAGE =
   'Die Antwort konnte nicht erstellt werden. Du kannst eine neue Nachricht senden.';
@@ -29,18 +29,19 @@ const INITIAL_STATE: SessionViewState = {
 };
 
 @Component({
-  selector: 'app-visual-demo',
+  selector: 'app-conversation-visual-demo',
   imports: [ChatUiComponent, DemoHeader],
-  templateUrl: './visual-demo.component.html',
-  styleUrl: './visual-demo.component.scss',
+  templateUrl: './conversation-visual-demo.component.html',
+  styleUrl: './conversation-visual-demo.component.scss',
 })
-export class VisualDemo implements OnInit, OnDestroy {
+export class ConversationVisualDemo implements OnInit, OnDestroy {
   protected readonly chat = signal<SessionViewState>(INITIAL_STATE);
   protected readonly model = computed(() => chatModel(this.chat().snapshot?.model));
   protected readonly usage = computed(() => chatUsage(this.chat().snapshot?.usage));
   private compatibilityFailure = false;
-  private readonly controller = new SessionController(new VisualDemoTransport(), (state) =>
-    this.publishVisualDemoState(state),
+  private readonly controller = new SessionController(
+    new ConversationVisualDemoTransport(),
+    (state) => this.publishConversationVisualDemoState(state),
   );
 
   ngOnInit(): void {
@@ -53,7 +54,7 @@ export class VisualDemo implements OnInit, OnDestroy {
     this.controller.dispose();
   }
 
-  private publishVisualDemoState(state: SessionViewState): void {
+  private publishConversationVisualDemoState(state: SessionViewState): void {
     if (this.compatibilityFailure) {
       this.chat.set(this.compatibilityError(state));
       return;

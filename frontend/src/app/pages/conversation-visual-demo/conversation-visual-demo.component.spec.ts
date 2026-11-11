@@ -4,7 +4,7 @@ import { provideRouter } from '@angular/router';
 import { ChatUiComponent, JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
 import type { PresentedSession, SessionEvent } from '@roithme0/chat-ui/conversation';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { VisualDemo } from './visual-demo.component';
+import { ConversationVisualDemo } from './conversation-visual-demo.component';
 
 const EMPTY_USAGE: PresentedSession['usage'] = {
   input_tokens: 0,
@@ -32,7 +32,7 @@ const LIFECYCLE = {
   finished_at: '2026-10-21T10:00:01Z',
 };
 
-class VisualDemoServer {
+class ConversationVisualDemoServer {
   private events!: ReadableStreamDefaultController<Uint8Array>;
   readonly fetch = vi.fn<typeof fetch>((input) => {
     const url = input instanceof Request ? input.url : input.toString();
@@ -65,15 +65,18 @@ class VisualDemoServer {
   }
 }
 
-async function openVisualDemo(): Promise<{
-  fixture: ComponentFixture<VisualDemo>;
+async function openConversationVisualDemo(): Promise<{
+  fixture: ComponentFixture<ConversationVisualDemo>;
   chat: ChatUiComponent;
-  server: VisualDemoServer;
+  server: ConversationVisualDemoServer;
 }> {
-  const server = new VisualDemoServer();
+  const server = new ConversationVisualDemoServer();
   vi.stubGlobal('fetch', server.fetch);
-  TestBed.configureTestingModule({ imports: [VisualDemo], providers: [provideRouter([])] });
-  const fixture = TestBed.createComponent(VisualDemo);
+  TestBed.configureTestingModule({
+    imports: [ConversationVisualDemo],
+    providers: [provideRouter([])],
+  });
+  const fixture = TestBed.createComponent(ConversationVisualDemo);
   fixture.detectChanges();
   const chat = fixture.debugElement.query(By.directive(ChatUiComponent))
     .componentInstance as ChatUiComponent;
@@ -89,11 +92,14 @@ async function openVisualDemo(): Promise<{
   return { fixture, chat, server };
 }
 
-function element(fixture: ComponentFixture<VisualDemo>): HTMLElement {
+function element(fixture: ComponentFixture<ConversationVisualDemo>): HTMLElement {
   return fixture.nativeElement as HTMLElement;
 }
 
-async function render(fixture: ComponentFixture<VisualDemo>, condition: () => void): Promise<void> {
+async function render(
+  fixture: ComponentFixture<ConversationVisualDemo>,
+  condition: () => void,
+): Promise<void> {
   await vi.waitFor(() => {
     fixture.detectChanges();
     condition();
@@ -104,7 +110,7 @@ describe('Visual demo application', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('passes conversation totals from new snapshots to the composer usage line', async () => {
-    const { fixture, chat, server } = await openVisualDemo();
+    const { fixture, chat, server } = await openConversationVisualDemo();
     expect(chat.usage()).toMatchObject({ totalTokens: 0, estimatedCostUsd: null });
     server.snapshot({
       ...EMPTY,
@@ -155,7 +161,7 @@ describe('Visual demo application', () => {
   ])(
     'renders $title from native snapshots without inserting an optimistic prompt',
     async ({ title, payload, text }) => {
-      const { fixture, chat, server } = await openVisualDemo();
+      const { fixture, chat, server } = await openConversationVisualDemo();
       expect(server.fetch).toHaveBeenNthCalledWith(
         1,
         '/api/v1/agents/visual-demo/sessions',
@@ -245,7 +251,7 @@ describe('Visual demo application', () => {
   );
 
   it('retains failed-turn commentary and offers the no-op action', async () => {
-    const { fixture, chat, server } = await openVisualDemo();
+    const { fixture, chat, server } = await openConversationVisualDemo();
     server.snapshot({
       ...EMPTY,
       history: [
@@ -275,7 +281,7 @@ describe('Visual demo application', () => {
   });
 
   it('simulates incompatibility only after three completed runs and retains the snapshot and draft', async () => {
-    const { fixture, chat, server } = await openVisualDemo();
+    const { fixture, chat, server } = await openConversationVisualDemo();
     const history: PresentedSession['history'] = Array.from({ length: 4 }, (_, index) => ({
       part_kind: 'turn',
       usage: EMPTY_USAGE,

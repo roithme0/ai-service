@@ -27,7 +27,7 @@ The browser chooses the encoding; consumers must check whether their transcripti
 
 ## Composer dictation
 
-Opt in through the `dictation` and `dictationContextKey` inputs on `ai-chat-ui`. See the [configuration types](ui/src/dictation.ts) and [live demo](../../src/app/pages/live-demo/live-demo.component.ts) for default recorder, transcription adapter, and host toast wiring. Backend limits and errors belong to the [speech-to-text contract](../../../docs/domains/transcriptions.md).
+Opt in through the `dictation` and `dictationContextKey` inputs on `ai-chat-ui`. See the [configuration types](ui/src/dictation.ts) and [live demo](../../src/app/pages/conversation-live-demo/conversation-live-demo.component.ts) for default recorder, transcription adapter, and host toast wiring. Backend limits and errors belong to the [speech-to-text contract](../../../docs/domains/transcriptions.md).
 
 - Keep the configuration reference stable. Its factory must return an independent recorder; the composer owns cancellation and disposal.
 - Supply a non-null context key independent of the backend session ID. Keep it stable during a conversation. Before switching or resetting, propagate a new key to the composer synchronously; the live demo shows this ordering.
@@ -92,7 +92,7 @@ import {
   selector: 'app-chat',
   imports: [ChatUiComponent],
   template: `<ai-chat-ui
-    bannerTitle="Visual Demo"
+    bannerTitle="Conversation Visual Demo"
     bannerDescription="Any text advances the scripted sequence."
     mascotAssetPath="assets/chat-ui/images"
     [turns]="chat().turns"

@@ -17,9 +17,10 @@ describe('Demo navigation', () => {
     const page = harness.routeNativeElement!;
     expect(page.querySelector('h1')?.textContent).toBe('Choose a demo');
     expect(Array.from(page.querySelectorAll('a'), (link) => link.getAttribute('href'))).toEqual([
-      '/demos/visual',
-      '/demos/live',
-      '/demos/image-generation',
+      '/demos/conversation/visual',
+      '/demos/conversation/live',
+      '/demos/image-generation/visual',
+      '/demos/image-generation/live',
     ]);
     expect(TestBed.inject(Router).url).toBe('/');
     expect(fetch).not.toHaveBeenCalled();
@@ -64,16 +65,18 @@ describe('Demo navigation', () => {
       TestBed.configureTestingModule({ providers: [provideRouter(routes)] });
       const harness = await RouterTestingHarness.create('/');
       harness
-        .routeNativeElement!.querySelector<HTMLAnchorElement>(`a[href="/demos/${demo}"]`)!
+        .routeNativeElement!.querySelector<HTMLAnchorElement>(
+          `a[href="/demos/conversation/${demo}"]`,
+        )!
         .click();
       await vi.waitFor(() => expect(signals).toHaveLength(1), { timeout: 2500 });
-      expect(TestBed.inject(Router).url).toBe(`/demos/${demo}`);
+      expect(TestBed.inject(Router).url).toBe(`/demos/conversation/${demo}`);
       expect(signals[0].aborted).toBe(false);
       expect(fetch.mock.calls[0][0]).toBe(`/api/v1/agents/${demo}-demo/sessions`);
       harness.routeNativeElement!.querySelector<HTMLAnchorElement>('app-demo-header a')!.click();
       await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/'));
       expect(signals[0].aborted).toBe(true);
-      await harness.navigateByUrl(`/demos/${demo}`);
+      await harness.navigateByUrl(`/demos/conversation/${demo}`);
       await vi.waitFor(() => expect(signals).toHaveLength(2), { timeout: 2500 });
       expect(sessionsCreated).toBe(2);
       await harness.navigateByUrl('/', DemoLanding);

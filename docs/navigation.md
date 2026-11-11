@@ -1,6 +1,6 @@
 # Repository navigation
 
-The conversation capability combines backend execution with a reusable Angular chat UI. Visual, Live, and Image Generation demos illustrate integration; the Kochwiki configuration connects execution to external domain tools.
+The conversation capability combines backend execution with a reusable Angular chat UI. Conversation and image generation visual and live demos illustrate integration; the Kochwiki configuration connects execution to external domain tools.
 
 ## System overview
 
@@ -36,12 +36,13 @@ The [gateway](../deployment/gateway/nginx.conf) serves the demos and API. Visual
 | [Chat UI package](../frontend/projects/chat-ui/) | `@roithme0/chat-ui/ui` renders host-supplied content; `@roithme0/chat-ui/conversation` supplies the [controller](../frontend/projects/chat-ui/conversation/src/session-controller.ts), HTTP/SSE transport, and snapshot mapping. |
 | [Composer dictation](../frontend/projects/chat-ui/README.md#composer-dictation) | The composer coordinates host-supplied recording, transcription, and error presentation. Defaults live in the [recording](../frontend/projects/chat-ui/recording/) and [transcription](../frontend/projects/chat-ui/transcription/) entry points. |
 | [Demo styles](../frontend/src/app/styles/tokens.css) | Shared semantic tokens for the demo host, separate from the Chat UI package's tokens. |
-| [Visual Demo](../backend/app/demos/visual_conversation_demo/) | Scripted conversation with messages, artifacts, simulated delays, and error states. The [visual page](../frontend/src/app/pages/visual-demo/visual-demo.component.ts) hosts its chat UI at `/demos/visual`; the [landing page](../frontend/src/app/pages/demo-landing/demo-landing.component.ts) at `/` selects demos. |
-| [Live Demo](../backend/app/demos/live_conversation_demo/) | Model-backed conversations, registered as `live-demo`; the [live page](../frontend/src/app/pages/live-demo/live-demo.component.ts) hosts its chat UI at `/demos/live`. |
-| [Image Generation Demo](../frontend/src/app/pages/image-generation-demo/image-generation-demo.component.ts) | Explicit controller and UI composition at `/demos/image-generation`; see the [image generation contract](domains/image-generation.md). |
+| [Conversation Visual Demo](../backend/app/demos/visual_conversation_demo/) | Scripted conversation at `/demos/conversation/visual`; the [landing page](../frontend/src/app/pages/demo-landing/demo-landing.component.ts) selects demos. |
+| [Conversation Live Demo](../backend/app/demos/live_conversation_demo/) | Model-backed conversations at `/demos/conversation/live`, registered as `live-demo`. |
+| [Image Generation Visual Demo](../frontend/src/app/pages/image-generation-visual-demo/image-generation-visual-demo.component.ts) | Frontend-only scripted scenarios with a predefined image at `/demos/image-generation/visual`. |
+| [Image Generation Live Demo](../frontend/src/app/pages/image-generation-live-demo/image-generation-live-demo.component.ts) | Controller and UI composition at `/demos/image-generation/live`; see the [image generation contract](domains/image-generation.md). |
 | [Deployment](../deployment/) | Environment-specific Compose definitions and gateway routing. The [publishing workflow](../.github/workflows/publish-app.yml) builds and publishes application images and the chat UI package. |
 
-The Image Generation demo uses the same unverified shared `demo:default` identity assertion as Live Demo; it provides neither browser isolation nor authentication. It uses the UI's built-in PNG download without a custom primary action and does not submit on entry.
+The Image Generation Live Demo uses the same unverified shared `demo:default` identity assertion as Conversation Live Demo; it provides neither browser isolation nor authentication. It uses the UI's built-in PNG download and does not submit on entry. The visual image demo uses local scripted results, supports recovery scenarios, and simulates a host action without uploading the image.
 
 The [contract generator](../frontend/scripts/conversation-contract.mjs) produces [TypeScript types and Zod schemas](../frontend/projects/chat-ui/conversation/src/generated/) from the session router's OpenAPI document.
 

@@ -11,12 +11,12 @@ import {
 import { DemoHeader } from '../../components/demo-header/demo-header.component';
 
 @Component({
-  selector: 'app-image-generation-demo',
+  selector: 'app-image-generation-live-demo',
   imports: [DemoHeader, ImageGenerationUiComponent],
-  templateUrl: './image-generation-demo.component.html',
-  styleUrl: './image-generation-demo.component.scss',
+  templateUrl: './image-generation-live-demo.component.html',
+  styleUrl: './image-generation-live-demo.component.scss',
 })
-export class ImageGenerationDemo implements OnDestroy {
+export class ImageGenerationLiveDemo implements OnDestroy {
   private readonly controller = new ImageGenerationController(
     new HttpImageGenerationTransport('/api/v1', 'demo:default'),
     (state) => this.state.set(state),

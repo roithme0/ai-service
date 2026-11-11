@@ -24,7 +24,7 @@ npm ci
 npm run start:app
 ```
 
-Open `http://localhost:4204` for the demo selector: **Visual Demo** (`/demos/visual`), **Live Demo** (`/demos/live`), or **Image Generation** (`/demos/image-generation`). API requests proxy to port 8004. Visual Demo needs no model credentials or Kochwiki connection; Live Demo requires the [provider key](operation.md#configuration). Image Generation requires the [provider key, model, and dedicated storage directory](operation.md#configuration). Refresh or re-enter a conversation demo to start a new session.
+Open `http://localhost:4204` for the demo selector: **Conversation Visual Demo** (`/demos/conversation/visual`), **Conversation Live Demo** (`/demos/conversation/live`), **Image Generation Visual Demo** (`/demos/image-generation/visual`), or **Image Generation Live Demo** (`/demos/image-generation/live`). API requests proxy to port 8004. The conversation visual demo needs no model credentials or Kochwiki connection. The conversation live demo requires the [provider key](operation.md#configuration); the image generation live demo requires the [provider key, model, and dedicated storage directory](operation.md#configuration). The image visual demo runs locally with a predefined image and selectable failure scenarios; instructions do not change its image. Refresh or re-enter a conversation demo to start a new session.
 
 For model-backed conversations or image generation, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [required settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
 
@@ -132,7 +132,7 @@ See the [package README](../frontend/projects/chat-ui/README.md) for component i
 
 From **frontend/**, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This verifies built exports, runtime behavior, explicit application identity, and strict consumer declarations without workspace aliases.
 
-For manual layout and interaction checks, use [Visual Demo](http://localhost:4204/demos/visual) with the [local servers](#run-locally) running. Check narrow viewports, scrolling, artifact expansion, and keyboard submission in Chrome and Firefox. Refresh to restart the scripted session.
+For manual layout and interaction checks, use [Conversation Visual Demo](http://localhost:4204/demos/conversation/visual) with the [local servers](#run-locally) running. Check narrow viewports, scrolling, artifact expansion, and keyboard submission in Chrome and Firefox. Refresh to restart the scripted session.
 
 ## Develop the image generation package
 

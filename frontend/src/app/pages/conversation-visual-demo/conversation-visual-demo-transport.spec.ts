@@ -1,8 +1,8 @@
 import { JSON_ARTIFACT_CAPABILITY } from '@roithme0/chat-ui/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { VisualDemoTransport } from './visual-demo-transport';
+import { ConversationVisualDemoTransport } from './conversation-visual-demo-transport';
 
-describe('VisualDemoTransport', () => {
+describe('ConversationVisualDemoTransport', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
@@ -20,7 +20,7 @@ describe('VisualDemoTransport', () => {
       )
       .mockResolvedValueOnce(Response.json({ kind: 'accepted' }, { status: 202 }));
     vi.stubGlobal('fetch', fetchMock);
-    const transport = new VisualDemoTransport();
+    const transport = new ConversationVisualDemoTransport();
     const initialization = {
       artifact_capabilities: [JSON_ARTIFACT_CAPABILITY],
     };

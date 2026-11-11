@@ -3,7 +3,7 @@ import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { ImageGenerationUiComponent } from '@roithme0/image-generation/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ImageGenerationDemo } from './image-generation-demo.component';
+import { ImageGenerationLiveDemo } from './image-generation-live-demo.component';
 
 const running = {
   generation_id: 'd0c2ca12-1392-46af-896e-25ddbf3d7783',
@@ -17,10 +17,10 @@ const running = {
 
 function setup() {
   TestBed.configureTestingModule({
-    imports: [ImageGenerationDemo],
+    imports: [ImageGenerationLiveDemo],
     providers: [provideRouter([])],
   });
-  const fixture = TestBed.createComponent(ImageGenerationDemo);
+  const fixture = TestBed.createComponent(ImageGenerationLiveDemo);
   fixture.detectChanges();
   const ui = fixture.debugElement.query(By.directive(ImageGenerationUiComponent))
     .componentInstance as ImageGenerationUiComponent;
