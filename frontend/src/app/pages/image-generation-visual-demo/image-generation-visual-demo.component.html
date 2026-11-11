@@ -1,24 +1,26 @@
 <app-demo-header label="Image Generation Visual Demo" tag="Scripted" />
 <main class="page">
   <section class="controls" aria-label="Demo controls">
-    <app-section-nav
-      label="Scenario"
-      [items]="scenarios"
-      [activeId]="scenario()"
-      (selected)="selectScenario($event)"
-    />
-    <div class="actions">
-      <mat-form-field>
-        <mat-label>Primary action outcome</mat-label>
-        <mat-select [value]="outcome()" (selectionChange)="outcome.set($event.value)">
-          <mat-option value="success">Success</mat-option>
-          <mat-option value="failure">Failure</mat-option>
-        </mat-select>
-      </mat-form-field>
-      <button matButton="filled" type="button" (click)="reset()">Reset</button>
+    <div class="scenario-row">
+      <app-section-nav
+        label="Scenario"
+        [items]="scenarios"
+        [activeId]="scenario()"
+        (selected)="selectScenario($event)"
+      />
+      <button matButton="text" type="button" (click)="reset()">Reset</button>
     </div>
-    <p>Scripted demo. Results use a predefined image.</p>
-    <p>Instructions do not change the predefined result.</p>
+    <div class="actions">
+      <span id="outcome-label">Primary action outcome</span>
+      <mat-radio-group
+        aria-labelledby="outcome-label"
+        [value]="outcome()"
+        (change)="outcome.set($event.value)"
+      >
+        <mat-radio-button value="success">Success</mat-radio-button>
+        <mat-radio-button value="failure">Failure</mat-radio-button>
+      </mat-radio-group>
+    </div>
   </section>
   <div class="showcase">
     @for (run of runs(); track run.id) {

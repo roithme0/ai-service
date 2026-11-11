@@ -1,7 +1,17 @@
+@use '@angular/material' as mat;
+
 @import '@angular/material/prebuilt-themes/magenta-violet.css';
-@import './app/styles/tokens.css';
+@import './tokens.css';
 
 :root {
+  @include mat.theme(
+    (
+      typography: (
+        plain-family: var(--demo-font-family),
+      ),
+    )
+  );
+
   color-scheme: dark;
   font-family: var(--demo-font-family);
   background: var(--demo-canvas-background);

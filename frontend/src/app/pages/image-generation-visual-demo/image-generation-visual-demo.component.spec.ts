@@ -2,7 +2,6 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatSelect, MatSelectChange } from '@angular/material/select';
 import { ImageGenerationUiComponent } from '@roithme0/image-generation/ui';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { ImageGenerationVisualDemo } from './image-generation-visual-demo.component';
@@ -166,12 +165,14 @@ describe('Image generation visual demo ownership', () => {
   it('captures the handoff outcome when an attempt begins', async () => {
     vi.useFakeTimers();
     const { fixture, ui, open } = setup();
-    const select = fixture.debugElement.query(By.directive(MatSelect))
-      .componentInstance as MatSelect;
+    const failureRadio = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+      'input[type="radio"][value="failure"]',
+    );
+    if (!failureRadio) throw new Error('Failure option missing');
     const action = ui().primaryAction();
     if (!action) throw new Error('Primary action missing');
     const pending = action.run(payload);
-    select.selectionChange.emit(new MatSelectChange(select, 'failure'));
+    failureRadio.click();
     fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1000);
     await pending;

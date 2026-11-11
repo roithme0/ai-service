@@ -1,7 +1,6 @@
 import { Component, signal, viewChild } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatSelectModule } from '@angular/material/select';
+import { MatRadioModule } from '@angular/material/radio';
 import { DemoHeader } from '../../components/demo-header/demo-header.component';
 import { SectionNavComponent } from '../../components/section-nav/section-nav.component';
 import type { ImageGenerationVisualScenario } from './image-generation-visual-transport';
@@ -16,8 +15,7 @@ import {
     DemoHeader,
     SectionNavComponent,
     MatButtonModule,
-    MatFormFieldModule,
-    MatSelectModule,
+    MatRadioModule,
     ImageGenerationVisualRun,
   ],
   templateUrl: './image-generation-visual-demo.component.html',
