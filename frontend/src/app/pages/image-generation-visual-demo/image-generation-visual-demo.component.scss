@@ -26,8 +26,12 @@
 }
 .actions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
+  gap: 2rem;
+}
+.options {
+  flex: 0 0 auto;
 }
 .showcase {
   box-sizing: border-box;

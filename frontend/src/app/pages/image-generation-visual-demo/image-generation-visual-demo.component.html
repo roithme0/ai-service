@@ -11,6 +11,7 @@
       <span id="outcome-label">Ergebnis der Hauptaktion</span>
       <mat-radio-group
         aria-labelledby="outcome-label"
+        class="options"
         [value]="outcome()"
         (change)="outcome.set($event.value)"
       >
