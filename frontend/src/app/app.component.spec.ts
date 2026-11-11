@@ -16,6 +16,18 @@ describe('Demo-Navigation', () => {
     await harness.navigateByUrl('/', DemoLanding);
     const page = harness.routeNativeElement!;
     expect(page.querySelector('h1')?.textContent).toBe('Demo auswählen');
+    expect(Array.from(page.querySelectorAll('h2'), (heading) => heading.textContent)).toEqual([
+      'Unterhaltung',
+      'Bilderstellung',
+    ]);
+    expect(
+      Array.from(page.querySelectorAll('a'), (link) => link.getAttribute('aria-label')),
+    ).toEqual([
+      'Unterhaltung - visuelle Demo',
+      'Unterhaltung - Live-Demo',
+      'Bilderstellung - visuelle Demo',
+      'Bilderstellung - Live-Demo',
+    ]);
     expect(Array.from(page.querySelectorAll('a'), (link) => link.getAttribute('href'))).toEqual([
       '/demos/conversation/visual',
       '/demos/conversation/live',

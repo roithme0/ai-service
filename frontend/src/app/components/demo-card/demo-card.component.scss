@@ -1,5 +1,8 @@
 .card {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  height: 100%;
   box-sizing: border-box;
   width: 100%;
   padding: var(--demo-surface-padding);
@@ -23,22 +26,10 @@
   outline-offset: var(--demo-focus-offset);
 }
 
-.card-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--demo-content-gap);
-}
-
-h2 {
-  margin: 0;
-  font-size: var(--demo-section-title-font-size);
-  font-weight: var(--demo-emphasis-font-weight);
-}
-
 p {
   display: block;
   margin: 0.875rem 0 1.25rem;
+  flex: 1;
   line-height: var(--demo-body-line-height);
 }
 

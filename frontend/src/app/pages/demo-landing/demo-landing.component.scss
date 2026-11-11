@@ -13,22 +13,33 @@
 }
 
 h1 {
-  margin: 0 0 0.7rem;
+  margin: 0 0 var(--demo-section-gap);
   font-size: var(--demo-page-title-font-size);
   font-weight: var(--demo-title-font-weight);
 }
 
-.intro {
-  margin: 0 0 var(--demo-section-gap);
+section + section {
+  margin-top: var(--demo-section-gap);
+}
+
+h2 {
+  margin: 0 0 0.875rem;
+  font-size: var(--demo-section-title-font-size);
+  font-weight: var(--demo-emphasis-font-weight);
 }
 
 .cards {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.875rem;
 }
 
 @media (max-width: 30rem) {
   .landing {
     padding: var(--demo-section-gap) var(--demo-content-gap);
+  }
+
+  .cards {
+    grid-template-columns: 1fr;
   }
 }
