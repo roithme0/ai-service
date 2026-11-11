@@ -96,7 +96,7 @@ export class ImageGenerationUiComponent implements OnDestroy {
     }
     if (state.admission === 'rejected') {
       this.draft.set(state.instructions ?? this.submitted());
-      this.error.set(state.error ?? 'Request was rejected.');
+      this.error.set(state.error ?? 'Die Anfrage wurde abgelehnt.');
       this.navigate('input', 'textarea');
     } else if (
       state.admission === 'submitting' ||
@@ -148,7 +148,7 @@ export class ImageGenerationUiComponent implements OnDestroy {
     if (this.pending()) return;
     const text = this.draft();
     if (!text.trim() || [...text].length > 32000) {
-      this.error.set('Enter instructions of at most 32,000 characters.');
+      this.error.set('Geben Sie eine Beschreibung mit höchstens 32.000 Zeichen ein.');
       this.focus('textarea');
       return;
     }
@@ -161,7 +161,10 @@ export class ImageGenerationUiComponent implements OnDestroy {
     this.error.set(null);
     this.panel.set('generating');
     this.focus('heading');
-    await this.invoke(() => this.actions().submit(text), 'Could not submit request.');
+    await this.invoke(
+      () => this.actions().submit(text),
+      'Die Anfrage konnte nicht gesendet werden.',
+    );
   }
 
   async invoke(action: () => void | Promise<void>, message: string): Promise<void> {
@@ -196,7 +199,8 @@ export class ImageGenerationUiComponent implements OnDestroy {
       const url = URL.createObjectURL(content.blob);
       this.result.set({ ...content, instructions: this.submitted(), url });
     } catch {
-      if (!this.destroyed && epoch === this.epoch) this.contentError.set('Could not load image.');
+      if (!this.destroyed && epoch === this.epoch)
+        this.contentError.set('Das Bild konnte nicht geladen werden.');
     } finally {
       if (!this.destroyed && epoch === this.epoch) this.loading.set(false);
     }
@@ -211,7 +215,7 @@ export class ImageGenerationUiComponent implements OnDestroy {
     const result = this.result();
     if (result) URL.revokeObjectURL(result.url);
     this.result.set(null);
-    this.contentError.set('Could not display image.');
+    this.contentError.set('Das Bild konnte nicht angezeigt werden.');
   }
 
   refine(): void {
@@ -257,7 +261,7 @@ export class ImageGenerationUiComponent implements OnDestroy {
       });
     } catch {
       if (!this.destroyed && epoch === this.epoch)
-        this.snackBar.open('Action failed. Please try again.', 'OK', {
+        this.snackBar.open('Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.', 'OK', {
           duration: 6000,
           politeness: 'assertive',
         });

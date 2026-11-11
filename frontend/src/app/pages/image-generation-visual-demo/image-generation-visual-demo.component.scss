@@ -24,15 +24,6 @@
   flex-direction: column;
   gap: 1rem;
 }
-.scenario-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.scenario-row app-section-nav {
-  flex: 1;
-  min-width: 0;
-}
 .actions {
   display: flex;
   flex-direction: column;

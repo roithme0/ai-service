@@ -1,10 +1,10 @@
 <div class="heading">
-  <h2 #heading tabindex="-1">{{ failure() ? 'Generation failed' : 'Your image' }}</h2>
+  <h2 #heading tabindex="-1">{{ failure() ? 'Bilderstellung fehlgeschlagen' : 'Ihr Bild' }}</h2>
   @if (!failure()) {
     <button
       mat-icon-button
       type="button"
-      aria-label="Download PNG"
+      aria-label="PNG herunterladen"
       [disabled]="!image() || pending()"
       (click)="download.emit()"
     >
@@ -15,7 +15,7 @@
 <div class="body" aria-live="polite">
   @if (!failure()) {
     @if (image(); as image) {
-      <img [src]="image.url" alt="Generated image" (error)="imageError.emit()" />
+      <img [src]="image.url" alt="Erstelltes Bild" (error)="imageError.emit()" />
     } @else if (loading() || contentError()) {
       <ai-image-generation-image-placeholder [error]="contentError()" (retry)="retryImage.emit()" />
     }
@@ -23,11 +23,11 @@
   @if (metadata(); as metadata) {
     <dl class="metadata">
       <div>
-        <dt>Model</dt>
+        <dt>Modell</dt>
         <dd>{{ metadata.provider_model || metadata.configured_model }}</dd>
       </div>
       <div>
-        <dt>Estimated cost</dt>
+        <dt>Geschätzte Kosten</dt>
         <dd>{{ cost(metadata.estimated_cost_usd) }}</dd>
       </div>
     </dl>
@@ -55,6 +55,6 @@
     [disabled]="pending()"
     (click)="refine.emit()"
   >
-    Refine instructions
+    Beschreibung bearbeiten
   </button>
 </div>

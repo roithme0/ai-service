@@ -95,21 +95,21 @@ it('validates code points and submits exact instructions once while pending', as
   const pending = deferred<void>();
   const t = setup();
   vi.mocked(t.actions.submit).mockReturnValue(pending.promise);
-  expect(t.button('Generate image').disabled).toBe(true);
+  expect(t.button('Bild erstellen').disabled).toBe(true);
   t.edit('  ');
-  expect(t.button('Generate image').disabled).toBe(true);
-  t.button('Generate image').click();
+  expect(t.button('Bild erstellen').disabled).toBe(true);
+  t.button('Bild erstellen').click();
   t.fixture.detectChanges();
   expect(t.actions.submit).not.toHaveBeenCalled();
   t.edit('\u{1F600}'.repeat(32001));
-  expect(t.button('Generate image').disabled).toBe(false);
-  t.button('Generate image').click();
+  expect(t.button('Bild erstellen').disabled).toBe(false);
+  t.button('Bild erstellen').click();
   expect(t.actions.submit).not.toHaveBeenCalled();
   const text = `  ${'\u{1F600}'.repeat(31996)}  `;
   t.edit(text);
-  t.button('Generate image').click();
+  t.button('Bild erstellen').click();
   t.fixture.detectChanges();
-  expect(t.root.textContent).toContain('Submitting request');
+  expect(t.root.textContent).toContain('Anfrage wird gesendet');
   expect(t.actions.submit).toHaveBeenCalledExactlyOnceWith(text);
   pending.resolve();
   await pending.promise;
@@ -123,14 +123,14 @@ it('keeps successful content and instructions through refinement and back withou
   t.fixture.detectChanges();
   expect(t.actions.loadContent).toHaveBeenCalledOnce();
   expect(t.root.textContent).toContain('$0');
-  t.button('Refine instructions').click();
+  t.button('Beschreibung bearbeiten').click();
   t.fixture.detectChanges();
   expect(t.root.querySelector('textarea')?.value).toBe('original');
   t.edit('edited');
-  t.button('Back to result').click();
+  t.button('Zurück zum Ergebnis').click();
   t.fixture.detectChanges();
   expect(t.root.querySelector('img')?.getAttribute('src')).toBe('blob:owned');
-  t.button('Refine instructions').click();
+  t.button('Beschreibung bearbeiten').click();
   t.fixture.detectChanges();
   expect(t.root.querySelector('textarea')?.value).toBe('edited');
   expect(t.actions.submit).not.toHaveBeenCalled();
@@ -154,7 +154,7 @@ it('rejects mismatched content and retries only content', async () => {
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   expect(t.root.textContent).toContain('configured');
-  t.button('Retry image').click();
+  t.button('Bild erneut laden').click();
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   expect(load).toHaveBeenCalledTimes(2);
@@ -181,14 +181,14 @@ it('switches from refinement to an externally supplied new result', async () => 
   t.setState({ ...initial, admission: 'accepted', instructions: 'first', snapshot });
   await t.fixture.whenStable();
   t.fixture.detectChanges();
-  t.button('Refine instructions').click();
+  t.button('Beschreibung bearbeiten').click();
   t.fixture.detectChanges();
   t.edit('draft');
   t.setState({ ...initial, admission: 'accepted', instructions: 'second', snapshot: second });
   await t.fixture.whenStable();
   t.fixture.detectChanges();
-  expect(t.root.textContent).toContain('Your image');
-  t.button('Refine instructions').click();
+  expect(t.root.textContent).toContain('Ihr Bild');
+  t.button('Beschreibung bearbeiten').click();
   t.fixture.detectChanges();
   expect(t.root.querySelector('textarea')?.value).toBe('second');
 });
@@ -204,7 +204,7 @@ it('ignores an obsolete recovery rejection while a new action is pending', async
     .mockReturnValueOnce(old)
     .mockReturnValueOnce(current.promise);
   t.setState({ ...initial, admission: 'uncertain', instructions: 'first' });
-  t.button('Recover request').click();
+  t.button('Anfrage wiederherstellen').click();
   t.fixture.detectChanges();
   t.setState({
     ...initial,
@@ -221,14 +221,14 @@ it('ignores an obsolete recovery rejection while a new action is pending', async
     },
   });
   t.setState({ ...initial, admission: 'uncertain', instructions: 'new' });
-  t.button('Recover request').click();
+  t.button('Anfrage wiederherstellen').click();
   t.fixture.detectChanges();
   reject(new Error('obsolete'));
   await Promise.resolve();
   await Promise.resolve();
   t.fixture.detectChanges();
-  expect(t.root.textContent).not.toContain('Could not recover request.');
-  expect(t.button('Recover request').disabled).toBe(true);
+  expect(t.root.textContent).not.toContain('Die Anfrage konnte nicht wiederhergestellt werden.');
+  expect(t.button('Anfrage wiederherstellen').disabled).toBe(true);
   current.resolve();
   await current.promise;
 });
@@ -243,15 +243,18 @@ it('retains instructions and available metadata on confirmed failure', () => {
     configured_model: 'configured',
     provider_model: 'provider',
     estimated_cost_usd: '0.001',
-    error: { kind: 'image_generation_failed' as const, detail: 'Generation failed safely' },
+    error: {
+      kind: 'image_generation_failed' as const,
+      detail: 'Bilderstellung fehlgeschlagen safely',
+    },
   };
   t.setState({ ...initial, admission: 'accepted', instructions: 'failed brief', snapshot: failed });
-  expect(t.root.textContent).toContain('Generation failed');
-  expect(t.root.textContent).not.toContain('Generation failed safely');
+  expect(t.root.textContent).toContain('Bilderstellung fehlgeschlagen');
+  expect(t.root.textContent).not.toContain('Bilderstellung fehlgeschlagen safely');
   expect(t.root.textContent).toContain('provider');
   expect(t.root.textContent).toContain('0.001');
-  expect(t.button('Refine instructions').classList.contains('mat-tonal-button')).toBe(true);
-  t.button('Refine instructions').click();
+  expect(t.button('Beschreibung bearbeiten').classList.contains('mat-tonal-button')).toBe(true);
+  t.button('Beschreibung bearbeiten').click();
   t.fixture.detectChanges();
   expect(t.root.querySelector('textarea')?.value).toBe('failed brief');
 });
@@ -293,14 +296,14 @@ it('wires the supplied controller and owner-aware HTTP transport through uncerta
   });
   t.fixture.detectChanges();
   t.edit('exact brief');
-  t.button('Generate image').click();
+  t.button('Bild erstellen').click();
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   await vi.waitFor(() => {
     t.fixture.detectChanges();
-    expect(t.root.textContent).toContain('Could not confirm submission');
+    expect(t.root.textContent).toContain('Das Absenden konnte nicht bestätigt werden');
   });
-  t.button('Recover request').click();
+  t.button('Anfrage wiederherstellen').click();
   await vi.waitFor(() => {
     t.fixture.detectChanges();
     expect(controller.state).toMatchObject({ admission: 'accepted' });
@@ -322,23 +325,23 @@ it('wires the supplied controller and owner-aware HTTP transport through uncerta
   t.fixture.destroy();
 });
 
-it('keeps Back to result available while completed content is pending or failed', async () => {
+it('keeps Zurück zum Ergebnis available while completed content is pending or failed', async () => {
   const loading = deferred<ImageContent>();
   const t = setup(() => loading.promise);
   t.setState({ ...initial, admission: 'accepted', instructions: 'brief', snapshot });
-  t.button('Refine instructions').click();
+  t.button('Beschreibung bearbeiten').click();
   t.fixture.detectChanges();
-  t.button('Back to result').click();
+  t.button('Zurück zum Ergebnis').click();
   t.fixture.detectChanges();
   expect(t.root.textContent).toContain('configured');
   loading.resolve({ blob: new Blob([], { type: 'image/png' }), filename: 'one.png', snapshot });
   await t.fixture.whenStable();
   t.fixture.detectChanges();
-  t.button('Refine instructions').click();
+  t.button('Beschreibung bearbeiten').click();
   t.fixture.detectChanges();
-  t.button('Back to result').click();
+  t.button('Zurück zum Ergebnis').click();
   t.fixture.detectChanges();
-  expect(t.button('Retry image')).toBeTruthy();
+  expect(t.button('Bild erneut laden')).toBeTruthy();
   expect(t.actions.submit).not.toHaveBeenCalled();
 });
 
@@ -354,15 +357,15 @@ it('associates labels and validation errors independently across instances', () 
   secondInput.value = 'x'.repeat(32001);
   secondInput.dispatchEvent(new Event('input'));
   fixture.detectChanges();
-  a.button('Generate image').click();
+  a.button('Bild erstellen').click();
   root.querySelector('button')!.click();
   a.fixture.detectChanges();
   fixture.detectChanges();
   const first = a.root.querySelector('textarea')!;
   const second = root.querySelector('textarea')!;
   expect(first.id).not.toBe(second.id);
-  expect(first.getAttribute('aria-label')).toBe('Instructions');
-  expect(second.getAttribute('aria-label')).toBe('Instructions');
+  expect(first.getAttribute('aria-label')).toBe('Beschreibung');
+  expect(second.getAttribute('aria-label')).toBe('Beschreibung');
   expect(first.getAttribute('aria-describedby')).not.toBe(second.getAttribute('aria-describedby'));
 });
 
@@ -381,13 +384,13 @@ it('retries invalid media and decoded-image errors without regeneration', async 
   t.setState({ ...initial, admission: 'accepted', instructions: 'brief', snapshot });
   await t.fixture.whenStable();
   t.fixture.detectChanges();
-  t.button('Retry image').click();
+  t.button('Bild erneut laden').click();
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   t.root.querySelector('img')!.dispatchEvent(new Event('error'));
   t.fixture.detectChanges();
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:owned');
-  t.button('Retry image').click();
+  t.button('Bild erneut laden').click();
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   expect(load).toHaveBeenCalledTimes(3);
@@ -400,10 +403,10 @@ it('ignores stale content when explicit new generation replaces a completed resu
   const old = deferred<ImageContent>();
   const t = setup(() => old.promise);
   t.setState({ ...initial, admission: 'accepted', instructions: 'brief', snapshot });
-  t.button('Refine instructions').click();
+  t.button('Beschreibung bearbeiten').click();
   t.fixture.detectChanges();
   t.edit('new brief');
-  t.button('Generate image').click();
+  t.button('Bild erstellen').click();
   t.fixture.detectChanges();
   old.resolve({ blob: new Blob(['png'], { type: 'image/png' }), filename: 'one.png', snapshot });
   await old.promise;
@@ -433,13 +436,13 @@ it('passes the retained payload to handoff once and stays on success after fulfi
     instructions: 'exact brief',
   });
   expect(run.mock.calls[0][0].blob).toBeInstanceOf(Blob);
-  expect(t.button('Download PNG').disabled).toBe(true);
-  expect(t.button('Refine instructions').disabled).toBe(true);
+  expect(t.button('PNG herunterladen').disabled).toBe(true);
+  expect(t.button('Beschreibung bearbeiten').disabled).toBe(true);
   pending.resolve();
   await pending.promise;
   await t.fixture.whenStable();
   t.fixture.detectChanges();
-  expect(t.root.textContent).toContain('Your image');
+  expect(t.root.textContent).toContain('Ihr Bild');
 });
 
 it('reports handoff failure and ignores obsolete handoff rejection on replacement', async () => {
@@ -477,10 +480,14 @@ it('reports handoff failure and ignores obsolete handoff rejection on replacemen
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   expect(t.snackbar.open).toHaveBeenCalledOnce();
-  expect(t.snackbar.open).toHaveBeenCalledWith('Action failed. Please try again.', 'OK', {
-    duration: 6000,
-    politeness: 'assertive',
-  });
+  expect(t.snackbar.open).toHaveBeenCalledWith(
+    'Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.',
+    'OK',
+    {
+      duration: 6000,
+      politeness: 'assertive',
+    },
+  );
   t.setState({ ...initial, admission: 'accepted', instructions: 'second', snapshot: second });
   await t.fixture.whenStable();
   t.fixture.detectChanges();
@@ -504,11 +511,11 @@ it('preserves the brief on authoritative rejection and does not invent a failure
     return Promise.reject(new Error('network'));
   });
   t.edit('exact brief');
-  t.button('Generate image').click();
+  t.button('Bild erstellen').click();
   await t.fixture.whenStable();
   t.fixture.detectChanges();
-  expect(t.root.textContent).toContain('Could not confirm submission');
-  expect(t.root.textContent).not.toContain('Generation failed');
+  expect(t.root.textContent).toContain('Das Absenden konnte nicht bestätigt werden');
+  expect(t.root.textContent).not.toContain('Bilderstellung fehlgeschlagen');
   t.setState({
     ...initial,
     admission: 'rejected',
@@ -561,12 +568,12 @@ it('reconnects a lost controller observation to the same ID without another subm
   });
   t.fixture.detectChanges();
   t.edit('brief');
-  t.button('Generate image').click();
+  t.button('Bild erstellen').click();
   await vi.waitFor(() => {
     t.fixture.detectChanges();
-    expect(t.root.textContent).toContain('Reconnect to status');
+    expect(t.root.textContent).toContain('Erneut mit dem Status verbinden');
   });
-  t.button('Reconnect to status').click();
+  t.button('Erneut mit dem Status verbinden').click();
   await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
   expect(fetcher.mock.calls[0][1]?.method).toBe('POST');
   expect(fetcher.mock.calls[1][0]).toBe(`/api/v1/image-generations/${id}/events`);

@@ -47,6 +47,6 @@ export class ImageGenerationOutcomePanelComponent {
   }
 
   cost(value: string | null): string {
-    return value === null ? 'Unavailable' : `$${value}`;
+    return value === null ? 'Nicht verfügbar' : `$${value}`;
   }
 }

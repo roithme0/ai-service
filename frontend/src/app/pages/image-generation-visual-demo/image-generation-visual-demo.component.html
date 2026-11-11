@@ -1,15 +1,12 @@
 <app-demo-header label="Image Generation Visual Demo" tag="Scripted" />
 <main class="page">
   <section class="controls" aria-label="Demo controls">
-    <div class="scenario-row">
-      <app-section-nav
-        label="Scenario"
-        [items]="scenarios"
-        [activeId]="scenario()"
-        (selected)="selectScenario($event)"
-      />
-      <button matButton="text" type="button" (click)="reset()">Reset</button>
-    </div>
+    <app-section-nav
+      label="Scenario"
+      [items]="scenarios"
+      [activeId]="scenario()"
+      (selected)="selectScenario($event)"
+    />
     <div class="actions">
       <span id="outcome-label">Primary action outcome</span>
       <mat-radio-group

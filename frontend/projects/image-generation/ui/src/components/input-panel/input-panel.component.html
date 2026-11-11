@@ -1,4 +1,4 @@
-<h2 #heading tabindex="-1">Create an image</h2>
+<h2 #heading tabindex="-1">Bild erstellen</h2>
 <div class="surface">
   <textarea
     cdkTextareaAutosize
@@ -6,13 +6,13 @@
     cdkAutosizeMaxRows="10"
     #textarea
     [id]="inputId"
-    aria-label="Instructions"
+    aria-label="Beschreibung"
     required
     [value]="draft()"
     (input)="draftChange.emit(textarea.value)"
     [attr.aria-invalid]="error() ? 'true' : null"
     [attr.aria-describedby]="error() ? errorId : null"
-    placeholder="Describe the image you want to create"
+    placeholder="Beschreiben Sie das Bild, das Sie erstellen möchten"
   ></textarea>
 </div>
 @if (error()) {
@@ -20,7 +20,7 @@
 }
 <div class="actions">
   @if (canGoBack()) {
-    <button mat-button type="button" (click)="back.emit()">Back to result</button>
+    <button mat-button type="button" (click)="back.emit()">Zurück zum Ergebnis</button>
   }
   <button
     mat-flat-button
@@ -28,6 +28,6 @@
     [disabled]="pending() || !draft().trim()"
     (click)="generate.emit()"
   >
-    Generate image
+    Bild erstellen
   </button>
 </div>

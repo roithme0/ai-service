@@ -17,8 +17,15 @@
         [observation]="state().observation"
         [error]="error()"
         [pending]="pending()"
-        (recover)="invoke(actions().recoverSubmission, 'Could not recover request.')"
-        (reconnect)="invoke(actions().reconnect, 'Could not reconnect to status.')"
+        (recover)="
+          invoke(actions().recoverSubmission, 'Die Anfrage konnte nicht wiederhergestellt werden.')
+        "
+        (reconnect)="
+          invoke(
+            actions().reconnect,
+            'Die Verbindung zum Status konnte nicht wiederhergestellt werden.'
+          )
+        "
       />
     }
     @case ('outcome') {

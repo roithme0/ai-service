@@ -35,7 +35,7 @@ it('supports native textarea and keyboard activation in a narrow host', async ()
   host.style.setProperty('--ai-ui-composer-border', 'rgb(65, 43, 21)');
   fixture.detectChanges();
   await fixture.whenStable();
-  const input = page.getByRole('textbox', { name: 'Instructions' });
+  const input = page.getByRole('textbox', { name: 'Beschreibung' });
   const textarea = input.element() as HTMLTextAreaElement;
   const surface = textarea.parentElement!;
   expect(getComputedStyle(surface).backgroundColor).toBe('rgb(12, 34, 56)');
@@ -59,19 +59,19 @@ it('supports native textarea and keyboard activation in a narrow host', async ()
   await input.fill('first');
   await expect.poll(contentHeight).toBeCloseTo(lineHeight * 3, 0);
   const generateBounds = page
-    .getByRole('button', { name: 'Generate image' })
+    .getByRole('button', { name: 'Bild erstellen' })
     .element()
     .getBoundingClientRect();
   expect(generateBounds.bottom).toBeLessThanOrEqual(host.getBoundingClientRect().bottom);
   await userEvent.keyboard('{Enter}second');
   await expect.element(input).toHaveValue('first\nsecond');
   expect(actions.submit).not.toHaveBeenCalled();
-  const button = page.getByRole('button', { name: 'Generate image' });
+  const button = page.getByRole('button', { name: 'Bild erstellen' });
   button.element().focus();
   await userEvent.keyboard('{Enter}');
   expect(actions.submit).toHaveBeenCalledExactlyOnceWith('first\nsecond');
-  await expect.element(page.getByRole('heading', { name: 'Generating image' })).toBeVisible();
-  await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Generating image');
+  await expect.element(page.getByRole('heading', { name: 'Bild wird erstellt' })).toBeVisible();
+  await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Bild wird erstellt');
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
 });
 
@@ -151,7 +151,10 @@ it('renders state transitions, focus and reflow in a real browser', async () => 
           configured_model: 'model',
           provider_model: null,
           estimated_cost_usd: null,
-          error: { kind: 'image_generation_failed' as const, detail: 'Generation failed' },
+          error: {
+            kind: 'image_generation_failed' as const,
+            detail: 'Bilderstellung fehlgeschlagen',
+          },
         },
       },
     ],
@@ -160,22 +163,24 @@ it('renders state transitions, focus and reflow in a real browser', async () => 
     fixture.detectChanges();
     await fixture.whenStable();
     const expected: Record<string, string> = {
-      input: 'Create an image',
-      submitting: 'Submitting request',
-      uncertain: 'Recover request',
-      running: 'Generating image',
-      lost: 'Reconnect to status',
-      failure: 'Generation failed',
+      input: 'Bild erstellen',
+      submitting: 'Anfrage wird gesendet',
+      uncertain: 'Anfrage wiederherstellen',
+      running: 'Bild wird erstellt',
+      lost: 'Erneut mit dem Status verbinden',
+      failure: 'Bilderstellung fehlgeschlagen',
     };
     expect(host.textContent).toContain(expected[name]);
     await page.screenshot({ path: '../../test-results/' + name + '.png' });
     expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
   }
-  await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Generation failed');
+  await expect
+    .poll(() => document.activeElement?.textContent?.trim())
+    .toBe('Bilderstellung fehlgeschlagen');
   await page.viewport(320, 400);
   fixture.detectChanges();
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
-  const refine = page.getByRole('button', { name: 'Refine instructions' });
+  const refine = page.getByRole('button', { name: 'Beschreibung bearbeiten' });
   await expect.element(refine).toBeVisible();
   await refine.click();
   await expect.poll(() => document.activeElement?.tagName).toBe('TEXTAREA');
@@ -236,16 +241,16 @@ it('shows a decoded image and retains focus while content settles and handoff fa
   fixture.componentRef.setInput('primaryAction', { label: 'Use image', run: () => handoff });
   fixture.detectChanges();
   await page.screenshot({ path: '../../test-results/content-loading.png' });
-  const refine = page.getByRole('button', { name: 'Refine instructions' });
+  const refine = page.getByRole('button', { name: 'Beschreibung bearbeiten' });
   await refine.click();
   await expect.poll(() => document.activeElement?.tagName).toBe('TEXTAREA');
   resolve({ blob: png, filename: 'one.png', snapshot });
   await fixture.whenStable();
   fixture.detectChanges();
   expect(document.activeElement?.tagName).toBe('TEXTAREA');
-  await page.getByRole('button', { name: 'Back to result' }).click();
-  await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Your image');
-  const img = page.getByRole('img', { name: 'Generated image' });
+  await page.getByRole('button', { name: 'Zurück zum Ergebnis' }).click();
+  await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Ihr Bild');
+  const img = page.getByRole('img', { name: 'Erstelltes Bild' });
   await expect.element(img).toBeVisible();
   await expect.poll(() => (img.element() as HTMLImageElement).naturalWidth).toBe(120);
   const bounds = img.element().getBoundingClientRect();
@@ -260,12 +265,14 @@ it('shows a decoded image and retains focus while content settles and handoff fa
   expect(shortBounds.width / shortBounds.height).toBeCloseTo(2, 1);
   await page.getByRole('button', { name: 'Use image' }).click();
   fixture.detectChanges();
-  await expect.element(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
+  await expect.element(page.getByRole('button', { name: 'PNG herunterladen' })).toBeDisabled();
   await page.screenshot({ path: '../../test-results/handoff-pending.png' });
   reject(new Error('failed'));
   await fixture.whenStable();
   fixture.detectChanges();
-  await expect.element(page.getByText('Action failed. Please try again.')).toBeVisible();
+  await expect
+    .element(page.getByText('Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.'))
+    .toBeVisible();
   await page.screenshot({ path: '../../test-results/handoff-error.png' });
   const session = cdp();
   await session.send('Browser.setDownloadBehavior', {
@@ -284,7 +291,7 @@ it('shows a decoded image and retains focus while content settles and handoff fa
     };
     session.on('Browser.downloadProgress', finishListener);
   });
-  await page.getByRole('button', { name: 'Download PNG' }).click();
+  await page.getByRole('button', { name: 'PNG herunterladen' }).click();
   const download = await started;
   const progress = await finished;
   expect(download.suggestedFilename).toBe('one.png');
@@ -329,7 +336,7 @@ it('keeps long errors and actions reachable in landscape and enlarged text', asy
   fixture.detectChanges();
   await fixture.whenStable();
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
-  await expect.element(page.getByRole('button', { name: 'Refine instructions' })).toBeVisible();
+  await expect.element(page.getByRole('button', { name: 'Beschreibung bearbeiten' })).toBeVisible();
   await page.screenshot({ path: '../../test-results/landscape-long-error.png' });
 });
 
@@ -364,14 +371,14 @@ it('shows content-only retry with completed metadata after load failure', async 
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
-  await expect.element(page.getByRole('button', { name: 'Retry image' })).toBeVisible();
+  await expect.element(page.getByRole('button', { name: 'Bild erneut laden' })).toBeVisible();
   const placeholder = (fixture.nativeElement as HTMLElement).querySelector(
     'ai-image-generation-image-placeholder',
   )!;
   expect(placeholder.querySelector('[role="alert"]')?.textContent).toContain(
-    'Could not load image.',
+    'Das Bild konnte nicht geladen werden.',
   );
-  expect(placeholder.querySelector('button')?.textContent).toContain('Retry image');
+  expect(placeholder.querySelector('button')?.textContent).toContain('Bild erneut laden');
   expect(placeholder.querySelector('rect')).not.toBeNull();
   expect((fixture.nativeElement as HTMLElement).textContent).toContain('model');
   await page.screenshot({ path: '../../test-results/content-error.png' });

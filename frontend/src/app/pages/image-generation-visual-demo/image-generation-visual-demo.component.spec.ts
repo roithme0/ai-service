@@ -26,7 +26,7 @@ const payload = {
 function setup(): {
   fixture: ComponentFixture<ImageGenerationVisualDemo>;
   ui: () => ImageGenerationUiComponent;
-  reset: () => void;
+  changeScenario: () => void;
   open: Mock;
   dismiss: Mock;
 } {
@@ -42,15 +42,19 @@ function setup(): {
   const ui = () =>
     fixture.debugElement.query(By.directive(ImageGenerationUiComponent))
       .componentInstance as ImageGenerationUiComponent;
-  const reset = () => {
-    const button = Array.from(host.querySelectorAll('button')).find(
-      (item) => item.textContent?.trim() === 'Reset',
-    );
-    if (!button) throw new Error('Reset button missing');
+  const changeScenario = () => {
+    const button =
+      Array.from(host.querySelectorAll('button')).find(
+        (item) => item.textContent?.trim() === 'Success' && !item.hasAttribute('aria-current'),
+      ) ??
+      Array.from(host.querySelectorAll('button')).find(
+        (item) => item.textContent?.trim() === 'Connection lost',
+      );
+    if (!button) throw new Error('Scenario button missing');
     button.click();
     fixture.detectChanges();
   };
-  return { fixture, ui, reset, open, dismiss };
+  return { fixture, ui, changeScenario, open, dismiss };
 }
 
 afterEach(() => {
@@ -59,8 +63,8 @@ afterEach(() => {
 });
 
 describe('Image generation visual demo ownership', () => {
-  it('clears a real input draft on scenario changes and reset', () => {
-    const { fixture, reset } = setup();
+  it('clears a real input draft on scenario changes', () => {
+    const { fixture, changeScenario } = setup();
     const host = fixture.nativeElement as HTMLElement;
     const textarea = (): HTMLTextAreaElement => {
       const element = host.querySelector('textarea');
@@ -81,22 +85,21 @@ describe('Image generation visual demo ownership', () => {
     textarea().value = 'another draft';
     textarea().dispatchEvent(new Event('input'));
     fixture.detectChanges();
-    reset();
+    changeScenario();
     expect(textarea().value).toBe('');
-    expect(scenario.getAttribute('aria-current')).toBeTruthy();
     fixture.destroy();
   });
 
-  it('replaces an active run on reset and suppresses its late generation', async () => {
+  it('replaces an active run on scenario changes and suppresses its late generation', async () => {
     vi.useFakeTimers();
-    const { fixture, ui, reset } = setup();
+    const { fixture, ui, changeScenario } = setup();
     const previous = ui();
     const pending = previous.actions().submit('old instructions');
     await vi.advanceTimersByTimeAsync(500);
     await pending;
     fixture.detectChanges();
     expect(previous.state().snapshot?.status).toBe('running');
-    reset();
+    changeScenario();
     expect(ui()).not.toBe(previous);
     expect(ui().state().admission).toBe('idle');
     await vi.advanceTimersByTimeAsync(3000);
@@ -105,7 +108,7 @@ describe('Image generation visual demo ownership', () => {
     fixture.destroy();
   });
 
-  it('ignores content that resolves after its run has been reset', async () => {
+  it('ignores content that resolves after its run has been replaced', async () => {
     vi.useFakeTimers();
     let resolveContent: (blob: Blob) => void = () => {
       throw new Error('Missing resolver');
@@ -123,14 +126,14 @@ describe('Image generation visual demo ownership', () => {
         static override createObjectURL = createUrl;
       },
     );
-    const { fixture, ui, reset } = setup();
+    const { fixture, ui, changeScenario } = setup();
     const pending = ui().actions().submit('draw');
     await vi.advanceTimersByTimeAsync(500);
     await pending;
     await vi.advanceTimersByTimeAsync(2000);
     fixture.detectChanges();
     expect(ui().state().snapshot?.status).toBe('completed');
-    reset();
+    changeScenario();
     resolveContent(new Blob(['old'], { type: 'image/png' }));
     await vi.advanceTimersByTimeAsync(0);
     fixture.detectChanges();
@@ -140,14 +143,14 @@ describe('Image generation visual demo ownership', () => {
     vi.unstubAllGlobals();
   });
 
-  it('cancels pending host feedback and dismisses visible feedback on reset', async () => {
+  it('cancels pending host feedback and dismisses visible feedback on scenario changes', async () => {
     vi.useFakeTimers();
-    const { fixture, ui, reset, open, dismiss } = setup();
+    const { fixture, ui, changeScenario, open, dismiss } = setup();
     const action = ui().primaryAction();
     if (!action) throw new Error('Primary action missing');
     const pending = action.run(payload);
     const aborted = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    reset();
+    changeScenario();
     await aborted;
     await vi.advanceTimersByTimeAsync(1000);
     expect(open).not.toHaveBeenCalled();
@@ -157,7 +160,7 @@ describe('Image generation visual demo ownership', () => {
     await vi.advanceTimersByTimeAsync(1000);
     await success;
     expect(open).toHaveBeenCalledWith('Image received by demo host', undefined, { duration: 3000 });
-    reset();
+    changeScenario();
     expect(dismiss).toHaveBeenCalled();
     fixture.destroy();
   });

@@ -1,18 +1,18 @@
-<h2 #heading tabindex="-1">Generating image</h2>
+<h2 #heading tabindex="-1">Bild wird erstellt</h2>
 <div class="center" aria-live="polite">
   @if (admission() === 'uncertain') {
-    <p>Could not confirm submission</p>
+    <p>Das Absenden konnte nicht bestätigt werden</p>
     <button mat-button type="button" [disabled]="pending()" (click)="recover.emit()">
-      Recover request
+      Anfrage wiederherstellen
     </button>
   } @else if (observation() === 'lost') {
-    <p>Connection to generation status lost.</p>
+    <p>Die Verbindung zum Erstellungsstatus wurde unterbrochen.</p>
     <button mat-button type="button" [disabled]="pending()" (click)="reconnect.emit()">
-      Reconnect to status
+      Erneut mit dem Status verbinden
     </button>
   } @else {
     <mat-spinner diameter="32" aria-hidden="true" />
-    <p>{{ admission() === 'accepted' ? 'Generating image' : 'Submitting request' }}</p>
+    <p>{{ admission() === 'accepted' ? 'Bild wird erstellt' : 'Anfrage wird gesendet' }}</p>
   }
   @if (error()) {
     <p class="error" role="alert">{{ error() }}</p>

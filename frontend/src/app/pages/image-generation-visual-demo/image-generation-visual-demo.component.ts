@@ -1,5 +1,4 @@
 import { Component, signal, viewChild } from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
 import { MatRadioModule } from '@angular/material/radio';
 import { DemoHeader } from '../../components/demo-header/demo-header.component';
 import { SectionNavComponent } from '../../components/section-nav/section-nav.component';
@@ -11,13 +10,7 @@ import {
 
 @Component({
   selector: 'app-image-generation-visual-demo',
-  imports: [
-    DemoHeader,
-    SectionNavComponent,
-    MatButtonModule,
-    MatRadioModule,
-    ImageGenerationVisualRun,
-  ],
+  imports: [DemoHeader, SectionNavComponent, MatRadioModule, ImageGenerationVisualRun],
   templateUrl: './image-generation-visual-demo.component.html',
   styleUrl: './image-generation-visual-demo.component.scss',
 })
@@ -38,9 +31,9 @@ export class ImageGenerationVisualDemo {
     const next = this.scenarios.find((item) => item.id === id);
     if (!next) return;
     this.scenario.set(next.id);
-    this.reset();
+    this.replaceRun();
   }
-  protected reset(): void {
+  private replaceRun(): void {
     this.currentRun()?.dispose();
     this.runs.update(([run]) => [{ id: run.id + 1 }]);
   }
