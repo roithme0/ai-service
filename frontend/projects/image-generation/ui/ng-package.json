@@ -1,1 +1,1 @@
-{ "lib": { "entryFile": "public-api.ts" } }
+{ "lib": { "entryFile": "../../image-generation-ui-entry.ts" } }

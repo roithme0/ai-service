@@ -1,7 +1,7 @@
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material/icon';
 
-const CHAT_ICONS = [
+const UI_ICONS = [
   {
     name: 'microphone',
     svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4m-4 0h8"/></svg>',
@@ -38,12 +38,16 @@ const CHAT_ICONS = [
     name: 'add-file',
     svg: '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24"><path d="M0 0h24v24H0z" fill="none"/><path d="M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6h-1.5z"/></svg>',
   },
-] as const;
+  {
+    name: 'download',
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M5 20h14v-2H5v2Zm7-3 5-5-1.41-1.41L13 13.17V4h-2v9.17l-2.59-2.58L7 12l5 5Z"/></svg>',
+  },
+];
 
-export function registerChatIcons(iconRegistry: MatIconRegistry, sanitizer: DomSanitizer): void {
-  for (const icon of CHAT_ICONS) {
+export function registerUiIcons(iconRegistry: MatIconRegistry, sanitizer: DomSanitizer): void {
+  for (const icon of UI_ICONS) {
     iconRegistry.addSvgIconLiteralInNamespace(
-      'ai-chat',
+      'ai-service',
       icon.name,
       sanitizer.bypassSecurityTrustHtml(icon.svg),
     );

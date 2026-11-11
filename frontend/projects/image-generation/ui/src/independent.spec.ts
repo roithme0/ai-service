@@ -4,6 +4,7 @@ import {
   ImageGenerationController,
 } from '@roithme0/image-generation/controller';
 import { TestBed } from '@angular/core/testing';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { afterEach, expect, it, vi } from 'vitest';
 import type {
   CompletedSnapshot,
@@ -56,7 +57,11 @@ function setup(
     reconnect: vi.fn(),
     loadContent,
   };
-  TestBed.configureTestingModule({ imports: [ImageGenerationUiComponent] });
+  const snackbar = { open: vi.fn() };
+  TestBed.configureTestingModule({
+    imports: [ImageGenerationUiComponent],
+    providers: [{ provide: MatSnackBar, useValue: snackbar }],
+  });
   const fixture = TestBed.createComponent(ImageGenerationUiComponent);
   fixture.componentRef.setInput('state', initial);
   fixture.componentRef.setInput('actions', actions);
@@ -68,7 +73,7 @@ function setup(
   };
   const button = (label: string) => {
     const found = [...root.querySelectorAll('button')].find(
-      (item) => item.textContent?.trim() === label,
+      (item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label,
     );
     if (!found) throw new Error(`Missing ${label}`);
     return found;
@@ -79,7 +84,7 @@ function setup(
     textarea.dispatchEvent(new Event('input'));
     fixture.detectChanges();
   };
-  return { fixture, root, actions, setState, button, edit };
+  return { fixture, root, actions, setState, button, edit, snackbar };
 }
 afterEach(() => {
   vi.restoreAllMocks();
@@ -124,7 +129,7 @@ it('keeps successful content and instructions through refinement and back withou
   t.edit('edited');
   t.button('Back to result').click();
   t.fixture.detectChanges();
-  expect(t.root.textContent).toContain('original');
+  expect(t.root.querySelector('img')?.getAttribute('src')).toBe('blob:owned');
   t.button('Refine instructions').click();
   t.fixture.detectChanges();
   expect(t.root.querySelector('textarea')?.value).toBe('edited');
@@ -183,7 +188,6 @@ it('switches from refinement to an externally supplied new result', async () => 
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   expect(t.root.textContent).toContain('Your image');
-  expect(t.root.textContent).toContain('second');
   t.button('Refine instructions').click();
   t.fixture.detectChanges();
   expect(t.root.querySelector('textarea')?.value).toBe('second');
@@ -242,11 +246,14 @@ it('retains instructions and available metadata on confirmed failure', () => {
     error: { kind: 'image_generation_failed' as const, detail: 'Generation failed safely' },
   };
   t.setState({ ...initial, admission: 'accepted', instructions: 'failed brief', snapshot: failed });
-  expect(t.root.textContent).toContain('Generation failed safely');
+  expect(t.root.textContent).toContain('Generation failed');
+  expect(t.root.textContent).not.toContain('Generation failed safely');
   expect(t.root.textContent).toContain('provider');
   expect(t.root.textContent).toContain('0.001');
-  expect(t.root.textContent).toContain('View instructions');
-  expect(t.root.textContent).toContain('failed brief');
+  expect(t.button('Refine instructions').classList.contains('mat-tonal-button')).toBe(true);
+  t.button('Refine instructions').click();
+  t.fixture.detectChanges();
+  expect(t.root.querySelector('textarea')?.value).toBe('failed brief');
 });
 
 it('wires the supplied controller and owner-aware HTTP transport through uncertain recovery', async () => {
@@ -435,7 +442,7 @@ it('passes the retained payload to handoff once and stays on success after fulfi
   expect(t.root.textContent).toContain('Your image');
 });
 
-it('clears prior handoff error and ignores obsolete handoff rejection on replacement', async () => {
+it('reports handoff failure and ignores obsolete handoff rejection on replacement', async () => {
   vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:owned'), revokeObjectURL: vi.fn() });
   const second = { ...snapshot, generation_id: 'two' };
   const third = { ...snapshot, generation_id: 'three' };
@@ -469,11 +476,14 @@ it('clears prior handoff error and ignores obsolete handoff rejection on replace
   t.button('Use image').click();
   await t.fixture.whenStable();
   t.fixture.detectChanges();
-  expect(t.root.textContent).toContain('Action failed');
+  expect(t.snackbar.open).toHaveBeenCalledOnce();
+  expect(t.snackbar.open).toHaveBeenCalledWith('Action failed. Please try again.', 'OK', {
+    duration: 6000,
+    politeness: 'assertive',
+  });
   t.setState({ ...initial, admission: 'accepted', instructions: 'second', snapshot: second });
   await t.fixture.whenStable();
   t.fixture.detectChanges();
-  expect(t.root.textContent).not.toContain('Action failed');
   t.button('Use image').click();
   t.fixture.detectChanges();
   t.setState({ ...initial, admission: 'accepted', instructions: 'third', snapshot: third });
@@ -483,7 +493,7 @@ it('clears prior handoff error and ignores obsolete handoff rejection on replace
   await Promise.resolve();
   await Promise.resolve();
   t.fixture.detectChanges();
-  expect(t.root.textContent).not.toContain('Action failed');
+  expect(t.snackbar.open).toHaveBeenCalledOnce();
   expect(t.button('Use image').disabled).toBe(false);
 });
 

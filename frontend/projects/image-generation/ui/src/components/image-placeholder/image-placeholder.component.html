@@ -1,0 +1,9 @@
+<svg aria-hidden="true" focusable="false">
+  <rect x="1" y="1" rx="12" />
+</svg>
+@if (error(); as error) {
+  <p role="alert">{{ error }}</p>
+  <button mat-button type="button" (click)="retry.emit()">Retry image</button>
+} @else {
+  <span>Loading image...</span>
+}

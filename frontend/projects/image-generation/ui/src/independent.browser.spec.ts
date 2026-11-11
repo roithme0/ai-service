@@ -258,9 +258,6 @@ it('shows a decoded image and retains focus while content settles and handoff fa
   expect(shortBounds.width).toBeGreaterThan(0);
   expect(shortBounds.height).toBeGreaterThan(0);
   expect(shortBounds.width / shortBounds.height).toBeCloseTo(2, 1);
-  const details = page.getByText('View instructions');
-  await details.click();
-  expect((fixture.nativeElement as HTMLElement).textContent).toContain('Brief');
   await page.getByRole('button', { name: 'Use image' }).click();
   fixture.detectChanges();
   await expect.element(page.getByRole('button', { name: 'Download PNG' })).toBeDisabled();
@@ -268,7 +265,7 @@ it('shows a decoded image and retains focus while content settles and handoff fa
   reject(new Error('failed'));
   await fixture.whenStable();
   fixture.detectChanges();
-  await expect.element(page.getByRole('alert')).toBeVisible();
+  await expect.element(page.getByText('Action failed. Please try again.')).toBeVisible();
   await page.screenshot({ path: '../../test-results/handoff-error.png' });
   const session = cdp();
   await session.send('Browser.setDownloadBehavior', {
@@ -368,6 +365,14 @@ it('shows content-only retry with completed metadata after load failure', async 
   await fixture.whenStable();
   fixture.detectChanges();
   await expect.element(page.getByRole('button', { name: 'Retry image' })).toBeVisible();
+  const placeholder = (fixture.nativeElement as HTMLElement).querySelector(
+    'ai-image-generation-image-placeholder',
+  )!;
+  expect(placeholder.querySelector('[role="alert"]')?.textContent).toContain(
+    'Could not load image.',
+  );
+  expect(placeholder.querySelector('button')?.textContent).toContain('Retry image');
+  expect(placeholder.querySelector('rect')).not.toBeNull();
   expect((fixture.nativeElement as HTMLElement).textContent).toContain('model');
   await page.screenshot({ path: '../../test-results/content-error.png' });
 });

@@ -1,7 +1,7 @@
-﻿import { TestBed } from '@angular/core/testing';
+import { TestBed } from '@angular/core/testing';
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material/icon';
-import { registerChatIcons } from '../../chat-icons';
+import { registerUiIcons } from '../../../../../shared/icons';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { RecordingOutcome, RecordingState } from '@roithme0/chat-ui/recording';
 import type { DictationConfig } from '../../dictation';
@@ -44,7 +44,7 @@ function setup() {
     onError,
   };
   TestBed.configureTestingModule({ imports: [ComposerComponent] });
-  registerChatIcons(TestBed.inject(MatIconRegistry), TestBed.inject(DomSanitizer));
+  registerUiIcons(TestBed.inject(MatIconRegistry), TestBed.inject(DomSanitizer));
   const fixture = TestBed.createComponent(ComposerComponent);
   fixture.componentRef.setInput('mascotSource', '/mascot.png');
   fixture.componentRef.setInput('dictation', config);

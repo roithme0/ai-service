@@ -7,18 +7,22 @@
   margin: auto;
 }
 .page {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: env(safe-area-inset-bottom);
+  gap: 1rem;
+  padding: 1rem max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
   background: var(--demo-page-background);
 }
 .controls {
   display: flex;
+  flex: none;
   flex-direction: column;
   gap: 1rem;
-  padding: 1rem max(1rem, env(safe-area-inset-right)) 1rem max(1rem, env(safe-area-inset-left));
 }
 .scenario-row {
   display: flex;
@@ -36,9 +40,8 @@
 }
 .showcase {
   box-sizing: border-box;
-  height: max(32rem, 70vh);
+  flex: 1 0;
   min-width: 0;
-  margin: 0 1rem;
   overflow: hidden;
   border: var(--demo-border-width) solid var(--demo-border);
   border-radius: 1.25rem;

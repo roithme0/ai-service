@@ -1,4 +1,14 @@
-import { Component, effect, input, OnDestroy, signal, untracked, viewChild } from '@angular/core';
+import {
+  Component,
+  effect,
+  inject,
+  input,
+  OnDestroy,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import type { ImageContent, ImageGenerationState } from '@roithme0/image-generation/controller';
 import type { CompletedSnapshot } from '@roithme0/image-generation/controller';
 import { ImageGenerationInputPanelComponent } from '../input-panel/input-panel.component';
@@ -33,6 +43,7 @@ type Panel = 'input' | 'generating' | 'outcome';
   styleUrl: './image-generation.component.scss',
 })
 export class ImageGenerationUiComponent implements OnDestroy {
+  private readonly snackBar = inject(MatSnackBar);
   readonly state = input.required<Readonly<ImageGenerationState>>();
   readonly actions = input.required<ImageGenerationActions>();
   readonly primaryAction = input<ImageGenerationPrimaryAction>();
@@ -246,7 +257,10 @@ export class ImageGenerationUiComponent implements OnDestroy {
       });
     } catch {
       if (!this.destroyed && epoch === this.epoch)
-        this.error.set('Action failed. Please try again.');
+        this.snackBar.open('Action failed. Please try again.', 'OK', {
+          duration: 6000,
+          politeness: 'assertive',
+        });
     } finally {
       if (!this.destroyed && epoch === this.epoch) this.pending.set(false);
     }

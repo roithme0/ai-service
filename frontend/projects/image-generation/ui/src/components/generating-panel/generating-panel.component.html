@@ -2,12 +2,12 @@
 <div class="center" aria-live="polite">
   @if (admission() === 'uncertain') {
     <p>Could not confirm submission</p>
-    <button mat-stroked-button type="button" [disabled]="pending()" (click)="recover.emit()">
+    <button mat-button type="button" [disabled]="pending()" (click)="recover.emit()">
       Recover request
     </button>
   } @else if (observation() === 'lost') {
     <p>Connection to generation status lost.</p>
-    <button mat-stroked-button type="button" [disabled]="pending()" (click)="reconnect.emit()">
+    <button mat-button type="button" [disabled]="pending()" (click)="reconnect.emit()">
       Reconnect to status
     </button>
   } @else {

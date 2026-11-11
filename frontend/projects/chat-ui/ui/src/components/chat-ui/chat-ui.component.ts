@@ -3,7 +3,7 @@ import { Component, computed, inject, input, output, viewChild } from '@angular/
 import { DomSanitizer } from '@angular/platform-browser';
 import { MatIconRegistry } from '@angular/material/icon';
 import type { DictationConfig } from '../../dictation';
-import { registerChatIcons } from '../../chat-icons';
+import { registerUiIcons } from '../../../../../shared/icons';
 import { ComposerComponent } from '../composer/composer.component';
 import { HistoryComponent } from '../history/history.component';
 import type { ChatUsage } from '../../models/chat-usage';
@@ -51,6 +51,6 @@ export class ChatUiComponent {
   });
 
   constructor() {
-    registerChatIcons(inject(MatIconRegistry), inject(DomSanitizer));
+    registerUiIcons(inject(MatIconRegistry), inject(DomSanitizer));
   }
 }
