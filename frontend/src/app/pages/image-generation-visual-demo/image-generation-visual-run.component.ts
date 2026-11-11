@@ -60,7 +60,7 @@ export class ImageGenerationVisualRun implements OnDestroy {
     }),
   };
   protected readonly primaryAction: ImageGenerationPrimaryAction = {
-    label: 'Use image',
+    label: 'Bild verwenden',
     run: async () => {
       const outcome = this.outcome();
       await new Promise<void>((resolve, reject) => {
@@ -82,7 +82,7 @@ export class ImageGenerationVisualRun implements OnDestroy {
       });
       if (this.abort.signal.aborted) return;
       if (outcome === 'failure') throw new Error('Demo action failed');
-      this.feedback = this.snackBar.open('Image received by demo host', undefined, {
+      this.feedback = this.snackBar.open('Bild wurde von der Demo empfangen', undefined, {
         duration: timings.snackbarVisibilityMs,
       });
     },

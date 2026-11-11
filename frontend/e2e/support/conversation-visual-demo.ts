@@ -69,10 +69,10 @@ export class ConversationVisualDemo {
 
   constructor(page: Page) {
     const header = page.getByRole('banner');
-    this.title = header.getByText('Conversation Visual Demo', { exact: true });
-    this.scriptedBadge = header.getByText('Scripted', { exact: true });
+    this.title = header.getByText('Unterhaltung - visuelle Demo', { exact: true });
+    this.scriptedBadge = header.getByText('Skript', { exact: true });
     this.landingPageLink = header
-      .getByRole('navigation', { name: 'Demo navigation' })
+      .getByRole('navigation', { name: 'Demo-Navigation' })
       .getByRole('link', { name: 'Demos', exact: true });
     this.composer = page.getByRole('textbox', { name: 'Nachricht', exact: true });
     this.send = page.getByRole('button', { name: 'Nachricht senden', exact: true });

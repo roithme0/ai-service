@@ -6,11 +6,11 @@ export class LandingPage {
   readonly conversationLiveDemoLink: Locator;
 
   constructor(private readonly page: Page) {
-    this.heading = page.getByRole('heading', { name: 'Choose a demo', exact: true });
+    this.heading = page.getByRole('heading', { name: 'Demo auswählen', exact: true });
     this.conversationVisualDemoLink = page.getByRole('link', {
-      name: /^Conversation Visual Demo\b/,
+      name: /^Unterhaltung - visuelle Demo\b/,
     });
-    this.conversationLiveDemoLink = page.getByRole('link', { name: /^Conversation Live Demo\b/ });
+    this.conversationLiveDemoLink = page.getByRole('link', { name: /^Unterhaltung - Live-Demo\b/ });
   }
 
   async goto(): Promise<void> {

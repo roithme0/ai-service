@@ -1,39 +1,45 @@
 <main class="landing" aria-labelledby="demo-heading">
   <div class="content">
-    <h1 id="demo-heading">Choose a demo</h1>
-    <p class="intro">Explore the conversation and image generation demos.</p>
+    <h1 id="demo-heading">Demo auswählen</h1>
+    <p class="intro">Entdecke die Demos für Unterhaltung und Bilderstellung.</p>
     <div class="cards">
       <a class="card" routerLink="/demos/conversation/visual"
         ><div class="card-heading">
-          <h2>Conversation Visual Demo</h2>
-          <app-demo-tag label="Scripted" />
+          <h2>Unterhaltung - visuelle Demo</h2>
+          <app-demo-tag label="Skript" />
         </div>
-        <p>Walk through chat, tool calls, artifacts, and simulated errors. No AI model involved.</p>
-        <app-navigation-link>Open conversation visual demo</app-navigation-link></a
+        <p>
+          Erlebe Chat, Tool-Aufrufe, Artefakte und simulierte Fehler. Dabei wird kein KI-Modell
+          verwendet.
+        </p>
+        <app-navigation-link>Visuelle Unterhaltungsdemo öffnen</app-navigation-link></a
       >
       <a class="card" routerLink="/demos/conversation/live"
         ><div class="card-heading">
-          <h2>Conversation Live Demo</h2>
+          <h2>Unterhaltung - Live-Demo</h2>
           <app-demo-tag label="Live" />
         </div>
-        <p>Chat with the AI service using real model responses and tool execution.</p>
-        <app-navigation-link>Open conversation live demo</app-navigation-link></a
+        <p>Chatte mit dem KI-Dienst und erlebe echte Modellantworten und Tool-Aufrufe.</p>
+        <app-navigation-link>Live-Unterhaltungsdemo öffnen</app-navigation-link></a
       >
       <a class="card" routerLink="/demos/image-generation/visual"
         ><div class="card-heading">
-          <h2>Image Generation Visual Demo</h2>
-          <app-demo-tag label="Scripted" />
+          <h2>Bilderstellung - visuelle Demo</h2>
+          <app-demo-tag label="Skript" />
         </div>
-        <p>Explore image generation and recovery with a predefined image.</p>
-        <app-navigation-link>Open image generation visual demo</app-navigation-link></a
+        <p>Erlebe die Bilderstellung und Wiederherstellung mit einem vordefinierten Bild.</p>
+        <app-navigation-link>Visuelle Bilderstellungsdemo öffnen</app-navigation-link></a
       >
       <a class="card" routerLink="/demos/image-generation/live"
         ><div class="card-heading">
-          <h2>Image Generation Live Demo</h2>
+          <h2>Bilderstellung - Live-Demo</h2>
           <app-demo-tag label="Live" />
         </div>
-        <p>Generate an image with the configured provider. References are temporary.</p>
-        <app-navigation-link>Open image generation live demo</app-navigation-link></a
+        <p>
+          Erstelle ein Bild mit dem konfigurierten Anbieter. Referenzen sind nur vorübergehend
+          verfügbar.
+        </p>
+        <app-navigation-link>Live-Bilderstellungsdemo öffnen</app-navigation-link></a
       >
     </div>
   </div>

@@ -16,11 +16,11 @@ import {
 })
 export class ImageGenerationVisualDemo {
   protected readonly scenarios: readonly { id: ImageGenerationVisualScenario; label: string }[] = [
-    { id: 'success', label: 'Success' },
-    { id: 'generation-failure', label: 'Generation failure' },
-    { id: 'connection-lost', label: 'Connection lost' },
-    { id: 'submission-uncertain', label: 'Submission uncertain' },
-    { id: 'image-load-failure', label: 'Image load failure' },
+    { id: 'success', label: 'Erfolg' },
+    { id: 'generation-failure', label: 'Bilderstellung fehlgeschlagen' },
+    { id: 'connection-lost', label: 'Verbindung unterbrochen' },
+    { id: 'submission-uncertain', label: 'Absenden unbestätigt' },
+    { id: 'image-load-failure', label: 'Bild konnte nicht geladen werden' },
   ];
   protected readonly scenario = signal<ImageGenerationVisualScenario>('success');
   protected readonly outcome = signal<DemoActionOutcome>('success');

@@ -191,7 +191,9 @@ describe('Live demo application', () => {
         .map((part) => part.kind),
     ).toEqual(['text', 'intermediate', 'tool', 'artifact', 'text']);
     const page = fixture.nativeElement as HTMLElement;
-    expect(page.querySelector('app-demo-header')?.textContent).toContain('Conversation Live Demo');
+    expect(page.querySelector('app-demo-header')?.textContent).toContain(
+      'Unterhaltung - Live-Demo',
+    );
     expect(page.querySelector('pre')?.textContent).toContain('"message": "Hallo!"');
     expect(page.querySelector('ai-chat-usage-line')?.textContent).toContain('$0.002');
     expect(chat.composerDisabled()).toBe(false);

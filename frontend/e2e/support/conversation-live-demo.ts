@@ -19,10 +19,10 @@ export class ConversationLiveDemo {
 
   constructor(private readonly page: Page) {
     const header = page.getByRole('banner');
-    this.title = header.getByText('Conversation Live Demo', { exact: true });
+    this.title = header.getByText('Unterhaltung - Live-Demo', { exact: true });
     this.liveBadge = header.getByText('Live', { exact: true });
     this.landingPageLink = header
-      .getByRole('navigation', { name: 'Demo navigation' })
+      .getByRole('navigation', { name: 'Demo-Navigation' })
       .getByRole('link', { name: 'Demos', exact: true });
     this.composer = page.getByRole('textbox', { name: 'Nachricht', exact: true });
     this.send = page.getByRole('button', { name: 'Nachricht senden', exact: true });

@@ -99,7 +99,7 @@ export class ImageGenerationVisualTransport implements ImageGenerationTransport 
         status: 'running',
         created_at: new Date().toISOString(),
         completed_at: null,
-        configured_model: 'Demo model',
+        configured_model: 'Demo-Modell',
         provider_model: null,
         estimated_cost_usd: null,
       },
@@ -138,7 +138,8 @@ export class ImageGenerationVisualTransport implements ImageGenerationTransport 
         completed_at: new Date().toISOString(),
         error: {
           kind: 'image_generation_failed',
-          detail: 'Demo generation failed. Refine your instructions to try again.',
+          detail:
+            'Die Bilderstellung in der Demo ist fehlgeschlagen. Passe die Beschreibung an und versuche es erneut.',
         },
       };
     } else {

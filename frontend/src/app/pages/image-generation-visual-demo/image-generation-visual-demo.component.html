@@ -1,21 +1,21 @@
-<app-demo-header label="Image Generation Visual Demo" tag="Scripted" />
+<app-demo-header label="Bilderstellung - visuelle Demo" tag="Skript" />
 <main class="page">
-  <section class="controls" aria-label="Demo controls">
+  <section class="controls" aria-label="Demo-Steuerung">
     <app-section-nav
-      label="Scenario"
+      label="Szenario"
       [items]="scenarios"
       [activeId]="scenario()"
       (selected)="selectScenario($event)"
     />
     <div class="actions">
-      <span id="outcome-label">Primary action outcome</span>
+      <span id="outcome-label">Ergebnis der Hauptaktion</span>
       <mat-radio-group
         aria-labelledby="outcome-label"
         [value]="outcome()"
         (change)="outcome.set($event.value)"
       >
-        <mat-radio-button value="success">Success</mat-radio-button>
-        <mat-radio-button value="failure">Failure</mat-radio-button>
+        <mat-radio-button value="success">Erfolg</mat-radio-button>
+        <mat-radio-button value="failure">Fehler</mat-radio-button>
       </mat-radio-group>
     </div>
   </section>

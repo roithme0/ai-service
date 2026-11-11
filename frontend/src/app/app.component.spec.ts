@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { routes } from './app.routes';
 import { DemoLanding } from './pages/demo-landing/demo-landing.component';
 
-describe('Demo navigation', () => {
+describe('Demo-Navigation', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('shows links to all demos without starting a session', async () => {
@@ -15,7 +15,7 @@ describe('Demo navigation', () => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl('/', DemoLanding);
     const page = harness.routeNativeElement!;
-    expect(page.querySelector('h1')?.textContent).toBe('Choose a demo');
+    expect(page.querySelector('h1')?.textContent).toBe('Demo auswählen');
     expect(Array.from(page.querySelectorAll('a'), (link) => link.getAttribute('href'))).toEqual([
       '/demos/conversation/visual',
       '/demos/conversation/live',

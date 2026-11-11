@@ -16,7 +16,7 @@ const payload = {
     status: 'completed' as const,
     created_at: '2026-01-01T00:00:00Z',
     completed_at: '2026-01-01T00:00:01Z',
-    configured_model: 'Demo model',
+    configured_model: 'Demo-Modell',
     provider_model: null,
     estimated_cost_usd: '0.00',
     content: { media_type: 'image/png' as const, size_bytes: 0, url: '/image' },
@@ -45,10 +45,10 @@ function setup(): {
   const changeScenario = () => {
     const button =
       Array.from(host.querySelectorAll('button')).find(
-        (item) => item.textContent?.trim() === 'Success' && !item.hasAttribute('aria-current'),
+        (item) => item.textContent?.trim() === 'Erfolg' && !item.hasAttribute('aria-current'),
       ) ??
       Array.from(host.querySelectorAll('button')).find(
-        (item) => item.textContent?.trim() === 'Connection lost',
+        (item) => item.textContent?.trim() === 'Verbindung unterbrochen',
       );
     if (!button) throw new Error('Scenario button missing');
     button.click();
@@ -75,7 +75,7 @@ describe('Image generation visual demo ownership', () => {
     textarea().dispatchEvent(new Event('input'));
     fixture.detectChanges();
     const scenario = Array.from(host.querySelectorAll('button')).find(
-      (item) => item.textContent?.trim() === 'Connection lost',
+      (item) => item.textContent?.trim() === 'Verbindung unterbrochen',
     );
     if (!scenario) throw new Error('Scenario missing');
     scenario.click();
@@ -159,7 +159,9 @@ describe('Image generation visual demo ownership', () => {
     const success = next.run(payload);
     await vi.advanceTimersByTimeAsync(1000);
     await success;
-    expect(open).toHaveBeenCalledWith('Image received by demo host', undefined, { duration: 3000 });
+    expect(open).toHaveBeenCalledWith('Bild wurde von der Demo empfangen', undefined, {
+      duration: 3000,
+    });
     changeScenario();
     expect(dismiss).toHaveBeenCalled();
     fixture.destroy();
