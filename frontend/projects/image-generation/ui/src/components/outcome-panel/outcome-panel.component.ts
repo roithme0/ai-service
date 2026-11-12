@@ -36,6 +36,16 @@ export class ImageGenerationOutcomePanelComponent {
   readonly retry = output<void>();
   readonly retryImage = output<void>();
 
+  readonly imageRetryAction = {
+    label: 'Erneut versuchen',
+    action: (): void => this.retryImage.emit(),
+  };
+  readonly failureRetryAction = computed(() => ({
+    label: 'Erneut versuchen',
+    action: (): void => this.retry.emit(),
+    disabled: this.pending(),
+  }));
+
   readonly metadata = computed(() => {
     const snapshot = this.image()?.snapshot ?? this.snapshot();
     return snapshot?.status !== 'running' ? snapshot : null;

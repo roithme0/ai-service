@@ -382,6 +382,11 @@ it('retains instructions and available metadata on confirmed failure', () => {
   t.setState({ ...initial, admission: 'accepted', instructions: 'failed brief', snapshot: failed });
   expect(t.root.textContent).toContain('Erstellung fehlgeschlagen');
   expect(t.root.textContent).not.toContain('Erstellung fehlgeschlagen safely');
+  const placeholder = t.root.querySelector('ai-image-generation-image-placeholder');
+  expect(placeholder?.querySelector('[role="alert"]')?.textContent).toContain(
+    'Die Bilderstellung ist fehlgeschlagen',
+  );
+  expect(placeholder?.querySelector('button')?.textContent).toContain('Erneut versuchen');
   expect(t.root.textContent).toContain('provider');
   expect(t.root.textContent).toContain('0.001');
   expect(t.button('Beschreibung bearbeiten').classList.contains('mat-tonal-button')).toBe(true);

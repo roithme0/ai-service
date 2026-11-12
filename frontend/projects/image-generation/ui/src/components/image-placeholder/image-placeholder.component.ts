@@ -1,5 +1,11 @@
-import { Component, input, output } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+
+export interface PlaceholderAction {
+  readonly label: string;
+  readonly action: () => void;
+  readonly disabled?: boolean;
+}
 
 @Component({
   selector: 'ai-image-generation-image-placeholder',
@@ -10,5 +16,5 @@ import { MatButtonModule } from '@angular/material/button';
 })
 export class ImagePlaceholderComponent {
   readonly error = input<string | null>(null);
-  readonly retry = output<void>();
+  readonly action = input<PlaceholderAction | null>(null);
 }

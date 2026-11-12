@@ -17,13 +17,17 @@
     @if (image(); as image) {
       <img [src]="image.url" alt="Erstelltes Bild" (error)="imageError.emit()" />
     } @else if (loading() || contentError()) {
-      <ai-image-generation-image-placeholder [error]="contentError()" (retry)="retryImage.emit()" />
+      <ai-image-generation-image-placeholder
+        [error]="contentError()"
+        [action]="contentError() ? imageRetryAction : null"
+      />
     }
   }
   @if (failure()) {
-    <p class="error" role="alert">
-      Die Bilderstellung ist fehlgeschlagen. Bitte versuchen Sie es erneut.
-    </p>
+    <ai-image-generation-image-placeholder
+      error="Die Bilderstellung ist fehlgeschlagen. Bitte versuchen Sie es erneut."
+      [action]="failureRetryAction()"
+    />
   }
   @if (metadata(); as metadata) {
     <dl class="metadata">
@@ -52,11 +56,6 @@
       (click)="handoff.emit()"
     >
       {{ primaryLabel() }}
-    </button>
-  }
-  @if (failure()) {
-    <button mat-flat-button type="button" [disabled]="pending()" (click)="retry.emit()">
-      Erneut versuchen
     </button>
   }
   @if (editable()) {

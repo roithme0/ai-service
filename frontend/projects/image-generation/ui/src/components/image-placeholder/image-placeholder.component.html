@@ -3,7 +3,11 @@
 </svg>
 @if (error(); as error) {
   <p role="alert">{{ error }}</p>
-  <button mat-button type="button" (click)="retry.emit()">Bild erneut laden</button>
+  @if (action(); as action) {
+    <button mat-button type="button" [disabled]="action.disabled" (click)="action.action()">
+      {{ action.label }}
+    </button>
+  }
 } @else {
   <span>Bild wird geladen...</span>
 }
