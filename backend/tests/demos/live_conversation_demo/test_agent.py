@@ -30,6 +30,7 @@ from app.capabilities.conversations.runner import AgentTurnRunner
 from app.core.config import ProviderSettings
 from app.demos.live_conversation_demo import lifecycle
 from app.demos.live_conversation_demo.agent import create_live_conversation_demo_agent
+from app.demos.live_conversation_demo.config import LiveConversationDemoSettings
 from tests.capabilities.conversations.test_http import stream
 
 BASE = "/api/v1/agents/live-demo/sessions"
@@ -43,6 +44,7 @@ def test_live_demo_requires_shared_provider_credentials(
     with pytest.raises(ValueError, match="OPENAI_API_KEY"):
         create_live_conversation_demo_agent(
             ProviderSettings(_env_file=None, openai_api_key=key),
+            LiveConversationDemoSettings(_env_file=None, live_demo_openai_model="test"),
             mcp_http_client=mcp_http_client,
         )
 
@@ -56,7 +58,10 @@ def test_live_demo_startup_failure_keeps_visual_demo_available(
     failure: Exception,
 ) -> None:
     def unavailable(
-        settings: ProviderSettings, *, mcp_http_client: httpx2.AsyncClient
+        settings: ProviderSettings,
+        demo_settings: LiveConversationDemoSettings,
+        *,
+        mcp_http_client: httpx2.AsyncClient,
     ) -> Agent[None, str]:
         raise failure
 
@@ -82,20 +87,25 @@ def test_live_demo_configuration_and_session_artifacts_through_http(
     monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)
     agent = create_live_conversation_demo_agent(
         ProviderSettings(_env_file=None, openai_api_key="test-key"),
+        LiveConversationDemoSettings(
+            _env_file=None,
+            live_demo_openai_model="configured-model",
+            live_demo_openai_reasoning_effort="high",
+        ),
         mcp_http_client=mcp_http_client,
     )
     assert agent.name == "live-demo"
     model = agent.model
     assert isinstance(model, OpenAIResponsesModel)
-    assert model.model_name == "gpt-6-luna"
+    assert model.model_name == "configured-model"
     assert model.settings is not None
-    assert model.settings["openai_reasoning_effort"] == "medium"
+    assert model.settings["openai_reasoning_effort"] == "high"
     assert model.settings["openai_store"] is False
     assert model.client.api_key == "test-key"
     monkeypatch.setattr(
         lifecycle,
         "create_live_conversation_demo_agent",
-        lambda settings, mcp_http_client: agent,
+        lambda settings, demo_settings, mcp_http_client: agent,
     )
     monkeypatch.setattr(
         lifespan, "get_provider_settings", lambda: ProviderSettings(_env_file=None)
@@ -216,6 +226,11 @@ def test_partial_live_runner_startup_closes_model(
 ) -> None:
     agent = create_live_conversation_demo_agent(
         ProviderSettings(_env_file=None, openai_api_key="test-key"),
+        LiveConversationDemoSettings(
+            _env_file=None,
+            live_demo_openai_model="configured-model",
+            live_demo_openai_reasoning_effort="high",
+        ),
         mcp_http_client=mcp_http_client,
     )
     model = agent.model
@@ -223,7 +238,7 @@ def test_partial_live_runner_startup_closes_model(
     monkeypatch.setattr(
         lifecycle,
         "create_live_conversation_demo_agent",
-        lambda settings, mcp_http_client: agent,
+        lambda settings, demo_settings, mcp_http_client: agent,
     )
 
     async def fail_start(runner: AgentTurnRunner) -> AgentTurnRunner:
@@ -239,3 +254,46 @@ def test_partial_live_runner_startup_closes_model(
             assert model.client.is_closed()
 
     asyncio.run(exercise())
+
+
+def test_live_demo_settings_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LIVE_DEMO_OPENAI_MODEL", "  example-model  ")
+    monkeypatch.setenv("LIVE_DEMO_OPENAI_REASONING_EFFORT", " high ")
+    settings = LiveConversationDemoSettings(_env_file=None)
+    assert settings.live_demo_openai_model == "example-model"
+    assert settings.live_demo_openai_reasoning_effort == "high"
+
+    monkeypatch.setenv("LIVE_DEMO_OPENAI_MODEL", " ")
+    monkeypatch.setenv("LIVE_DEMO_OPENAI_REASONING_EFFORT", " ")
+    settings = LiveConversationDemoSettings(_env_file=None)
+    assert settings.live_demo_openai_model is None
+    assert settings.live_demo_openai_reasoning_effort is None
+
+
+def test_invalid_live_demo_settings_do_not_disable_visual_demo(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LIVE_DEMO_OPENAI_REASONING_EFFORT", "invalid")
+    monkeypatch.setattr(
+        lifecycle,
+        "get_live_conversation_demo_settings",
+        lambda: LiveConversationDemoSettings(_env_file=None),
+    )
+    with TestClient(app) as client:
+        headers = {"X-Application-User": "demo:default"}
+        assert client.post(BASE, json={}, headers=headers).status_code == 503
+        assert (
+            client.post(
+                "/api/v1/agents/visual-demo/sessions", json={}, headers=headers
+            ).status_code
+            == 201
+        )
+
+
+def test_live_demo_requires_model(mcp_http_client: httpx2.AsyncClient) -> None:
+    with pytest.raises(ValueError, match="LIVE_DEMO_OPENAI_MODEL"):
+        create_live_conversation_demo_agent(
+            ProviderSettings(_env_file=None, openai_api_key="test"),
+            LiveConversationDemoSettings(_env_file=None, live_demo_openai_model=" "),
+            mcp_http_client=mcp_http_client,
+        )
