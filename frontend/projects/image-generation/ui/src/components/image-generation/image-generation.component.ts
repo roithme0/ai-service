@@ -10,7 +10,9 @@ import {
 } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import type { ImageContent, ImageGenerationState } from '@roithme0/image-generation/controller';
-import type { CompletedSnapshot } from '@roithme0/image-generation/controller';
+import { ImageResultService } from './image-result.service';
+import { ImageGenerationActionCoordinator } from './image-generation-action-coordinator.service';
+import { ImageGenerationWorkflowService } from './image-generation-workflow.service';
 import { ImageGenerationInputPanelComponent } from '../input-panel/input-panel.component';
 import { ImageGenerationGeneratingPanelComponent } from '../generating-panel/generating-panel.component';
 import { ImageGenerationOutcomePanelComponent } from '../outcome-panel/outcome-panel.component';
@@ -28,9 +30,7 @@ export interface ImageGenerationPrimaryAction {
   label: string;
   run(payload: ImageGenerationHandoff): Promise<void>;
 }
-type Result = ImageGenerationHandoff & { url: string };
 export type ImageGenerationInstructionMode = 'editable' | 'hidden';
-type Panel = 'input' | 'generating' | 'outcome';
 
 @Component({
   selector: 'ai-image-generation',
@@ -42,36 +42,27 @@ type Panel = 'input' | 'generating' | 'outcome';
   ],
   templateUrl: './image-generation.component.html',
   styleUrl: './image-generation.component.scss',
+  providers: [ImageResultService, ImageGenerationWorkflowService, ImageGenerationActionCoordinator],
 })
 export class ImageGenerationUiComponent implements OnDestroy {
   private readonly snackBar = inject(MatSnackBar);
+  readonly imageResult = inject(ImageResultService);
+  readonly workflow = inject(ImageGenerationWorkflowService);
+  readonly actionCoordinator = inject(ImageGenerationActionCoordinator);
+
   readonly state = input.required<Readonly<ImageGenerationState>>();
   readonly actions = input.required<ImageGenerationActions>();
   readonly primaryAction = input<ImageGenerationPrimaryAction>();
   readonly instructionMode = input<ImageGenerationInstructionMode>('editable');
-  readonly effectiveMode = signal<ImageGenerationInstructionMode>('editable');
-  private initialMode: ImageGenerationInstructionMode | null = null;
+
   private readonly inputPanel = viewChild(ImageGenerationInputPanelComponent);
   private readonly generatingPanel = viewChild(ImageGenerationGeneratingPanelComponent);
   private readonly outcomePanel = viewChild(ImageGenerationOutcomePanelComponent);
-  readonly panel = signal<Panel>('input');
-  readonly draft = signal('');
-  readonly submitted = signal('');
-  readonly result = signal<Result | null>(null);
-  readonly failure = signal<string | null>(null);
+
+  readonly effectiveMode = signal<ImageGenerationInstructionMode>('editable');
   readonly error = signal<string | null>(null);
-  readonly contentError = signal<string | null>(null);
-  readonly pending = signal(false);
-  readonly loading = signal(false);
-  private generation: string | null = null;
-  private epoch = 0;
-  private actionEpoch = 0;
-  private submittingInstructions: string | null = null;
+  private initialMode: ImageGenerationInstructionMode | null = null;
   private destroyed = false;
-  private requested: string | null = null;
-  private editing = false;
-  private hasDraft = false;
-  private lastAdmission: string = 'idle';
 
   constructor() {
     effect(() => {
@@ -81,7 +72,7 @@ export class ImageGenerationUiComponent implements OnDestroy {
         if (this.initialMode === null) {
           this.initialMode = mode;
           this.effectiveMode.set(mode);
-          if (mode === 'hidden') this.panel.set('generating');
+          this.workflow.initialize(mode);
         } else if (mode !== this.initialMode) {
           console.error('instructionMode cannot change after mounting.');
         }
@@ -91,77 +82,24 @@ export class ImageGenerationUiComponent implements OnDestroy {
   }
 
   private applyState(state: Readonly<ImageGenerationState>): void {
+    const previousPanel = this.workflow.panel();
+    const transition = this.workflow.applyState(
+      state,
+      this.effectiveMode(),
+      this.actionCoordinator.submittingInstructions,
+    );
+    if (transition.clearResult) this.clearResult(transition.preserveAction);
+    if (transition.error !== undefined) this.error.set(transition.error);
+    if (previousPanel !== this.workflow.panel()) this.focus('heading');
     const snapshot = state.snapshot;
     if (
-      state.admission === 'rejected' &&
-      this.lastAdmission === 'rejected' &&
-      state.instructions !== null &&
-      state.instructions !== this.submitted()
+      transition.loadContent &&
+      snapshot?.status === 'completed' &&
+      !this.imageResult.hasRequested(snapshot.generation_id)
     ) {
-      this.editing = false;
-    }
-    if (
-      (state.admission === 'submitting' || state.admission === 'rejected') &&
-      state.instructions !== null
-    ) {
-      this.submitted.set(state.instructions);
-    }
-    if (
-      (state.admission === 'rejected' || state.admission === 'idle') &&
-      this.generation !== null &&
-      !snapshot
-    ) {
-      this.clearResult();
-      this.generation = null;
-      this.editing = false;
-      this.failure.set(null);
-    }
-    if (
-      state.admission === 'submitting' &&
-      this.lastAdmission !== 'submitting' &&
-      this.lastAdmission !== 'uncertain'
-    ) {
-      if (this.generation !== null) {
-        this.clearResult();
-        this.generation = null;
-      }
-      this.editing = false;
-    }
-    this.lastAdmission = state.admission;
-    if (snapshot && snapshot.generation_id !== this.generation) {
-      this.clearResult(
-        this.submittingInstructions !== null && state.instructions === this.submittingInstructions,
+      void this.imageResult.load(snapshot, this.workflow.submitted(), () =>
+        this.actions().loadContent(),
       );
-      this.generation = snapshot.generation_id;
-      this.editing = false;
-      this.hasDraft = false;
-      this.submitted.set(state.instructions ?? this.submitted());
-    }
-    if (state.admission === 'idle' && !snapshot) {
-      this.navigate(this.effectiveMode() === 'hidden' ? 'generating' : 'input', 'heading');
-    } else if (state.admission === 'rejected') {
-      this.error.set(state.error ?? 'Die Anfrage wurde abgelehnt.');
-      if (!this.editing) this.navigate('generating', 'heading');
-    } else if (
-      state.admission === 'submitting' ||
-      state.admission === 'uncertain' ||
-      snapshot?.status === 'running'
-    ) {
-      this.navigate('generating', 'heading');
-    } else if (snapshot?.status === 'failed') {
-      this.failure.set(snapshot.error.detail);
-      if (!this.editing) this.navigate('outcome', 'heading');
-    } else if (snapshot?.status === 'completed') {
-      this.failure.set(null);
-      if (!this.editing) this.navigate('outcome', 'heading');
-      if (this.requested !== snapshot.generation_id) void this.load(snapshot);
-    }
-  }
-
-  private navigate(panel: Panel, target: 'heading' | 'textarea'): void {
-    if (this.panel() !== panel) {
-      this.panel.set(panel);
-      this.focus(target);
     }
   }
 
@@ -177,39 +115,23 @@ export class ImageGenerationUiComponent implements OnDestroy {
   }
 
   private clearResult(preserveAction = false): void {
-    this.epoch++;
-    if (!preserveAction) {
-      this.actionEpoch++;
-      this.submittingInstructions = null;
-    }
-    const previous = this.result();
-    if (previous) URL.revokeObjectURL(previous.url);
-    this.result.set(null);
+    this.actionCoordinator.clearResult(preserveAction);
+    this.imageResult.clear();
     this.error.set(null);
-    if (!preserveAction) this.pending.set(false);
-    this.requested = null;
-    this.loading.set(false);
-    this.contentError.set(null);
   }
 
   async submit(): Promise<void> {
-    if (this.pending()) return;
-    const text = this.draft();
+    if (this.actionCoordinator.pending()) return;
+    const text = this.workflow.draft();
     if (!text.trim() || [...text].length > 32000) {
       this.error.set('Geben Sie eine Beschreibung mit höchstens 32.000 Zeichen ein.');
       this.focus('textarea');
       return;
     }
     this.clearResult();
-    this.generation = null;
-    this.submitted.set(text);
-    this.editing = false;
-    this.hasDraft = false;
-    this.failure.set(null);
+    this.workflow.startSubmission(text);
     this.error.set(null);
-    this.panel.set('generating');
     this.focus('heading');
-    this.submittingInstructions = text;
     await this.invoke(
       () => this.actions().submit(text),
       'Die Anfrage konnte nicht gesendet werden.',
@@ -218,16 +140,11 @@ export class ImageGenerationUiComponent implements OnDestroy {
   }
 
   async retry(): Promise<void> {
-    if (this.pending()) return;
-    const text = this.submitted();
+    if (this.actionCoordinator.pending()) return;
+    const text = this.workflow.submitted();
     this.clearResult();
-    this.generation = null;
-    this.editing = false;
-    this.hasDraft = false;
-    this.failure.set(null);
-    this.panel.set('generating');
+    this.workflow.startSubmission(text);
     this.focus('heading');
-    this.submittingInstructions = text;
     await this.invoke(
       () => this.actions().submit(text),
       'Die Anfrage konnte nicht gesendet werden.',
@@ -236,12 +153,9 @@ export class ImageGenerationUiComponent implements OnDestroy {
   }
 
   editFailure(): void {
-    if (this.pending() || this.effectiveMode() === 'hidden') return;
-    this.draft.set(this.submitted());
-    this.hasDraft = true;
-    this.editing = true;
+    if (this.actionCoordinator.pending() || this.effectiveMode() === 'hidden') return;
+    this.workflow.editInstructions(true);
     this.error.set(null);
-    this.panel.set('input');
     this.focus('textarea');
   }
 
@@ -250,79 +164,36 @@ export class ImageGenerationUiComponent implements OnDestroy {
     message: string,
     submission?: string,
   ): Promise<void> {
-    if (this.pending()) return;
-    this.pending.set(true);
+    if (this.actionCoordinator.pending()) return;
     this.error.set(null);
-    const epoch = this.actionEpoch;
-    try {
-      await action();
-    } catch {
-      if (!this.destroyed && epoch === this.actionEpoch) this.error.set(message);
-    } finally {
-      if (submission !== undefined && epoch === this.actionEpoch)
-        this.submittingInstructions = null;
-      if (!this.destroyed && epoch === this.actionEpoch) this.pending.set(false);
-    }
-  }
-
-  async load(snapshot: CompletedSnapshot): Promise<void> {
-    if (this.loading()) return;
-    this.requested = snapshot.generation_id;
-    this.loading.set(true);
-    this.contentError.set(null);
-    const epoch = this.epoch;
-    try {
-      const content = await this.actions().loadContent();
-      if (this.destroyed || epoch !== this.epoch) return;
-      if (
-        content.snapshot.generation_id !== snapshot.generation_id ||
-        content.blob.type !== 'image/png' ||
-        !content.blob.size
-      )
-        throw new Error('Invalid image content');
-      const url = URL.createObjectURL(content.blob);
-      this.result.set({ ...content, instructions: this.submitted(), url });
-    } catch {
-      if (!this.destroyed && epoch === this.epoch)
-        this.contentError.set('Das Bild konnte nicht geladen werden.');
-    } finally {
-      if (!this.destroyed && epoch === this.epoch) this.loading.set(false);
-    }
+    await this.actionCoordinator.invoke(action, () => this.error.set(message), submission);
   }
 
   retryImage(): void {
     const snapshot = this.state().snapshot;
-    if (snapshot?.status === 'completed') void this.load(snapshot);
-  }
-
-  imageError(): void {
-    const result = this.result();
-    if (result) URL.revokeObjectURL(result.url);
-    this.result.set(null);
-    this.contentError.set('Das Bild konnte nicht angezeigt werden.');
+    if (snapshot?.status === 'completed')
+      void this.imageResult.load(snapshot, this.workflow.submitted(), () =>
+        this.actions().loadContent(),
+      );
   }
 
   refine(): void {
-    if (this.pending()) return;
-    if (!this.hasDraft) this.draft.set(this.submitted());
-    this.hasDraft = true;
-    this.editing = true;
+    if (this.actionCoordinator.pending()) return;
+    this.workflow.editInstructions(false);
     this.error.set(null);
-    this.panel.set('input');
     this.focus('textarea');
   }
 
   back(): void {
-    if (!this.pending()) {
-      this.editing = false;
-      this.panel.set('outcome');
+    if (!this.actionCoordinator.pending()) {
+      this.workflow.returnToOutcome();
       this.focus('heading');
     }
   }
 
   download(): void {
-    const result = this.result();
-    if (!result || this.pending()) return;
+    const result = this.imageResult.result();
+    if (!result || this.actionCoordinator.pending()) return;
     const anchor = document.createElement('a');
     anchor.href = result.url;
     anchor.download = result.filename;
@@ -330,32 +201,29 @@ export class ImageGenerationUiComponent implements OnDestroy {
   }
 
   async handoff(): Promise<void> {
-    const result = this.result();
+    const result = this.imageResult.result();
     const action = this.primaryAction();
-    if (!result || !action || !action.label.trim() || this.pending()) return;
-    const epoch = this.epoch;
-    this.pending.set(true);
+    if (!result || !action || !action.label.trim() || this.actionCoordinator.pending()) return;
     this.error.set(null);
-    try {
-      await action.run({
-        blob: result.blob,
-        filename: result.filename,
-        snapshot: result.snapshot,
-        instructions: result.instructions,
-      });
-    } catch {
-      if (!this.destroyed && epoch === this.epoch)
+    await this.actionCoordinator.handoff(
+      () =>
+        action.run({
+          blob: result.blob,
+          filename: result.filename,
+          snapshot: result.snapshot,
+          instructions: result.instructions,
+        }),
+      () =>
         this.snackBar.open('Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.', 'OK', {
           duration: 6000,
           politeness: 'assertive',
-        });
-    } finally {
-      if (!this.destroyed && epoch === this.epoch) this.pending.set(false);
-    }
+        }),
+    );
   }
 
   ngOnDestroy(): void {
     this.destroyed = true;
-    this.clearResult();
+    this.imageResult.clear();
+    this.error.set(null);
   }
 }

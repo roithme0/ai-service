@@ -1,12 +1,12 @@
 <section class="layout">
-  @switch (panel()) {
+  @switch (workflow.panel()) {
     @case ('input') {
       <ai-image-generation-input-panel
-        [draft]="draft()"
+        [draft]="workflow.draft()"
         [error]="error()"
-        [pending]="pending()"
-        [canGoBack]="state().snapshot?.status === 'completed' && !failure()"
-        (draftChange)="draft.set($event)"
+        [pending]="actionCoordinator.pending()"
+        [canGoBack]="state().snapshot?.status === 'completed' && !workflow.failure()"
+        (draftChange)="workflow.updateDraft($event)"
         (generate)="submit()"
         (back)="back()"
       />
@@ -17,7 +17,7 @@
         [editable]="effectiveMode() === 'editable'"
         [observation]="state().observation"
         [error]="error()"
-        [pending]="pending()"
+        [pending]="actionCoordinator.pending()"
         (retry)="retry()"
         (edit)="editFailure()"
         (recover)="
@@ -33,21 +33,21 @@
     }
     @case ('outcome') {
       <ai-image-generation-outcome-panel
-        [image]="result()"
+        [image]="imageResult.result()"
         [editable]="effectiveMode() === 'editable'"
         [snapshot]="state().snapshot"
-        [failure]="failure()"
+        [failure]="workflow.failure()"
         [error]="error()"
-        [contentError]="contentError()"
-        [loading]="loading()"
-        [pending]="pending()"
+        [contentError]="imageResult.error()"
+        [loading]="imageResult.loading()"
+        [pending]="actionCoordinator.pending()"
         [primaryLabel]="primaryAction()?.label ?? null"
-        (refine)="failure() ? editFailure() : refine()"
+        (refine)="workflow.failure() ? editFailure() : refine()"
         (retry)="retry()"
         (download)="download()"
         (handoff)="handoff()"
         (retryImage)="retryImage()"
-        (imageError)="imageError()"
+        (imageError)="imageResult.imageError()"
       />
     }
   }

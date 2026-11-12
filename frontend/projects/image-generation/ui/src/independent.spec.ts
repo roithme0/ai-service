@@ -506,6 +506,25 @@ it('reports handoff failure and ignores obsolete handoff rejection on replacemen
   expect(t.button('Use image').disabled).toBe(false);
 });
 
+it('keeps a synchronously published matching submission pending until its callback settles', async () => {
+  const t = setup();
+  const pending = deferred<void>();
+  vi.mocked(t.actions.submit).mockImplementation((instructions) => {
+    t.setState({ ...initial, admission: 'accepted', instructions, snapshot });
+    return pending.promise;
+  });
+
+  t.edit('brief');
+  t.button('Bild erstellen').click();
+  t.fixture.detectChanges();
+  expect(t.fixture.componentInstance.actionCoordinator.pending()).toBe(true);
+
+  pending.resolve();
+  await pending.promise;
+  await Promise.resolve();
+  expect(t.fixture.componentInstance.actionCoordinator.pending()).toBe(false);
+});
+
 it('preserves the brief on authoritative rejection and does not invent a failure on callback throw', async () => {
   const t = setup();
   vi.mocked(t.actions.submit).mockImplementation(() => {
@@ -662,7 +681,7 @@ it.each(['editable', 'hidden'] as const)(
     t.button('Erneut versuchen').click();
     t.fixture.detectChanges();
     expect(t.actions.submit).toHaveBeenCalledExactlyOnceWith(instructions);
-    expect(t.fixture.componentInstance.pending()).toBe(true);
+    expect(t.fixture.componentInstance.actionCoordinator.pending()).toBe(true);
     pending.resolve();
     await pending.promise;
   },
@@ -847,4 +866,117 @@ it('preserves hidden-mode result handoff and download', async () => {
     instructions: 'exact brief',
   });
   expect(run.mock.calls[0][0].blob).toBeInstanceOf(Blob);
+});
+
+it('models repeated rejection edits and coalesced replacement', async () => {
+  const { applyControllerState, editInstructions, initialWorkflow } =
+    await import('./components/image-generation/workflow');
+  const rejected: ImageGenerationState = {
+    ...initial,
+    admission: 'rejected',
+    instructions: 'first',
+    error: 'Rejected',
+  };
+  const first = applyControllerState(initialWorkflow(), rejected, 'editable', null);
+  const editing = { ...editInstructions(first.workflow, true), draft: 'draft' };
+  const repeated = applyControllerState(editing, rejected, 'editable', null);
+  expect(repeated.workflow).toMatchObject({
+    activity: 'editing',
+    draft: 'draft',
+    submitted: 'first',
+  });
+  const replacement = applyControllerState(
+    repeated.workflow,
+    { ...rejected, instructions: 'second' },
+    'editable',
+    null,
+  );
+  expect(replacement.workflow).toMatchObject({
+    activity: 'generating',
+    submitted: 'second',
+  });
+});
+
+it('preserves only the matching pending submission when a generation arrives', async () => {
+  const { applyControllerState, initialWorkflow, startSubmission } =
+    await import('./components/image-generation/workflow');
+  const submitting = startSubmission(initialWorkflow(), 'brief');
+  const matching = applyControllerState(
+    submitting,
+    { ...initial, admission: 'accepted', instructions: 'brief', snapshot },
+    'editable',
+    'brief',
+  );
+  expect(matching).toMatchObject({ clearResult: true, preserveAction: true, loadContent: true });
+  const replacement = applyControllerState(
+    matching.workflow,
+    {
+      ...initial,
+      admission: 'accepted',
+      instructions: 'other',
+      snapshot: { ...snapshot, generation_id: 'two' },
+    },
+    'editable',
+    'brief',
+  );
+  expect(replacement).toMatchObject({
+    clearResult: true,
+    preserveAction: false,
+    loadContent: true,
+  });
+});
+
+it('retains refinement intent when a transient uncertain state hides the editor', async () => {
+  vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:owned'), revokeObjectURL: vi.fn() });
+  const t = setup();
+  const completed: ImageGenerationState = {
+    ...initial,
+    admission: 'accepted',
+    instructions: 'brief',
+    snapshot,
+  };
+  t.setState(completed);
+  await t.fixture.whenStable();
+  t.fixture.detectChanges();
+  t.button('Beschreibung bearbeiten').click();
+  t.fixture.detectChanges();
+  t.edit('draft');
+  t.setState({ ...completed, admission: 'uncertain' });
+  expect(t.root.querySelector('textarea')).toBeNull();
+  t.setState(completed);
+  expect(t.root.querySelector('textarea')).toBeNull();
+  expect(t.root.textContent).not.toContain('Ihr Bild');
+});
+
+it('retains rejection editing across an idle publication', () => {
+  const t = setup();
+  const rejected: ImageGenerationState = {
+    ...initial,
+    admission: 'rejected',
+    instructions: 'brief',
+    error: 'Rejected',
+  };
+  t.setState(rejected);
+  t.button('Beschreibung bearbeiten').click();
+  t.fixture.detectChanges();
+  t.edit('draft');
+  t.setState(initial);
+  t.setState(rejected);
+  expect(t.root.querySelector('textarea')?.value).toBe('draft');
+});
+
+it('retains an empty refinement across back and edit again', async () => {
+  vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:owned'), revokeObjectURL: vi.fn() });
+  const t = setup();
+  t.setState({ ...initial, admission: 'accepted', instructions: 'original', snapshot });
+  await t.fixture.whenStable();
+  t.fixture.detectChanges();
+  t.button('Beschreibung bearbeiten').click();
+  t.fixture.detectChanges();
+  t.edit('');
+  t.button('Zurück zum Ergebnis').click();
+  t.fixture.detectChanges();
+  t.button('Beschreibung bearbeiten').click();
+  t.fixture.detectChanges();
+  expect(t.root.querySelector('textarea')?.value).toBe('');
 });
