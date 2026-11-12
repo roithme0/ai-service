@@ -18,7 +18,7 @@ Convert an approved direction into a verified implementation. The main agent sup
 1. Read the repository guidance, target spec, related concepts or specs, and relevant code.
 2. Use the supervisor's supplied implementation authorization for the named spec and scope. Return missing authorization to the supervisor.
 3. Confirm that no open question or codebase conflict requires a product, architecture, contract, compatibility, or migration decision. If one does, pause affected work and return the smallest useful decision to the supervisor.
-4. Create or update the shared delivery plan using [assets/delivery-plan-template.md](assets/delivery-plan-template.md) in `.agents/plans/` relative to the target repository root. Reuse it for later milestones and corrections. Follow local filenames; otherwise use `YYYY-MM-DD-<short-kebab-title>-plan.md`. Link the spec with a relative Markdown link.
+4. Create or update the shared delivery plan using [assets/delivery-plan-template.md](assets/delivery-plan-template.md) in `plans/` relative to the target repository root. Reuse it for later milestones and corrections. Follow local filenames; otherwise use `YYYY-MM-DD-<short-kebab-title>-plan.md`. Link the spec with a relative Markdown link.
 
 ## Delivery
 

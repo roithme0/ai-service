@@ -9,7 +9,7 @@ Perform an evidence-based review of combined production changes and tests. Remai
 
 ## Workflow
 
-1. Establish the reviewed scope: milestone, corrections, or integrated delivery. Read repository guidance, the approved spec in `.agents/specs/`, delivery plan in `.agents/plans/`, and relevant production/test changes. Resolve paths from the target repository root and report missing artifacts.
+1. Establish the reviewed scope: milestone, corrections, or integrated delivery. Read repository guidance, the approved spec in `specs/`, delivery plan in `plans/`, and relevant production/test changes. Resolve paths from the target repository root and report missing artifacts.
 2. Read [references/review-criteria.md](references/review-criteria.md) and apply each relevant review lane proportionally to the change.
 3. Run safe, relevant validation needed to confirm or challenge the recorded results. Inspect test assertions and behavior independently; passing checks alone do not establish regression protection. Treat failing checks as evidence to assess against the spec, not automatic proof of a production defect.
 4. Trace applicable acceptance criteria to implementation and current evidence. Final review covers every criterion, the integrated production changes and tests, and cross-milestone behavior. A checked plan item is not proof.

@@ -45,7 +45,7 @@ A spec is ready for delivery when:
 
 ## Spec Maintenance
 
-- Store specs in `.agents/specs/` relative to the target repository root. Follow existing filename conventions there; otherwise use `YYYY-MM-DD-<short-kebab-title>.md`.
+- Store specs in `specs/` relative to the target repository root. Follow existing filename conventions there; otherwise use `YYYY-MM-DD-<short-kebab-title>.md`.
 - Use relative Markdown links to related concepts and specs, including across artifact folders.
 - Remove resolved questions and empty optional sections instead of preserving placeholders.
 - Do not silently change an approved decision. Discuss and record the amendment.

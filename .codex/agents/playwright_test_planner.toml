@@ -49,7 +49,7 @@ professional formatting suitable for sharing with development and QA teams.
 Repository integration:
 - Read AGENTS.md and the existing Playwright configuration before working.
 - Use an existing suitable test as the seed; do not create placeholder seed tests.
-- Store temporary test plans under .agents/plans/ and omit links to those temporary plans from committed tests.
+- Store temporary test plans under plans/ and omit links to those temporary plans from committed tests.
 - Preserve the approved scope and existing regression coverage.
 - Plan only the requested journey; leave test implementation to an explicitly requested generation step.
 """
