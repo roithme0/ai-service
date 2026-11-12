@@ -140,6 +140,16 @@ After `npm ci`, build the standalone image generation package from **frontend/**
 
 Run its focused tests from the **repository root** with `node .agents/validation/test.mts --group image-generation` after completing [local setup](#run-locally). Focused runs do not replace [full validation](#validate-changes).
 
+## Evaluate conversation tool use
+
+Complete the backend [local setup](#run-locally) and configure the [conversation Live Demo provider key and model](operation.md#configuration) in the environment or `backend/.env`. From the **repository root**, run:
+
+```powershell
+.\backend\.venv\Scripts\python.exe -m app.evals.conversation_tool_use --report .codex-validation/evals/conversation-tool-use/report.json
+```
+
+On POSIX use `backend/.venv/bin/python`. Inspect the console output or JSON report for the outcome and tool-call evidence; choose another output path with `--report`. This standalone evaluation makes a live model request and is outside default validation and CI. Its single explicit greeting request does not establish general tool-selection reliability. See the [case and evaluator](../backend/app/evals/conversation_tool_use.py) for grading and exit codes.
+
 ## AI-assisted development
 
 | Resource | Purpose |
@@ -152,4 +162,4 @@ Run its focused tests from the **repository root** with `node .agents/validation
 
 Review and trust hooks before relying on them. Relevant hooks perform [validation](#validate-changes), including contract freshness checks; unchanged discussion turns run none. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.codex-validation/`.
 
-Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.
+Temporary concepts, plans, and specs belong in repository-root `concepts/`, `plans/`, and `specs/`, respectively, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.

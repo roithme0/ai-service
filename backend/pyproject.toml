@@ -23,6 +23,7 @@ dev = [
 ]
 test = [
     "pytest>=8,<10",
+    "pydantic-evals==2.58.0",
 ]
 
 [tool.black]
