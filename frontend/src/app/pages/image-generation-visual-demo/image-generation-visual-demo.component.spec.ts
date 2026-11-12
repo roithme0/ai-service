@@ -150,8 +150,13 @@ describe('Image generation visual demo ownership', () => {
     if (!action) throw new Error('Primary action missing');
     const pending = action.run(payload);
     const aborted = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
-    changeScenario();
+    const scenario = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Verbindung unterbrochen',
+    );
+    if (!scenario) throw new Error('Scenario missing');
+    scenario.click();
     await aborted;
+    fixture.detectChanges();
     await vi.advanceTimersByTimeAsync(1000);
     expect(open).not.toHaveBeenCalled();
     const next = ui().primaryAction();

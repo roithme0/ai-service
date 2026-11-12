@@ -94,13 +94,9 @@ export class ImageGenerationVisualRun implements OnInit, OnDestroy {
       void this.getController().submit('Eine sonnige Landschaft mit Bergen und einem See.');
     }
   }
-  dispose(): void {
-    if (this.abort.signal.aborted) return;
+  ngOnDestroy(): void {
     this.abort.abort();
     this.controller?.dispose();
     this.feedback?.dismiss();
-  }
-  ngOnDestroy(): void {
-    this.dispose();
   }
 }
