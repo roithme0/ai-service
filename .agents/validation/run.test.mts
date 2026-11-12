@@ -261,32 +261,47 @@ void test("CI validation phases cover non-E2E and prebuilt E2E through the centr
   const commands = [
     ...workflow.matchAll(/run: node \.agents\/validation\/run\.mts([^\r\n]*)/g),
   ].map((match) => match[1].trim().split(/\s+/).filter(Boolean));
-  assert.equal(commands.length, 2);
+  assert.equal(commands.length, 3);
   const phases = commands.map(parseValidationArguments);
   assert.ok(phases.every((phase) => !phase.format));
   assert.deepEqual(
     phases[0].selection.groups,
     parseTestArguments(["--group", "non-e2e"]).groups,
   );
-  assert.deepEqual(phases[1].selection.groups, ["e2e"]);
-  assert.equal(phases[1].selection.prebuiltImages, true);
+  assert.deepEqual(phases[1].selection.groups, ["evals"]);
+  assert.equal(phases[1].omitContracts, false);
+  assert.deepEqual(phases[2].selection.groups, ["e2e"]);
+  assert.equal(phases[2].selection.prebuiltImages, true);
   assert.equal(phases[0].omitContracts, false);
-  assert.equal(phases[1].omitContracts, true);
+  assert.equal(phases[2].omitContracts, true);
   assert.match(workflow, /pull_request:/);
   assert.match(workflow, /push:\s*\n\s*tags:/);
   assert.doesNotMatch(workflow, /npm run check:(conversation|transcription)-contract/);
   assert.match(workflow, /python -m venv \.venv/);
   assert.match(workflow, /\[test,dev\]/);
+  assert.match(workflow, /evals:\s*\n\s*needs: validate/);
+  const evalJob = workflow.split(/ {2}evals:\r?\n/)[1]?.split(/\r?\n {2}build-app:/)[0] ?? "";
+  assert.match(evalJob, /node-version: ['"]24['"]/);
+  assert.match(evalJob, /python-version: ['"]3\.13['"]/);
+  assert.match(evalJob, /working-directory: backend[\s\S]*?pip install -e "\.\[test,dev\]"/);
+  assert.match(evalJob, /working-directory: frontend\s*\n\s*run: npm ci/);
+  assert.match(evalJob, /LIVE_DEMO_OPENAI_MODEL: \$\{\{ vars\.LIVE_DEMO_OPENAI_MODEL \|\| 'gpt-6-luna' \}\}/);
+  assert.match(evalJob, /LIVE_DEMO_OPENAI_REASONING_EFFORT: \$\{\{ vars\.LIVE_DEMO_OPENAI_REASONING_EFFORT \|\| 'medium' \}\}/);
+  assert.doesNotMatch(evalJob, /continue-on-error|pull_request_target|retry/i);
+  assert.equal((evalJob.match(/^\s*if:/gm) ?? []).length, 1);
+  assert.match(workflow, /if: failure\(\) && steps\.evaluation\.outcome == 'failure'/);
+  assert.match(workflow, /name: evals-diagnostics[\s\S]*?path: \.codex-validation\/evals\/manual\/[\s\S]*?include-hidden-files: true[\s\S]*?retention-days: 7/);
+  assert.equal((workflow.match(/OPENAI_API_KEY: \$\{\{ secrets\.OPENAI_API_KEY \}\}/g) ?? []).length, 2);
   assert.match(workflow, /build-app:\s*\n\s*needs: \[validate\]/);
   assert.match(workflow, /e2e:\s*\n\s*needs: build-app/);
   assert.match(workflow, /build-chat-ui:\s*\n\s*needs: e2e/);
   assert.match(
     workflow,
-    /publish-app:\s*\n\s*needs: \[build-app, build-chat-ui, e2e\]/,
+    /publish-app:\s*\n\s*needs: \[build-app, build-chat-ui, e2e, evals\]/,
   );
   assert.match(
     workflow,
-    /publish-chat-ui:\s*\n\s*needs: \[build-app, build-chat-ui, e2e\]/,
+    /publish-chat-ui:\s*\n\s*needs: \[build-app, build-chat-ui, e2e, evals\]/,
   );
 });
 
@@ -366,4 +381,15 @@ void test("freshness failure prevents tests and is never cached", async () => {
   await validate(f.root, { ...request, continued: true }, parseValidationArguments([]), f.services);
   assert.ok(f.calls.includes("contracts"));
   assert.ok(f.calls.includes("tests"));
+});
+
+void test("explicit evals run on snapshots only after start and always rerun", async () => {
+  const f = await aggregateFixture();
+  const options = parseValidationArguments(["--group", "evals"]);
+  const request = { sessionId: "eval-fresh", start: true, continued: false };
+  await validate(f.root, request, options, f.services);
+  assert.ok(!f.calls.includes("tests"));
+  await validate(f.root, { ...request, start: false }, options, f.services);
+  await validate(f.root, { ...request, start: false }, options, f.services);
+  assert.equal(f.calls.filter((call) => call === "tests").length, 2);
 });

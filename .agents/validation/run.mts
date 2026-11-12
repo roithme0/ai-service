@@ -90,13 +90,14 @@ export async function validate(root: string, request: ValidationRequest, options
       const dep = deps.get(profile.scope)!;
       return request.force || (request.continued && state.pending?.includes(profile.scope)) || (state.prompts?.[profile.scope] ? state.prompts[profile.scope] !== before[profile.scope] : dep.hasChanges());
     });
+    if (!relevant.length && options.selection.groups.includes('evals')) relevant.push(...profiles);
     if (!relevant.length) return {};
     state.pending = relevant.map((profile) => profile.scope);
     await writeFile(path, JSON.stringify(state));
     if (options.format) for (const profile of relevant) formatted.push(...(await deps.get(profile.scope)!.format()).formatted);
     const current = await fingerprints();
     const identity = hash(['aggregate-v3-paired-contracts', relevant.map((profile) => profile.scope), options.format, true, options.selection.groups, current]);
-    if (request.force || options.selection.groups.includes('e2e') || identity !== state.successful) {
+    if (request.force || options.selection.groups.includes('e2e') || options.selection.groups.includes('evals') || identity !== state.successful) {
       state.successful = undefined;
       await writeFile(path, JSON.stringify(state));
       for (const profile of relevant) await deps.get(profile.scope)!.lint?.();

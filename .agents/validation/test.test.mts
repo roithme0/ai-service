@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -12,7 +12,7 @@ import {
   runTests,
   toolingFiles,
 } from "./test.mts";
-import type { runCheck } from "./shared.mts";
+import { runCheck } from "./shared.mts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 void test("registry covers the bounded tooling directories", async () => {
@@ -135,7 +135,7 @@ void test("default and combined aliases select every intended family exactly onc
   const all = Object.keys(groupDescriptions);
   assert.deepEqual(
     parseTestArguments([]).groups,
-    all.filter((group) => group !== "e2e"),
+    all.filter((group) => group !== "e2e" && group !== "evals"),
   );
   assert.deepEqual(
     parseTestArguments([
@@ -146,7 +146,7 @@ void test("default and combined aliases select every intended family exactly onc
       "--group",
       "tooling",
     ]).groups,
-    all,
+    all.filter((group) => group !== "evals"),
   );
   assert.deepEqual(
     parseTestArguments(["--group", "all", "--group", "all"]).groups,
@@ -261,4 +261,81 @@ void test("selected runners receive their working directory and native arguments
     ),
     /runner failed/,
   );
+});
+
+void test("eval selection is explicit, deduplicated and rejects native arguments", () => {
+  for (const selection of [[], ["--group", "non-e2e"], ["--group", "tooling"]]) {
+    assert.ok(!parseTestArguments(selection).groups.includes("evals"));
+  }
+  const all = parseTestArguments(["--group", "all", "--group", "evals"]);
+  assert.ok(all.groups.includes("e2e"));
+  assert.equal(all.groups.filter((group) => group === "evals").length, 1);
+  assert.throws(() => parseTestArguments(["--group", "evals", "--", "--help"]), /not supported for evals/);
+});
+
+void test("evaluation uses unique reports and propagates runner failures", async () => {
+  const fixture = await mkdtemp(join(tmpdir(), "eval-run-"));
+  const calls: { cwd: string; args: string[]; log: string; executable?: string }[] = [];
+  const run: typeof runCheck = (cwd, _label, args, log, _timeout, executable) => {
+    calls.push({ cwd, args, log, executable });
+    return Promise.resolve("evaluation evidence\n");
+  };
+  const selection = parseTestArguments(["--group", "evals", "--group", "evals"]);
+  await runTests(fixture, selection, run);
+  await runTests(fixture, selection, run);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].cwd, fixture);
+  assert.deepEqual(calls[0].args.slice(0, 3), ["-m", "app.evals.conversation_tool_use", "--report"]);
+  assert.notEqual(calls[0].args[3], calls[1].args[3]);
+  assert.equal(dirname(calls[0].args[3]), dirname(calls[0].log));
+  assert.ok(calls[0].executable?.includes(".venv"));
+  await assert.rejects(runTests(fixture, selection, () => Promise.reject(new Error("runner failed"))), /runner failed/);
+});
+
+void test("evaluation process failures retain current logs and propagate", async () => {
+  const fixture = await mkdtemp(join(tmpdir(), "eval-fail-"));
+  const selection = parseTestArguments(["--group", "evals"]);
+  for (const status of [1, 2]) {
+    let logPath = "";
+    const run: typeof runCheck = (cwd, label, _args, log, timeout) => {
+      logPath = log;
+      return runCheck(cwd, label, ["-e", `process.stdout.write('status ${status} evidence'); process.exit(${status})`], log, timeout);
+    };
+    await assert.rejects(runTests(fixture, selection, run), new RegExp(`status ${status} evidence`));
+    assert.match(await readFile(logPath, "utf8"), new RegExp(`status ${status} evidence`));
+  }
+  const startup: typeof runCheck = (cwd, label, _args, log, timeout) =>
+    runCheck(cwd, label, [], log, timeout, join(fixture, "missing-python"));
+  await assert.rejects(runTests(fixture, selection, startup), /evals failed/);
+});
+
+void test("successful evaluation surfaces the report location and evaluator evidence", async () => {
+  const fixture = await mkdtemp(join(tmpdir(), "eval-output-"));
+  const originalWrite = Object.getOwnPropertyDescriptor(process.stdout, "write");
+  let output = "";
+  try {
+    process.stdout.write = (chunk: string | Uint8Array) => {
+      output += chunk.toString();
+      return true;
+    };
+    await runTests(fixture, parseTestArguments(["--group", "evals"]), () =>
+      Promise.resolve("passed; model example; greetings__greet name=Anna outcome=success\n"),
+    );
+  } finally {
+    if (originalWrite) Object.defineProperty(process.stdout, "write", originalWrite);
+    else Reflect.deleteProperty(process.stdout, "write");
+  }
+  assert.match(output, /Evaluation report: .*report\.json/);
+  assert.match(output, /passed; model example; greetings__greet name=Anna outcome=success/);
+});
+
+void test("evaluation timeout propagates and preserves available diagnostics", async () => {
+  const fixture = await mkdtemp(join(tmpdir(), "eval-timeout-"));
+  let logPath = "";
+  const run: typeof runCheck = (cwd, label, _args, log) => {
+    logPath = log;
+    return runCheck(cwd, label, ["-e", "setInterval(() => {}, 1000)"], log, 100);
+  };
+  await assert.rejects(runTests(fixture, parseTestArguments(["--group", "evals"]), run), /evals failed/);
+  assert.match(await readFile(logPath, "utf8"), /ETIMEDOUT|timed out/i);
 });

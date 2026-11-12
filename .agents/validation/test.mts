@@ -1,4 +1,4 @@
-import { mkdir, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { backendPython, runBackendPytest } from './backend.mts';
@@ -25,12 +25,13 @@ export const groupDescriptions = {
   'chat-ui-browser': 'Chat UI browser component tests',
   'image-generation-browser': 'Image generation browser component tests',
   e2e: 'Docker-backed application flow',
+  evals: 'Live conversation tool-use evaluation',
 } as const;
 export type TestGroup = keyof typeof groupDescriptions;
 const groups = Object.keys(groupDescriptions) as TestGroup[];
 const tooling = Object.keys(toolingFiles) as TestGroup[];
 const aliases: Readonly<Record<string, readonly TestGroup[]>> = {
-  tooling, 'non-e2e': groups.filter((group) => group !== 'e2e'), all: groups,
+  tooling, 'non-e2e': groups.filter((group) => group !== 'e2e' && group !== 'evals'), all: groups,
 };
 export interface TestSelection { groups: TestGroup[]; nativeArgs: string[]; prebuiltImages: boolean; list: boolean }
 
@@ -59,8 +60,9 @@ export function parseTestArguments(args: readonly string[], allowNative = true):
     else if (arg === '--prebuilt-images') prebuiltImages = true;
     else throw new Error(`Unknown test option: ${arg}`);
   }
-  const resolved = groups.filter((group) => selected ? chosen.has(group) : group !== 'e2e');
+  const resolved = groups.filter((group) => selected ? chosen.has(group) : group !== 'e2e' && group !== 'evals');
   if (nativeArgs.length && (resolved.length !== 1 || !selected)) throw new Error('Native arguments require exactly one concrete group.');
+  if (nativeArgs.length && resolved.includes('evals')) throw new Error('Native runner arguments are not supported for evals.');
   if (prebuiltImages && !resolved.includes('e2e')) throw new Error('--prebuilt-images requires selecting e2e.');
   const boundary = nativeArgs.indexOf('--');
   const group = resolved[0];
@@ -98,6 +100,14 @@ export async function runTests(root: string, selection: TestSelection, run: type
       await run(root, group, ['--test', ...selection.nativeArgs, ...(explicitFiles ? [] : toolingFiles[group as keyof typeof toolingFiles])], log, 120_000);
     } else if (group === 'backend') {
       await runBackendPytest(root, cache, backendPython(root), run, selection.nativeArgs);
+    } else if (group === 'evals') {
+      const base = join(root, '.codex-validation/evals/manual');
+      await mkdir(base, { recursive: true });
+      const directory = await mkdtemp(join(base, 'run-'));
+      const report = join(directory, 'report.json');
+      process.stdout.write(`Evaluation report: ${report}\n`);
+      const output = await run(root, 'evals', ['-m', 'app.evals.conversation_tool_use', '--report', report], join(directory, 'execution.log'), 300_000, backendPython(root));
+      process.stdout.write(output);
     } else if (group === 'e2e') {
       const { testE2E } = await import('./e2e.mts');
       await testE2E(root, join(root, '.codex-validation/e2e/manual'), run, selection.prebuiltImages, selection.nativeArgs);

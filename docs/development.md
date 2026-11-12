@@ -56,7 +56,7 @@ Complete [local setup](#run-locally) for both backend and frontend, then [instal
 node .agents/validation/run.mts
 ```
 
-This formats changed files, lints, checks freshness of all generated contracts, and runs all non-E2E tests, including browser components. Formatting includes staged, unstaged, and untracked changed files; review unrelated edits first and inspect the resulting diff. `--scope frontend|backend` limits formatting and lint only; `--no-format` skips formatting. Contract checks run regardless of scope or test group.
+This formats changed files, lints, checks freshness of all generated contracts, and runs the default test groups, including browser components. Live evaluations and E2E are excluded. Formatting includes staged, unstaged, and untracked changed files; review unrelated edits first and inspect the resulting diff. `--scope frontend|backend` limits formatting and lint only; `--no-format` skips formatting. Contract checks run regardless of scope or test group.
 
 Validation uses Python 3.13 from `backend/.venv` with the `test` and `dev` extras, frontend npm dependencies, and Playwright Chromium. No running application, Docker, or secrets are needed. See [generated contracts](#update-generated-contracts) for manual freshness checks.
 
@@ -142,13 +142,17 @@ Run its focused tests from the **repository root** with `node .agents/validation
 
 ## Evaluate conversation tool use
 
-Complete the backend [local setup](#run-locally) and configure the [conversation Live Demo provider key and model](operation.md#configuration) in the environment or `backend/.env`. From the **repository root**, run:
+Complete [local setup](#run-locally), including the editable backend Python 3.13 environment with `test` and `dev` extras, and configure the [conversation Live Demo provider key and model](operation.md#configuration) in the environment or `backend/.env`. From the **repository root**, run:
 
 ```powershell
-.\backend\.venv\Scripts\python.exe -m app.evals.conversation_tool_use --report .codex-validation/evals/conversation-tool-use/report.json
+node .agents/validation/run.mts --group evals
 ```
 
-On POSIX use `backend/.venv/bin/python`. Inspect the console output or JSON report for the outcome and tool-call evidence; choose another output path with `--report`. This standalone evaluation makes a live model request and is outside default validation and CI. Its single explicit greeting request does not establish general tool-selection reliability. See the [case and evaluator](../backend/app/evals/conversation_tool_use.py) for grading and exit codes.
+For tests only, use `node .agents/validation/test.mts --group evals`. Each invocation runs the single case afresh against the real model, making paid requests, and writes its report and execution log to a unique directory under `.codex-validation/evals/manual/`. The console shows the report location and available result, model, reasoning, and tool-call evidence. Exit 1 indicates behavioral failure and exit 2 an execution error in the underlying evaluator; centralized commands fail for either or for orchestration errors. Missing credentials are an execution error, not a skip.
+
+Default validation, `non-e2e`, tooling groups, and hooks exclude evaluations. Explicit `--group all` includes evaluations and E2E. Native runner arguments are not supported for `evals`. The standalone module also accepts a caller-selected `--report` path.
+
+CI runs this evaluation as a blocking publication gate using the Live Demo configuration. Missing credentials, including on fork pull requests, fail the gate. When the evaluation step fails, download `evals-diagnostics` for available reports and logs; artifacts are retained for seven days. A setup failure may prevent report creation. The single explicit greeting attempt does not establish general tool-selection reliability and provider outages can block publication. See the [case and evaluator](../backend/app/evals/conversation_tool_use.py) and [Pydantic Evals documentation](https://ai.pydantic.dev/evals/).
 
 ## AI-assisted development
 
