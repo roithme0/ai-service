@@ -177,6 +177,8 @@ jobs:
       - name: Run Docker-based end-to-end tests
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LIVE_DEMO_OPENAI_MODEL: ${{ vars.LIVE_DEMO_OPENAI_MODEL || 'gpt-6-luna' }}
+          LIVE_DEMO_OPENAI_REASONING_EFFORT: ${{ vars.LIVE_DEMO_OPENAI_REASONING_EFFORT || 'medium' }}
         run: node .agents/validation/run.mts --no-format --group e2e --prebuilt-images --ci-prerequisite-contracts
 
       - name: Collect container logs
