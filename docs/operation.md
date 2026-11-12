@@ -24,8 +24,10 @@ Create `deployment/.env` from [.env.example](../deployment/.env.example); host-s
 | `KOCHWIKI_OPENAI_MODEL` | Model used by the Kochwiki agent. |
 | `KOCHWIKI_MCP_URL` | External Streamable HTTP MCP endpoint, including its path. |
 | `KOCHWIKI_OPENAI_REASONING_EFFORT` | Optional model reasoning effort; blank uses the model default. Support depends on the selected model. |
+| `LIVE_DEMO_OPENAI_MODEL` | Model used by the conversation Live Demo. |
+| `LIVE_DEMO_OPENAI_REASONING_EFFORT` | Optional model reasoning effort; blank uses the model default. Support depends on the selected model. |
 
-Visual Demo (`visual-demo`) needs no provider or Kochwiki settings. Live Demo (`live-demo`) requires only `OPENAI_API_KEY`; Kochwiki also requires its model and MCP URL. Missing required settings or initialization failure leaves the affected agent unavailable with `503 agent_unavailable`; restart after correcting startup configuration. Kochwiki connects MCP per turn, so an outage can recover on a later turn without restarting.
+Visual Demo (`visual-demo`) needs no provider or Kochwiki settings. Live Demo (`live-demo`) requires `OPENAI_API_KEY` and `LIVE_DEMO_OPENAI_MODEL`; Kochwiki also requires its model and MCP URL. Missing required settings or initialization failure leaves the affected agent unavailable with `503 agent_unavailable`; restart after correcting startup configuration. Kochwiki connects MCP per turn, so an outage can recover on a later turn without restarting.
 
 Live Demo includes a stateless greetings MCP server mounted at `/mcp/` in the backend. Its read-only `greet` and `farewell` tools accept a name and language (`en` or `de`); `greetings://catalog` supplies vocabulary and a fictional club motto. The live agent uses the mounted endpoint through an in-process HTTP transport, with resources indexed each turn and read on demand. No separate MCP process, endpoint configuration, or database is required. Direct local MCP clients can use `http://localhost:8004/mcp/` when running the backend locally; the deployment gateway does not publish this route.
 

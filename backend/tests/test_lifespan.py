@@ -93,7 +93,7 @@ def test_application_shutdown_clears_registry_and_closes_all_resources(
     monkeypatch.setattr(
         live_demo_lifecycle,
         "create_live_conversation_demo_agent",
-        lambda settings, mcp_http_client: live_agent,
+        lambda settings, demo_settings, mcp_http_client: live_agent,
     )
 
     async def exercise() -> None:

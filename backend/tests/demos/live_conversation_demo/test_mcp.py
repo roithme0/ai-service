@@ -20,6 +20,7 @@ from app.capabilities.conversations.mcp import create_mcp_toolset
 from app.capabilities.conversations.turns import execute_turn
 from app.core.config import ProviderSettings
 from app.demos.live_conversation_demo.agent import create_live_conversation_demo_agent
+from app.demos.live_conversation_demo.config import LiveConversationDemoSettings
 
 
 def test_mounted_greetings_discovery_resource_and_tool_contracts(
@@ -132,6 +133,9 @@ def test_live_agent_receives_mcp_guidance_resources_and_both_tool_results(
         async with app.router.lifespan_context(app):
             agent = create_live_conversation_demo_agent(
                 ProviderSettings(_env_file=None, openai_api_key=SecretStr("test-key")),
+                LiveConversationDemoSettings(
+                    _env_file=None, live_demo_openai_model="test"
+                ),
                 mcp_http_client=mcp_http_client,
             )
             async with agent:
