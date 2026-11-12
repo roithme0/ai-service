@@ -390,14 +390,14 @@ it('shows content-only retry with completed metadata after load failure', async 
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
-  await expect.element(page.getByRole('button', { name: 'Bild erneut laden' })).toBeVisible();
+  await expect.element(page.getByRole('button', { name: 'Erneut versuchen' })).toBeVisible();
   const placeholder = (fixture.nativeElement as HTMLElement).querySelector(
     'ai-image-generation-image-placeholder',
   )!;
   expect(placeholder.querySelector('[role="alert"]')?.textContent).toContain(
     'Das Laden fehlgeschlagen.',
   );
-  expect(placeholder.querySelector('button')?.textContent).toContain('Bild erneut laden');
+  expect(placeholder.querySelector('button')?.textContent).toContain('Erneut versuchen');
   expect(placeholder.querySelector('rect')).not.toBeNull();
   expect((fixture.nativeElement as HTMLElement).textContent).toContain('model');
   await page.screenshot({ path: '../../test-results/content-error.png' });

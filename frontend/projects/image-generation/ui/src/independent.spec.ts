@@ -285,7 +285,7 @@ it('rejects mismatched content and retries only content', async () => {
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   expect(t.root.textContent).toContain('configured');
-  t.button('Bild erneut laden').click();
+  t.button('Erneut versuchen').click();
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   expect(load).toHaveBeenCalledTimes(2);
@@ -477,7 +477,7 @@ it('keeps Zurück zum Ergebnis available while completed content is pending or f
   t.fixture.detectChanges();
   t.button('Zurück zum Ergebnis').click();
   t.fixture.detectChanges();
-  expect(t.button('Bild erneut laden')).toBeTruthy();
+  expect(t.button('Erneut versuchen')).toBeTruthy();
   expect(t.actions.submit).not.toHaveBeenCalled();
 });
 
@@ -520,13 +520,13 @@ it('retries invalid media and decoded-image errors without regeneration', async 
   t.setState({ ...initial, admission: 'accepted', instructions: 'brief', snapshot });
   await t.fixture.whenStable();
   t.fixture.detectChanges();
-  t.button('Bild erneut laden').click();
+  t.button('Erneut versuchen').click();
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   t.root.querySelector('img')!.dispatchEvent(new Event('error'));
   t.fixture.detectChanges();
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:owned');
-  t.button('Bild erneut laden').click();
+  t.button('Erneut versuchen').click();
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   expect(load).toHaveBeenCalledTimes(3);
