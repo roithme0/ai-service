@@ -50,7 +50,7 @@
         aria-label="Nachricht senden"
         [disabled]="disabled() || editingDisabled() || dictationBusy() || draft().trim() === ''"
       >
-        <mat-icon svgIcon="ai-chat:send" aria-hidden="true" />
+        <mat-icon svgIcon="ai-service:send" aria-hidden="true" />
       </button>
     </div>
   </div>
@@ -65,7 +65,7 @@
       (click)="setUsageExpanded(true, $event)"
     >
       <ai-chat-usage-line [usage]="usage" />
-      <mat-icon svgIcon="ai-chat:arrow-up" aria-hidden="true" />
+      <mat-icon svgIcon="ai-service:arrow-up" aria-hidden="true" />
     </button>
   </div>
 }

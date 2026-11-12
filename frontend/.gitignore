@@ -38,6 +38,7 @@ testem.log
 /typings
 __screenshots__/
 /projects/chat-ui/test-results/
+/projects/image-generation/test-results/
 
 # System files
 .DS_Store

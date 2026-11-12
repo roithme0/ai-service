@@ -5,7 +5,7 @@ import { DemoHeader } from './demo-header.component';
 
 describe('DemoHeader', () => {
   it.each([
-    { label: 'Visual Demo', tag: 'Scripted' },
+    { label: 'Visual Demo', tag: 'Skript' },
     { label: 'Live Demo', tag: 'Live' },
   ])('identifies $label and links back to the selector', ({ label, tag }) => {
     TestBed.configureTestingModule({ providers: [provideRouter([])] });

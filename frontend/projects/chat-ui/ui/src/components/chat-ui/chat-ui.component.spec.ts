@@ -302,12 +302,12 @@ describe('ChatUiComponent', () => {
     };
     fixture.componentRef.setInput('turns', [turn]);
     fixture.detectChanges();
-    expect(mascot.getAttribute('src')).toBe('images/maskot-working.png');
+    expect(mascot.getAttribute('src')).toBe('images/mascot-working.gif');
 
     fixture.componentRef.setInput('turns', [{ ...turn, content: DETAILS_CONTENT }]);
     fixture.componentRef.setInput('conversationStatus', null);
     fixture.detectChanges();
-    expect(mascot.getAttribute('src')).toBe('images/maskot-working.png');
+    expect(mascot.getAttribute('src')).toBe('images/mascot-working.gif');
 
     for (const status of ['completed', 'failed', 'unknown'] as const) {
       fixture.componentRef.setInput('turns', [{ ...turn, status }]);
@@ -333,7 +333,7 @@ describe('ChatUiComponent', () => {
       { runKey: 'completed', status: 'completed', content: [] },
     ]);
     fixture.detectChanges();
-    expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/maskot-working.png');
+    expect(mascot.getAttribute('src')).toBe('assets/chat-ui/images/mascot-working.gif');
   });
 
   it('shows enabled final-answer actions while active and retains them through automatic collapse', () => {
@@ -374,7 +374,7 @@ describe('ChatUiComponent', () => {
     expect(toggle.type).toBe('button');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(toggle.getAttribute('aria-label')).toBe('Details anzeigen');
-    expect(toggle.querySelector('mat-icon')?.getAttribute('svgIcon')).toBe('ai-chat:list-tree');
+    expect(toggle.querySelector('mat-icon')?.getAttribute('svgIcon')).toBe('ai-service:list-tree');
     expect(
       toggle.closest('ai-chat-assistant-message')?.querySelector('.markdown')?.textContent,
     ).toBe('Answer');
@@ -1085,7 +1085,7 @@ describe('ChatUiComponent', () => {
     ]);
     expect(
       rows.every(
-        (row) => row.querySelector('mat-icon')?.getAttribute('svgIcon') === 'ai-chat:tool',
+        (row) => row.querySelector('mat-icon')?.getAttribute('svgIcon') === 'ai-service:tool',
       ),
     ).toBe(true);
     expect(rows[0].textContent).toContain('<b>present</b>');
@@ -1552,7 +1552,7 @@ describe('ChatUiComponent', () => {
   it('renders the packaged send icon through the Material control', () => {
     const fixture = createFixture([]);
     const button = fixtureElement(fixture).querySelector('button[matIconButton]');
-    const icon = fixtureElement(fixture).querySelector('mat-icon[svgIcon="ai-chat:send"]');
+    const icon = fixtureElement(fixture).querySelector('mat-icon[svgIcon="ai-service:send"]');
 
     expect(button).not.toBeNull();
     expect(icon).not.toBeNull();
@@ -1568,12 +1568,12 @@ describe('ChatUiComponent', () => {
     expect(actions.querySelector('.send-button')).not.toBeNull();
   });
 
-  it('registers the packaged icons in the chat namespace', async () => {
+  it('registers the packaged icons in the service namespace', async () => {
     createFixture([]);
     const registry = TestBed.inject(MatIconRegistry);
 
     for (const name of ['send', 'retry', 'tts', 'add-file', 'tool']) {
-      const icon = await firstValueFrom(registry.getNamedSvgIcon(name, 'ai-chat'));
+      const icon = await firstValueFrom(registry.getNamedSvgIcon(name, 'ai-service'));
       expect(icon.getAttribute('viewBox')).toBe('0 0 24 24');
     }
   });

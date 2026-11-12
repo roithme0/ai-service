@@ -1,0 +1,13 @@
+<svg aria-hidden="true" focusable="false">
+  <rect x="1" y="1" rx="12" />
+</svg>
+@if (error(); as error) {
+  <p role="alert">{{ error }}</p>
+  @if (action(); as action) {
+    <button mat-button type="button" [disabled]="action.disabled" (click)="action.action()">
+      {{ action.label }}
+    </button>
+  }
+} @else {
+  <span>Bild wird geladen...</span>
+}

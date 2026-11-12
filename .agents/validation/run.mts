@@ -65,7 +65,7 @@ export async function validate(root: string, request: ValidationRequest, options
     return { failed: true, message: '--ci-prerequisite-contracts is restricted to the GitHub Actions downstream E2E job after prerequisite validation.' };
   }
   const session = hash(request.sessionId);
-  const cache = join(root, '.agents/.codex-validation/aggregate-v2', session);
+  const cache = join(root, '.codex-validation/aggregate-v2', session);
   await mkdir(cache, { recursive: true });
   const path = join(cache, 'state.json');
   const state = await readState(path);

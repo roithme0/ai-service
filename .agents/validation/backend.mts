@@ -148,7 +148,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (process.argv.length !== 3 || process.argv[2] !== '--format')
     throw new Error('Usage: node .agents/validation/backend.mts --format');
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-  const result = await formatBackend(root, join(root, '.agents/.codex-validation/backend/manual'));
+  const result = await formatBackend(root, join(root, '.codex-validation/backend/manual'));
   process.stdout.write(
     `Checked ${result.checked.length} changed Python files; formatted ${result.formatted.length}.\n`,
   );

@@ -5,10 +5,10 @@ import { DemoTag } from './demo-tag.component';
 describe('DemoTag', () => {
   it('updates when the host changes demo type', () => {
     const fixture = TestBed.createComponent(DemoTag);
-    fixture.componentRef.setInput('label', 'Scripted');
+    fixture.componentRef.setInput('label', 'Skript');
     fixture.detectChanges();
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.textContent?.trim()).toBe('Scripted');
+    expect(element.textContent?.trim()).toBe('Skript');
     fixture.componentRef.setInput('label', 'Live');
     fixture.detectChanges();
     expect(element.textContent?.trim()).toBe('Live');

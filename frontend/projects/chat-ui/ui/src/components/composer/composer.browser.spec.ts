@@ -4,7 +4,7 @@ import { MatIconRegistry } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
-import { registerChatIcons } from '../../chat-icons';
+import { registerUiIcons } from '../../../../../shared/icons';
 import type { ChatSubmission } from '../../models/chat-message';
 import type { ChatUsage } from '../../models/chat-usage';
 import { ComposerComponent } from './composer.component';
@@ -26,7 +26,7 @@ const USAGE: ChatUsage = {
 
 beforeEach(async () => {
   TestBed.configureTestingModule({ imports: [ComposerComponent, MatSnackBarModule] });
-  registerChatIcons(TestBed.inject(MatIconRegistry), TestBed.inject(DomSanitizer));
+  registerUiIcons(TestBed.inject(MatIconRegistry), TestBed.inject(DomSanitizer));
   fixture = TestBed.createComponent(ComposerComponent);
   fixture.componentRef.setInput('mascotSource', '/images/mascot-idle.png');
   const host = fixture.nativeElement as HTMLElement;
@@ -249,7 +249,7 @@ it.each([
     host.style.fontFamily = 'monospace';
     host.style.fontSize = '16px';
     host.style.lineHeight = '1.5';
-    if (width === 900) host.style.setProperty('--ai-chat-composer-secondary-font-size', '13px');
+    if (width === 900) host.style.setProperty('--ai-ui-composer-secondary-font-size', '13px');
     const name = 'provider/' + 'long-model-identifier-'.repeat(12);
     fixture.componentRef.setInput('model', { name, reasoningEffort });
     fixture.componentRef.setInput('usage', USAGE);

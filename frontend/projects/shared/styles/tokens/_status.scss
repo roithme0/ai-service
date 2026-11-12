@@ -1,0 +1,8 @@
+$values: (
+  'error-background': var(--ai-ui-error-background, #321b22),
+  'error-border': var(--ai-ui-error-border, #814152),
+  'error-text': var(--ai-ui-error-text, #ffd9e2),
+  'error-radius': var(--ai-ui-error-radius, 0.875rem),
+  'error-padding': var(--ai-ui-error-padding, 0.875rem 1rem),
+  'status-fade-duration': var(--ai-ui-status-fade-duration, 180ms),
+);

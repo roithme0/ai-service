@@ -1,0 +1,45 @@
+<app-demo-header label="Bilderstellung - visuelle Demo" tag="Skript" />
+<main class="page">
+  <section class="controls" aria-label="Demo-Steuerung">
+    <app-section-nav
+      label="Szenario"
+      [items]="scenarios"
+      [activeId]="scenario()"
+      (selected)="selectScenario($event)"
+    />
+    <div class="actions">
+      <span id="instruction-mode-label">Beschreibung</span>
+      <mat-radio-group
+        aria-labelledby="instruction-mode-label"
+        class="options"
+        [value]="instructionMode()"
+        (change)="selectInstructionMode($event.value)"
+      >
+        <mat-radio-button value="editable">Bearbeitbar</mat-radio-button>
+        <mat-radio-button value="hidden">Verborgen</mat-radio-button>
+      </mat-radio-group>
+    </div>
+    <div class="actions">
+      <span id="outcome-label">Ergebnis der Hauptaktion</span>
+      <mat-radio-group
+        aria-labelledby="outcome-label"
+        class="options"
+        [value]="outcome()"
+        (change)="outcome.set($event.value)"
+      >
+        <mat-radio-button value="success">Erfolg</mat-radio-button>
+        <mat-radio-button value="failure">Fehler</mat-radio-button>
+      </mat-radio-group>
+    </div>
+  </section>
+  <div class="showcase">
+    <ng-container #runHost />
+    <ng-template #runTemplate>
+      <app-image-generation-visual-run
+        [scenario]="scenario()"
+        [outcome]="outcome()"
+        [instructionMode]="instructionMode()"
+      />
+    </ng-template>
+  </div>
+</main>

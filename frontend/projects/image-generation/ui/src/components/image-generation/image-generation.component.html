@@ -1,0 +1,60 @@
+<section class="layout">
+  @switch (submissionUnknown() ? 'generating' : workflow.panel()) {
+    @case ('input') {
+      <ai-image-generation-input-panel
+        [draft]="workflow.draft()"
+        [error]="error()"
+        [pending]="actionCoordinator.pending()"
+        [canGoBack]="state().snapshot?.status === 'completed' && !workflow.failure()"
+        (draftChange)="workflow.updateDraft($event)"
+        (generate)="submit()"
+        (back)="back()"
+      />
+    }
+    @case ('generating') {
+      <ai-image-generation-generating-panel
+        [admission]="state().admission"
+        [editable]="effectiveMode() === 'editable'"
+        [observation]="state().observation"
+        [submissionUnknown]="submissionUnknown()"
+        [error]="error()"
+        [pending]="actionCoordinator.pending()"
+        (retry)="retry()"
+        (edit)="editFailure()"
+        (recover)="
+          invoke(
+            actions().recoverSubmission,
+            'recover',
+            'Die Anfrage konnte nicht wiederhergestellt werden.'
+          )
+        "
+        (reconnect)="
+          invoke(
+            actions().reconnect,
+            'reconnect',
+            'Die Verbindung zum Status konnte nicht wiederhergestellt werden.'
+          )
+        "
+      />
+    }
+    @case ('outcome') {
+      <ai-image-generation-outcome-panel
+        [image]="imageResult.result()"
+        [editable]="effectiveMode() === 'editable'"
+        [snapshot]="state().snapshot"
+        [failure]="workflow.failure()"
+        [error]="error()"
+        [contentError]="imageResult.error()"
+        [loading]="imageResult.loading()"
+        [pending]="actionCoordinator.pending()"
+        [primaryLabel]="primaryAction()?.label ?? null"
+        (refine)="workflow.failure() ? editFailure() : refine()"
+        (retry)="retry()"
+        (download)="download()"
+        (handoff)="handoff()"
+        (retryImage)="retryImage()"
+        (imageError)="imageResult.imageError()"
+      />
+    }
+  }
+</section>

@@ -27,7 +27,7 @@ The browser chooses the encoding; consumers must check whether their transcripti
 
 ## Composer dictation
 
-Opt in through the `dictation` and `dictationContextKey` inputs on `ai-chat-ui`. See the [configuration types](ui/src/dictation.ts) and [live demo](../../src/app/pages/live-demo/live-demo.component.ts) for default recorder, transcription adapter, and host toast wiring. Backend limits and errors belong to the [speech-to-text contract](../../../docs/domains/transcriptions.md).
+Opt in through the `dictation` and `dictationContextKey` inputs on `ai-chat-ui`. See the [configuration types](ui/src/dictation.ts) and [live demo](../../src/app/pages/conversation-live-demo/conversation-live-demo.component.ts) for default recorder, transcription adapter, and host toast wiring. Backend limits and errors belong to the [speech-to-text contract](../../../docs/domains/transcriptions.md).
 
 - Keep the configuration reference stable. Its factory must return an independent recorder; the composer owns cancellation and disposal.
 - Supply a non-null context key independent of the backend session ID. Keep it stable during a conversation. Before switching or resetting, propagate a new key to the composer synchronously; the live demo shows this ordering.
@@ -69,7 +69,7 @@ Add to the application's build `assets` array in `angular.json`:
 }
 ```
 
-Set `mascotAssetPath="assets/chat-ui/images"`; the default is `images`, relative to the application base URL. The package supplies `mascot-idle.png` and `maskot-working.png` (spelling intentional). Any `active` turn selects the working mascot, even after final text arrives.
+Set `mascotAssetPath="assets/chat-ui/images"`; the default is `images`, relative to the application base URL. The package supplies `mascot-idle.png` and `mascot-working.gif` (spelling intentional). Any `active` turn selects the working mascot, even after final text arrives.
 
 ## AI Service integration
 
@@ -92,7 +92,7 @@ import {
   selector: 'app-chat',
   imports: [ChatUiComponent],
   template: `<ai-chat-ui
-    bannerTitle="Visual Demo"
+    bannerTitle="Conversation Visual Demo"
     bannerDescription="Any text advances the scripted sequence."
     mascotAssetPath="assets/chat-ui/images"
     [turns]="chat().turns"
@@ -211,9 +211,9 @@ Direct transport methods: `createSession(initialization?)`, `readSession(session
 
 ## Theme
 
-Set CSS variables on an ancestor of `ai-chat-ui`; fallback defaults preserve inherited overrides. Material styles controls; library styles are bundled.
+Set `--ai-ui-*` CSS variables on an ancestor of `ai-chat-ui` or `ai-image-generation` to theme both packages. Defaults are bundled with each UI; Material styles controls.
 
-See the [token catalog](https://github.com/roithme0/ai-service/blob/production/frontend/projects/chat-ui/ui/src/styles/_tokens.scss) and its imported semantic groups for configurable variables and defaults.
+See the [token catalog](https://github.com/roithme0/ai-service/blob/production/frontend/projects/shared/styles/_tokens.scss) and its imported semantic groups for configurable variables and defaults.
 
 ## Repository workflows
 

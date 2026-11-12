@@ -1,0 +1,5 @@
+<a class="card" [routerLink]="route()" [attr.aria-label]="title()">
+  <app-demo-tag [label]="tag()" />
+  <p><ng-content /></p>
+  <app-navigation-link>Demo öffnen</app-navigation-link>
+</a>

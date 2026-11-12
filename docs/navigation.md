@@ -1,6 +1,6 @@
 # Repository navigation
 
-The conversation capability combines backend execution with a reusable Angular chat UI. Visual and Live Demos illustrate integration; the Kochwiki configuration connects execution to external domain tools.
+The conversation capability combines backend execution with a reusable Angular chat UI. Conversation and image generation visual and live demos illustrate integration; the Kochwiki configuration connects execution to external domain tools.
 
 ## System overview
 
@@ -30,23 +30,30 @@ The [gateway](../deployment/gateway/nginx.conf) serves the demos and API. Visual
 | [Application lifespan](../backend/app/lifespan.py) | Starts and stops capabilities and demos. Loads shared [provider settings](../backend/app/core/config.py); the conversation lifecycle loads [conversation settings](../backend/app/capabilities/conversations/config.py). |
 | [Session API](../backend/app/capabilities/conversations/http.py) | Session creation, reads, prompt admission, and SSE observation under `/api/v1/agents/{configuration}/sessions`. [Presentation](../backend/app/capabilities/conversations/presentation.py) projects native history into public snapshots. |
 | [Embeddings](../backend/app/capabilities/embeddings/) | Embedding endpoint and provider integration. See [usage and profiles](domains/embeddings.md). |
+| [Image generation](../backend/app/capabilities/image_generation/) | One-off HTTP image generation. See [usage and lifetime](domains/image-generation.md). |
 | [Execution](../backend/app/capabilities/conversations/runner.py) | Owns background turns. [Registry](../backend/app/capabilities/conversations/sessions.py) handles ownership and expiry; [session state](../backend/app/capabilities/conversations/session_state.py) retains conversation, lifecycle, and artifacts. |
 | [Agent composition](../backend/app/capabilities/conversations/wiring.py) | Configures the Kochwiki model and MCP connection. [Turns](../backend/app/capabilities/conversations/turns.py) execute through Pydantic AI; [artifacts](../backend/app/capabilities/conversations/artifacts.py) validate and publish presentation data. |
 | [Chat UI package](../frontend/projects/chat-ui/) | `@roithme0/chat-ui/ui` renders host-supplied content; `@roithme0/chat-ui/conversation` supplies the [controller](../frontend/projects/chat-ui/conversation/src/session-controller.ts), HTTP/SSE transport, and snapshot mapping. |
 | [Composer dictation](../frontend/projects/chat-ui/README.md#composer-dictation) | The composer coordinates host-supplied recording, transcription, and error presentation. Defaults live in the [recording](../frontend/projects/chat-ui/recording/) and [transcription](../frontend/projects/chat-ui/transcription/) entry points. |
 | [Demo styles](../frontend/src/app/styles/tokens.css) | Shared semantic tokens for the demo host, separate from the Chat UI package's tokens. |
-| [Visual Demo](../backend/app/demos/visual_conversation_demo/) | Scripted conversation with messages, artifacts, simulated delays, and error states. The [visual page](../frontend/src/app/pages/visual-demo/visual-demo.component.ts) hosts its chat UI at `/demos/visual`; the [landing page](../frontend/src/app/pages/demo-landing/demo-landing.component.ts) at `/` selects demos. |
-| [Live Demo](../backend/app/demos/live_conversation_demo/) | Model-backed conversations, registered as `live-demo`; the [live page](../frontend/src/app/pages/live-demo/live-demo.component.ts) hosts its chat UI at `/demos/live`. |
+| [Conversation Visual Demo](../backend/app/demos/visual_conversation_demo/) | Scripted conversation at `/demos/conversation/visual`; the [landing page](../frontend/src/app/pages/demo-landing/demo-landing.component.ts) selects demos. |
+| [Conversation Live Demo](../backend/app/demos/live_conversation_demo/) | Model-backed conversations at `/demos/conversation/live`, registered as `live-demo`. |
+| [Image Generation Visual Demo](../frontend/src/app/pages/image-generation-visual-demo/image-generation-visual-demo.component.ts) | Frontend-only scripted scenarios with a predefined image at `/demos/image-generation/visual`. |
+| [Image Generation Live Demo](../frontend/src/app/pages/image-generation-live-demo/image-generation-live-demo.component.ts) | Controller and UI composition at `/demos/image-generation/live`; see the [image generation contract](domains/image-generation.md). |
 | [Deployment](../deployment/) | Environment-specific Compose definitions and gateway routing. The [publishing workflow](../.github/workflows/publish-app.yml) builds and publishes application images and the chat UI package. |
+
+The Image Generation Live Demo uses the same unverified shared `demo:default` identity assertion as Conversation Live Demo; it provides neither browser isolation nor authentication. It uses the UI's built-in PNG download and does not submit on entry. The visual image demo uses local scripted results, supports recovery scenarios, and simulates a host action without uploading the image.
 
 The [contract generator](../frontend/scripts/conversation-contract.mjs) produces [TypeScript types and Zod schemas](../frontend/projects/chat-ui/conversation/src/generated/) from the session router's OpenAPI document.
 
 The [transcription generator](../frontend/scripts/transcription-contract.mjs) owns the [transcription types and validators](../frontend/projects/chat-ui/transcription/src/generated/). See [contract generation](development.md#update-generated-contracts) for commands.
 
+The [image generator contract script](../frontend/scripts/image-generation-contract.mjs) produces [types and validators](../frontend/projects/image-generation/controller/src/generated/) for direct HTTP consumers.
+
 ## Follow a flow
 
 - **Send a prompt:** the controller calls the [transport](../frontend/projects/chat-ui/conversation/src/session-transport.ts) → session API → runner → session state → Pydantic AI. HTTP 202 acknowledges admission; execution continues in the background.
-- **Display progress:** the runner streams complete snapshots over SSE → controller → [presentation mapper](../frontend/projects/chat-ui/conversation/src/session-presentation.ts) → [chat component](../frontend/projects/chat-ui/ui/lib/components/chat-ui/chat-ui.component.ts). Backend snapshots supply conversation content and execution status.
+- **Display progress:** the runner streams complete snapshots over SSE → controller → [presentation mapper](../frontend/projects/chat-ui/conversation/src/session-presentation.ts) → [chat component](../frontend/projects/chat-ui/ui/src/components/chat-ui/chat-ui.component.ts). Backend snapshots supply conversation content and execution status.
 - **Present an artifact:** the consumer advertises supported schemas at session creation → the agent calls `present_artifact` → validation and session retention → snapshot → consumer renderer. Publication does not save domain data; domain operations belong to MCP tools.
 
 ## Find related tests

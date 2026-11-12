@@ -1,12 +1,12 @@
 import { test } from '@playwright/test';
-import { LiveDemo } from './support/live-demo';
+import { ConversationLiveDemo } from './support/conversation-live-demo';
 
-test.describe('Live demo real-provider smoke', () => {
+test.describe('Conversation live demo real-provider smoke', () => {
   test('receives a text answer and completes a tool-assisted answer with an intermediate message', async ({
     page,
   }) => {
     test.setTimeout(120_000);
-    const demo = new LiveDemo(page);
+    const demo = new ConversationLiveDemo(page);
 
     await test.step('Open the live demo directly', async () => {
       await demo.goto();

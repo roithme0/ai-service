@@ -1,0 +1,22 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 30rem;
+  margin: 0 auto;
+  height: 100%;
+}
+
+.image-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--demo-page-background);
+  box-shadow: var(--demo-chat-shadow);
+}
+
+ai-image-generation {
+  flex: 1;
+  min-height: 0;
+}

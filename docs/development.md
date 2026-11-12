@@ -24,9 +24,9 @@ npm ci
 npm run start:app
 ```
 
-Open `http://localhost:4204` for the demo selector: **Visual Demo** (`/demos/visual`) or **Live Demo** (`/demos/live`). API requests proxy to port 8004. Visual Demo needs no model credentials or Kochwiki connection; Live Demo requires the [provider key](operation.md#configuration). Refresh or re-enter a demo to start a new session.
+Open `http://localhost:4204` for the demo selector: **Conversation Visual Demo** (`/demos/conversation/visual`), **Conversation Live Demo** (`/demos/conversation/live`), **Image Generation Visual Demo** (`/demos/image-generation/visual`), or **Image Generation Live Demo** (`/demos/image-generation/live`). API requests proxy to port 8004. The conversation visual demo needs no model credentials or Kochwiki connection. The conversation live demo requires the [provider key](operation.md#configuration); the image generation live demo requires the [provider key, model, and dedicated storage directory](operation.md#configuration). The image visual demo runs locally with a predefined image and selectable failure scenarios; instructions do not change its image. Refresh or re-enter a conversation demo to start a new session.
 
-For model-backed conversations, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [agent settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
+For model-backed conversations or image generation, copy [backend/.env.example](../backend/.env.example) to `backend/.env` and configure the [required settings](operation.md#configuration). Restart the backend after configuration changes. Interactive API documentation is at `http://localhost:8004/api/docs`.
 
 ### Container alternative
 
@@ -38,6 +38,16 @@ docker compose --env-file deployment/.env -f deployment/docker-compose-local.yml
 
 Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have no source reload; rebuild after changes. Follow backend logs with the same Compose command prefix and `logs -f backend`.
 
+## Frontend scripts
+
+Run `npm run <script>` from **frontend/** after `npm ci`. Common scripts in [package.json](../frontend/package.json) include:
+
+- `start:app`, `build:app`, and `watch:app` run or build the app. See [chat UI development](#develop-the-chat-ui-package) and [image generation development](#develop-the-image-generation-package) for library commands.
+- `generate:image-generation-contract` and `check:image-generation-contract` update or verify the image generation contract; see [generated contracts](#update-generated-contracts) for all contracts and prerequisites.
+- `test:app` and `test:image-generation` run focused test groups; browser tests require Playwright Chromium. See [validation](#validate-changes) for the full suite.
+- `format:changed`, `lint`, and `lint:fix` format or lint frontend and shared tooling changes.
+- `ng` forwards arguments to the Angular CLI.
+
 ## Validate changes
 
 Complete [local setup](#run-locally) for both backend and frontend, then [install Playwright Chromium](#end-to-end-browser-tests). From the **repository root**:
@@ -46,7 +56,7 @@ Complete [local setup](#run-locally) for both backend and frontend, then [instal
 node .agents/validation/run.mts
 ```
 
-This formats changed files, lints, checks freshness of both generated contracts, and runs all non-E2E tests, including browser components. Formatting includes staged, unstaged, and untracked changed files; review unrelated edits first and inspect the resulting diff. `--scope frontend|backend` limits formatting and lint only; `--no-format` skips formatting. Contract checks run regardless of scope or test group.
+This formats changed files, lints, checks freshness of all generated contracts, and runs all non-E2E tests, including browser components. Formatting includes staged, unstaged, and untracked changed files; review unrelated edits first and inspect the resulting diff. `--scope frontend|backend` limits formatting and lint only; `--no-format` skips formatting. Contract checks run regardless of scope or test group.
 
 Validation uses Python 3.13 from `backend/.venv` with the `test` and `dev` extras, frontend npm dependencies, and Playwright Chromium. No running application, Docker, or secrets are needed. See [generated contracts](#update-generated-contracts) for manual freshness checks.
 
@@ -92,9 +102,9 @@ npx playwright test --headed
 Remove-Item Env:PLAYWRIGHT_BASE_URL
 ```
 
-Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Run `node .agents/validation/e2e.mts` from the repository root for browser flow, frontend/backend integration, or local deployment changes. It updates Docker using the build cache and runs Playwright. The stack stays running; logs are in `.agents/.codex-validation/e2e/`.
+Codegen takes its URL explicitly. Results and failure traces go to gitignored `e2e/test-results/`, replaced on each run. Current coverage checks landing-page links. Run `node .agents/validation/e2e.mts` from the repository root for browser flow, frontend/backend integration, or local deployment changes. It updates Docker using the build cache and runs Playwright. The stack stays running; logs are in `.codex-validation/e2e/`.
 
-The [CI workflow](../.github/workflows/publish-app.yml) defines validation, image testing, and publication dependencies. The isolated runner writes browser results and HTML reports under separate `.agents/.codex-validation/e2e/manual/playwright-*/` directories. On failure, the `e2e-diagnostics` artifact contains available results and reports with their run directories preserved, along with top-level manual logs.
+The [CI workflow](../.github/workflows/publish-app.yml) defines validation, image testing, and publication dependencies. The isolated runner writes browser results and HTML reports under separate `.codex-validation/e2e/manual/playwright-*/` directories. On failure, the `e2e-diagnostics` artifact contains available results and reports with their run directories preserved, along with top-level manual logs.
 
 ## Update generated contracts
 
@@ -106,6 +116,8 @@ npm run generate:conversation-contract
 npm run check:conversation-contract
 npm run generate:transcription-contract
 npm run check:transcription-contract
+npm run generate:image-generation-contract
+npm run check:image-generation-contract
 ```
 
 Generators produce TypeScript types and Zod validators from backend schemas without starting the application. Manual commands use `PYTHON` when set or Python on PATH; automated validation selects the repository virtual environment explicitly. Check commands compare generated output without modifying checked-in files. Ship backend schema changes, generated files, and frontend consumers together. Review generated changes; do not edit them by hand.
@@ -120,7 +132,13 @@ See the [package README](../frontend/projects/chat-ui/README.md) for component i
 
 From **frontend/**, run `npm run build:chat-ui`, then `node scripts/check-chat-ui-package.mjs`. This verifies built exports, runtime behavior, explicit application identity, and strict consumer declarations without workspace aliases.
 
-For manual layout and interaction checks, use [Visual Demo](http://localhost:4204/demos/visual) with the [local servers](#run-locally) running. Check narrow viewports, scrolling, artifact expansion, and keyboard submission in Chrome and Firefox. Refresh to restart the scripted session.
+For manual layout and interaction checks, use [Conversation Visual Demo](http://localhost:4204/demos/conversation/visual) with the [local servers](#run-locally) running. Check narrow viewports, scrolling, artifact expansion, and keyboard submission in Chrome and Firefox. Refresh to restart the scripted session.
+
+## Develop the image generation package
+
+After `npm ci`, build the standalone image generation package from **frontend/** with `npm run build:image-generation`, then verify its packed controller entrypoint and declarations with `npm run check:image-generation-package`. Use `npm run pack:image-generation` to build and create a package archive.
+
+Run its focused tests from the **repository root** with `node .agents/validation/test.mts --group image-generation` after completing [local setup](#run-locally). Focused runs do not replace [full validation](#validate-changes).
 
 ## AI-assisted development
 
@@ -132,6 +150,6 @@ For manual layout and interaction checks, use [Visual Demo](http://localhost:420
 | [Hooks](../.codex/hooks.json) | Codex adapter snapshots content before prompts and validates affected scopes on stop. |
 | [Project configuration](../.codex/config.toml) | Angular CLI and OpenAI documentation MCP connections. |
 
-Review and trust hooks before relying on them. Relevant hooks perform [validation](#validate-changes), including both contract freshness checks; unchanged discussion turns run none. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.agents/.codex-validation/`.
+Review and trust hooks before relying on them. Relevant hooks perform [validation](#validate-changes), including contract freshness checks; unchanged discussion turns run none. Their commands invoke Node.js using absolute checkout paths; run validation manually if unavailable. Hook state and reports are gitignored under `.codex-validation/`.
 
 Temporary concepts, specs, and plans belong under `.agents/`, outside commits and permanent documentation. Invoke spec and delivery workflows explicitly; routine changes do not require them.

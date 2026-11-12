@@ -10,6 +10,7 @@ from mcp.server import MCPServer
 from app.capabilities.conversations.lifecycle import kochwiki_runner
 from app.capabilities.conversations.runner import AgentTurnRunner
 from app.capabilities.embeddings.lifecycle import embedding_service
+from app.capabilities.image_generation.lifecycle import image_generation_service
 from app.capabilities.transcriptions.lifecycle import transcription_service
 from app.core.config import get_provider_settings
 from app.core.logging import configure_logging
@@ -35,6 +36,11 @@ async def application_lifespan(
             AsyncClient(transport=ASGITransport(app=application))
         )
         provider_settings = get_provider_settings()
+        application.state.image_generation_service = (
+            await resources.enter_async_context(
+                image_generation_service(provider_settings),
+            )
+        )
         application.state.embedding_service = await resources.enter_async_context(
             embedding_service(provider_settings),
         )

@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../out-tsc/image-generation-spec",
+    "types": ["vitest/globals"]
+  },
+  "include": ["src/**/*.ts", "controller/**/*.ts", "ui/**/*.ts"]
+}

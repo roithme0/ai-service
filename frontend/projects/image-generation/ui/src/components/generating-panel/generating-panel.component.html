@@ -1,0 +1,23 @@
+<h2 #heading tabindex="-1">{{ interruption()?.heading ?? loading().heading }}</h2>
+<div class="center" aria-live="polite">
+  @if (interruption(); as interruption) {
+    <p [class.error]="interruption.alert" [attr.role]="interruption.alert ? 'alert' : null">
+      {{ interruption.message }}
+    </p>
+    <div class="interruption-actions">
+      @if (interruption.action; as action) {
+        <button mat-button type="button" [disabled]="pending()" (click)="action.emit()">
+          {{ interruption.label }}
+        </button>
+      }
+      @if (interruption.editable && editable()) {
+        <button mat-button type="button" [disabled]="pending()" (click)="edit.emit()">
+          Beschreibung bearbeiten
+        </button>
+      }
+    </div>
+  } @else {
+    <mat-spinner diameter="32" aria-hidden="true" />
+    <p>{{ loading().message }}</p>
+  }
+</div>

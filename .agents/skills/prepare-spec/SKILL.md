@@ -10,34 +10,34 @@ Turn an intended software change into an approved direction without prescribing 
 ## Workflow
 
 1. Read the repository guidance and inspect the relevant code, documentation, existing specs, and established contracts.
-2. Confirm that the request is a bounded change. If it is primarily an exploratory product or architecture direction spanning multiple potential changes, explain that it belongs in concept work before creating a spec.
-3. Spar with the user for as many rounds as the change needs. Pressure-test goals, scope, behavior, UX, contracts, constraints, alternatives, and integration impact. Ask about unresolved choices that materially affect the change; offer recommendations with their tradeoffs. Follow the repository's clarification batch limit; do not force a fixed number of rounds.
+2. Establish a bounded change. If the request still spans multiple possible directions, use concept work before creating a delivery spec.
+3. Discuss goals, scope, behavior, UX, contracts, constraints, alternatives, and integration impact. Ask about unresolved material choices and recommend options with tradeoffs. Follow local clarification rules; use as many rounds as needed.
 4. Create or update a draft spec from [assets/spec-template.md](assets/spec-template.md) as the direction takes shape. Treat it as the current decision record, not a conversation transcript. Keep unconfirmed material choices under Open Questions, including any recommendations.
-5. Keep only decisions the implementation cannot safely recover from the codebase. Scale detail with ambiguity, blast radius, irreversibility, and contract or migration risk.
-6. Review the draft against the codebase and related specs. Surface conflicts or missing decisions and continue sparring until it satisfies the readiness criteria.
-7. Summarize the material decisions and obtain user confirmation before marking the spec ready. Reuse explicit confirmation already given; do not ask again for unchanged decisions. Present the resulting spec, observable acceptance criteria, confirmation evidence, and unresolved non-blocking risks. When delegated, route user decisions and the handoff through the supervisor. Do not begin implementation. Implementation requires an explicit request to deliver the agreed spec, such as `$deliver-spec`, or existing explicit authorization for the same scope.
+5. Review the draft against the codebase, related specs, and readiness criteria. Resolve conflicts and missing decisions; scale detail with ambiguity and risk.
+6. Summarize material decisions and obtain confirmation before marking the spec ready. Reuse prior confirmation for unchanged decisions. Hand off the spec path, acceptance criteria, confirmation evidence, and residual risks. When delegated, route user decisions and the handoff through the supervisor.
+
+Stop at the handoff unless implementation of the agreed scope is already explicitly authorized. A request to deliver the spec, including `$deliver-spec`, provides that authorization.
 
 ## Decisions and Assumptions
 
-- Do not turn missing information into a settled requirement. Distinguish user-confirmed decisions, facts established by repository evidence, and proposed choices.
-- Use the codebase to establish current behavior, contracts, and conventions; cite the relevant evidence when relying on it. Current behavior does not establish the user's intended change.
-- Material product, scope, UX, behavioral, architectural, compatibility, and migration choices require user confirmation or explicit user authorization to decide. Recommendations remain proposals until confirmed. Silence is not confirmation.
-- Routine implementation mechanics may follow established conventions without additional confirmation. Record the scope of user-authorized decision-making and any material decisions made within it.
+- Distinguish confirmed decisions, repository facts, and proposals. Cite evidence for inherited constraints; current behavior does not establish the intended change.
+- Material product, scope, UX, architecture, compatibility, and migration choices require confirmation or explicit authorization to decide. Record decisions made within that authority. Recommendations and unanswered questions remain proposals.
+- Resolve routine implementation mechanics from established conventions without further confirmation.
 
 ## Readiness Criteria
 
 A spec is ready for delivery when:
 
 - The outcome and meaningful scope boundaries are clear.
-- Material decisions are user-confirmed or made within explicit user authorization to decide, and those choices are recorded.
+- Material decisions meet the confirmation rules above and are recorded.
 - Acceptance criteria describe observable, verifiable outcomes.
 - No open question would require the implementer to invent a product, architecture, compatibility, or migration decision.
-- For UI-affecting work, the intended experience, interaction model, important states, and visual direction are clear enough that implementation does not require inventing product decisions.
-- For non-UI work, the absence of UI impact is explicit.
+- UI-affecting work specifies the intended experience, interactions, important states, and visual direction.
+- For non-UI work, note that there is no UI impact.
 
 ## Detail and Splitting
 
-- Omit obvious implementation mechanics, exhaustive file lists, and details already established by the codebase.
+- Keep decisions the implementer cannot safely recover from the codebase. Omit routine mechanics and exhaustive file lists.
 - Include error cases, compatibility, migration, security, rollout, or validation detail only in proportion to their risk.
 - Use one spec by default, including for ordinary cross-layer work.
 - Split coordination and implementation specs only when independent ownership, deployment boundaries, contract complexity, or sequencing makes the separation useful.
@@ -48,4 +48,4 @@ A spec is ready for delivery when:
 - Store specs in `.agents/specs/` relative to the target repository root. Follow existing filename conventions there; otherwise use `YYYY-MM-DD-<short-kebab-title>.md`.
 - Use relative Markdown links to related concepts and specs, including across artifact folders.
 - Remove resolved questions and empty optional sections instead of preserving placeholders.
-- Do not silently change an approved decision. Return to sparring and make the change visible.
+- Do not silently change an approved decision. Discuss and record the amendment.

@@ -5,7 +5,7 @@ import { MatIconRegistry } from '@angular/material/icon';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { RecordingOutcome, RecordingState } from '@roithme0/chat-ui/recording';
 import { TranscriptionError } from '@roithme0/chat-ui/transcription';
-import { registerChatIcons } from '../../chat-icons';
+import { registerUiIcons } from '../../../../../shared/icons';
 import type { DictationConfig } from '../../dictation';
 import { DictationButtonComponent, type DictationEnvironment } from './dictation-button.component';
 
@@ -65,7 +65,7 @@ function setup(configure = true) {
   });
   if (configure) {
     TestBed.configureTestingModule({ imports: [DictationButtonComponent] });
-    registerChatIcons(TestBed.inject(MatIconRegistry), TestBed.inject(DomSanitizer));
+    registerUiIcons(TestBed.inject(MatIconRegistry), TestBed.inject(DomSanitizer));
   }
   const fixture = TestBed.createComponent(DictationButtonComponent);
   fixture.componentRef.setInput('source', environment);

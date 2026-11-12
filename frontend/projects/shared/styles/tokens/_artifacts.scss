@@ -1,0 +1,15 @@
+@use 'defaults';
+
+$values: (
+  'artifact-background': var(--ai-ui-artifact-background, #21171b),
+  'artifact-border': var(--ai-ui-artifact-border, defaults.$surface-border),
+  'artifact-subtitle': var(--ai-ui-artifact-subtitle, #bda9b1),
+  'artifact-heading': var(--ai-ui-artifact-heading, defaults.$primary-text),
+  'artifact-text': var(--ai-ui-artifact-text, #eadde2),
+  'artifact-collapsed-height': var(--ai-ui-artifact-collapsed-height, 18rem),
+  'artifact-code-font-size': var(--ai-ui-artifact-code-font-size, 0.8rem),
+  'artifact-radius': var(--ai-ui-artifact-radius, defaults.$surface-radius),
+  'artifact-padding': var(--ai-ui-artifact-padding, defaults.$surface-padding),
+  'artifact-code-padding': var(--ai-ui-artifact-code-padding, 0.875rem),
+  'artifact-fade-height': var(--ai-ui-artifact-fade-height, 3rem),
+);
