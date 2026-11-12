@@ -1,7 +1,7 @@
 # <Spec Title>
 
 Status: draft
-Confirmation: <Pending, or reference to user confirmation of material decisions and any explicit authorization to decide.>
+Confirmation: <Pending, or reference to caller approval of material decisions and any explicit authorization to decide.>
 Date: YYYY-MM-DD
 Related concept: <relative Markdown link to a file in ../concepts/, or "None">
 Related specs: <relative Markdown links to spec files, or "None">

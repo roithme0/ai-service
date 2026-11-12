@@ -4,7 +4,7 @@ The main agent owns coordination, user decisions, and overall completion. Delega
 
 ## Start
 
-Read repository guidance and the named spec. An explicit request to deliver that spec, including `$deliver-spec`, authorizes implementation of that scope unless the user requested planning only; reuse existing authorization. If the direction is not ready, use Prepare Spec to resolve it with the user before delivery. Preserve the preparation skill's material decision and confirmation gates. Mark an authorized spec `approved` where supported.
+Read repository guidance and the named spec. An explicit request to deliver that spec, including `$deliver-spec`, authorizes implementation of that scope unless the user requested planning only; reuse existing authorization. If the direction is not ready, use Prepare Spec before delivery. The supervisor may approve the spec within the user's authorized scope; preserve the preparation skill's caller approval and escalation rules. Mark an authorized spec `approved` where supported.
 
 Give Delivery the spec, authorization, repository context, and responsibility for a plan using [the delivery plan template](../assets/delivery-plan-template.md). Agree on a few substantial, testable milestones, with an architecture-sensitive slice early where applicable. Assign production/docs ownership to Delivery and independent coverage ownership to Test, including authority to improve Delivery-authored tests. Review remains read-only.
 

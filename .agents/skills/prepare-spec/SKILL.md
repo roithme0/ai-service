@@ -14,14 +14,14 @@ Turn an intended software change into an approved direction without prescribing 
 3. Discuss goals, scope, behavior, UX, contracts, constraints, alternatives, and integration impact. Ask about unresolved material choices and recommend options with tradeoffs. Follow local clarification rules; use as many rounds as needed.
 4. Create or update a draft spec from [assets/spec-template.md](assets/spec-template.md) as the direction takes shape. Treat it as the current decision record, not a conversation transcript. Keep unconfirmed material choices under Open Questions, including any recommendations.
 5. Review the draft against the codebase, related specs, and readiness criteria. Resolve conflicts and missing decisions; scale detail with ambiguity and risk.
-6. Summarize material decisions and obtain confirmation before marking the spec ready. Reuse prior confirmation for unchanged decisions. Hand off the spec path, acceptance criteria, confirmation evidence, and residual risks. When delegated, route user decisions and the handoff through the supervisor.
+6. Summarize material decisions and obtain caller approval before marking the spec ready. The caller is the user for direct invocation or the orchestrating agent for delegated preparation. Reuse prior approval for unchanged decisions. Hand off the spec path, acceptance criteria, approval evidence, and residual risks.
 
 Stop at the handoff unless implementation of the agreed scope is already explicitly authorized. A request to deliver the spec, including `$deliver-spec`, provides that authorization.
 
 ## Decisions and Assumptions
 
 - Distinguish confirmed decisions, repository facts, and proposals. Cite evidence for inherited constraints; current behavior does not establish the intended change.
-- Material product, scope, UX, architecture, compatibility, and migration choices require confirmation or explicit authorization to decide. Record decisions made within that authority. Recommendations and unanswered questions remain proposals.
+- Material product, scope, UX, architecture, compatibility, and migration choices require caller approval or explicit authorization to decide. An orchestrating agent may approve within the user's authorized scope; escalate choices beyond that authority to the user. Record decisions made within that authority. Recommendations and unanswered questions remain proposals.
 - Resolve routine implementation mechanics from established conventions without further confirmation.
 
 ## Readiness Criteria
