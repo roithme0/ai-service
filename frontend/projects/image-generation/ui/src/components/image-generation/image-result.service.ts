@@ -44,7 +44,7 @@ export class ImageResultService implements OnDestroy {
       this.resultState.set({ ...content, instructions, url });
     } catch {
       if (!this.destroyed && epoch === this.epoch)
-        this.errorState.set('Das Bild konnte nicht geladen werden.');
+        this.errorState.set('Das Laden fehlgeschlagen.');
     } finally {
       if (!this.destroyed && epoch === this.epoch) this.loadingState.set(false);
     }

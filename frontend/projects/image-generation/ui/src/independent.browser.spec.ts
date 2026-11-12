@@ -153,7 +153,7 @@ it('renders state transitions, focus and reflow in a real browser', async () => 
           estimated_cost_usd: null,
           error: {
             kind: 'image_generation_failed' as const,
-            detail: 'Bilderstellung fehlgeschlagen',
+            detail: 'Erstellung fehlgeschlagen',
           },
         },
       },
@@ -168,7 +168,7 @@ it('renders state transitions, focus and reflow in a real browser', async () => 
       uncertain: 'Anfrage wiederherstellen',
       running: 'Bild wird erstellt',
       lost: 'Erneut mit dem Status verbinden',
-      failure: 'Bilderstellung fehlgeschlagen',
+      failure: 'Erstellung fehlgeschlagen',
     };
     expect(host.textContent).toContain(expected[name]);
     await page.screenshot({ path: '../../test-results/' + name + '.png' });
@@ -176,7 +176,7 @@ it('renders state transitions, focus and reflow in a real browser', async () => 
   }
   await expect
     .poll(() => document.activeElement?.textContent?.trim())
-    .toBe('Bilderstellung fehlgeschlagen');
+    .toBe('Erstellung fehlgeschlagen');
   await page.viewport(320, 400);
   fixture.detectChanges();
   expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
@@ -376,7 +376,7 @@ it('shows content-only retry with completed metadata after load failure', async 
     'ai-image-generation-image-placeholder',
   )!;
   expect(placeholder.querySelector('[role="alert"]')?.textContent).toContain(
-    'Das Bild konnte nicht geladen werden.',
+    'Das Laden fehlgeschlagen.',
   );
   expect(placeholder.querySelector('button')?.textContent).toContain('Bild erneut laden');
   expect(placeholder.querySelector('rect')).not.toBeNull();
@@ -470,7 +470,7 @@ it('keeps hidden failure retry reachable and keyboard operable in portrait', asy
   expect(host.textContent).not.toContain('Beschreibung bearbeiten');
   await expect
     .poll(() => document.activeElement?.textContent?.trim())
-    .toBe('Bilderstellung fehlgeschlagen');
+    .toBe('Erstellung fehlgeschlagen');
   const retry = page.getByRole('button', { name: 'Erneut versuchen' });
   await expect.element(retry).toBeVisible();
   retry.element().focus();

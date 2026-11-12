@@ -25,11 +25,11 @@ import {
 export class ImageGenerationVisualDemo implements AfterViewInit {
   protected readonly scenarios: readonly { id: ImageGenerationVisualScenario; label: string }[] = [
     { id: 'success', label: 'Erfolg' },
-    { id: 'generation-failure', label: 'Bilderstellung fehlgeschlagen' },
+    { id: 'generation-failure', label: 'Erstellung fehlgeschlagen' },
     { id: 'connection-lost', label: 'Verbindung unterbrochen' },
-    { id: 'submission-rejected', label: 'Absenden abgelehnt' },
-    { id: 'submission-uncertain', label: 'Absenden unbestätigt' },
-    { id: 'image-load-failure', label: 'Bild konnte nicht geladen werden' },
+    { id: 'submission-rejected', label: 'Senden abgelehnt' },
+    { id: 'submission-uncertain', label: 'Senden unbestätigt' },
+    { id: 'image-load-failure', label: 'Laden fehlgeschlagen' },
   ];
   protected readonly scenario = signal<ImageGenerationVisualScenario>('success');
   protected readonly instructionMode = signal<ImageGenerationInstructionMode>('editable');

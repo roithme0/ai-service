@@ -247,12 +247,12 @@ it('retains instructions and available metadata on confirmed failure', () => {
     estimated_cost_usd: '0.001',
     error: {
       kind: 'image_generation_failed' as const,
-      detail: 'Bilderstellung fehlgeschlagen safely',
+      detail: 'Erstellung fehlgeschlagen safely',
     },
   };
   t.setState({ ...initial, admission: 'accepted', instructions: 'failed brief', snapshot: failed });
-  expect(t.root.textContent).toContain('Bilderstellung fehlgeschlagen');
-  expect(t.root.textContent).not.toContain('Bilderstellung fehlgeschlagen safely');
+  expect(t.root.textContent).toContain('Erstellung fehlgeschlagen');
+  expect(t.root.textContent).not.toContain('Erstellung fehlgeschlagen safely');
   expect(t.root.textContent).toContain('provider');
   expect(t.root.textContent).toContain('0.001');
   expect(t.button('Beschreibung bearbeiten').classList.contains('mat-tonal-button')).toBe(true);
@@ -536,7 +536,7 @@ it('preserves the brief on authoritative rejection and does not invent a failure
   await t.fixture.whenStable();
   t.fixture.detectChanges();
   expect(t.root.textContent).toContain('Das Absenden konnte nicht bestätigt werden');
-  expect(t.root.textContent).not.toContain('Bilderstellung fehlgeschlagen');
+  expect(t.root.textContent).not.toContain('Erstellung fehlgeschlagen');
   t.setState({
     ...initial,
     admission: 'rejected',

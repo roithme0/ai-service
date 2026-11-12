@@ -230,7 +230,7 @@ it.each(['editable', 'hidden'] as const)(
     const { fixture, ui } = setup();
     const host = fixture.nativeElement as HTMLElement;
     const scenario = [...host.querySelectorAll('button')].find(
-      (button) => button.textContent?.trim() === 'Absenden abgelehnt',
+      (button) => button.textContent?.trim() === 'Senden abgelehnt',
     );
     if (!scenario) throw new Error('Rejection scenario missing');
     scenario.click();
@@ -267,7 +267,7 @@ it('retains selected scenario and action outcome while replacing and disposing a
   const { fixture, ui } = setup();
   const host = fixture.nativeElement as HTMLElement;
   const scenario = [...host.querySelectorAll('button')].find(
-    (button) => button.textContent?.trim() === 'Absenden abgelehnt',
+    (button) => button.textContent?.trim() === 'Senden abgelehnt',
   )!;
   scenario.click();
   fixture.detectChanges();
