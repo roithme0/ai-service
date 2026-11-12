@@ -13,6 +13,9 @@ import type { Admission, Observation } from '@roithme0/image-generation/controll
 export class ImageGenerationGeneratingPanelComponent {
   readonly admission = input.required<Admission>();
   readonly observation = input.required<Observation>();
+  readonly editable = input(true);
+  readonly retry = output<void>();
+  readonly edit = output<void>();
   readonly pending = input(false);
   readonly error = input<string | null>(null);
   readonly recover = output<void>();

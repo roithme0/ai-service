@@ -2,6 +2,7 @@ import { Component, signal, viewChild } from '@angular/core';
 import { MatRadioModule } from '@angular/material/radio';
 import { DemoHeader } from '../../components/demo-header/demo-header.component';
 import { SectionNavComponent } from '../../components/section-nav/section-nav.component';
+import type { ImageGenerationInstructionMode } from '@roithme0/image-generation/ui';
 import type { ImageGenerationVisualScenario } from './image-generation-visual-transport';
 import {
   ImageGenerationVisualRun,
@@ -19,10 +20,12 @@ export class ImageGenerationVisualDemo {
     { id: 'success', label: 'Erfolg' },
     { id: 'generation-failure', label: 'Bilderstellung fehlgeschlagen' },
     { id: 'connection-lost', label: 'Verbindung unterbrochen' },
+    { id: 'submission-rejected', label: 'Absenden abgelehnt' },
     { id: 'submission-uncertain', label: 'Absenden unbestätigt' },
     { id: 'image-load-failure', label: 'Bild konnte nicht geladen werden' },
   ];
   protected readonly scenario = signal<ImageGenerationVisualScenario>('success');
+  protected readonly instructionMode = signal<ImageGenerationInstructionMode>('editable');
   protected readonly outcome = signal<DemoActionOutcome>('success');
   protected readonly runs = signal<readonly { id: number }[]>([{ id: 0 }]);
   private readonly currentRun = viewChild(ImageGenerationVisualRun);
@@ -31,6 +34,11 @@ export class ImageGenerationVisualDemo {
     const next = this.scenarios.find((item) => item.id === id);
     if (!next) return;
     this.scenario.set(next.id);
+    this.replaceRun();
+  }
+  protected selectInstructionMode(mode: ImageGenerationInstructionMode): void {
+    if (mode === this.instructionMode()) return;
+    this.instructionMode.set(mode);
     this.replaceRun();
   }
   private replaceRun(): void {

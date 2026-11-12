@@ -8,6 +8,18 @@
       (selected)="selectScenario($event)"
     />
     <div class="actions">
+      <span id="instruction-mode-label">Beschreibung</span>
+      <mat-radio-group
+        aria-labelledby="instruction-mode-label"
+        class="options"
+        [value]="instructionMode()"
+        (change)="selectInstructionMode($event.value)"
+      >
+        <mat-radio-button value="editable">Bearbeitbar</mat-radio-button>
+        <mat-radio-button value="hidden">Verborgen</mat-radio-button>
+      </mat-radio-group>
+    </div>
+    <div class="actions">
       <span id="outcome-label">Ergebnis der Hauptaktion</span>
       <mat-radio-group
         aria-labelledby="outcome-label"
@@ -22,7 +34,11 @@
   </section>
   <div class="showcase">
     @for (run of runs(); track run.id) {
-      <app-image-generation-visual-run [scenario]="scenario()" [outcome]="outcome()" />
+      <app-image-generation-visual-run
+        [scenario]="scenario()"
+        [outcome]="outcome()"
+        [instructionMode]="instructionMode()"
+      />
     }
   </div>
 </main>

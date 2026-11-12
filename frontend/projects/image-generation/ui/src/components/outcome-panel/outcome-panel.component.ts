@@ -19,6 +19,8 @@ interface ImagePreview {
   styleUrls: ['../panel.scss', './outcome-panel.component.scss'],
 })
 export class ImageGenerationOutcomePanelComponent {
+  readonly editable = input(true);
+  readonly retry = output<void>();
   readonly image = input<ImagePreview | null>(null);
   readonly snapshot = input<Snapshot | null>(null);
   readonly failure = input<string | null>(null);

@@ -190,3 +190,101 @@ describe('Image generation visual demo ownership', () => {
     fixture.destroy();
   });
 });
+
+it('recreates the run in hidden mode and starts host instructions', async () => {
+  vi.useFakeTimers();
+  const { fixture, ui } = setup();
+  const previous = ui();
+  const host = fixture.nativeElement as HTMLElement;
+  const hidden = host.querySelector<HTMLInputElement>('input[type="radio"][value="hidden"]');
+  if (!hidden) throw new Error('Hidden option missing');
+  hidden.click();
+  fixture.detectChanges();
+  expect(ui()).not.toBe(previous);
+  expect(ui().instructionMode()).toBe('hidden');
+  expect(host.querySelector('textarea')).toBeNull();
+  expect(ui().state().admission).toBe('submitting');
+  expect(ui().state().instructions).toBe('Eine sonnige Landschaft mit Bergen und einem See.');
+  await vi.advanceTimersByTimeAsync(500);
+  fixture.detectChanges();
+  expect(ui().state().snapshot?.status).toBe('running');
+  fixture.destroy();
+});
+
+it.each(['editable', 'hidden'] as const)(
+  'completes the rejection scenario after retry in %s mode',
+  async (mode) => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'URL',
+      class extends URL {
+        static override createObjectURL = vi.fn(() => 'blob:demo');
+        static override revokeObjectURL = vi.fn();
+      },
+    );
+    const { fixture, ui } = setup();
+    const host = fixture.nativeElement as HTMLElement;
+    const scenario = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === 'Absenden abgelehnt',
+    );
+    if (!scenario) throw new Error('Rejection scenario missing');
+    scenario.click();
+    fixture.detectChanges();
+    if (mode === 'hidden') {
+      host.querySelector<HTMLInputElement>('input[value="hidden"]')!.click();
+      fixture.detectChanges();
+    } else {
+      const input = host.querySelector('textarea')!;
+      input.value = '  exact brief  ';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      [...host.querySelectorAll('button')]
+        .find((button) => button.textContent?.trim() === 'Bild erstellen')!
+        .click();
+    }
+    await vi.advanceTimersByTimeAsync(500);
+    fixture.detectChanges();
+    expect(ui().state().admission).toBe('rejected');
+    expect(host.textContent).toContain('Erneut versuchen');
+    [...host.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === 'Erneut versuchen')!
+      .click();
+    await vi.advanceTimersByTimeAsync(3000);
+    fixture.detectChanges();
+    expect(ui().state().snapshot?.status).toBe('completed');
+    fixture.destroy();
+    vi.unstubAllGlobals();
+  },
+);
+
+it('retains selected scenario and action outcome while replacing and disposing a run on mode switch', async () => {
+  vi.useFakeTimers();
+  const { fixture, ui } = setup();
+  const host = fixture.nativeElement as HTMLElement;
+  const scenario = [...host.querySelectorAll('button')].find(
+    (button) => button.textContent?.trim() === 'Absenden abgelehnt',
+  )!;
+  scenario.click();
+  fixture.detectChanges();
+  host.querySelector<HTMLInputElement>('input[value="failure"]')!.click();
+  fixture.detectChanges();
+  const previous = ui();
+  const oldAction = previous.primaryAction()!;
+  const feedback = oldAction.run(payload);
+  const aborted = expect(feedback).rejects.toMatchObject({ name: 'AbortError' });
+  host.querySelector<HTMLInputElement>('input[value="hidden"]')!.click();
+  fixture.detectChanges();
+  await aborted;
+  expect(ui()).not.toBe(previous);
+  expect(scenario.getAttribute('aria-current')).toBeTruthy();
+  expect(host.querySelector<HTMLInputElement>('input[value="failure"]')!.checked).toBe(true);
+  await vi.advanceTimersByTimeAsync(500);
+  fixture.detectChanges();
+  expect(ui().state().admission).toBe('rejected');
+  host.querySelector<HTMLInputElement>('input[value="editable"]')!.click();
+  fixture.detectChanges();
+  expect(ui().state().admission).toBe('idle');
+  expect(host.querySelector<HTMLInputElement>('input[value="failure"]')!.checked).toBe(true);
+  expect(scenario.getAttribute('aria-current')).toBeTruthy();
+  fixture.destroy();
+});

@@ -10,6 +10,7 @@ export type ImageGenerationVisualScenario =
   | 'success'
   | 'generation-failure'
   | 'connection-lost'
+  | 'submission-rejected'
   | 'submission-uncertain'
   | 'image-load-failure';
 
@@ -42,6 +43,7 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
 
 export class ImageGenerationVisualTransport implements ImageGenerationTransport {
   private readonly generations = new Map<string, Generation>();
+  private rejectedOnce = false;
   private readonly keys = new Map<string, Generation>();
 
   constructor(private readonly scenario: ImageGenerationVisualScenario) {}
@@ -87,6 +89,10 @@ export class ImageGenerationVisualTransport implements ImageGenerationTransport 
         throw new TransportError('rejected', 'Submission key conflicts with existing instructions');
       if (admitted.uncertain) throw new TransportError('uncertain', 'Could not confirm submission');
       return admitted.snapshot;
+    }
+    if (this.scenario === 'submission-rejected' && !this.rejectedOnce) {
+      this.rejectedOnce = true;
+      throw new TransportError('rejected', 'Die Demo-Anfrage wurde abgelehnt.');
     }
     const id = crypto.randomUUID();
     const generation: Generation = {
@@ -138,8 +144,7 @@ export class ImageGenerationVisualTransport implements ImageGenerationTransport 
         completed_at: new Date().toISOString(),
         error: {
           kind: 'image_generation_failed',
-          detail:
-            'Die Bilderstellung in der Demo ist fehlgeschlagen. Passe die Beschreibung an und versuche es erneut.',
+          detail: 'Die Bilderstellung in der Demo ist fehlgeschlagen. Bitte versuche es erneut.',
         },
       };
     } else {

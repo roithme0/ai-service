@@ -1,4 +1,4 @@
-import { Component, inject, input, OnDestroy, signal } from '@angular/core';
+import { Component, inject, input, OnDestroy, OnInit, signal } from '@angular/core';
 import {
   MatSnackBar,
   type MatSnackBarRef,
@@ -11,6 +11,7 @@ import {
 import {
   ImageGenerationUiComponent,
   type ImageGenerationActions,
+  type ImageGenerationInstructionMode,
   type ImageGenerationPrimaryAction,
 } from '@roithme0/image-generation/ui';
 import {
@@ -25,12 +26,13 @@ export type DemoActionOutcome = 'success' | 'failure';
   selector: 'app-image-generation-visual-run',
   imports: [ImageGenerationUiComponent],
   template:
-    '<ai-image-generation [state]="state()" [actions]="actions" [primaryAction]="primaryAction" />',
+    '<ai-image-generation [state]="state()" [actions]="actions" [primaryAction]="primaryAction" [instructionMode]="instructionMode()" />',
   styles:
     ':host { display: block; height: 100%; min-height: 0; } ai-image-generation { display: block; height: 100%; }',
 })
-export class ImageGenerationVisualRun implements OnDestroy {
+export class ImageGenerationVisualRun implements OnInit, OnDestroy {
   readonly scenario = input.required<ImageGenerationVisualScenario>();
+  readonly instructionMode = input.required<ImageGenerationInstructionMode>();
   readonly outcome = input.required<DemoActionOutcome>();
   private readonly snackBar = inject(MatSnackBar);
   private readonly abort = new AbortController();
@@ -87,6 +89,11 @@ export class ImageGenerationVisualRun implements OnDestroy {
       });
     },
   };
+  ngOnInit(): void {
+    if (this.instructionMode() === 'hidden') {
+      void this.getController().submit('Eine sonnige Landschaft mit Bergen und einem See.');
+    }
+  }
   dispose(): void {
     if (this.abort.signal.aborted) return;
     this.abort.abort();

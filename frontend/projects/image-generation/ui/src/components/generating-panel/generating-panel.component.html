@@ -1,6 +1,17 @@
-<h2 #heading tabindex="-1">Bild wird erstellt</h2>
+<h2 #heading tabindex="-1">
+  {{ admission() === 'rejected' ? 'Anfrage fehlgeschlagen' : 'Bild wird erstellt' }}
+</h2>
 <div class="center" aria-live="polite">
-  @if (admission() === 'uncertain') {
+  @if (admission() === 'rejected') {
+    <button mat-flat-button type="button" [disabled]="pending()" (click)="retry.emit()">
+      Erneut versuchen
+    </button>
+    @if (editable()) {
+      <button mat-button type="button" [disabled]="pending()" (click)="edit.emit()">
+        Beschreibung bearbeiten
+      </button>
+    }
+  } @else if (admission() === 'uncertain') {
     <p>Das Absenden konnte nicht bestätigt werden</p>
     <button mat-button type="button" [disabled]="pending()" (click)="recover.emit()">
       Anfrage wiederherstellen
@@ -12,7 +23,15 @@
     </button>
   } @else {
     <mat-spinner diameter="32" aria-hidden="true" />
-    <p>{{ admission() === 'accepted' ? 'Bild wird erstellt' : 'Anfrage wird gesendet' }}</p>
+    <p>
+      {{
+        admission() === 'idle' && !pending()
+          ? 'Bilderstellung wird vorbereitet'
+          : admission() === 'accepted'
+            ? 'Bild wird erstellt'
+            : 'Anfrage wird gesendet'
+      }}
+    </p>
   }
   @if (error()) {
     <p class="error" role="alert">{{ error() }}</p>

@@ -383,3 +383,98 @@ it('shows content-only retry with completed metadata after load failure', async 
   expect((fixture.nativeElement as HTMLElement).textContent).toContain('model');
   await page.screenshot({ path: '../../test-results/content-error.png' });
 });
+
+it('keeps hidden mode free of editing and supports rejection retry by keyboard in a short portrait host', async () => {
+  await page.viewport(320, 400);
+  const idle: ImageGenerationState = {
+    admission: 'idle',
+    instructions: null,
+    snapshot: null,
+    observation: 'idle',
+    content: 'idle',
+    error: null,
+  };
+  const actions: ImageGenerationActions = {
+    submit: vi.fn(() => Promise.resolve()),
+    recoverSubmission: vi.fn(() => Promise.resolve()),
+    reconnect: vi.fn(),
+    loadContent: vi.fn(),
+  };
+  TestBed.configureTestingModule({ imports: [ImageGenerationUiComponent] });
+  const fixture = TestBed.createComponent(ImageGenerationUiComponent);
+  fixture.componentRef.setInput('state', idle);
+  fixture.componentRef.setInput('actions', actions);
+  fixture.componentRef.setInput('instructionMode', 'hidden');
+  const host = fixture.nativeElement as HTMLElement;
+  host.style.width = '320px';
+  host.style.height = '400px';
+  fixture.detectChanges();
+  expect(host.querySelector('textarea')).toBeNull();
+  expect(host.textContent).toContain('Bilderstellung wird vorbereitet');
+  expect(actions.submit).not.toHaveBeenCalled();
+  fixture.componentRef.setInput('state', {
+    ...idle,
+    admission: 'rejected',
+    instructions: 'private brief',
+    error: 'Abgelehnt',
+  });
+  fixture.detectChanges();
+  await fixture.whenStable();
+  expect(host.querySelector('textarea')).toBeNull();
+  expect(host.textContent).not.toContain('private brief');
+  expect(document.activeElement?.tagName).not.toBe('TEXTAREA');
+  const retry = page.getByRole('button', { name: 'Erneut versuchen' });
+  await expect.element(retry).toBeVisible();
+  retry.element().focus();
+  await userEvent.keyboard('{Enter}');
+  expect(actions.submit).toHaveBeenCalledExactlyOnceWith('private brief');
+  expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+});
+
+it('keeps hidden failure retry reachable and keyboard operable in portrait', async () => {
+  await page.viewport(320, 400);
+  const state: ImageGenerationState = {
+    admission: 'accepted',
+    instructions: 'brief',
+    observation: 'idle',
+    content: 'idle',
+    error: null,
+    snapshot: {
+      generation_id: 'failed',
+      status: 'failed',
+      created_at: '2026-01-01',
+      completed_at: '2026-01-01',
+      configured_model: 'model',
+      provider_model: null,
+      estimated_cost_usd: null,
+      error: { kind: 'image_generation_failed', detail: 'failed' },
+    },
+  };
+  const actions: ImageGenerationActions = {
+    submit: vi.fn(() => Promise.resolve()),
+    recoverSubmission: vi.fn(() => Promise.resolve()),
+    reconnect: vi.fn(),
+    loadContent: vi.fn(),
+  };
+  TestBed.configureTestingModule({ imports: [ImageGenerationUiComponent] });
+  const fixture = TestBed.createComponent(ImageGenerationUiComponent);
+  fixture.componentRef.setInput('state', state);
+  fixture.componentRef.setInput('actions', actions);
+  fixture.componentRef.setInput('instructionMode', 'hidden');
+  const host = fixture.nativeElement as HTMLElement;
+  host.style.width = '320px';
+  host.style.height = '400px';
+  fixture.detectChanges();
+  await fixture.whenStable();
+  expect(host.querySelector('textarea')).toBeNull();
+  expect(host.textContent).not.toContain('Beschreibung bearbeiten');
+  await expect
+    .poll(() => document.activeElement?.textContent?.trim())
+    .toBe('Bilderstellung fehlgeschlagen');
+  const retry = page.getByRole('button', { name: 'Erneut versuchen' });
+  await expect.element(retry).toBeVisible();
+  retry.element().focus();
+  await userEvent.keyboard('{Enter}');
+  expect(actions.submit).toHaveBeenCalledExactlyOnceWith('brief');
+  expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+});

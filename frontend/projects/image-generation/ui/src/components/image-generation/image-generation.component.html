@@ -14,9 +14,12 @@
     @case ('generating') {
       <ai-image-generation-generating-panel
         [admission]="state().admission"
+        [editable]="effectiveMode() === 'editable'"
         [observation]="state().observation"
         [error]="error()"
         [pending]="pending()"
+        (retry)="retry()"
+        (edit)="editFailure()"
         (recover)="
           invoke(actions().recoverSubmission, 'Die Anfrage konnte nicht wiederhergestellt werden.')
         "
@@ -31,6 +34,7 @@
     @case ('outcome') {
       <ai-image-generation-outcome-panel
         [image]="result()"
+        [editable]="effectiveMode() === 'editable'"
         [snapshot]="state().snapshot"
         [failure]="failure()"
         [error]="error()"
@@ -38,7 +42,8 @@
         [loading]="loading()"
         [pending]="pending()"
         [primaryLabel]="primaryAction()?.label ?? null"
-        (refine)="refine()"
+        (refine)="failure() ? editFailure() : refine()"
+        (retry)="retry()"
         (download)="download()"
         (handoff)="handoff()"
         (retryImage)="retryImage()"

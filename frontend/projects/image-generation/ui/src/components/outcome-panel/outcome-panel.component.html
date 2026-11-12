@@ -20,6 +20,11 @@
       <ai-image-generation-image-placeholder [error]="contentError()" (retry)="retryImage.emit()" />
     }
   }
+  @if (failure()) {
+    <p class="error" role="alert">
+      Die Bilderstellung ist fehlgeschlagen. Bitte versuchen Sie es erneut.
+    </p>
+  }
   @if (metadata(); as metadata) {
     <dl class="metadata">
       <div>
@@ -49,12 +54,19 @@
       {{ primaryLabel() }}
     </button>
   }
-  <button
-    [matButton]="failure() ? 'tonal' : 'text'"
-    type="button"
-    [disabled]="pending()"
-    (click)="refine.emit()"
-  >
-    Beschreibung bearbeiten
-  </button>
+  @if (failure()) {
+    <button mat-flat-button type="button" [disabled]="pending()" (click)="retry.emit()">
+      Erneut versuchen
+    </button>
+  }
+  @if (editable()) {
+    <button
+      [matButton]="failure() ? 'tonal' : 'text'"
+      type="button"
+      [disabled]="pending()"
+      (click)="refine.emit()"
+    >
+      Beschreibung bearbeiten
+    </button>
+  }
 </div>

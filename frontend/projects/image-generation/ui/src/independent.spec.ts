@@ -50,6 +50,7 @@ function setup(
       snapshot,
     }),
   ),
+  mode: 'editable' | 'hidden' = 'editable',
 ) {
   const actions: ImageGenerationActions = {
     submit: vi.fn(async () => {}),
@@ -65,6 +66,7 @@ function setup(
   const fixture = TestBed.createComponent(ImageGenerationUiComponent);
   fixture.componentRef.setInput('state', initial);
   fixture.componentRef.setInput('actions', actions);
+  fixture.componentRef.setInput('instructionMode', mode);
   fixture.detectChanges();
   const root = fixture.nativeElement as HTMLElement;
   const setState = (state: ImageGenerationState) => {
@@ -522,8 +524,10 @@ it('preserves the brief on authoritative rejection and does not invent a failure
     instructions: 'exact brief',
     error: 'Rejected by service',
   });
-  expect(t.root.querySelector('textarea')?.value).toBe('exact brief');
   expect(t.root.textContent).toContain('Rejected by service');
+  t.button('Beschreibung bearbeiten').click();
+  t.fixture.detectChanges();
+  expect(t.root.querySelector('textarea')?.value).toBe('exact brief');
 });
 
 it('ignores content settling after destruction without creating a URL', async () => {
@@ -600,4 +604,247 @@ it('ignores a handoff rejection after destruction', async () => {
   await Promise.resolve();
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:owned');
   expect(t.fixture.componentInstance.error()).toBeNull();
+});
+
+it('keeps hidden instructions absent and retries a direct rejection with exact instructions', () => {
+  const t = setup(undefined, 'hidden');
+  expect(t.root.querySelector('textarea')).toBeNull();
+  expect(t.root.textContent).toContain('Bilderstellung wird vorbereitet');
+  expect(t.actions.submit).not.toHaveBeenCalled();
+  const instructions = '  Gr??e ??  ';
+  t.setState({ ...initial, admission: 'rejected', instructions, error: 'Abgelehnt' });
+  expect(t.root.querySelector('textarea')).toBeNull();
+  expect(t.root.textContent).not.toContain(instructions);
+  t.button('Erneut versuchen').click();
+  t.button('Erneut versuchen').click();
+  expect(t.actions.submit).toHaveBeenCalledExactlyOnceWith(instructions);
+});
+
+it.each(['editable', 'hidden'] as const)(
+  'retains failed instructions and guards retry in %s mode',
+  async (mode) => {
+    const t = setup(undefined, mode);
+    const pending = deferred<void>();
+    vi.mocked(t.actions.submit).mockReturnValue(pending.promise);
+    const instructions = '  Gr\u00fc\u00dfe \u{1F600}\n';
+    const failed = {
+      generation_id: 'failed',
+      status: 'failed' as const,
+      created_at: '2026-01-01',
+      completed_at: '2026-01-01',
+      configured_model: 'model',
+      provider_model: null,
+      estimated_cost_usd: null,
+      error: { kind: 'image_generation_failed' as const, detail: 'failed' },
+    };
+    const state: ImageGenerationState = {
+      ...initial,
+      admission: 'accepted',
+      instructions,
+      snapshot: failed,
+    };
+    t.setState(state);
+    if (mode === 'editable') {
+      t.button('Beschreibung bearbeiten').click();
+      t.fixture.detectChanges();
+      expect(t.root.querySelector('textarea')?.value).toBe(instructions);
+      t.edit('unsubmitted draft');
+      t.setState({ ...state });
+      expect(t.root.querySelector('textarea')?.value).toBe('unsubmitted draft');
+      expect(t.actions.submit).not.toHaveBeenCalled();
+      t.setState({ ...initial, admission: 'submitting', instructions });
+      t.setState(state);
+    } else {
+      expect(t.root.querySelector('textarea')).toBeNull();
+      expect(t.root.textContent).not.toContain(instructions);
+      expect(t.root.textContent).not.toContain('Beschreibung bearbeiten');
+    }
+    t.button('Erneut versuchen').click();
+    t.fixture.detectChanges();
+    expect(t.actions.submit).toHaveBeenCalledExactlyOnceWith(instructions);
+    expect(t.fixture.componentInstance.pending()).toBe(true);
+    pending.resolve();
+    await pending.promise;
+  },
+);
+
+it.each(['editable', 'hidden'] as const)(
+  'retains initial %s mode when the input changes',
+  (mode) => {
+    const t = setup(undefined, mode);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    t.fixture.componentRef.setInput('instructionMode', mode === 'editable' ? 'hidden' : 'editable');
+    t.fixture.detectChanges();
+    expect(error).toHaveBeenCalled();
+    expect(t.fixture.componentInstance.effectiveMode()).toBe(mode);
+    expect(Boolean(t.root.querySelector('textarea'))).toBe(mode === 'editable');
+  },
+);
+
+it('keeps a rejected edit usable across repeated state publication', () => {
+  const t = setup();
+  const instructions = '  \u{1F600} original  ';
+  const state: ImageGenerationState = {
+    ...initial,
+    admission: 'rejected',
+    instructions,
+    error: 'Rejected',
+  };
+  t.setState(state);
+  t.button('Beschreibung bearbeiten').click();
+  t.fixture.detectChanges();
+  expect(t.root.querySelector('textarea')?.value).toBe(instructions);
+  t.edit('draft');
+  t.setState({ ...state });
+  expect(t.root.querySelector('textarea')?.value).toBe('draft');
+  expect(t.actions.submit).not.toHaveBeenCalled();
+});
+
+it('leaves error editing when an external attempt is rejected', () => {
+  const t = setup();
+  const rejected: ImageGenerationState = {
+    ...initial,
+    admission: 'rejected',
+    instructions: 'first',
+    error: 'Rejected',
+  };
+  t.setState(rejected);
+  t.button('Beschreibung bearbeiten').click();
+  t.fixture.detectChanges();
+  t.setState({ ...initial, admission: 'submitting', instructions: 'second' });
+  t.setState({ ...rejected, instructions: 'second' });
+  expect(t.root.querySelector('textarea')).toBeNull();
+  expect(t.root.textContent).toContain('Erneut versuchen');
+});
+
+it('keeps retry and edit disabled until the submitted action settles', () => {
+  const t = setup();
+  const pending = deferred<void>();
+  vi.mocked(t.actions.submit).mockReturnValue(pending.promise);
+  t.edit('brief');
+  t.button('Bild erstellen').click();
+  t.setState({
+    ...initial,
+    admission: 'accepted',
+    instructions: 'brief',
+    snapshot: {
+      generation_id: 'new',
+      status: 'failed',
+      created_at: '2026-01-01',
+      completed_at: '2026-01-01',
+      configured_model: 'model',
+      provider_model: null,
+      estimated_cost_usd: null,
+      error: { kind: 'image_generation_failed', detail: 'failed' },
+    },
+  });
+  expect(t.button('Erneut versuchen').disabled).toBe(true);
+  expect(t.button('Beschreibung bearbeiten').disabled).toBe(true);
+  pending.resolve();
+});
+
+it('shows a replacement rejection when intermediate external submission is coalesced', () => {
+  const t = setup();
+  t.setState({ ...initial, admission: 'rejected', instructions: 'first', error: 'Rejected' });
+  t.button('Beschreibung bearbeiten').click();
+  t.fixture.detectChanges();
+  t.fixture.componentRef.setInput('state', {
+    ...initial,
+    admission: 'submitting',
+    instructions: 'second',
+  });
+  t.fixture.componentRef.setInput('state', {
+    ...initial,
+    admission: 'rejected',
+    instructions: 'second',
+    error: 'Rejected again',
+  });
+  t.fixture.detectChanges();
+  expect(t.root.querySelector('textarea')).toBeNull();
+  expect(t.root.textContent).toContain('Rejected again');
+});
+
+it.each(['rejected', 'failed'] as const)(
+  'retries %s through the real controller with a fresh key and completes',
+  async (failure) => {
+    vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:owned'), revokeObjectURL: vi.fn() });
+    const id = 'b1e807b2-2824-4f9d-967b-1cd58a20c117';
+    const completed = {
+      ...snapshot,
+      generation_id: id,
+      created_at: '2026-01-01T00:00:00Z',
+      completed_at: '2026-01-01T00:00:01Z',
+    };
+    const failed = {
+      ...completed,
+      status: 'failed',
+      content: undefined,
+      error: { kind: 'image_generation_failed', detail: 'failed' },
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        failure === 'rejected'
+          ? Response.json(
+              { kind: 'image_generation_unavailable', detail: 'Unavailable' },
+              { status: 503 },
+            )
+          : Response.json(failed, { status: 202 }),
+      )
+      .mockResolvedValueOnce(Response.json(completed, { status: 202 }))
+      .mockResolvedValueOnce(
+        new Response(new Blob(['png'], { type: 'image/png' }), {
+          headers: { 'content-type': 'image/png' },
+        }),
+      );
+    const t = setup(undefined, 'hidden');
+    const controller = new ImageGenerationController(
+      new HttpImageGenerationTransport('/api/v1', 'owner', fetcher),
+      (state) => t.fixture.componentRef.setInput('state', { ...state }),
+    );
+    t.fixture.componentRef.setInput('actions', {
+      submit: (text: string) => controller.submit(text),
+      recoverSubmission: () => controller.recoverSubmission(),
+      reconnect: () => controller.reconnect(),
+      loadContent: () => controller.loadContent(),
+    });
+    const instructions = '  \u{1F600} exact  ';
+    await controller.submit(instructions);
+    t.fixture.detectChanges();
+    t.button('Erneut versuchen').click();
+    await vi.waitFor(() => {
+      t.fixture.detectChanges();
+      expect(t.root.querySelector('img')?.getAttribute('src')).toBe('blob:owned');
+    });
+    const first = fetcher.mock.calls[0][1]!;
+    const second = fetcher.mock.calls[1][1]!;
+    expect(first.body).toBe(second.body);
+    expect(new Headers(first.headers).get('Idempotency-Key')).not.toBe(
+      new Headers(second.headers).get('Idempotency-Key'),
+    );
+    controller.dispose();
+    t.fixture.destroy();
+  },
+);
+
+it('preserves hidden-mode result handoff and download', async () => {
+  vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:owned'), revokeObjectURL: vi.fn() });
+  const run = vi.fn<ImageGenerationPrimaryAction['run']>(() => Promise.resolve());
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  const t = setup(undefined, 'hidden');
+  t.fixture.componentRef.setInput('primaryAction', { label: 'Use image', run });
+  t.setState({ ...initial, admission: 'accepted', instructions: 'exact brief', snapshot });
+  await t.fixture.whenStable();
+  t.fixture.detectChanges();
+  expect(t.root.textContent).not.toContain('Beschreibung bearbeiten');
+  t.button('PNG herunterladen').click();
+  expect(click).toHaveBeenCalledOnce();
+  t.button('Use image').click();
+  expect(run).toHaveBeenCalledOnce();
+  expect(run.mock.calls[0][0]).toMatchObject({
+    filename: 'one.png',
+    snapshot,
+    instructions: 'exact brief',
+  });
+  expect(run.mock.calls[0][0].blob).toBeInstanceOf(Blob);
 });

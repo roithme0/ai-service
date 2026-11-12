@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+﻿import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ImageGenerationVisualTransport } from './image-generation-visual-transport';
 import { ImageGenerationController } from '@roithme0/image-generation/controller';
 
@@ -137,4 +137,18 @@ describe('ImageGenerationVisualTransport', () => {
     expect((await first).generation_id).toBe((await duplicate).generation_id);
     await rejected;
   });
+});
+
+it('rejects the first explicit attempt and accepts the next', async () => {
+  vi.useFakeTimers();
+  const transport = new ImageGenerationVisualTransport('submission-rejected');
+  const signal = new AbortController().signal;
+  const first = transport.submit('draw', 'first', signal);
+  const rejected = expect(first).rejects.toMatchObject({ category: 'rejected' });
+  await vi.advanceTimersByTimeAsync(500);
+  await rejected;
+  const second = transport.submit('draw', 'second', signal);
+  await vi.advanceTimersByTimeAsync(500);
+  expect((await second).status).toBe('running');
+  vi.useRealTimers();
 });

@@ -29,6 +29,7 @@ export interface ImageGenerationPrimaryAction {
   run(payload: ImageGenerationHandoff): Promise<void>;
 }
 type Result = ImageGenerationHandoff & { url: string };
+export type ImageGenerationInstructionMode = 'editable' | 'hidden';
 type Panel = 'input' | 'generating' | 'outcome';
 
 @Component({
@@ -47,6 +48,9 @@ export class ImageGenerationUiComponent implements OnDestroy {
   readonly state = input.required<Readonly<ImageGenerationState>>();
   readonly actions = input.required<ImageGenerationActions>();
   readonly primaryAction = input<ImageGenerationPrimaryAction>();
+  readonly instructionMode = input<ImageGenerationInstructionMode>('editable');
+  readonly effectiveMode = signal<ImageGenerationInstructionMode>('editable');
+  private initialMode: ImageGenerationInstructionMode | null = null;
   private readonly inputPanel = viewChild(ImageGenerationInputPanelComponent);
   private readonly generatingPanel = viewChild(ImageGenerationGeneratingPanelComponent);
   private readonly outcomePanel = viewChild(ImageGenerationOutcomePanelComponent);
@@ -61,6 +65,8 @@ export class ImageGenerationUiComponent implements OnDestroy {
   readonly loading = signal(false);
   private generation: string | null = null;
   private epoch = 0;
+  private actionEpoch = 0;
+  private submittingInstructions: string | null = null;
   private destroyed = false;
   private requested: string | null = null;
   private editing = false;
@@ -70,34 +76,72 @@ export class ImageGenerationUiComponent implements OnDestroy {
   constructor() {
     effect(() => {
       const state = this.state();
-      untracked(() => this.applyState(state));
+      const mode = this.instructionMode();
+      untracked(() => {
+        if (this.initialMode === null) {
+          this.initialMode = mode;
+          this.effectiveMode.set(mode);
+          if (mode === 'hidden') this.panel.set('generating');
+        } else if (mode !== this.initialMode) {
+          console.error('instructionMode cannot change after mounting.');
+        }
+        this.applyState(state);
+      });
     });
   }
 
   private applyState(state: Readonly<ImageGenerationState>): void {
     const snapshot = state.snapshot;
     if (
-      state.admission === 'submitting' &&
-      this.lastAdmission !== 'submitting' &&
-      this.lastAdmission !== 'uncertain' &&
-      this.generation !== null
+      state.admission === 'rejected' &&
+      this.lastAdmission === 'rejected' &&
+      state.instructions !== null &&
+      state.instructions !== this.submitted()
+    ) {
+      this.editing = false;
+    }
+    if (
+      (state.admission === 'submitting' || state.admission === 'rejected') &&
+      state.instructions !== null
+    ) {
+      this.submitted.set(state.instructions);
+    }
+    if (
+      (state.admission === 'rejected' || state.admission === 'idle') &&
+      this.generation !== null &&
+      !snapshot
     ) {
       this.clearResult();
       this.generation = null;
       this.editing = false;
+      this.failure.set(null);
+    }
+    if (
+      state.admission === 'submitting' &&
+      this.lastAdmission !== 'submitting' &&
+      this.lastAdmission !== 'uncertain'
+    ) {
+      if (this.generation !== null) {
+        this.clearResult();
+        this.generation = null;
+      }
+      this.editing = false;
     }
     this.lastAdmission = state.admission;
     if (snapshot && snapshot.generation_id !== this.generation) {
-      this.clearResult();
+      this.clearResult(
+        this.submittingInstructions !== null && state.instructions === this.submittingInstructions,
+      );
       this.generation = snapshot.generation_id;
       this.editing = false;
       this.hasDraft = false;
       this.submitted.set(state.instructions ?? this.submitted());
     }
-    if (state.admission === 'rejected') {
-      this.draft.set(state.instructions ?? this.submitted());
+    if (state.admission === 'idle' && !snapshot) {
+      this.navigate(this.effectiveMode() === 'hidden' ? 'generating' : 'input', 'heading');
+    } else if (state.admission === 'rejected') {
       this.error.set(state.error ?? 'Die Anfrage wurde abgelehnt.');
-      this.navigate('input', 'textarea');
+      if (!this.editing) this.navigate('generating', 'heading');
     } else if (
       state.admission === 'submitting' ||
       state.admission === 'uncertain' ||
@@ -106,7 +150,7 @@ export class ImageGenerationUiComponent implements OnDestroy {
       this.navigate('generating', 'heading');
     } else if (snapshot?.status === 'failed') {
       this.failure.set(snapshot.error.detail);
-      this.navigate('outcome', 'heading');
+      if (!this.editing) this.navigate('outcome', 'heading');
     } else if (snapshot?.status === 'completed') {
       this.failure.set(null);
       if (!this.editing) this.navigate('outcome', 'heading');
@@ -132,13 +176,17 @@ export class ImageGenerationUiComponent implements OnDestroy {
     });
   }
 
-  private clearResult(): void {
+  private clearResult(preserveAction = false): void {
     this.epoch++;
+    if (!preserveAction) {
+      this.actionEpoch++;
+      this.submittingInstructions = null;
+    }
     const previous = this.result();
     if (previous) URL.revokeObjectURL(previous.url);
     this.result.set(null);
     this.error.set(null);
-    this.pending.set(false);
+    if (!preserveAction) this.pending.set(false);
     this.requested = null;
     this.loading.set(false);
     this.contentError.set(null);
@@ -161,23 +209,59 @@ export class ImageGenerationUiComponent implements OnDestroy {
     this.error.set(null);
     this.panel.set('generating');
     this.focus('heading');
+    this.submittingInstructions = text;
     await this.invoke(
       () => this.actions().submit(text),
       'Die Anfrage konnte nicht gesendet werden.',
+      text,
     );
   }
 
-  async invoke(action: () => void | Promise<void>, message: string): Promise<void> {
+  async retry(): Promise<void> {
+    if (this.pending()) return;
+    const text = this.submitted();
+    this.clearResult();
+    this.generation = null;
+    this.editing = false;
+    this.hasDraft = false;
+    this.failure.set(null);
+    this.panel.set('generating');
+    this.focus('heading');
+    this.submittingInstructions = text;
+    await this.invoke(
+      () => this.actions().submit(text),
+      'Die Anfrage konnte nicht gesendet werden.',
+      text,
+    );
+  }
+
+  editFailure(): void {
+    if (this.pending() || this.effectiveMode() === 'hidden') return;
+    this.draft.set(this.submitted());
+    this.hasDraft = true;
+    this.editing = true;
+    this.error.set(null);
+    this.panel.set('input');
+    this.focus('textarea');
+  }
+
+  async invoke(
+    action: () => void | Promise<void>,
+    message: string,
+    submission?: string,
+  ): Promise<void> {
     if (this.pending()) return;
     this.pending.set(true);
     this.error.set(null);
-    const epoch = this.epoch;
+    const epoch = this.actionEpoch;
     try {
       await action();
     } catch {
-      if (!this.destroyed && epoch === this.epoch) this.error.set(message);
+      if (!this.destroyed && epoch === this.actionEpoch) this.error.set(message);
     } finally {
-      if (!this.destroyed && epoch === this.epoch) this.pending.set(false);
+      if (submission !== undefined && epoch === this.actionEpoch)
+        this.submittingInstructions = null;
+      if (!this.destroyed && epoch === this.actionEpoch) this.pending.set(false);
     }
   }
 
