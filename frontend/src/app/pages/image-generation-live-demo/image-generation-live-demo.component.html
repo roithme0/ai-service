@@ -1,4 +1,8 @@
 <app-demo-header label="Bilderstellung - Live-Demo" tag="Live" />
 <main class="image-shell">
-  <ai-image-generation [state]="state()" [actions]="actions" />
+  <ai-image-generation
+    [state]="state()"
+    [actions]="actions"
+    (actionError)="showActionError($event)"
+  />
 </main>

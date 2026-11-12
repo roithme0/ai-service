@@ -1,6 +1,7 @@
 ﻿import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { ImageGenerationUiComponent } from '@roithme0/image-generation/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ImageGenerationLiveDemo } from './image-generation-live-demo.component';
@@ -16,20 +17,30 @@ const running = {
 };
 
 function setup() {
+  const open = vi.fn();
   TestBed.configureTestingModule({
     imports: [ImageGenerationLiveDemo],
-    providers: [provideRouter([])],
+    providers: [provideRouter([]), { provide: MatSnackBar, useValue: { open } }],
   });
   const fixture = TestBed.createComponent(ImageGenerationLiveDemo);
   fixture.detectChanges();
   const ui = fixture.debugElement.query(By.directive(ImageGenerationUiComponent))
     .componentInstance as ImageGenerationUiComponent;
-  return { fixture, ui };
+  return { fixture, ui, open };
 }
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Image generation demo composition', () => {
+  it('displays reported UI action errors in a snackbar', () => {
+    const { fixture, ui, open } = setup();
+    ui.actionError.emit({ operation: 'reconnect', message: 'Verbindung fehlgeschlagen.' });
+    expect(open).toHaveBeenCalledWith('Verbindung fehlgeschlagen.', 'OK', {
+      duration: 6000,
+      politeness: 'assertive',
+    });
+    fixture.destroy();
+  });
   it('publishes a definitive unavailable rejection without retrying', async () => {
     const fetcher = vi
       .fn<typeof fetch>()

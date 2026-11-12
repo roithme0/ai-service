@@ -4,11 +4,11 @@ import {
   inject,
   input,
   OnDestroy,
+  output,
   signal,
   untracked,
   viewChild,
 } from '@angular/core';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import type { ImageContent, ImageGenerationState } from '@roithme0/image-generation/controller';
 import { ImageResultService } from './image-result.service';
 import { ImageGenerationActionCoordinator } from './image-generation-action-coordinator.service';
@@ -31,6 +31,10 @@ export interface ImageGenerationPrimaryAction {
   run(payload: ImageGenerationHandoff): Promise<void>;
 }
 export type ImageGenerationInstructionMode = 'editable' | 'hidden';
+export interface ImageGenerationActionError {
+  operation: 'submit' | 'recover' | 'reconnect' | 'primaryAction';
+  message: string;
+}
 
 @Component({
   selector: 'ai-image-generation',
@@ -45,7 +49,6 @@ export type ImageGenerationInstructionMode = 'editable' | 'hidden';
   providers: [ImageResultService, ImageGenerationWorkflowService, ImageGenerationActionCoordinator],
 })
 export class ImageGenerationUiComponent implements OnDestroy {
-  private readonly snackBar = inject(MatSnackBar);
   readonly imageResult = inject(ImageResultService);
   readonly workflow = inject(ImageGenerationWorkflowService);
   readonly actionCoordinator = inject(ImageGenerationActionCoordinator);
@@ -54,6 +57,7 @@ export class ImageGenerationUiComponent implements OnDestroy {
   readonly actions = input.required<ImageGenerationActions>();
   readonly primaryAction = input<ImageGenerationPrimaryAction>();
   readonly instructionMode = input<ImageGenerationInstructionMode>('editable');
+  readonly actionError = output<ImageGenerationActionError>();
 
   private readonly inputPanel = viewChild(ImageGenerationInputPanelComponent);
   private readonly generatingPanel = viewChild(ImageGenerationGeneratingPanelComponent);
@@ -61,7 +65,9 @@ export class ImageGenerationUiComponent implements OnDestroy {
 
   readonly effectiveMode = signal<ImageGenerationInstructionMode>('editable');
   readonly error = signal<string | null>(null);
+  readonly submissionUnknown = signal(false);
   private initialMode: ImageGenerationInstructionMode | null = null;
+  private unknownBaseline: Readonly<ImageGenerationState> | null = null;
   private destroyed = false;
 
   constructor() {
@@ -82,6 +88,10 @@ export class ImageGenerationUiComponent implements OnDestroy {
   }
 
   private applyState(state: Readonly<ImageGenerationState>): void {
+    if (this.submissionUnknown() && this.resolvesUnknown(state)) {
+      this.submissionUnknown.set(false);
+      this.unknownBaseline = null;
+    }
     const previousPanel = this.workflow.panel();
     const transition = this.workflow.applyState(
       state,
@@ -101,6 +111,17 @@ export class ImageGenerationUiComponent implements OnDestroy {
         this.actions().loadContent(),
       );
     }
+  }
+
+  private resolvesUnknown(state: Readonly<ImageGenerationState>): boolean {
+    const baseline = this.unknownBaseline;
+    if (!baseline || state.instructions !== this.workflow.submitted()) return false;
+    if (state.snapshot && state.snapshot.generation_id !== baseline.snapshot?.generation_id)
+      return true;
+    return (
+      (state.admission === 'uncertain' || state.admission === 'rejected') &&
+      (state.admission !== baseline.admission || state.instructions !== baseline.instructions)
+    );
   }
 
   private focus(target: 'heading' | 'textarea'): void {
@@ -132,10 +153,13 @@ export class ImageGenerationUiComponent implements OnDestroy {
     this.workflow.startSubmission(text);
     this.error.set(null);
     this.focus('heading');
+    const previousState = this.state();
     await this.invoke(
       () => this.actions().submit(text),
-      'Die Anfrage konnte nicht gesendet werden.',
+      'submit',
+      'Der Status der Anfrage konnte nicht bestätigt werden.',
       text,
+      previousState,
     );
   }
 
@@ -145,10 +169,13 @@ export class ImageGenerationUiComponent implements OnDestroy {
     this.clearResult();
     this.workflow.startSubmission(text);
     this.focus('heading');
+    const previousState = this.state();
     await this.invoke(
       () => this.actions().submit(text),
-      'Die Anfrage konnte nicht gesendet werden.',
+      'submit',
+      'Der Status der Anfrage konnte nicht bestätigt werden.',
       text,
+      previousState,
     );
   }
 
@@ -161,12 +188,36 @@ export class ImageGenerationUiComponent implements OnDestroy {
 
   async invoke(
     action: () => void | Promise<void>,
+    operation: ImageGenerationActionError['operation'],
     message: string,
     submission?: string,
+    previousState?: Readonly<ImageGenerationState>,
   ): Promise<void> {
     if (this.actionCoordinator.pending()) return;
     this.error.set(null);
-    await this.actionCoordinator.invoke(action, () => this.error.set(message), submission);
+    await this.actionCoordinator.invoke(
+      action,
+      () => {
+        const state = this.state();
+        const decisive =
+          previousState &&
+          state.instructions === submission &&
+          (((state.admission === 'uncertain' || state.admission === 'rejected') &&
+            (state.admission !== previousState.admission ||
+              state.instructions !== previousState.instructions)) ||
+            (state.snapshot !== null &&
+              state.snapshot.generation_id !== previousState.snapshot?.generation_id));
+        if (
+          (operation === 'submit' && !decisive) ||
+          (operation === 'recover' && state.admission === 'submitting')
+        ) {
+          this.unknownBaseline = { ...state };
+          this.submissionUnknown.set(true);
+        }
+        this.actionError.emit({ operation, message });
+      },
+      submission,
+    );
   }
 
   retryImage(): void {
@@ -214,9 +265,9 @@ export class ImageGenerationUiComponent implements OnDestroy {
           instructions: result.instructions,
         }),
       () =>
-        this.snackBar.open('Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.', 'OK', {
-          duration: 6000,
-          politeness: 'assertive',
+        this.actionError.emit({
+          operation: 'primaryAction',
+          message: 'Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.',
         }),
     );
   }

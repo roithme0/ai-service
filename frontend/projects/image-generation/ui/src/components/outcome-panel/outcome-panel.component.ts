@@ -19,25 +19,28 @@ interface ImagePreview {
   styleUrls: ['../panel.scss', './outcome-panel.component.scss'],
 })
 export class ImageGenerationOutcomePanelComponent {
-  readonly editable = input(true);
-  readonly retry = output<void>();
-  readonly image = input<ImagePreview | null>(null);
-  readonly snapshot = input<Snapshot | null>(null);
-  readonly failure = input<string | null>(null);
-  readonly error = input<string | null>(null);
   readonly contentError = input<string | null>(null);
+  readonly editable = input(true);
+  readonly error = input<string | null>(null);
+  readonly failure = input<string | null>(null);
+  readonly image = input<ImagePreview | null>(null);
   readonly loading = input(false);
   readonly pending = input(false);
   readonly primaryLabel = input<string | null>(null);
-  readonly refine = output<void>();
+  readonly snapshot = input<Snapshot | null>(null);
+
   readonly download = output<void>();
   readonly handoff = output<void>();
-  readonly retryImage = output<void>();
   readonly imageError = output<void>();
+  readonly refine = output<void>();
+  readonly retry = output<void>();
+  readonly retryImage = output<void>();
+
   readonly metadata = computed(() => {
     const snapshot = this.image()?.snapshot ?? this.snapshot();
     return snapshot?.status !== 'running' ? snapshot : null;
   });
+
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
   constructor() {

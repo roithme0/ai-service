@@ -8,6 +8,22 @@ import {
   ImageGenerationUiComponent,
   type ImageGenerationActions,
 } from './components/image-generation/image-generation.component';
+import { ImageGenerationGeneratingPanelComponent } from './components/generating-panel/generating-panel.component';
+
+it('wraps interruption actions only when the available width requires it', () => {
+  TestBed.configureTestingModule({ imports: [ImageGenerationGeneratingPanelComponent] });
+  const fixture = TestBed.createComponent(ImageGenerationGeneratingPanelComponent);
+  fixture.componentRef.setInput('admission', 'rejected');
+  fixture.componentRef.setInput('observation', 'idle');
+  const host = fixture.nativeElement as HTMLElement;
+  host.style.width = '500px';
+  fixture.detectChanges();
+  const [retry, edit] = host.querySelectorAll('button');
+  expect(retry.getBoundingClientRect().top).toBe(edit.getBoundingClientRect().top);
+  host.style.width = '220px';
+  expect(edit.getBoundingClientRect().top).toBeGreaterThan(retry.getBoundingClientRect().top);
+  expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+});
 
 it('supports native textarea and keyboard activation in a narrow host', async () => {
   const state: ImageGenerationState = {
@@ -165,9 +181,9 @@ it('renders state transitions, focus and reflow in a real browser', async () => 
     const expected: Record<string, string> = {
       input: 'Bild erstellen',
       submitting: 'Anfrage wird gesendet',
-      uncertain: 'Anfrage wiederherstellen',
+      uncertain: 'Wiederherstellen',
       running: 'Bild wird erstellt',
-      lost: 'Erneut mit dem Status verbinden',
+      lost: 'Erneut verbinden',
       failure: 'Erstellung fehlgeschlagen',
     };
     expect(host.textContent).toContain(expected[name]);
@@ -239,6 +255,8 @@ it('shows a decoded image and retains focus while content settles and handoff fa
   fixture.componentRef.setInput('state', state);
   fixture.componentRef.setInput('actions', actions);
   fixture.componentRef.setInput('primaryAction', { label: 'Use image', run: () => handoff });
+  const actionError = vi.fn();
+  fixture.componentInstance.actionError.subscribe(actionError);
   fixture.detectChanges();
   await page.screenshot({ path: '../../test-results/content-loading.png' });
   const refine = page.getByRole('button', { name: 'Beschreibung bearbeiten' });
@@ -270,9 +288,10 @@ it('shows a decoded image and retains focus while content settles and handoff fa
   reject(new Error('failed'));
   await fixture.whenStable();
   fixture.detectChanges();
-  await expect
-    .element(page.getByText('Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.'))
-    .toBeVisible();
+  expect(actionError).toHaveBeenCalledWith({
+    operation: 'primaryAction',
+    message: 'Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.',
+  });
   await page.screenshot({ path: '../../test-results/handoff-error.png' });
   const session = cdp();
   await session.send('Browser.setDownloadBehavior', {

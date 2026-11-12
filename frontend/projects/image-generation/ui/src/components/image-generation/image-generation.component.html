@@ -1,5 +1,5 @@
 <section class="layout">
-  @switch (workflow.panel()) {
+  @switch (submissionUnknown() ? 'generating' : workflow.panel()) {
     @case ('input') {
       <ai-image-generation-input-panel
         [draft]="workflow.draft()"
@@ -16,16 +16,22 @@
         [admission]="state().admission"
         [editable]="effectiveMode() === 'editable'"
         [observation]="state().observation"
+        [submissionUnknown]="submissionUnknown()"
         [error]="error()"
         [pending]="actionCoordinator.pending()"
         (retry)="retry()"
         (edit)="editFailure()"
         (recover)="
-          invoke(actions().recoverSubmission, 'Die Anfrage konnte nicht wiederhergestellt werden.')
+          invoke(
+            actions().recoverSubmission,
+            'recover',
+            'Die Anfrage konnte nicht wiederhergestellt werden.'
+          )
         "
         (reconnect)="
           invoke(
             actions().reconnect,
+            'reconnect',
             'Die Verbindung zum Status konnte nicht wiederhergestellt werden.'
           )
         "

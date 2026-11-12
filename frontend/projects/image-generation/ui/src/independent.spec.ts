@@ -4,7 +4,6 @@ import {
   ImageGenerationController,
 } from '@roithme0/image-generation/controller';
 import { TestBed } from '@angular/core/testing';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { afterEach, expect, it, vi } from 'vitest';
 import type {
   CompletedSnapshot,
@@ -58,12 +57,12 @@ function setup(
     reconnect: vi.fn(),
     loadContent,
   };
-  const snackbar = { open: vi.fn() };
   TestBed.configureTestingModule({
     imports: [ImageGenerationUiComponent],
-    providers: [{ provide: MatSnackBar, useValue: snackbar }],
   });
   const fixture = TestBed.createComponent(ImageGenerationUiComponent);
+  const actionError = vi.fn();
+  fixture.componentInstance.actionError.subscribe(actionError);
   fixture.componentRef.setInput('state', initial);
   fixture.componentRef.setInput('actions', actions);
   fixture.componentRef.setInput('instructionMode', mode);
@@ -86,11 +85,141 @@ function setup(
     textarea.dispatchEvent(new Event('input'));
     fixture.detectChanges();
   };
-  return { fixture, root, actions, setState, button, edit, snackbar };
+  return { fixture, root, actions, setState, button, edit, actionError };
 }
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it('reports an unexpected submission failure without offering an unsafe retry', async () => {
+  const t = setup();
+  vi.mocked(t.actions.submit).mockRejectedValue(new Error('unexpected'));
+  t.edit('brief');
+  t.button('Bild erstellen').click();
+  await t.fixture.whenStable();
+  t.fixture.detectChanges();
+  expect(t.actionError).toHaveBeenCalledExactlyOnceWith({
+    operation: 'submit',
+    message: 'Der Status der Anfrage konnte nicht bestätigt werden.',
+  });
+  expect(t.root.textContent).toContain('Anfragestatus unbekannt');
+  expect(t.root.querySelector('mat-spinner')).toBeNull();
+  expect(t.root.querySelector('button')).toBeNull();
+  t.setState({ ...initial, observation: 'idle' });
+  expect(t.root.textContent).toContain('Anfragestatus unbekannt');
+  t.setState({ ...initial, admission: 'uncertain', instructions: 'brief' });
+  expect(t.button('Wiederherstellen')).toBeTruthy();
+});
+
+it('reports failed recovery and reconnect actions while retaining their interruptions', async () => {
+  const t = setup();
+  vi.mocked(t.actions.recoverSubmission).mockRejectedValue(new Error('unexpected'));
+  t.setState({ ...initial, admission: 'uncertain', instructions: 'brief' });
+  t.button('Wiederherstellen').click();
+  await t.fixture.whenStable();
+  t.fixture.detectChanges();
+  expect(t.actionError).toHaveBeenCalledWith({
+    operation: 'recover',
+    message: 'Die Anfrage konnte nicht wiederhergestellt werden.',
+  });
+  expect(t.button('Wiederherstellen')).toBeTruthy();
+  vi.mocked(t.actions.reconnect).mockImplementation(() => {
+    throw new Error('unexpected');
+  });
+  t.setState({
+    ...initial,
+    admission: 'accepted',
+    instructions: 'brief',
+    observation: 'lost',
+    snapshot: { ...snapshot, status: 'running', completed_at: null },
+  });
+  t.button('Erneut verbinden').click();
+  await t.fixture.whenStable();
+  t.fixture.detectChanges();
+  expect(t.actionError).toHaveBeenCalledWith({
+    operation: 'reconnect',
+    message: 'Die Verbindung zum Status konnte nicht wiederhergestellt werden.',
+  });
+  expect(t.button('Erneut verbinden')).toBeTruthy();
+});
+
+it('does not mistake an old rejection or unrelated updates for a new submission result', async () => {
+  const t = setup();
+  const old: ImageGenerationState = {
+    ...initial,
+    admission: 'rejected',
+    instructions: 'brief',
+    error: 'old',
+  };
+  t.setState(old);
+  vi.mocked(t.actions.submit).mockRejectedValue(new Error('unexpected'));
+  t.button('Erneut versuchen').click();
+  await t.fixture.whenStable();
+  t.fixture.detectChanges();
+  expect(t.root.textContent).toContain('Anfragestatus unbekannt');
+  t.setState({ ...old, error: 'updated old error' });
+  expect(t.root.textContent).toContain('Anfragestatus unbekannt');
+  t.setState({ ...initial, admission: 'uncertain', instructions: 'brief' });
+  expect(t.button('Wiederherstellen')).toBeTruthy();
+});
+
+it('keeps a failed recovery from appearing to load indefinitely', async () => {
+  const t = setup();
+  t.setState({ ...initial, admission: 'uncertain', instructions: 'brief' });
+  vi.mocked(t.actions.recoverSubmission).mockImplementation(() => {
+    t.setState({ ...initial, admission: 'submitting', instructions: 'brief' });
+    return Promise.reject(new Error('unexpected'));
+  });
+  t.button('Wiederherstellen').click();
+  await t.fixture.whenStable();
+  t.fixture.detectChanges();
+  expect(t.root.textContent).toContain('Anfragestatus unbekannt');
+  t.setState({ ...initial, admission: 'submitting', instructions: 'brief' });
+  expect(t.root.textContent).toContain('Anfragestatus unbekannt');
+  t.setState({ ...initial, admission: 'uncertain', instructions: 'brief' });
+  expect(t.button('Wiederherstellen')).toBeTruthy();
+});
+
+it('presents submission interruptions with a message before the recovery action', () => {
+  const t = setup();
+  for (const scenario of [
+    {
+      state: { ...initial, admission: 'rejected' as const, error: 'Rejected' },
+      heading: 'Anfrage fehlgeschlagen',
+      message: 'Rejected',
+      action: 'Erneut versuchen',
+    },
+    {
+      state: { ...initial, admission: 'uncertain' as const },
+      heading: 'Anfrage nicht bestätigt',
+      message: 'Das Absenden konnte nicht bestätigt werden',
+      action: 'Wiederherstellen',
+    },
+    {
+      state: {
+        ...initial,
+        admission: 'accepted' as const,
+        observation: 'lost' as const,
+        snapshot: { ...snapshot, status: 'running' as const, completed_at: null },
+      },
+      heading: 'Verbindung unterbrochen',
+      message: 'Die Verbindung zum Erstellungsstatus wurde unterbrochen.',
+      action: 'Erneut verbinden',
+    },
+  ]) {
+    t.setState(scenario.state);
+    expect(t.root.querySelector('h2')?.textContent?.trim()).toBe(scenario.heading);
+    const action = t.button(scenario.action);
+    const message = [...t.root.querySelectorAll('p')].find(
+      (item) => item.textContent?.trim() === scenario.message,
+    );
+    expect(message).toBeDefined();
+    expect(
+      (message?.compareDocumentPosition(action) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(action.classList.contains('mat-mdc-button')).toBe(true);
+  }
 });
 
 it('validates code points and submits exact instructions once while pending', async () => {
@@ -206,7 +335,7 @@ it('ignores an obsolete recovery rejection while a new action is pending', async
     .mockReturnValueOnce(old)
     .mockReturnValueOnce(current.promise);
   t.setState({ ...initial, admission: 'uncertain', instructions: 'first' });
-  t.button('Anfrage wiederherstellen').click();
+  t.button('Wiederherstellen').click();
   t.fixture.detectChanges();
   t.setState({
     ...initial,
@@ -223,14 +352,14 @@ it('ignores an obsolete recovery rejection while a new action is pending', async
     },
   });
   t.setState({ ...initial, admission: 'uncertain', instructions: 'new' });
-  t.button('Anfrage wiederherstellen').click();
+  t.button('Wiederherstellen').click();
   t.fixture.detectChanges();
   reject(new Error('obsolete'));
   await Promise.resolve();
   await Promise.resolve();
   t.fixture.detectChanges();
   expect(t.root.textContent).not.toContain('Die Anfrage konnte nicht wiederhergestellt werden.');
-  expect(t.button('Anfrage wiederherstellen').disabled).toBe(true);
+  expect(t.button('Wiederherstellen').disabled).toBe(true);
   current.resolve();
   await current.promise;
 });
@@ -305,7 +434,7 @@ it('wires the supplied controller and owner-aware HTTP transport through uncerta
     t.fixture.detectChanges();
     expect(t.root.textContent).toContain('Das Absenden konnte nicht bestätigt werden');
   });
-  t.button('Anfrage wiederherstellen').click();
+  t.button('Wiederherstellen').click();
   await vi.waitFor(() => {
     t.fixture.detectChanges();
     expect(controller.state).toMatchObject({ admission: 'accepted' });
@@ -481,15 +610,10 @@ it('reports handoff failure and ignores obsolete handoff rejection on replacemen
   t.button('Use image').click();
   await t.fixture.whenStable();
   t.fixture.detectChanges();
-  expect(t.snackbar.open).toHaveBeenCalledOnce();
-  expect(t.snackbar.open).toHaveBeenCalledWith(
-    'Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.',
-    'OK',
-    {
-      duration: 6000,
-      politeness: 'assertive',
-    },
-  );
+  expect(t.actionError).toHaveBeenCalledExactlyOnceWith({
+    operation: 'primaryAction',
+    message: 'Die Aktion ist fehlgeschlagen. Bitte versuchen Sie es erneut.',
+  });
   t.setState({ ...initial, admission: 'accepted', instructions: 'second', snapshot: second });
   await t.fixture.whenStable();
   t.fixture.detectChanges();
@@ -502,7 +626,7 @@ it('reports handoff failure and ignores obsolete handoff rejection on replacemen
   await Promise.resolve();
   await Promise.resolve();
   t.fixture.detectChanges();
-  expect(t.snackbar.open).toHaveBeenCalledOnce();
+  expect(t.actionError).toHaveBeenCalledOnce();
   expect(t.button('Use image').disabled).toBe(false);
 });
 
@@ -594,9 +718,9 @@ it('reconnects a lost controller observation to the same ID without another subm
   t.button('Bild erstellen').click();
   await vi.waitFor(() => {
     t.fixture.detectChanges();
-    expect(t.root.textContent).toContain('Erneut mit dem Status verbinden');
+    expect(t.root.textContent).toContain('Erneut verbinden');
   });
-  t.button('Erneut mit dem Status verbinden').click();
+  t.button('Erneut verbinden').click();
   await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
   expect(fetcher.mock.calls[0][1]?.method).toBe('POST');
   expect(fetcher.mock.calls[1][0]).toBe(`/api/v1/image-generations/${id}/events`);

@@ -30,6 +30,8 @@ Retry after confirmed rejection or generation failure submits the attempt's exac
 
 Submission and recovery actions must publish accepted, rejected, or uncertain admission even when their callbacks reject. The UI relies on published state to classify admission.
 
+The `actionError` output reports unexpected failures from submission, recovery, reconnection, and the primary action, including the operation and a user-facing message. Hosts decide how to present these errors. Expected admission and observation failures remain visible in the UI based on controller state. If submission or recovery fails without a decisive published state, the UI shows an unknown status rather than offering a potentially unsafe retry.
+
 Refinement preserves the successful result and its submitted instructions alongside the editable draft until explicit submission. An optional async primary action receives the PNG Blob, filename, completed snapshot, and submitted instructions. The host owns persistence, closing, and navigation after handoff.
 
 Give the component a bounded height for scrolling. See the [component and public types](../../frontend/projects/image-generation/ui/src/components/image-generation/image-generation.component.ts) and [host integration tests](../../frontend/projects/image-generation/ui/src/independent.spec.ts) for integration details.

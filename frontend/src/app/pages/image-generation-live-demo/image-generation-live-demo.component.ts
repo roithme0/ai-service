@@ -1,4 +1,5 @@
-import { Component, OnDestroy, signal } from '@angular/core';
+import { Component, inject, OnDestroy, signal } from '@angular/core';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   HttpImageGenerationTransport,
   ImageGenerationController,
@@ -7,6 +8,7 @@ import {
 import {
   ImageGenerationUiComponent,
   type ImageGenerationActions,
+  type ImageGenerationActionError,
 } from '@roithme0/image-generation/ui';
 import { DemoHeader } from '../../components/demo-header/demo-header.component';
 
@@ -21,13 +23,20 @@ export class ImageGenerationLiveDemo implements OnDestroy {
     new HttpImageGenerationTransport('/api/v1', 'demo:default'),
     (state) => this.state.set(state),
   );
-  protected readonly state = signal<Readonly<ImageGenerationState>>(this.controller.state);
+  private readonly snackBar = inject(MatSnackBar);
+
   protected readonly actions: ImageGenerationActions = {
     submit: (instructions) => this.controller.submit(instructions),
     recoverSubmission: () => this.controller.recoverSubmission(),
     reconnect: () => this.controller.reconnect(),
     loadContent: () => this.controller.loadContent(),
   };
+
+  protected readonly state = signal<Readonly<ImageGenerationState>>(this.controller.state);
+
+  protected showActionError(error: ImageGenerationActionError): void {
+    this.snackBar.open(error.message, 'OK', { duration: 6000, politeness: 'assertive' });
+  }
 
   ngOnDestroy(): void {
     this.controller.dispose();

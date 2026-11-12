@@ -11,6 +11,7 @@ import {
 import {
   ImageGenerationUiComponent,
   type ImageGenerationActions,
+  type ImageGenerationActionError,
   type ImageGenerationInstructionMode,
   type ImageGenerationPrimaryAction,
 } from '@roithme0/image-generation/ui';
@@ -26,32 +27,20 @@ export type DemoActionOutcome = 'success' | 'failure';
   selector: 'app-image-generation-visual-run',
   imports: [ImageGenerationUiComponent],
   template:
-    '<ai-image-generation [state]="state()" [actions]="actions" [primaryAction]="primaryAction" [instructionMode]="instructionMode()" />',
+    '<ai-image-generation [state]="state()" [actions]="actions" [primaryAction]="primaryAction" [instructionMode]="instructionMode()" (actionError)="showActionError($event)" />',
   styles:
     ':host { display: block; height: 100%; min-height: 0; } ai-image-generation { display: block; height: 100%; }',
 })
 export class ImageGenerationVisualRun implements OnInit, OnDestroy {
-  readonly scenario = input.required<ImageGenerationVisualScenario>();
   readonly instructionMode = input.required<ImageGenerationInstructionMode>();
   readonly outcome = input.required<DemoActionOutcome>();
-  private readonly snackBar = inject(MatSnackBar);
+  readonly scenario = input.required<ImageGenerationVisualScenario>();
+
   private readonly abort = new AbortController();
-  private feedback: MatSnackBarRef<TextOnlySnackBar> | null = null;
+  private readonly snackBar = inject(MatSnackBar);
   private controller: ImageGenerationController | null = null;
-  protected readonly state = signal<Readonly<ImageGenerationState>>({
-    admission: 'idle',
-    instructions: null,
-    snapshot: null,
-    observation: 'idle',
-    content: 'idle',
-    error: null,
-  });
-  private getController(): ImageGenerationController {
-    return (this.controller ??= new ImageGenerationController(
-      new ImageGenerationVisualTransport(this.scenario()),
-      (state) => this.state.set(state),
-    ));
-  }
+  private feedback: MatSnackBarRef<TextOnlySnackBar> | null = null;
+
   protected readonly actions: ImageGenerationActions = {
     submit: (instructions) => this.getController().submit(instructions),
     recoverSubmission: () => this.getController().recoverSubmission(),
@@ -61,6 +50,7 @@ export class ImageGenerationVisualRun implements OnInit, OnDestroy {
       filename: 'demo-image.png',
     }),
   };
+
   protected readonly primaryAction: ImageGenerationPrimaryAction = {
     label: 'Bild verwenden',
     run: async () => {
@@ -89,11 +79,36 @@ export class ImageGenerationVisualRun implements OnInit, OnDestroy {
       });
     },
   };
+
+  protected readonly state = signal<Readonly<ImageGenerationState>>({
+    admission: 'idle',
+    instructions: null,
+    snapshot: null,
+    observation: 'idle',
+    content: 'idle',
+    error: null,
+  });
+
+  private getController(): ImageGenerationController {
+    return (this.controller ??= new ImageGenerationController(
+      new ImageGenerationVisualTransport(this.scenario()),
+      (state) => this.state.set(state),
+    ));
+  }
+
+  protected showActionError(error: ImageGenerationActionError): void {
+    this.feedback = this.snackBar.open(error.message, 'OK', {
+      duration: 6000,
+      politeness: 'assertive',
+    });
+  }
+
   ngOnInit(): void {
     if (this.instructionMode() === 'hidden') {
       void this.getController().submit('Eine sonnige Landschaft mit Bergen und einem See.');
     }
   }
+
   ngOnDestroy(): void {
     this.abort.abort();
     this.controller?.dispose();

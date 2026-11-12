@@ -63,6 +63,16 @@ afterEach(() => {
 });
 
 describe('Image generation visual demo ownership', () => {
+  it('displays UI action errors and dismisses the snackbar when the run ends', () => {
+    const { fixture, ui, open, dismiss } = setup();
+    ui().actionError.emit({ operation: 'primaryAction', message: 'Aktion fehlgeschlagen.' });
+    expect(open).toHaveBeenCalledWith('Aktion fehlgeschlagen.', 'OK', {
+      duration: 6000,
+      politeness: 'assertive',
+    });
+    fixture.destroy();
+    expect(dismiss).toHaveBeenCalled();
+  });
   it('clears a real input draft on scenario changes', () => {
     const { fixture, changeScenario } = setup();
     const host = fixture.nativeElement as HTMLElement;
