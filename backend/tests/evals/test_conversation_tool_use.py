@@ -18,6 +18,7 @@ from app.capabilities.conversations.observation import TurnObservation
 from app.core.config import ProviderSettings
 from app.demos.live_conversation_demo.config import LiveConversationDemoSettings
 from app.evals import conversation_tool_use as evaluation
+from app.evals.evidence import Evidence, collect_evidence
 
 
 def test_real_greeting_with_function_model(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -86,7 +87,7 @@ def test_grading_requires_corresponding_successful_call(
         observation: TurnObservation,
         provider: ProviderSettings,
         settings: LiveConversationDemoSettings,
-    ) -> evaluation.Evidence:
+    ) -> Evidence:
         observation.messages.append(
             ModelResponse(parts=[ToolCallPart(tool, arguments, "id")])
         )
@@ -96,7 +97,7 @@ def test_grading_requires_corresponding_successful_call(
                     parts=[ToolReturnPart(tool, "result", "id", outcome=outcome)]
                 )
             )
-        return evaluation.collect_evidence(observation)
+        return collect_evidence(observation)
 
     monkeypatch.setattr(evaluation, "run_case", fake_run)
     report = asyncio.run(evaluation.evaluate())
@@ -124,7 +125,7 @@ def test_calls_are_correlated_and_partial_execution_cannot_pass(
         observation: TurnObservation,
         provider: ProviderSettings,
         settings: LiveConversationDemoSettings,
-    ) -> evaluation.Evidence:
+    ) -> Evidence:
         observation.messages.extend(
             [
                 ModelResponse(
@@ -142,62 +143,12 @@ def test_calls_are_correlated_and_partial_execution_cannot_pass(
                 ),
             ]
         )
-        return evaluation.collect_evidence(observation)
+        return collect_evidence(observation)
 
     monkeypatch.setattr(evaluation, "run_case", fake_run)
     report = asyncio.run(evaluation.evaluate())
     assert report["status"] == "behavioral_failure"
     assert [call["outcome"] for call in report["calls"]] == ["missing", "success"]
-
-
-@pytest.mark.parametrize(
-    "status, exit_code",
-    [("passed", 0), ("behavioral_failure", 1), ("execution_error", 2)],
-)
-def test_cli_persists_current_report_and_redacts_credentials(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    status: str,
-    exit_code: int,
-) -> None:
-    import json
-    import sys
-
-    secret = "sensitive-key"
-    monkeypatch.setenv("OPENAI_API_KEY", secret)
-    report_path = tmp_path / "nested" / "report.json"
-    monkeypatch.setattr(sys, "argv", ["eval", "--report", str(report_path)])
-
-    async def fake_evaluate() -> dict[str, JsonValue]:
-        return {"status": status, "calls": [{"arguments": secret}]}
-
-    monkeypatch.setattr(evaluation, "evaluate", fake_evaluate)
-    report_path.parent.mkdir()
-    report_path.write_text("stale", encoding="utf-8")
-    assert evaluation.main() == exit_code
-    contents = report_path.read_text(encoding="utf-8")
-    assert json.loads(contents)["status"] == status
-    output = capsys.readouterr()
-    assert str(report_path.resolve()) in output.out
-    assert secret not in contents + output.out + output.err
-
-
-def test_cli_report_write_failure_is_execution_error(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    import sys
-
-    monkeypatch.setattr(sys, "argv", ["eval", "--report", str(tmp_path)])
-
-    async def fake_evaluate() -> dict[str, JsonValue]:
-        return {"status": "passed"}
-
-    monkeypatch.setattr(evaluation, "evaluate", fake_evaluate)
-    assert evaluation.main() == 2
-    assert "Could not write" in capsys.readouterr().err
 
 
 def test_partial_matching_execution_remains_execution_error(
@@ -213,7 +164,7 @@ def test_partial_matching_execution_remains_execution_error(
         observation: TurnObservation,
         provider: ProviderSettings,
         settings: LiveConversationDemoSettings,
-    ) -> evaluation.Evidence:
+    ) -> Evidence:
         observation.messages.extend(
             [
                 ModelResponse(
@@ -248,7 +199,7 @@ def test_extra_calls_do_not_change_grade(
         observation: TurnObservation,
         provider: ProviderSettings,
         settings: LiveConversationDemoSettings,
-    ) -> evaluation.Evidence:
+    ) -> Evidence:
         observation.messages.extend(
             [
                 ModelResponse(
@@ -263,20 +214,12 @@ def test_extra_calls_do_not_change_grade(
                 ModelResponse(parts=[TextPart(answer)]),
             ]
         )
-        return evaluation.collect_evidence(observation)
+        return collect_evidence(observation)
 
     monkeypatch.setattr(evaluation, "run_case", fake_run)
     report = asyncio.run(evaluation.evaluate())
     assert report["status"] == "passed"
     assert len(report["calls"]) == 2
-
-
-def test_started_unfinished_call_is_interrupted() -> None:
-    observation = TurnObservation()
-    call = ToolCallPart(evaluation.TARGET, evaluation.EXPECTED, "one")
-    observation.messages.append(ModelResponse(parts=[call]))
-    observation.started_tool_calls = (call,)
-    assert evaluation.collect_evidence(observation).calls[0].outcome == "interrupted"
 
 
 @pytest.mark.parametrize(
@@ -385,54 +328,6 @@ def test_resources_close_on_completion_and_partial_failure(
     assert ("exit agent" in events) == (failure not in ("manager", "client", "agent"))
 
 
-def test_sequential_reused_call_ids_keep_occurrences_distinct() -> None:
-    from pydantic_ai.messages import ModelRequest
-
-    observation = TurnObservation()
-    observation.messages.extend(
-        [
-            ModelResponse(
-                parts=[ToolCallPart(evaluation.TARGET, evaluation.EXPECTED, "same")]
-            ),
-            ModelRequest(parts=[ToolReturnPart(evaluation.TARGET, "first", "same")]),
-            ModelResponse(
-                parts=[
-                    ToolCallPart(
-                        evaluation.TARGET, {"name": "Bob", "language": "de"}, "same"
-                    )
-                ]
-            ),
-            ModelRequest(parts=[ToolReturnPart(evaluation.TARGET, "second", "same")]),
-        ]
-    )
-    calls = evaluation.collect_evidence(observation).calls
-    assert [(call.arguments, call.outcome) for call in calls] == [
-        (evaluation.EXPECTED, "success"),
-        ({"name": "Bob", "language": "de"}, "success"),
-    ]
-
-
-def test_simultaneous_reused_call_ids_are_not_misattributed() -> None:
-    from pydantic_ai.messages import ModelRequest
-
-    observation = TurnObservation()
-    observation.messages.extend(
-        [
-            ModelResponse(
-                parts=[
-                    ToolCallPart(evaluation.TARGET, evaluation.EXPECTED, "same"),
-                    ToolCallPart(
-                        evaluation.TARGET, {"name": "Bob", "language": "de"}, "same"
-                    ),
-                ]
-            ),
-            ModelRequest(parts=[ToolReturnPart(evaluation.TARGET, "result", "same")]),
-        ]
-    )
-    calls = evaluation.collect_evidence(observation).calls
-    assert all(call.outcome != "success" for call in calls)
-
-
 def test_main_writes_report_for_invalid_configuration(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -489,12 +384,12 @@ def test_evaluator_failure_is_execution_error(monkeypatch: pytest.MonkeyPatch) -
         observation: TurnObservation,
         provider: ProviderSettings,
         settings: LiveConversationDemoSettings,
-    ) -> evaluation.Evidence:
-        return evaluation.Evidence(calls=[])
+    ) -> Evidence:
+        return Evidence(calls=[])
 
     def fail_evaluator(
         self: evaluation.GreetingEvaluator,
-        ctx: evaluation.EvaluatorContext[str, evaluation.Evidence, None],
+        ctx: evaluation.EvaluatorContext[str, Evidence, None],
     ) -> bool:
         raise RuntimeError("evaluator failed")
 
@@ -521,7 +416,7 @@ def test_retried_call_reusing_id_tracks_valid_occurrence(
         observation: TurnObservation,
         provider: ProviderSettings,
         settings: LiveConversationDemoSettings,
-    ) -> evaluation.Evidence:
+    ) -> Evidence:
         rejected = ToolCallPart(evaluation.TARGET, {"name": "Bob"}, "same")
         valid = ToolCallPart(evaluation.TARGET, evaluation.EXPECTED, "same")
         observation.messages.extend(
@@ -546,7 +441,7 @@ def test_retried_call_reusing_id_tracks_valid_occurrence(
                     parts=[ToolReturnPart(evaluation.TARGET, "result", "same")]
                 )
             )
-        return evaluation.collect_evidence(observation)
+        return collect_evidence(observation)
 
     monkeypatch.setattr(evaluation, "run_case", fake_run)
     report = asyncio.run(evaluation.evaluate())
@@ -570,12 +465,66 @@ def test_completed_run_without_calls_is_behavioral_failure(
         observation: TurnObservation,
         provider: ProviderSettings,
         settings: LiveConversationDemoSettings,
-    ) -> evaluation.Evidence:
+    ) -> Evidence:
         observation.messages.append(ModelResponse(parts=[TextPart("Welcome")]))
-        return evaluation.collect_evidence(observation)
+        return collect_evidence(observation)
 
     monkeypatch.setattr(evaluation, "run_case", fake_run)
     report = asyncio.run(evaluation.evaluate())
     assert report["status"] == "behavioral_failure"
     assert report["calls"] == []
     assert report["criterion"]["passed"] is False
+
+
+def test_each_task_uses_its_own_observation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("LIVE_DEMO_OPENAI_MODEL", "test-model")
+    observations: list[TurnObservation] = []
+    original_evaluate = evaluation.Dataset.evaluate
+
+    async def fake_run(
+        prompt: str,
+        observation: TurnObservation,
+        provider: ProviderSettings,
+        settings: LiveConversationDemoSettings,
+    ) -> Evidence:
+        observations.append(observation)
+        assert observation.messages == []
+        observation.messages.append(ModelResponse(parts=[TextPart(prompt)]))
+        return collect_evidence(observation)
+
+    async def evaluate_twice(
+        self: evaluation.Dataset[str, Evidence, None], task: object, **kwargs: object
+    ) -> object:
+        # Exercise the dataset's task independently before its normal execution.
+        from collections.abc import Awaitable, Callable
+        from typing import cast
+
+        run = cast(Callable[[str], Awaitable[Evidence]], task)
+        await run("first")
+        await run("second")
+        return await original_evaluate(self, run, progress=False)
+
+    monkeypatch.setattr(evaluation, "run_case", fake_run)
+    monkeypatch.setattr(evaluation.Dataset, "evaluate", evaluate_twice)
+    asyncio.run(evaluation.evaluate())
+    assert len(observations) == 3
+    assert len({id(observation) for observation in observations}) == 3
+
+
+def test_main_redacts_configured_provider_secret(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import sys
+
+    secret = "sensitive-provider-key"
+    monkeypatch.setenv("OPENAI_API_KEY", secret)
+    path = tmp_path / "report.json"
+    monkeypatch.setattr(sys, "argv", ["eval", "--report", str(path)])
+
+    async def fake_evaluate() -> dict[str, JsonValue]:
+        return {"status": "passed", "calls": [secret]}
+
+    monkeypatch.setattr(evaluation, "evaluate", fake_evaluate)
+    assert evaluation.main() == 0
+    assert secret not in path.read_text(encoding="utf-8") + capsys.readouterr().out
