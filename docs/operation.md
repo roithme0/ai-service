@@ -2,13 +2,15 @@
 
 ## Deployment layout
 
-| Environment | Compose file | Image channel | Default gateway port |
-| --- | --- | --- | --- |
-| Local | [docker-compose-local.yml](../deployment/docker-compose-local.yml) | Built from source | 8004 |
-| Staging | [docker-compose-staging.yml](../deployment/docker-compose-staging.yml) | `alpha` | 8004 |
-| Production | [docker-compose-production.yml](../deployment/docker-compose-production.yml) | `latest` | 8005 |
+| Environment | Compose file | Image channel |
+| --- | --- | --- |
+| Local | [docker-compose-local.yml](../deployment/docker-compose-local.yml) | Built from source |
+| Staging | [docker-compose-staging.yml](../deployment/docker-compose-staging.yml) | `alpha` |
+| Production | [docker-compose-production.yml](../deployment/docker-compose-production.yml) | `latest` |
 
-The gateway exposes HTTP; backend and frontend stay on the Compose network. `GATEWAY_PORT` overrides the port. Retain [gateway/nginx.conf](../deployment/gateway/nginx.conf) beside the Compose files. Local and staging ports conflict unless overridden.
+Keep [docker-compose-common.yml](../deployment/docker-compose-common.yml) and [gateway/nginx.conf](../deployment/gateway/nginx.conf) alongside the environment's Compose file, with `nginx.conf` in the `gateway/` subdirectory.
+
+The gateway exposes HTTP on port 8000 by default in every environment. Backend and frontend stay on the Compose network. Set a distinct `GATEWAY_PORT` for each environment running on the same host.
 
 ## Configuration
 
@@ -16,7 +18,7 @@ Create `deployment/.env` from [.env.example](../deployment/.env.example); host-s
 
 | Variable | Purpose |
 | --- | --- |
-| `GATEWAY_PORT` | Published gateway port for Compose. The example selects 8004. |
+| `GATEWAY_PORT` | Published gateway port for Compose. Defaults to 8000. |
 | `OPENAI_API_KEY` | Provider credentials for transcription, embeddings, image generation, Kochwiki, and Live Demo. |
 | `TRANSCRIPTION_OPENAI_MODEL` | Optional transcription model; defaults to `gpt-transcribe`. |
 | `IMAGE_GENERATION_OPENAI_MODEL` | Optional GPT Image model for image generation; blank disables it. |

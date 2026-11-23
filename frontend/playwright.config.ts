@@ -6,7 +6,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   forbidOnly: !!process.env['CI'],
   use: {
-    baseURL: process.env['PLAYWRIGHT_BASE_URL'] ?? 'http://localhost:8004',
+    baseURL: process.env['PLAYWRIGHT_BASE_URL'] ?? 'http://localhost:8000',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

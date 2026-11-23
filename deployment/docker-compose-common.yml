@@ -1,0 +1,27 @@
+services:
+  backend:
+    scale: 1
+    environment:
+      KOCHWIKI_MCP_URL: "${KOCHWIKI_MCP_URL:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      IMAGE_GENERATION_OPENAI_MODEL: "${IMAGE_GENERATION_OPENAI_MODEL:-}"
+      IMAGE_GENERATION_STORAGE_ROOT: "${IMAGE_GENERATION_STORAGE_ROOT:-}"
+      TRANSCRIPTION_OPENAI_MODEL: "${TRANSCRIPTION_OPENAI_MODEL:-gpt-transcribe}"
+      KOCHWIKI_OPENAI_MODEL: "${KOCHWIKI_OPENAI_MODEL:-}"
+      KOCHWIKI_OPENAI_REASONING_EFFORT: "${KOCHWIKI_OPENAI_REASONING_EFFORT:-}"
+      LIVE_DEMO_OPENAI_MODEL: "${LIVE_DEMO_OPENAI_MODEL:-}"
+      LIVE_DEMO_OPENAI_REASONING_EFFORT: "${LIVE_DEMO_OPENAI_REASONING_EFFORT:-}"
+
+  frontend:
+    depends_on:
+      - backend
+
+  gateway:
+    image: nginx:1.25
+    ports:
+      - "${GATEWAY_PORT:-8000}:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend

@@ -36,7 +36,7 @@ Copy [deployment/.env.example](../deployment/.env.example) to `deployment/.env`.
 docker compose --env-file deployment/.env -f deployment/docker-compose-local.yml up --build
 ```
 
-Open `http://localhost:8004` (or the configured `GATEWAY_PORT`). Containers have no source reload; rebuild after changes. Follow backend logs with the same Compose command prefix and `logs -f backend`.
+Open `http://localhost:8000` (or the configured `GATEWAY_PORT`). Containers have no source reload. Rebuild after changes. Follow backend logs with the same Compose command prefix and `logs -f backend`.
 
 ## Frontend scripts
 
@@ -84,12 +84,12 @@ From **frontend/**, run `npm run test:chat-ui:browser` after installing Playwrig
 
 ### End-to-end browser tests
 
-[Playwright](../frontend/playwright.config.ts) tests live in [frontend/e2e/](../frontend/e2e/). Start the [Docker stack](#container-alternative) separately; the default target is `http://localhost:8004`. From **frontend/**, after `npm ci`:
+[Playwright](../frontend/playwright.config.ts) tests live in [frontend/e2e/](../frontend/e2e/). Start the [Docker stack](#container-alternative) separately. The default target is `http://localhost:8000`. From **frontend/**, after `npm ci`:
 
 ```powershell
 npx playwright install chromium
 npx playwright test
-npx playwright codegen http://localhost:8004
+npx playwright codegen http://localhost:8000
 ```
 
 Install Chromium on first setup and after Playwright upgrades. Codegen records tests interactively; save reviewed tests as `e2e/<name>.spec.ts` and use `page.goto('/')` for the configured target. Add `--headed` to test runs to watch the browser.
