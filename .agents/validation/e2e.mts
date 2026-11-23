@@ -8,6 +8,7 @@ const inputs = [
   'frontend/',
   'backend/',
   'deployment/docker-compose-local.yml',
+  'deployment/docker-compose-common.yml',
   'deployment/docker-compose-e2e.override.yml',
   'deployment/gateway/',
   '.editorconfig',
@@ -57,7 +58,7 @@ export async function testE2E(
   await mkdir(cache, { recursive: true });
   const env = {
     ...process.env,
-    GATEWAY_PORT: process.env['GATEWAY_PORT'] || '8004',
+    GATEWAY_PORT: process.env['GATEWAY_PORT'] || '8000',
   };
   const frontend = join(root, 'frontend');
   const cli = join(frontend, 'node_modules/@playwright/test/cli.js');
