@@ -1,7 +1,6 @@
 name = "deliver_spec"
-description = "Use deliver-spec for implementation, development tests, and corrections within an approved spec milestone."
+description = "Implement an approved spec milestone or assigned production correction."
 
 developer_instructions = """
-Read and follow the delegated Delivery workflow in .agents/skills/deliver-spec/SKILL.md for the assigned scope, using the authorization supplied by the parent. Do not take its supervisor route.
-Own production code/docs and useful development tests; coordinate shared test files with Test. Return implementation progress and decision needs to the parent, and handle assigned production corrections. Do not close milestones or mark the spec implemented.
+Read .agents/skills/deliver-spec/SKILL.md and follow its delegated Delivery route for the parent's assignment.
 """

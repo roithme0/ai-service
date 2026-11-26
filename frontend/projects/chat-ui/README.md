@@ -217,5 +217,5 @@ See the [token catalog](https://github.com/roithme0/ai-service/blob/production/f
 
 ## Repository workflows
 
-- [Development](https://github.com/roithme0/ai-service/blob/production/docs/development.md): local linking, validation, contract generation, built-package checks, and browser verification.
+- [Development](https://github.com/roithme0/ai-service/blob/production/docs/development/general.md): local linking, contract generation, built-package checks, and browser verification.
 - [Releases](https://github.com/roithme0/ai-service/blob/production/docs/operation.md#releases): shared tags, `latest`/`alpha` channels, and publication checks. CI/Docker consume published versions rather than sibling checkout links.

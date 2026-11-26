@@ -9,14 +9,12 @@ Spec: <relative Markdown link to the spec in ../specs/>
 
 ## Milestones
 
-<Choose a few substantial outcomes, each independently testable and reviewable. Include an architecture-sensitive slice early where relevant; avoid a task-by-task checklist. Add or merge rows to fit the change.>
-
-| Milestone | Outcome and spec criteria | Change areas / ownership | Delivery evidence | Independent Test evidence | Review / remediation | Supervisor status |
+| Milestone | Outcome and spec criteria | Change areas / ownership | Delivery status | Test evidence | Review / remediation | Supervisor status |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | <Observable slice and applicable criteria> | <Production/docs owner; test owner; coordinated shared files> | <Implementation progress and self-checks> | <Coverage, checks, gaps> | <Findings, corrections, recheck> | pending |
-| 2 | <Next coherent outcome and criteria> | <Change areas and owners> | <Progress and self-checks> | <Coverage, checks, gaps> | <Findings, corrections, recheck> | pending |
+| 1 | <Observable slice and applicable criteria> | <Production/docs owner; test owner; coordinated shared files> | <Implementation progress or completion, deviations, risks, decisions needed> | <Case record, verification by criterion, applicable assertions, check results, gaps> | <Findings, checks, corrections, recheck> | pending |
+| 2 | <Next coherent outcome and criteria> | <Change areas and owners> | <Implementation status> | <Cases, coverage, validation, gaps> | <Findings, checks, corrections, recheck> | pending |
 
-Use `pending`, `in progress`, `complete`, or `blocked` for supervisor status. Delivery records implementation progress; only the supervisor closes milestones after Test, Review, and material remediation.
+Use `pending`, `in progress`, `complete`, or `blocked` for supervisor status.
 
 ## Integrated Acceptance and Validation
 

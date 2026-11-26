@@ -1,51 +1,26 @@
 ---
 name: prepare-spec
-description: Pressure-test a scoped software change and create or refine a lightweight, implementation-ready spec. Use only when explicitly invoked for spec-driven delivery; use concept work instead when the direction is still broad or spans multiple potential changes.
+description: Create or refine an implementation-ready spec for a scoped software change and obtain approval. Use when explicitly invoked or assigned the Prepare role.
 ---
 
 # Prepare Spec
 
-Turn an intended software change into an approved direction without prescribing implementation details that the codebase already answers.
+## Establish the direction
 
-## Workflow
+Read repository guidance and inspect relevant code, docs, specs, and contracts. If the direction is still broad or spans multiple possible changes, use concept work first. Discuss the intended outcome, scope, UX, contracts, and integration impact. For frontend work, use the [frontend test guidance](../../../docs/development/frontend-testing.md#frontend-test-guidance) to identify outcomes the spec must make explicit.
 
-1. Read the repository guidance and inspect the relevant code, documentation, existing specs, and established contracts.
-2. Establish a bounded change. If the request still spans multiple possible directions, use concept work before creating a delivery spec.
-3. Discuss goals, scope, behavior, UX, contracts, constraints, alternatives, and integration impact. Ask about unresolved material choices and recommend options with tradeoffs. Follow local clarification rules; use as many rounds as needed.
-4. Create or update a draft spec from [assets/spec-template.md](assets/spec-template.md) as the direction takes shape. Treat it as the current decision record, not a conversation transcript. Keep unconfirmed material choices under Open Questions, including any recommendations.
-5. Review the draft against the codebase, related specs, and readiness criteria. Resolve conflicts and missing decisions; scale detail with ambiguity and risk.
-6. Summarize material decisions and obtain caller approval before marking the spec ready. The caller is the user for direct invocation or the orchestrating agent for delegated preparation. Reuse prior approval for unchanged decisions. Hand off the spec path, acceptance criteria, approval evidence, and residual risks.
+Separate confirmed decisions, repository facts, and proposals. Resolve routine mechanics from established conventions. For material product, scope, UX, architecture, compatibility, or migration choices, obtain caller approval or explicit authority to decide. The caller is the user for direct invocation and the supervisor for delegated preparation. The supervisor can approve within the user's authorized scope and escalates choices beyond it. Record approvals and decisions made under delegated authority. Keep unresolved choices and recommendations with their tradeoffs under Open Questions.
 
-Stop at the handoff unless implementation of the agreed scope is already explicitly authorized. A request to deliver the spec, including `$deliver-spec`, provides that authorization.
+## Draft and check readiness
 
-## Decisions and Assumptions
+Draft in the target repository's `specs/` directory using the [spec template](assets/spec-template.md). Follow local filenames or use `YYYY-MM-DD-<short-kebab-title>.md`. Link related concepts and specs relatively. Keep one spec for ordinary cross-layer work. Split coordination and implementation only when ownership, deployment, contract complexity, or sequencing warrants it. Keep implementation sequencing in the delivery plan. Remove resolved questions and empty optional sections.
 
-- Distinguish confirmed decisions, repository facts, and proposals. Cite evidence for inherited constraints; current behavior does not establish the intended change.
-- Material product, scope, UX, architecture, compatibility, and migration choices require caller approval or explicit authorization to decide. An orchestrating agent may approve within the user's authorized scope; escalate choices beyond that authority to the user. Record decisions made within that authority. Recommendations and unanswered questions remain proposals.
-- Resolve routine implementation mechanics from established conventions without further confirmation.
+Before handing off, check that:
 
-## Readiness Criteria
+- The outcome, scope, affected entry points, and behavior callers rely on are clear.
+- Behavior describes starting states, inputs or actions, and observable results. Cover applicable invalid input, failure, retry, cancellation, and overlapping work, including effects on entered values, stored data, and pending state.
+- Changed contracts state fields, meaning, and errors. Record material constraints and cite inherited constraints. For UI changes, state the intended experience and visual direction.
+- Each material acceptance criterion has a stable ID, condition, and expected result that Delivery, Test, and Review can interpret independently.
+- Material decisions have caller approval or were made under explicit authority. Summarize them before marking the spec ready and reuse approval for unchanged decisions. Discuss and record amendments before changing approved direction.
 
-A spec is ready for delivery when:
-
-- The outcome and meaningful scope boundaries are clear.
-- Material decisions meet the confirmation rules above and are recorded.
-- Acceptance criteria describe observable, verifiable outcomes.
-- No open question would require the implementer to invent a product, architecture, compatibility, or migration decision.
-- UI-affecting work specifies the intended experience, interactions, important states, and visual direction.
-- For non-UI work, note that there is no UI impact.
-
-## Detail and Splitting
-
-- Keep decisions the implementer cannot safely recover from the codebase. Omit routine mechanics and exhaustive file lists.
-- Include error cases, compatibility, migration, security, rollout, or validation detail only in proportion to their risk.
-- Use one spec by default, including for ordinary cross-layer work.
-- Split coordination and implementation specs only when independent ownership, deployment boundaries, contract complexity, or sequencing makes the separation useful.
-- Keep implementation sequencing out of the spec; it belongs to `$deliver-spec`.
-
-## Spec Maintenance
-
-- Store specs in `specs/` relative to the target repository root. Follow existing filename conventions there; otherwise use `YYYY-MM-DD-<short-kebab-title>.md`.
-- Use relative Markdown links to related concepts and specs, including across artifact folders.
-- Remove resolved questions and empty optional sections instead of preserving placeholders.
-- Do not silently change an approved decision. Discuss and record the amendment.
+Hand off the spec path, acceptance criteria, approval evidence, and residual risks. A delegated Prepare assignment ends there. For direct preparation, proceed to delivery only when implementation of that scope is explicitly authorized, including through a request to deliver the spec.

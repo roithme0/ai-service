@@ -16,6 +16,7 @@
 ### Testing
 
 - Add unit, component, integration, or contract tests where they provide meaningful regression protection. Choose the smallest scope that verifies the behavior. Use a real browser when the behavior depends on layout or native browser interactions. Avoid tests that merely restate implementation details.
+- Follow the [frontend test guidance](docs/development/frontend-testing.md#frontend-test-guidance) for required frontend coverage, layers, and conventions.
 - Create new end-to-end tests only when explicitly requested. Maintain and repair existing end-to-end tests as needed, preserving their regression coverage.
 - Remove existing tests only when redundant, obsolete, flaky, or blocking legitimate refactoring; explain the reason.
 
@@ -28,22 +29,15 @@
 
 ## Validation
 
-After frontend, backend, or shared tooling edits, run from the **repository root**:
+After edits, run applicable formatting and lint checks, then run only tests that directly cover this turn's changes. Skip tests if none are relevant. Leave full test groups to the Codex stop hook unless the user requests a broader run.
 
-```powershell
-node .agents/validation/run.mts
-```
+- For frontend changes, run `npm run format:changed` from **frontend/**. For backend changes, run `node .agents/validation/backend.mts --format` from the repository root. Respect exclusions, leave the Git index unchanged, coordinate before formatting unrelated user edits, and review the diff. Full-backend formatting requires an explicit request.
+- For frontend or shared tooling changes, run `npm run lint` from **frontend/**. Treat warnings as failures. Use `lint:fix` deliberately and review its diff.
+- From the repository root, run `node .agents/validation/test.mts --group NAME -- <runner arguments>` with a file or case filter. Use a pytest node ID for backend tests, Angular's `--include` for frontend tests, or `node --test <file>` for individual tooling tests. List groups with `node .agents/validation/test.mts --list`.
+- For browser flow, frontend/backend integration, or local deployment changes, run the relevant [isolated E2E tests](docs/development/change-validation.md#end-to-end-browser-tests) with `node .agents/validation/test.mts --group e2e -- --grep '<pattern>'`.
+- For contract changes, verify freshness using the [generated contract commands](docs/development/general.md#update-generated-contracts). See [local setup](docs/development/general.md#run-locally) for dependencies and use `npm.cmd` if PowerShell blocks `npm.ps1`.
 
-This formats changed files, lints, checks both generated contracts, and runs all non-E2E tests. Install frontend dependencies, Playwright Chromium, and the backend local Python 3.13 venv with `test` and `dev` extras first; see [development setup](docs/development.md). The paired freshness checks use that venv and run for every validation scope and test selection; direct test commands remain tests-only.
-
-For focused tests during implementation, discover groups with `node .agents/validation/test.mts --list` and select them with `--group NAME`. Focused runs do not replace full validation. `--scope frontend|backend` limits formatting and lint only; tests remain the full non-E2E suite.
-
-For browser flow, frontend/backend integration, or local deployment changes, also run `node .agents/validation/e2e.mts` from the repository root. It updates Docker and runs Playwright.
-
-- Format only changed staged, unstaged, and untracked files, respecting configured exclusions and leaving the Git index unchanged. Coordinate before formatting unrelated user edits and review the resulting diff. Full-backend formatting requires an explicit request.
-- Lint errors and warnings fail validation. Run `lint:fix` only deliberately and review its diff; hooks and CI never apply lint fixes.
-- Review and trust hooks before relying on them. Hooks format and lint relevant scopes and run all non-E2E tests. They reuse success only for identical inputs after all checks pass and request at most one continuation for persistent failures.
-- Fix findings introduced by your work; broader cleanup requires authorization. Report missing dependencies or failed checks as incomplete validation. Hooks never install dependencies automatically.
+Review and trust the Codex hooks before relying on them. The stop hook formats and lints applicable scopes, checks generated contract freshness, and runs the default non-E2E suite. Fix findings introduced by your work and get authorization for broader cleanup. Report incomplete validation and its cause.
 
 ## Communication Preferences
 

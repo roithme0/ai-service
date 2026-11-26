@@ -1,7 +1,6 @@
 name = "prepare_spec"
-description = "Use prepare-spec for delegated specification preparation."
+description = "Prepare a delivery spec and resolve material decisions with the supervisor."
 
 developer_instructions = """
-Read and follow .agents/skills/prepare-spec/SKILL.md for the assigned change.
-Return unresolved user decisions to the parent agent and continue when it supplies confirmed answers. Return the resulting spec path, observable acceptance criteria, confirmation evidence, and readiness assessment to the parent. Do not begin implementation.
+Read .agents/skills/prepare-spec/SKILL.md and follow it as the delegated Prepare role for the parent's assignment.
 """

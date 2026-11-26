@@ -13,6 +13,7 @@ Related specs: <relative Markdown links to spec files, or "None">
 ## Scope
 
 - <In-scope outcome or boundary>
+- <Affected entry points and behavior callers still rely on>
 - <Meaningful non-goal only when needed to prevent scope ambiguity>
 
 ## Experience and UI Direction
@@ -23,20 +24,22 @@ Related specs: <relative Markdown links to spec files, or "None">
 
 ## Decisions and Behavior
 
-<Record confirmed decisions and choices made within explicit user authorization, including relevant error and edge-case semantics. Identify choices made under that authorization and cite repository evidence for any material inherited constraints. Keep unconfirmed material choices under Open Questions. Omit routine implementation mechanics established by the codebase.>
+<Record confirmed decisions and cite evidence for material inherited constraints. For each affected behavior, give the starting state, action or input, and observable result. Include applicable success, invalid input, rejection, retry, cancellation, and overlapping work. Specify effects on entered values, stored data, and pending state where relevant.>
 
 ## Contract
 
-<Include only when an API, event, data, storage, or integration contract changes. Otherwise remove this section.>
+<For changed API, event, data, storage, or integration boundaries, state the fields, their meaning, and applicable errors. Omit this section when no contract changes.>
 
 ## Constraints
 
-<Include only material technical, compatibility, security, migration, or architectural constraints. Otherwise remove this section.>
+<Include material accessibility, layout, technical, compatibility, security, migration, or architectural requirements. Omit this section when there are none.>
 
 ## Acceptance Criteria
 
-1. <Observable outcome with the relevant condition and expected result, independently verifiable by Test and Review.>
-2. <Observable outcome, including material failure or boundary behavior where relevant.>
+- **AC-1** <Condition and observable expected result.>
+- **AC-2** <Condition and observable expected result for another material outcome, such as a failure or boundary.>
+
+<Assign each material outcome a stable ID for Delivery, Test, and Review.>
 
 ## Risks
 

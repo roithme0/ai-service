@@ -46,7 +46,7 @@ The Image Generation Live Demo uses the same unverified shared `demo:default` id
 
 The [contract generator](../frontend/scripts/conversation-contract.mjs) produces [TypeScript types and Zod schemas](../frontend/projects/chat-ui/conversation/src/generated/) from the session router's OpenAPI document.
 
-The [transcription generator](../frontend/scripts/transcription-contract.mjs) owns the [transcription types and validators](../frontend/projects/chat-ui/transcription/src/generated/). See [contract generation](development.md#update-generated-contracts) for commands.
+The [transcription generator](../frontend/scripts/transcription-contract.mjs) owns the [transcription types and validators](../frontend/projects/chat-ui/transcription/src/generated/). See [contract generation](development/general.md#update-generated-contracts) for commands.
 
 The [image generator contract script](../frontend/scripts/image-generation-contract.mjs) produces [types and validators](../frontend/projects/image-generation/controller/src/generated/) for direct HTTP consumers.
 
@@ -63,6 +63,6 @@ The [image generator contract script](../frontend/scripts/image-generation-contr
 - Application: [test_lifespan.py](../backend/tests/test_lifespan.py) covers startup and shutdown across capabilities and demos; [test_capability_integration.py](../backend/tests/test_capability_integration.py) covers capability independence. Application HTTP and shared infrastructure tests also live under [backend/tests/](../backend/tests/).
 - Demos: [backend/tests/demos/](../backend/tests/demos/), covering Visual Demo and Live Demo execution and lifecycle.
 - Frontend: `*.spec.ts` beside application and library code.
-- End-to-end browser tests: [frontend/e2e/](../frontend/e2e/), using Playwright; see [setup and commands](development.md#end-to-end-browser-tests).
+- End-to-end browser tests: [frontend/e2e/](../frontend/e2e/), using Playwright; see [setup and commands](development/change-validation.md#end-to-end-browser-tests).
 - Validation tooling: `*.test.mts` in [.agents/validation/](../.agents/validation/).
 - Deployment: [deployment/tests/](../deployment/tests/), with backend and gateway test runners.
